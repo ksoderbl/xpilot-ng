@@ -35,6 +35,11 @@
 #include "list.h"
 #endif
 
+#ifndef MAP_H
+/* need treasure_t */
+#include "map.h"
+#endif
+
 /*
  * Prototypes for cell.c
  */
@@ -82,6 +87,7 @@ int Polys_to_client(unsigned char *);
  * Prototypes for event.c
  */
 int Handle_keyboard(int);
+bool Team_zero_pausing_available(void);
 void Pause_player(int ind, int onoff);
 int Player_lock_closest(int ind, int next);
 bool team_dead(int team);
@@ -174,8 +180,10 @@ void Fire_right_shot(int ind, int type, int dir, int gun);
 void Fire_left_rshot(int ind, int type, int dir, int gun);
 void Fire_right_rshot(int ind, int type, int dir, int gun);
 void Make_treasure_ball(int treasure);
-int Punish_team(int ind, int t_destroyed, int t_target);
+int Punish_team(int ind, int t_destroyed, int cx, int cy);
 void Ball_hits_goal(ballobject *ball, int group);
+void Ball_is_replaced(ballobject *ball, treasure_t *tt, player *pl);
+void Ball_is_destroyed(ballobject *ball);
 void Delete_shot(int ind);
 void Fire_laser(int ind);
 void Fire_general_laser(int ind, unsigned short team, int cx, int cy, int dir,

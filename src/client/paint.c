@@ -585,8 +585,8 @@ void Paint_score_entry(int entry_num,
 	|| other->mychar == 'P'
 	|| other->mychar == 'W')
 	&& !mono) {
-#if 0 /* do we need this ? */
-	if (BIT(hackedInstruments, BASE_WARNING)) {
+	/*if (BIT(hackedInstruments, BASE_WARNING))*/
+	{
 	    int i;
 	    /*if (deadcount>0) { */
 	    for (i = 0; i < 10; i++) {
@@ -595,7 +595,7 @@ void Paint_score_entry(int entry_num,
 		}
 	    }
 	}
-#endif
+
 	if (!fullColor) {
 	    /* START team zero pausing */
 	    if (BIT(hackedInstruments, TREAT_ZERO_SPECIAL)

@@ -371,13 +371,12 @@ static int Laser_pulse_check_player_hits(
 static list_t Laser_pulse_get_object_list(
 	list_t input_obj_list,
 	pulse_t *pulse,
-	DFLOAT midx,
-	DFLOAT midy)
+	int midcx,
+	int midcy)
 {
     list_t		output_obj_list;
     list_t		ast_list;
-    register DFLOAT	dx, dy;
-    int			range;
+    int			dcx, dcy, range;
     list_iter_t		iter;
     object		*ast;
 
@@ -399,12 +398,16 @@ static list_t Laser_pulse_get_object_list(
 		 LI_FORWARD(iter))
 	    {
 		ast = (object *) LI_DATA(iter);
-		dx = midx - ast->pos.px;
-		dy = midy - ast->pos.py;
-		dx = WRAP_DX(dx);
-		dy = WRAP_DY(dy);
-		range = ast->pl_radius + CLICK_TO_PIXEL(pulse->len / 2);
-		if (sqr(dx) + sqr(dy) < sqr(range)) {
+		dcx = midcx - ast->pos.cx;
+		dcy = midcy - ast->pos.cy;
+		if (BIT(World.rules->mode, WRAP_PLAY)) {
+		    dcx = CENTER_XCLICK(dcx);
+		    dcy = CENTER_YCLICK(dcy);
+		}
+		range = ast->pl_radius * CLICK + pulse->len / 2;
+		if (ABS(dcx) > range || ABS(dcy) > range)
+		    continue;
+		if (sqr(dcx) + sqr(dcy) < sqr(range)) {
 		    List_push_back(output_obj_list, ast);
 		}
 	    }
@@ -426,9 +429,8 @@ void Laser_pulse_collision(void)
     int				max, hits;
     bool			refl;
     vicbuf_t			vicbuf;
-    DFLOAT			x, y, x1, x2, y1, y2;
-    DFLOAT			dx, dy;
-    DFLOAT			midx, midy;
+    int				cx, cy, cx1, cx2, cy1, cy2;
+    int				dcx, dcy, midcx, midcy;
     player			*pl;
     pulse_t			*pulse;
     object			*obj = NULL, *ast = NULL;
@@ -467,54 +469,48 @@ void Laser_pulse_collision(void)
 	    pl = NULL;
 	}
 
-	pulse->pos.cx += tcos(pulse->dir) * PULSE_SPEED * timeStep2;
-	pulse->pos.cy += tsin(pulse->dir) * PULSE_SPEED * timeStep2;
+	/* pulse moves every frame */
+	dcx = tcos(pulse->dir) * PULSE_SPEED * timeStep2;
+	dcy = tsin(pulse->dir) * PULSE_SPEED * timeStep2;
+	pulse->pos.cx += dcx;
+	pulse->pos.cy += dcy;
+	pulse->pos.cx = WRAP_XCLICK(pulse->pos.cx);
+	pulse->pos.cy = WRAP_YCLICK(pulse->pos.cy);
+
 	if (BIT(World.rules->mode, WRAP_PLAY)) {
-	    if (pulse->pos.cx < 0) {
-		pulse->pos.cx += World.cwidth;
-	    }
-	    else if (pulse->pos.cx >= World.cwidth) {
-		pulse->pos.cx -= World.cwidth;
-	    }
-	    if (pulse->pos.cy < 0) {
-		pulse->pos.cy += World.cheight;
-	    }
-	    else if (pulse->pos.cy >= World.cheight) {
-		pulse->pos.cy -= World.cheight;
-	    }
-	    x1 = CLICK_TO_PIXEL(pulse->pos.cx);
-	    y1 = CLICK_TO_PIXEL(pulse->pos.cy);
-	    x2 = x1 + tcos(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
-	    y2 = y1 + tsin(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
+	    cx1 = pulse->pos.cx;
+	    cy1 = pulse->pos.cy;
+	    cx2 = cx1 + tcos(pulse->dir) * pulse->len;
+	    cy2 = cy1 + tsin(pulse->dir) * pulse->len;
 	} else {
-	    x1 = CLICK_TO_PIXEL(pulse->pos.cx);
-	    y1 = CLICK_TO_PIXEL(pulse->pos.cy);
-	    if (x1 < 0 || x1 >= World.width
-		|| y1 < 0 || y1 >= World.height) {
+	    cx1 = pulse->pos.cx;
+	    cy1 = pulse->pos.cy;
+	    if (cx1 < 0 || cx1 >= World.cwidth ||
+		cy1 < 0 || cy1 >= World.cheight) {
 		pulse->len = 0;
 		continue;
 	    }
-	    x2 = x1 + tcos(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
-	    if (x2 < 0) {
-		pulse->len = (int)(CLICK_TO_PIXEL(pulse->len) * (0 - x1) / (x2 - x1));
-		x2 = x1 + tcos(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
+	    cx2 = cx1 + tcos(pulse->dir) * pulse->len;
+	    if (cx2 < 0) {
+		pulse->len = pulse->len * (0 - cx1) / (cx2 - cx1);
+		cx2 = 0;
 	    }
-	    if (x2 >= World.width) {
-		pulse->len = (int)(CLICK_TO_PIXEL(pulse->len) * (World.width - 1 - x1)
-		    / (x2 - x1));
-		x2 = x1 + tcos(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
+	    if (cx2 >= World.cwidth) {
+		pulse->len = pulse->len * (World.cwidth - 1 - cx1)
+		    / (cx2 - cx1);
+		cx2 = World.cwidth - 1;
 	    }
-	    y2 = y1 + tsin(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
-	    if (y2 < 0) {
-		pulse->len = (int)(CLICK_TO_PIXEL(pulse->len) * (0 - y1) / (y2 - y1));
-		x2 = x1 + tcos(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
-		y2 = y1 + tsin(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
+	    cy2 = cy1 + tsin(pulse->dir) * pulse->len;
+	    if (cy2 < 0) {
+		pulse->len = pulse->len * (0 - cy1) / (cy2 - cy1);
+		cx2 = cx1 + tcos(pulse->dir) * pulse->len;
+		cy2 = 0;
 	    }
-	    if (y2 > World.height) {
-		pulse->len = (int)(CLICK_TO_PIXEL(pulse->len) * (World.height - 1 - y1)
-		    / (y2 - y1));
-		x2 = x1 + tcos(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
-		y2 = y1 + tsin(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
+	    if (cy2 >= World.cheight) {
+		pulse->len = pulse->len * (World.cheight - 1 - cy1)
+		    / (cy2 - cy1);
+		cx2 = cx1 + tcos(pulse->dir) * pulse->len;
+		cy2 = World.cheight - 1;
 	    }
 	    if (pulse->len <= 0) {
 		pulse->len = 0;
@@ -523,34 +519,31 @@ void Laser_pulse_collision(void)
 	}
 
 	/* calculate delta x and y for pulse start and end position. */
-	dx = x2 - x1;
-	dy = y2 - y1;
-	dx = WRAP_DX(dx);
-	dy = WRAP_DY(dy);
+	dcx = cx2 - cx1;
+	dcy = cy2 - cy1;
+	if (BIT(World.rules->mode, WRAP_PLAY)) {
+	    dcx = CENTER_XCLICK(dcx);
+	    dcy = CENTER_YCLICK(dcy);
+	}
 
 	/* max is the highest absolute delta length of either x or y. */
-	max = (int)MAX(ABS(dx), ABS(dy));
+	max = MAX(ABS(dcx), ABS(dcy));
 	if (max == 0) {
 	    continue;
 	}
 
 	/* calculate the midpoint of the new laser pulse position. */
-	midx = x1 + (dx * 0.5);
-	midy = y1 + (dy * 0.5);
-	midx = WRAP_XPIXEL(midx);
-	midy = WRAP_YPIXEL(midy);
+	midcx = cx1 + (dcx / 2);
+	midcy = cy1 + (dcy / 2);
+	midcx = WRAP_XCLICK(midcx);
+	midcy = WRAP_YCLICK(midcy);
 
 	if (round_delay == 0) {
 	    /* assemble a shortlist of players which might get hit. */
-	    Laser_pulse_find_victims(&vicbuf, pulse,
-				     FLOAT_TO_CLICK(midx),
-				     FLOAT_TO_CLICK(midy));
+	    Laser_pulse_find_victims(&vicbuf, pulse, midcx, midcy);
 	}
 
-	obj_list = Laser_pulse_get_object_list(
-				obj_list,
-				pulse,
-				midx, midy);
+	obj_list = Laser_pulse_get_object_list(obj_list, pulse,	midcx, midcy);
 
 	obj->type = OBJ_PULSE;
 	obj->life = 1;
@@ -561,15 +554,16 @@ void Laser_pulse_collision(void)
 	if (pulse->id == NO_ID) {
 	    obj->status = FROMCANNON;
 	}
-	Object_position_init_clicks(obj, FLOAT_TO_CLICK(x1), FLOAT_TO_CLICK(y1));
+	Object_position_init_clicks(obj, cx1, cy1);
 
 	refl = false;
 
-	for (i = hits = 0; i <= max; i += CLICK_TO_PIXEL(PULSE_SAMPLE_DISTANCE)) {
-	    x = x1 + (i * dx) / max;
-	    y = y1 + (i * dy) / max;
-	    obj->vel.x = (x - CLICK_TO_FLOAT(obj->pos.cx));
-	    obj->vel.y = (y - CLICK_TO_FLOAT(obj->pos.cy));
+	hits = 0;
+	for (i = 0; i <= max; i += PULSE_SAMPLE_DISTANCE) {
+	    cx = cx1 + (i * dcx) / max;
+	    cy = cy1 + (i * dcy) / max;
+	    obj->vel.x = CLICK_TO_FLOAT(cx - obj->pos.cx);
+	    obj->vel.y = CLICK_TO_FLOAT(cy - obj->pos.cy);
 	    /* changed from = x - obj->pos.x to make lasers disappear
 	       less frequently when wrapping. There's still a small
 	       chance of it happening though. */
@@ -578,21 +572,21 @@ void Laser_pulse_collision(void)
 		break;
 	    }
 	    if (BIT(World.rules->mode, WRAP_PLAY)) {
-		if (x < 0) {
-		    x += World.width;
-		    x1 += World.width;
+		if (cx < 0) {
+		    cx += World.cwidth;
+		    cx1 += World.cwidth;
 		}
-		else if (x >= World.width) {
-		    x -= World.width;
-		    x1 -= World.width;
+		else if (cx >= World.cwidth) {
+		    cx -= World.cwidth;
+		    cx1 -= World.cwidth;
 		}
-		if (y < 0) {
-		    y += World.height;
-		    y1 += World.height;
+		if (cy < 0) {
+		    cy += World.cheight;
+		    cy1 += World.cheight;
 		}
-		else if (y >= World.height) {
-		    y -= World.height;
-		    y1 -= World.height;
+		else if (cy >= World.cheight) {
+		    cy -= World.cheight;
+		    cy1 -= World.cheight;
 		}
 	    }
 
@@ -602,13 +596,19 @@ void Laser_pulse_collision(void)
 		     iter != List_end(obj_list);
 		     LI_FORWARD(iter))
 		{
-		    DFLOAT adx, ady;
+		    int adcx, adcy, radius
+;
 		    ast = LI_DATA(iter);
-		    adx = x - ast->pos.px;
-		    ady = y - ast->pos.py;
-		    adx = WRAP_DX(adx);
-		    ady = WRAP_DY(ady);
-		    if (sqr(adx) + sqr(ady) <= sqr(ast->pl_radius)) {
+		    adcx = cx - ast->pos.cx;
+		    adcy = cy - ast->pos.cy;
+		    if (BIT(World.rules->mode, WRAP_PLAY)) {
+			adcx = CENTER_XCLICK(adcx);
+			adcy = CENTER_YCLICK(adcy);
+		    }
+		    radius = ast->pl_radius * CLICK;
+		    if (ABS(adcx) > radius || ABS(adcy) > radius)
+			continue;
+		    if (sqr(adcx) + sqr(adcy) <= sqr(radius)) {
 			obj->life = 0;
 			ast->life += ASTEROID_FUEL_HIT(ED_LASER_HIT,
 						       WIRE_PTR(ast)->size);
@@ -638,7 +638,7 @@ void Laser_pulse_collision(void)
 
 	    hits = Laser_pulse_check_player_hits(
 			    pulse, obj,
-			    FLOAT_TO_CLICK(x), FLOAT_TO_CLICK(y),
+			    cx, cy,
 			    &vicbuf,
 			    &refl);
 

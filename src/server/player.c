@@ -367,6 +367,7 @@ int Init_player(int ind, shipobj *ship)
     bool		too_late = false;
     int			i;
 
+    /*memset(pl, 0, sizeof(player));*/
 
     pl->vel.x	= pl->vel.y	= 0.0;
     pl->acc.x	= pl->acc.y	= 0.0;
@@ -480,10 +481,18 @@ int Init_player(int ind, shipobj *ship)
     Rank_ClearKills(pl);
     Rank_ClearDeaths(pl);
 
+    pl->idleCount = 0;
+    pl->flooding = -1;
+    pl->grabbedBallFrame = -1;
+
     /*
      * If limited lives and if nobody has lost a life yet, you may enter
      * now, otherwise you will have to wait 'til everyone gets GAME OVER.
      */
+    /* Indeed you have to! (Mara) */
+    if (BIT(World.rules->mode, LIMITED_LIVES))
+	too_late = true;
+#if 0
     for (i = 0; i < NumPlayers; i++) {
 	/* If a non-team member has lost a life,
 	 * then it's too late to join.
@@ -497,6 +506,7 @@ int Init_player(int ind, shipobj *ship)
 	    break;
 	}
     }
+#endif
 
     if (too_late) {
 	pl->mychar	= 'W';
@@ -534,6 +544,7 @@ int Init_player(int ind, shipobj *ship)
 
     pl->isowner = 0;
     pl->isoperator = 0;
+    pl->privs = 0;
 
     pl->rectype = 0;
 
@@ -550,6 +561,7 @@ void Alloc_players(int number)
     struct _visibility *t;
     int i;
 
+    /* kps - fix this so you can memset the player struct to 0 later */
 
     /* Allocate space for pointers */
     Players = (player **) calloc(number + 1, sizeof(player *));
@@ -688,12 +700,18 @@ void Reset_all_players(void)
 		    continue;
 		}
 	    }
-	    Rank_IgnoreLastDeath(pl);
+	    /* kps - hacks upon hacks ;), consider removing ignorelastdeath */
+	    if (!(teamZeroPausing && pl->team == 0))
+		Rank_IgnoreLastDeath(pl);
 	}
 	CLR_BIT(pl->status, GAME_OVER);
 	CLR_BIT(pl->have, HAS_BALL);
 	Rank_ClearKills(pl);
 	Rank_ClearDeaths(pl);
+	/* This has already been changed to 'D' at this point*/
+	/* not always - kps */
+	/*xpprintf("%s %c \n", pl->name, pl->mychar);*/
+	
 	if (!BIT(pl->status, PAUSE) && pl->mychar != 'W')
 	    Rank_AddRound(pl);
 	pl->round = 0;
@@ -1027,7 +1045,7 @@ void Team_game_over(int winning_team, const char *reason)
     free(best_players);
 
     /* Ranking */
-    Rank_rank_score();
+    Rank_write_webpage();
     Rank_write_score_file();
     Rank_show_ranks();
 }
@@ -1802,10 +1820,12 @@ void Delete_player(int ind)
     for (i = MAX_TEAMS - 1; i >= 0; i--)
 	if (World.teams[i].SwapperId == id)
 	    World.teams[i].SwapperId = -1;
+#if 0 /* kps - why "if 0" ? */
     if (pl->team != TEAM_NOT_SET) {
 	/* Swapping a queued player might be better */
 	World.teams[pl->team].SwapperId = -1;
     }
+#endif
 
     /* Delete remaining shots */
     for (i = NumObjs - 1; i >= 0; i--) {
@@ -1886,15 +1906,14 @@ void Delete_player(int ind)
     if (IS_HUMAN_PTR(pl)) {
 	Rank_save_score(pl);
    	if (NumPlayers == NumRobots + NumPseudoPlayers) {
-	    Rank_rank_score();
+	    Rank_write_webpage();
 	    Rank_write_score_file();
    	}
     }
 
     if (pl->team != TEAM_NOT_SET && !IS_TANK_PTR(pl)) {
 	World.teams[pl->team].NumMembers--;
-	if (teamShareScore)
-	    TEAM_SCORE(pl->team, -(pl->score));	/* recalculate teamscores */
+	TEAM_SCORE(pl->team, -(pl->score));	/* recalculate teamscores */
 	if (IS_ROBOT_PTR(pl))
 	    World.teams[pl->team].NumRobots--;
     }
@@ -2005,7 +2024,6 @@ void Kill_player(int ind)
      * to home base after being killed. */
     if (BIT(Players[ind]->status, PLAYING)) {
 	Explode_fighter(ind);
-	/* Rank_death(Players[ind]); kps - ??? */
     }
 #endif
     Player_death_reset(ind);
@@ -2088,7 +2106,8 @@ void Player_death_reset(int ind)
 		}
 		pl->life = 0;
 		SET_BIT(pl->status, GAME_OVER);
-		pl->mychar = 'D';
+		if (pl->mychar != 'W')
+		    pl->mychar = 'D';
 		Player_lock_closest(ind, 0);
 	    }
 	}

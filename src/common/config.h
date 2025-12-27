@@ -69,13 +69,13 @@
 #ifdef _WINDOWS
 #	ifdef	_DEBUG
 #		define	DEBUG	1
-#		define	D(x)	{x;}
+#		define	D(x)	x
 #	else
 #		define	D(x)
 #	endif
 #else
 #	ifdef	DEBUG
-#		define D(x)	{ {x}; fflush(stdout); }
+#		define D(x)	x ;  fflush(stdout);
 #	else
 #		define D(x)
 #	endif

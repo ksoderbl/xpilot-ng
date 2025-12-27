@@ -150,6 +150,7 @@
 #include "recwrap.h"
 #include "click.h"
 #include "auth.h"
+#include "rank.h"
 
 
 char netserver_version[] = VERSION;
@@ -180,7 +181,6 @@ static int		num_logins, num_logouts;
  * This works well for most maps which have lots of series of the
  * same map object and is simple enough to got implemented quickly.
  */
-/* kps - ng does not want this */
 static int Compress_map(unsigned char *map, int size)
 {
     int			i, j, k;
@@ -737,6 +737,114 @@ void Create_client_socket(sock_t *socket, int *port)
 }
 
 
+#if 0
+/* kps - this needs to be fixed */
+/*
+ * Banning of players
+ */
+static void dcase(char *str)
+{
+    while (*str) {
+	*str = tolower(*str);
+	str++;
+    }
+}
+
+char *banned_reals[] = { "<", ">", "\"", "'", NULL };
+char *banned_nicks[] = { "<", ">", "\"", "'", NULL };
+char *banned_addrs[] = { NULL };
+char *banned_hosts[] = { "<", ">", "\"", "'", NULL };
+
+int CheckBanned(char *real, char *nick, char *addr, char *host)
+{
+    int ret = 0, i;
+
+    real = strdup(real);
+    nick = strdup(nick);
+    addr = strdup(addr);
+    host = strdup(host);
+    dcase(real);
+    dcase(nick);
+    dcase(addr);
+    dcase(host);
+
+    for (i = 0; banned_reals[i] != NULL; i++) {
+	if (strstr(real, banned_reals[i]) != NULL) {
+	    ret = 1;
+	    goto out;
+	}
+    }
+    for (i = 0; banned_nicks[i] != NULL; i++) {
+	if (strstr(nick, banned_nicks[i]) != NULL) {
+	    ret = 1;
+	    goto out;
+	}
+    }
+    for (i = 0; banned_addrs[i] != NULL; i++) {
+	if (strstr(addr, banned_addrs[i]) != NULL) {
+	    ret = 1;
+	    goto out;
+	}
+    }
+    for (i = 0; banned_hosts[i] != NULL; i++) {
+	if (strstr(host, banned_hosts[i]) != NULL) {
+	    ret = 1;
+	    goto out;
+	}
+    }
+ out:
+    free(real);
+    free(nick);
+    free(addr);
+    free(host);
+
+    return ret;
+}
+
+struct restrict {
+    char *nick;
+    char *addr;
+    char *mail;
+};
+
+struct restrict restricted[] = {
+    { NULL, NULL, NULL }
+};
+
+int CheckAllowed(char *real, char *nick, char *addr, char *host)
+{
+    int i, allowed = 1;
+    /*char *realnick = nick;*/
+    char *mail = NULL;
+    
+    nick = strdup(nick);
+    addr = strdup(addr);
+    dcase(nick);
+    dcase(addr);
+    
+    for (i = 0; restricted[i].nick != NULL; i++) {
+	if (strstr(nick, restricted[i].nick) != NULL) {
+	    if (strncmp(addr, restricted[i].addr, strlen(restricted[i].addr))
+		== 0) {
+		allowed = 1;
+		break;
+	    }
+	    allowed = 0;
+	    mail = restricted[i].mail;
+	}
+    }
+    if (!allowed) {
+	/* Do whatever you want here... */
+    }
+    
+    free(nick);
+    free(addr);
+    
+    return allowed;
+}
+#endif
+
+
 /*
  * A client has requested a playing connection with this server.
  * See if we have room for one more player and if his name is not
@@ -1101,8 +1209,43 @@ static int Handle_setup(int ind)
     if (connp->setup >= Setup->setup_size) {
 	Conn_set_state(connp, CONN_DRAIN, CONN_LOGIN);
     }
+#if 0
+    if (CheckBanned(connp->real, connp->nick, connp->addr, connp->host)) {
+	Destroy_connection(ind, "Banned from server, contact " LOCALGURU);
+	return -1;
+    }
+    if (!CheckAllowed(connp->real, connp->nick, connp->addr, connp->host)) {
+	Destroy_connection(ind, "Restricted nick, contact " LOCALGURU);
+	return -1;
+    }
+#endif
 
     return 0;
+}
+
+
+static void LegalizeName(char *string)
+{
+    while ( *string != '\0' ) {
+	char ch = *string;
+	if ( ch == ' ' )
+	    ch = (char)0xA0; /* kps - ??? */
+	else if ( ch == '\"' )
+	    ch = '\'';
+	else if ( !isprint(ch) )
+	    ch = '.';
+	string++;
+    }
+}
+
+static void LegalizeHost(char *string)
+{
+    while ( *string != '\0' ) {
+	char ch = *string;
+	if ( !isalnum(ch) && ch != '.' )
+	    ch = '.';
+	string++;
+    }
 }
 
 /*
@@ -1216,10 +1359,15 @@ static int Handle_login(int ind, char *errmsg, int errsize)
     }
     pl->rectype = connp->rectype;
 #endif
+    strlcpy(pl->rawname, connp->nick, MAX_CHARS);
     strlcpy(pl->name, connp->nick, MAX_CHARS);
     strlcpy(pl->auth_nick, old_nick, MAX_CHARS);
     strlcpy(pl->realname, connp->real, MAX_CHARS);
     strlcpy(pl->hostname, connp->host, MAX_CHARS);
+    /* kps - what about auth_nick ? */
+    LegalizeName(pl->name);
+    LegalizeName(pl->realname);
+    LegalizeHost(pl->hostname);
     pl->isowner = (!strcmp(pl->realname, Server.owner) &&
 		   !strcmp(connp->addr, "127.0.0.1"));
     if (connp->team != TEAM_NOT_SET) {
@@ -1238,8 +1386,8 @@ static int Handle_login(int ind, char *errmsg, int errsize)
 		    /* reset team score on first player */
 		    World.teams[pl->team].score = 0;
 		}
-		TEAM_SCORE(pl->team, 0);
 	    }
+	    TEAM_SCORE(pl->team, pl->score);
 	}
 	NumPlayers++;
 	request_ID();
@@ -1257,6 +1405,9 @@ static int Handle_login(int ind, char *errmsg, int errsize)
     memset(pl->prev_keyv, 0, sizeof(pl->prev_keyv));
 
     Conn_set_state(connp, CONN_READY, CONN_PLAYING);
+
+    if (teamZeroPausing && pl->team == 0)
+	Pause_player(GetInd[pl->id], 1);
 
     if (Send_reply(ind, PKT_PLAY, PKT_SUCCESS) <= 0) {
 	strlcpy(errmsg, "Cannot send play reply", errsize);
@@ -1375,6 +1526,11 @@ static int Handle_login(int ind, char *errmsg, int errsize)
 	Set_player_message(pl, msg);
     }
 
+    if (getenv("XPILOTGREETING") != NULL) {
+	sprintf(msg, "%s", getenv("XPILOTGREETING"));
+	Set_player_message(pl, msg);
+    }
+
     if (connp->version < MY_VERSION) {
 	const char sender[] = "[*Server notice*]";
 	sprintf(msg, "Server runs version %s. %s", VERSION, sender);
@@ -1461,8 +1617,10 @@ static int Handle_login(int ind, char *errmsg, int errsize)
 	Set_message(msg);
     }
 
-    /* kps - this can cause segfaults */
-    /*Rank_get_saved_score(pl);*/
+    /* idle */
+    for (i = 0; i < NumPlayers; i++)
+	if (Players[i]->mychar == ' ')
+	    Players[i]->idleCount = 0;
 
     return 0;
 }
@@ -1861,7 +2019,7 @@ int Send_player(int ind, int id)
 		      "%c%hd" "%c%c" "%s%s%s" "%S",
 		      PKT_PLAYER, pl->id,
 		      pl->team, pl->mychar,
-		      pl->name, pl->realname, pl->hostname,
+		      pl->rawname, pl->realname, pl->hostname,
 		      buf);
     if (n > 0) {
 	if (connp->version < 0x4F10) {
@@ -1883,6 +2041,11 @@ int Send_score(int ind, int id, DFLOAT score,
 	       int life, int mychar, int alliance)
 {
     connection_t	*connp = &Conn[ind];
+
+    /* for those poor fools using standard client or haven't
+       got 'treatZeroSpecial' on... =) */
+    /* if (teamZeroPausing && (Players[GetInd[connp->id]]->team == 0))
+       score = (DFLOAT)(-5000.0); */
 
     if (!BIT(connp->state, CONN_PLAYING | CONN_READY)) {
 	errno = 0;
@@ -2408,6 +2571,7 @@ static int Receive_keyboard(int ind)
 	pl = Players[GetInd[connp->id]];
 	memcpy(pl->last_keyv, connp->r.ptr, size);
 	connp->r.ptr += size;
+	Players[GetInd[connp->id]]->idleCount = 0; /* idle */
 	Handle_keyboard(GetInd[connp->id]);
     }
     if (connp->num_keyboard_updates++ && (connp->state & CONN_PLAYING)) {
@@ -2895,16 +3059,26 @@ static void Handle_talk(int ind, char *str)
     connection_t	*connp = &Conn[ind];
     player		*pl = Players[GetInd[connp->id]];
     int			i, sent, team;
-	unsigned int	len;
+    unsigned int	len;
     char		*cp,
 			msg[MSG_LEN * 2];
+
+    pl->flooding += FPS/3;
 
     if ((cp = strchr (str, ':')) == NULL
 	|| cp == str
 	|| strchr("-_~)(/\\}{[]", cp[1])	/* smileys are smileys */
 	) {
 	sprintf(msg, "%s [%s]", str, pl->name);
-	Set_message(msg);
+	if (!(teamZeroPausing && mute_zero && pl->team == 0)) {
+	    Set_message(msg);
+	} else {
+	    sprintf(msg + strlen(msg), ":[zero]");
+	    for (sent = i = 0; i < NumPlayers; i++) {
+		if (Players[i]->team == 0)
+		    Set_player_message (Players[i], msg);
+	    }
+	}
 	return;
     }
     *cp++ = '\0';
@@ -2914,18 +3088,25 @@ static void Handle_talk(int ind, char *str)
     if (strspn(str, "0123456789") == len) {		/* Team message */
 	team = atoi (str);
 	sprintf(msg + strlen(msg), ":[%d]", team);
-	for (sent = i = 0; i < NumPlayers; i++) {
-	    if (Players[i]->team != TEAM_NOT_SET && Players[i]->team == team) {
-		sent++;
-		Set_player_message (Players[i], msg);
+	sent = 0;
+	if (!(teamZeroPausing && mute_zero && pl->team == 0 && team != 0)) {
+	    for (i = 0; i < NumPlayers; i++) {
+		if (Players[i]->team == team) {
+		    sent++;
+		    Set_player_message (Players[i], msg);
+		}
 	    }
 	}
 	if (sent) {
 	    if (pl->team != team)
 		Set_player_message (pl, msg);
 	} else {
-	    sprintf(msg, "Message not sent, nobody in team %d!",
-		    team);
+	    if (!(teamZeroPausing && mute_zero
+		  && pl->team == 0 && team != 0)) {
+		sprintf(msg, "Message not sent, nobody in team %d!", team);
+	    } else {
+		sprintf(msg, "You may not send messages to active teams!");
+	    }
 	    Set_player_message(pl, msg);
 	}
     }
@@ -2967,8 +3148,14 @@ static void Handle_talk(int ind, char *str)
 	    break;
 	default:
 	    if (Players[sent] != pl) {
-		sprintf(msg + strlen(msg), ":[%s]", Players[sent]->name);
-		Set_player_message(Players[sent], msg);
+		if (!(teamZeroPausing && mute_zero
+		      && pl->team == 0 && Players[sent]->team != 0)) {
+		    sprintf(msg + strlen(msg), ":[%s]", Players[sent]->name);
+		    Set_player_message(Players[sent], msg);
+		} else {
+		    sprintf(msg,
+			    "You may not send messages to active players!");
+		}
 		Set_player_message(pl, msg);
 	    }
 	    break;
@@ -3159,7 +3346,8 @@ int Get_conn_version(int ind)
 
 const char *Get_player_addr(int ind)
 {
-    connection_t	*connp = &Conn[ind];
+    /*connection_t	*connp = &Conn[ind];*/
+    connection_t	*connp = &Conn[Players[ind]->conn];
 
     return connp->addr;
 }

@@ -574,6 +574,8 @@ static void Paint_all_ships(void)
 		&& Other_by_id(ship_ptr[i].id) != NULL ) {
 		  eyesId = ship_ptr[i].id;
 		  eyes = Other_by_id(eyesId);
+		  if (eyes != NULL)
+		      eyeTeam = eyes->team;
 	    }
 
 	    Gui_paint_ship(x, y, 

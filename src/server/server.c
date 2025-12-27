@@ -105,6 +105,11 @@ static bool		Log = true;
 #endif
 static bool		NoPlayersEnteredYet = true;
 int			game_lock = false;
+int			lock_zero = false;
+int			mute_zero = false;
+bool			teamZeroPausing;
+char			team_0[] = "team 0";
+
 time_t			gameOverTime = 0;
 time_t			serverTime = 0;
 
@@ -380,7 +385,7 @@ int End_game(void)
     Contact_cleanup();
 
     /* Ranking. */
-    Rank_rank_score();
+    Rank_write_webpage();     /* "Rank_score" */
     Rank_write_score_file();
 
     Free_players();
@@ -393,7 +398,7 @@ int End_game(void)
 #ifndef _WINDOWS
     exit (0);
 #endif
-	return(FALSE);                  /* return FALSE so windows bubbles out of the main loop */
+    return(FALSE); /* return FALSE so windows bubbles out of the main loop */
 }
 
 /*
@@ -504,21 +509,26 @@ int Pick_team(int pick_for_type)
 	}
     }
 
-    if (num_available_teams == 1) {
-	return available_teams[0];
-    }
-
-    if (num_available_teams > 1) {
-	losing_team = -1;
-	losing_score = LONG_MAX;
-	for (i = 0; i < num_available_teams; i++) {
-	    if (team_score[available_teams[i]] < losing_score
-		&& available_teams[i] != robotTeam) {
-		losing_team = available_teams[i];
-		losing_score = team_score[losing_team];
-	    }
+    /* kps - why check game lock here ??? */
+    if (!teamZeroPausing || !game_lock) {
+	if (num_available_teams == 1) {
+	    return available_teams[0];
 	}
-	return losing_team;
+
+	if (num_available_teams > 1) {
+	    losing_team = -1;
+	    losing_score = LONG_MAX;
+	    for (i = 0; i < num_available_teams; i++) {
+		if (team_score[available_teams[i]] < losing_score
+		    && available_teams[i] != robotTeam) {
+		    losing_team = available_teams[i];
+		    losing_score = team_score[losing_team];
+		}
+	    }
+	    return losing_team;
+	}
+    } else if (Team_zero_pausing_available()) {
+	return 0;
     }
 
     /*NOTREACHED*/
@@ -550,7 +560,7 @@ void Server_info(char *str, unsigned max_size)
 	    "\n"
 	    "EXPERIMENTAL SERVER, see\n"
 	    "http://xpilot.sourceforge.net/\n"
-	    "http://www.hut.fi/~ksoderbl/xpilot/xpilot-4.5.4X-rc6.txt\n"
+	    "http://www.hut.fi/~ksoderbl/xpilot/xpilot-4.5.4X-rc7.txt\n"
 	    "\n",
 	    server_version,
 	    (game_lock && ShutdownServer == -1) ? "locked" :

@@ -206,7 +206,7 @@ SortRankings(void)
 
 /* Sort the ranks and save them to the webpage. */
 void
-Rank_rank_score(void)
+Rank_write_webpage(void)
 {
     static const char HEADER[] =
 "<html><head><title>XPilot @ Ranking server</title>\n"
@@ -423,7 +423,7 @@ Init_scorenode(RankInfo *node,
 
 
 RankInfo *
-Rank_rank_by_name(char *name)
+Rank_get_by_name(char *name)
 {
     RankInfo *score;
     int i;

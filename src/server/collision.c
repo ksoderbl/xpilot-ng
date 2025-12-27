@@ -160,9 +160,9 @@ static int in_range_acd_old(
 	return 0;
 }
 
-/* poly acd functions */
+/* new acd functions */
 /* doubles because the multiplies might overflow ints */
-static int in_range_acd(double dx, double dy, double dvx, double dvy, double r)
+int in_range_acd(double dx, double dy, double dvx, double dvy, double r)
 {
     double	tmin, fminx, fminy;
     double	top, bot;
@@ -196,7 +196,7 @@ static int in_range_acd(double dx, double dy, double dvx, double dvy, double r)
 	return 0;
 }
 
-static int in_range_simple(int px, int py, int qx, int qy, int r)
+int in_range_simple(int px, int py, int qx, int qy, int r)
 {
     int dx = px - qx, dy = py - qy;
 
@@ -214,8 +214,8 @@ static int in_range_simple(int px, int py, int qx, int qy, int r)
 	return 0;
 }
 
-static int in_range_partial(double dx, double dy, double dvx, double dvy,
-			    double r, DFLOAT wall_time)
+int in_range_partial(double dx, double dy, double dvx, double dvy,
+		     double r, DFLOAT wall_time)
 {
     double	tmin, fminx, fminy;
     double	top, bot;
@@ -320,13 +320,24 @@ static void PlayerCollision(void)
 		}
 		if (BIT(Players[j]->used, HAS_PHASING_DEVICE))
 		    continue;
-		if (!in_range_acd_old(pl->prevpos.x, pl->prevpos.y,
-				      pl->pos.cx, pl->pos.cy, 
-				      Players[j]->prevpos.x,
-				      Players[j]->prevpos.y, 
-				      Players[j]->pos.cx, Players[j]->pos.cy, 
-				      PIXEL_TO_CLICK(2*SHIP_SZ-6))) {
-		    continue;
+		if (!is_polygon_map) {
+		    if (!in_range_acd_old(pl->prevpos.x, pl->prevpos.y,
+					  pl->pos.cx, pl->pos.cy, 
+					  Players[j]->prevpos.x,
+					  Players[j]->prevpos.y, 
+					  Players[j]->pos.cx,
+					  Players[j]->pos.cy, 
+					  PIXEL_TO_CLICK(2*SHIP_SZ-6))) {
+			continue;
+		    }
+		} else {
+		    if (!in_range_acd(pl->prevpos.x - Players[j]->prevpos.x,
+				      pl->prevpos.y - Players[j]->prevpos.y,
+				      pl->extmove.x - Players[j]->extmove.x,
+				      pl->extmove.y - Players[j]->extmove.y,
+				      (2*SHIP_SZ-6) * CLICK)) {
+ 			continue;
+		    }
 		}
 
 		/*
@@ -432,7 +443,7 @@ static void PlayerCollision(void)
 			sound_play_sensors(Players[j]->pos.cx,
 					   Players[j]->pos.cy,
 					   PLAYER_RAN_OVER_PLAYER_SOUND);
-			pl->kills++;
+			Rank_AddKill(pl);
 			if (IS_TANK_IND(i)) {
 			    sc = Rate(Players[i_tank_owner]->score,
 						 Players[j]->score)
@@ -459,7 +470,7 @@ static void PlayerCollision(void)
 			Set_message(msg);
 			sound_play_sensors(pl->pos.cx, pl->pos.cy,
 					   PLAYER_RAN_OVER_PLAYER_SOUND);
-			Players[j]->kills++;
+			Rank_AddKill(Players[j]);
 			if (IS_TANK_IND(j)) {
 			    sc = Rate(Players[j_tank_owner]->score, pl->score)
 				   * tankKillScoreMult;
@@ -492,18 +503,20 @@ static void PlayerCollision(void)
 	}
 
 	/* Player picking up ball/treasure */
-	if (!BIT(pl->used, HAS_CONNECTOR) || BIT(pl->used, HAS_PHASING_DEVICE)) {
+	if (!BIT(pl->used, HAS_CONNECTOR)
+	    || BIT(pl->used, HAS_PHASING_DEVICE)) {
 	    pl->ball = NULL;
-	}
-	else if (pl->ball != NULL) {
+	} else if (pl->ball != NULL) {
 	    ballobject *ball = pl->ball;
+
 	    if (ball->life <= 0 || ball->id != NO_ID)
 		pl->ball = NULL;
 	    else {
 		DFLOAT distance = Wrap_length(pl->pos.cx - ball->pos.cx,
-					      pl->pos.cy - ball->pos.cy)
-		    / CLICK;
-		if (distance >= ballConnectorLength) {
+					      pl->pos.cy - ball->pos.cy);
+		int group;
+
+		if (distance >= ballConnectorLength * CLICK) {
 		    ball->id = pl->id;
 		    /* this is only the team of the owner of the ball,
 		       not the team the ball belongs to. the latter is
@@ -512,13 +525,30 @@ static void PlayerCollision(void)
 		    if (ball->owner == NO_ID)
 			ball->life = LONG_MAX;  /* for frame counter */
 		    ball->owner = pl->id;
-		    ball->length = distance;
+		    /*ball->length = distance;*/
 		    SET_BIT(ball->status, GRAVITY);
 		    World.treasures[ball->treasure].have = false;
 		    SET_BIT(pl->have, HAS_BALL);
 		    pl->ball = NULL;
 		    sound_play_sensors(pl->pos.cx, pl->pos.cy,
 				       CONNECT_BALL_SOUND);
+		    pl->grabbedBallFrame = main_loops;
+		    if (is_polygon_map) {
+			/* The ball might already be inside the team's ball
+			 * target. This is not a complete check as it only
+			 * checks the center of the ball, but at least it
+			 * should take care of the typical case where this
+			 * really matters on Bloods. Must fix this completely
+			 * later (once there's general code for shape/polygon
+			 * is-inside testing, which should be relatively easy
+			 * to add on top of current features). !@#*/
+			if ((group = is_inside(ball->pos.cx, ball->pos.cy,
+					       BALL_BIT | HITMASK(pl->team)))
+			    != -1) {
+			    Ball_hits_goal(ball, group);
+			    ball->life = 0;
+			}
+		    }
 		}
 	    }
 	} else {
@@ -526,11 +556,11 @@ static void PlayerCollision(void)
 	     * We want a separate list of balls to avoid searching
 	     * the object list for balls.
 	     */
-	    int dist, mindist = ballConnectorLength;
+	    int dist, mindist = ballConnectorLength * CLICK;
 	    for (j = 0; j < NumObjs; j++) {
 		if (BIT(Obj[j]->type, OBJ_BALL) && Obj[j]->id == NO_ID) {
 		    dist = Wrap_length(pl->pos.cx - Obj[j]->pos.cx,
-				       pl->pos.cy - Obj[j]->pos.cy) / CLICK;
+				       pl->pos.cy - Obj[j]->pos.cy);
 		    if (dist < mindist) {
 			ballobject *ball = BALL_PTR(Obj[j]);
 			int bteam = World.treasures[ball->treasure].team;
@@ -542,6 +572,8 @@ static void PlayerCollision(void)
 			 * taking and hiding with the ball... this was
 			 * considered bad gamesmanship.
 			 */
+			/* mara: this also causes balls to be impossible to
+			   grab when the owner leaves...*/
 			if (!BIT(World.rules->mode, TEAM_PLAY)
 			    || ball->owner != NO_ID
 			    || pl->team != bteam) {
@@ -628,7 +660,34 @@ int CountDefensiveItems(player *pl)
     return count;
 }
 
+/* Collmodes:
+   0 - Object has not been moved in walls.c after it was created.
+       Check only whether end-of-frame position is on top of a
+       player.
+   1 - Object was moved in walls.c. It did not hit walls and
+       therefore moved at constant speed from obj->prevpos to
+       obj->pos. Check whether it was within range during movement
+       using analytical collision detection.
+   2 - Object was moving from obj->prevpos by obj->extmove but it
+       hit a wall and was destroyed after completing obj->wall_time
+       of the distance. Check whether it was within range similarly
+       to case 1 but only consider hits at the beginning of the
+       frame before obj->wall_time.
+   3 - Object bounced off a wall at least once without getting
+       destroyed. Checking all the linear parts of movement
+       separately is not implemented yet so we don't detect any
+       possible collisions. Note that it would already be possible
+       to check the first linear part until obj->wall_time similarly
+       to case 2. This is not done because we lack the information
+       needed to calculate the effect of non-fatal hits. The
+       direction and speed of the object at the moment of impact
+       were likely completely different from the end-of-frame values
+       we have now.
 
+       Different collision modes for players have not been implemented
+       yet. It's supposed that they move in a straight line from
+       prevpos to pos. This can lead to some erroneous hits.
+*/
 static void PlayerObjectCollision(int ind)
 {
     int		j, range, radius, hit, obj_count;
@@ -648,17 +707,51 @@ static void PlayerObjectCollision(int ind)
 
     for (j = 0; j < obj_count; j++) {
 	obj = obj_list[j];
-	if (obj->life <= 0) {
-	    continue;
-	}
 
-	range = SHIP_SZ + obj->pl_range;
-	if (!in_range_acd_old(pl->prevpos.x, pl->prevpos.y,
-			      pl->pos.cx, pl->pos.cy,
-			      obj->prevpos.x, obj->prevpos.y,
-			      obj->pos.cx, obj->pos.cy,
-			      range * CLICK)) {
-	    continue;
+	if (!is_polygon_map) {
+	    if (obj->life <= 0) {
+		continue;
+	    }
+
+	    range = SHIP_SZ + obj->pl_range;
+	    if (!in_range_acd_old(pl->prevpos.x, pl->prevpos.y,
+				  pl->pos.cx, pl->pos.cy,
+				  obj->prevpos.x, obj->prevpos.y,
+				  obj->pos.cx, obj->pos.cy,
+				  range * CLICK)) {
+		continue;
+	    }
+	} else {
+	    range = SHIP_SZ + obj->pl_range;
+	    switch (obj->collmode) {
+	    case 0:
+		hit = in_range_simple(pl->pos.cx, pl->pos.cy,
+				      obj->pos.cx, obj->pos.cy,
+				      range * CLICK);
+		break;
+	    case 1:
+		hit = in_range_acd(pl->prevpos.x - obj->prevpos.x,
+				   pl->prevpos.y - obj->prevpos.y,
+				   pl->extmove.x - obj->extmove.x,
+				   pl->extmove.y - obj->extmove.y,
+				   range * CLICK);
+		break;
+	    case 2:
+		hit = in_range_partial(pl->prevpos.x - obj->prevpos.x,
+				       pl->prevpos.y - obj->prevpos.y,
+				       pl->extmove.x - obj->extmove.x,
+				       pl->extmove.y - obj->extmove.y,
+				       range * CLICK, obj->wall_time);
+		break;
+	    case 3:
+	    default:
+#if 0
+		warn("Unimplemented collision mode %d", obj->collmode);
+#endif
+		continue;
+	    }
+	    if (!hit)
+		continue;
 	}
 
 	if (obj->id != NO_ID) {
@@ -719,12 +812,49 @@ static void PlayerObjectCollision(int ind)
 	if (radius >= range) {
 	    hit = 1;
 	} else {
-	    hit = in_range_acd_old(pl->prevpos.x, pl->prevpos.y,
-				   pl->pos.cx, pl->pos.cy,
-				   obj->prevpos.x, obj->prevpos.y,
-				   obj->pos.cx, obj->pos.cy,
-				   range * CLICK);
+	    if (!is_polygon_map) {
+		hit = in_range_acd_old(pl->prevpos.x, pl->prevpos.y,
+				       pl->pos.cx, pl->pos.cy,
+				       obj->prevpos.x, obj->prevpos.y,
+				       obj->pos.cx, obj->pos.cy,
+				       range * CLICK);
+	    } else {
+		switch (obj->collmode) {
+		case 0:
+		    hit = in_range_simple(pl->pos.cx, pl->pos.cy,
+					  obj->pos.cx, obj->pos.cy,
+					  radius * CLICK);
+		    break;
+		case 1:
+		    hit = in_range_acd(pl->prevpos.x - obj->prevpos.x,
+				       pl->prevpos.y - obj->prevpos.y,
+				       pl->extmove.x - obj->extmove.x,
+				       pl->extmove.y - obj->extmove.y,
+				       radius * CLICK);
+		    break;
+		case 2:
+		    hit = in_range_partial(pl->prevpos.x - obj->prevpos.x,
+					   pl->prevpos.y - obj->prevpos.y,
+					   pl->extmove.x - obj->extmove.x,
+					   pl->extmove.y - obj->extmove.y,
+					   radius * CLICK, obj->wall_time);
+		    break;
+		default:
+		    warn("Unimplemented collision mode %d", obj->collmode);
+		    continue;
+		}
+	    }
 	}
+
+#if 1
+	if (is_polygon_map && obj->collmode != 1) {
+	    char MSG[80];
+	    sprintf(MSG, "Collision type=%d, hit=%d, cm=%d, time=%f, "
+		    "frame=%ld [*DEBUG*]", obj->type, hit, obj->collmode,
+		    obj->wall_time, frame_loops);
+	    Set_message(MSG);
+	}
+#endif
 
 	/*
 	 * Object collision.
@@ -842,7 +972,7 @@ static void Player_collides_with_ball(int ind, object *obj, int radius)
 		   * selfKillScoreMult;
 	    SCORE(ind, -sc, pl->pos.cx, pl->pos.cy, Players[killer]->name);
 	} else {
-	    Players[killer]->kills++;
+	    Rank_AddKill(Players[killer]);
 	    sc = Rate(Players[killer]->score, pl->score)
 		       * ballKillScoreMult;
 	    Score_players(killer, sc, pl->name,
@@ -1142,7 +1272,7 @@ static void Player_collides_with_debris(int ind, object *obj)
 	    SCORE(ind, -sc, pl->pos.cx, pl->pos.cy,
 		  (killer == -1) ? "[Explosion]" : pl->name);
 	} else {
-	    Players[killer]->kills++;
+	    Rank_AddKill(Players[killer]);
 	    sc = Rate(Players[killer]->score, pl->score)
 		       * explosionKillScoreMult;
 	    Score_players(killer, sc, pl->name,
@@ -1330,7 +1460,7 @@ static void Player_collides_with_killing_shot(int ind, object *obj)
 		    strcat(msg, "  How strange!");
 		    sc = Rate(0, pl->score) * selfKillScoreMult;
 		} else {
-		    Players[killer]->kills++;
+		    Rank_AddKill(Players[killer]);
 		    sc = Rate(Players[killer]->score, pl->score);
 		}
 	    }
@@ -1386,6 +1516,7 @@ static void Player_pass_checkpoint(int ind)
 
     if (pl->check == 0) {
 	pl->round++;
+#if 1
 	pl->last_lap_time = pl->time - pl->last_lap;
 	if ((pl->best_lap > pl->last_lap_time
 	     || pl->best_lap == 0)
@@ -1428,6 +1559,11 @@ static void Player_pass_checkpoint(int ind)
 	    sprintf(msg, "%s starts lap 1 of %d", pl->name, raceLaps);
 	}
 	Set_message(msg);
+#else
+	/* this is how 4.3.1X did this */
+	SET_BIT(pl->status, FINISH);
+	/* Rest done in Compute_game_status() */
+#endif
     }
 
     if (++pl->check == World.NumChecks)
@@ -1453,6 +1589,7 @@ static void AsteroidCollision(void)
 	return;
     }
 
+    /* kps - use new acd here too, as in PlayerObjectCollision */
     for (iter = List_begin(list); iter != List_end(list); LI_FORWARD(iter)) {
 	ast = LI_DATA(iter);
 
@@ -1644,6 +1781,7 @@ static void BallCollision(void)
 	    }
 	}
 
+	/* kps - use new acd here too, as in PlayerObjectCollision */
 	/* Ball - object */
 	if (!ballCollisions)
 	    continue;
@@ -1745,6 +1883,7 @@ static void MineCollision(void)
 			   OBJ_HEAT_SHOT |
 			   OBJ_CANNON_SHOT;
 
+    /* kps - use new acd here too, as in PlayerObjectCollision */
     for (i = 0; i < NumObjs; i++) {
 	mine = MINE_IND(i);
 

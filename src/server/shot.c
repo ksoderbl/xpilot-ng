@@ -343,7 +343,7 @@ void Make_treasure_ball(int treasure)
 	return;
     }
 
-    ball->length = ballConnectorLength; /* kps - ng wants this removed */
+    /*ball->length = ballConnectorLength;*/ /* kps - ng wants this removed */
     ball->life = LONG_MAX;
     ball->mass = ballMass;
     ball->vel.x = 0;	  	/* make the ball stuck a little */
@@ -1557,7 +1557,7 @@ void Move_ball(int ind)
 	Detach_ball(GetInd[ball->id], ind);
 	return;
     }
-    ball->length = length / CLICK;
+    /*ball->length = length;*/
 
     /* compute damping for player */
     cosine = (pl->vel.x * D.x) + (pl->vel.y * D.y);

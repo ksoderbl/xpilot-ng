@@ -409,8 +409,8 @@ static void Place_asteroid(void)
 
 	    for (i = 0; i < NumPlayers; i++) {
 		if (IS_HUMAN_IND(i)) {
-		    ox = OBJ_X_IN_PIXELS(Players[i]);
-		    oy = OBJ_Y_IN_PIXELS(Players[i]);
+		    ox = Players[i]->pos.px;
+		    oy = Players[i]->pos.py;
 		    dpx = WRAP_DX(px - ox);
 		    dpy = WRAP_DY(py - oy);
 		    if (sqr(dpx) + sqr(dpy) < sqr(ASTEROID_MIN_DIST)) {

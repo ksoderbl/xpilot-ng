@@ -247,8 +247,11 @@ bool		reportToMetaServer;	/* Send status to meta-server? */
 bool		searchDomainForXPilot;	/* Do a DNS lookup for XPilot.domain? */
 char		*denyHosts;		/* Computers which are denied service */
 DFLOAT		gameDuration;		/* total duration of game in minutes */
-bool		allowViewing;		/* Full framerate paused/waiting? */
-
+bool		allowViewing;		/* Allowed to watch other players? */
+bool		fullFramerate;		/* Are players allowed to watch
+					   others with full framerate? */
+bool		fullZeroFramerate;	/* Are team zero pausers allowed to
+					   watch others with full framerate? */
 bool		teamAssign;		/* Assign player to team if not set? */
 bool		teamImmunity;		/* Is team immune from player action */
 bool		teamShareScore;		/* Are scores shared between members? */
@@ -3149,12 +3152,45 @@ static option_desc options[] = {
     {
 	"allowViewing",
 	"allowViewing",
-	"false",
+	"true",
 	&allowViewing,
 	valBool,
 	tuner_dummy,
-	"Do players get a full framerate while they're paused or waiting?\n",
+	"Are active players allowed to watch any other player while paused, "
+	"waiting or dead?\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
+	"fullFramerate",
+	"fullFramerate",
+	"true",
+	&fullFramerate,
+	valBool,
+	tuner_dummy,
+	"Are active players allowed to watch other players with full "
+	"framerate?\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
+	"fullZeroFramerate",
+	"fullZeroFramerate",
+	"false",
+	&fullZeroFramerate,
+	valBool,
+	tuner_dummy,
+	"Are teamzero pausers allowed to watch other players with full "
+	"framerate?\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
+	"teamZeroPausing",
+	"teamZeroPausing",
+	"false",
+	&teamZeroPausing,
+	valBool,
+	tuner_dummy, /* kps - changed from tuner_none */
+	"Should team zero be considered a pause only team?\n",
+ 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
 	"friction",
@@ -3650,7 +3686,7 @@ void Timing_setup(void)
 	friction = pow(friction, 1. / FPSMultiplier);
 #endif
 
-#if 1
+#if 0
     xpprintf(__FILE__ ": FPSMultiplier     = %f\n", FPSMultiplier);
     xpprintf(__FILE__ ": timeStep          = %d\n", timeStep);
     xpprintf(__FILE__ ": timeStep2         = %f\n", timeStep2);

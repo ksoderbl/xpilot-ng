@@ -1340,21 +1340,24 @@ void Frame_update(void)
 	}
 	playback = (pl->rectype == 1);
 	if (BIT(pl->status, PAUSE|GAME_OVER)
-	    && !allowViewing && pl->rectype != 2
+	    && pl->rectype != 2
 	    && !pl->isowner) {
 	    /*
 	     * Lower the frame rate for non-playing players
 	     * to reduce network load.
 	     * Owner always gets full framerate even if paused.
-	     * With allowViewing on, everyone gets full framerate.
+	     * With fullFramerate on, everyone gets full framerate.
 	     */
-	    if (BIT(pl->status, PAUSE)) {
-		if (frame_loops & 0x03) {
-		    continue;
-		}
-	    } else {
-		if (frame_loops & 0x01) {
-		    continue;
+	    if (!fullFramerate) {
+		if (teamZeroPausing && pl->team == 0) {
+		    if (frame_loops & 0x07)
+			continue;
+		} else if (BIT(pl->status, PAUSE)) {
+		    if (frame_loops & 0x03)
+			continue;
+		} else {
+		    if (frame_loops & 0x01)
+			continue;
 		}
 	    }
 	}

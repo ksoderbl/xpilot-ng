@@ -650,10 +650,9 @@ static int Gui_calculate_ship_color(int id, other_t *other)
 
 #ifndef NO_BLUE_TEAM
     if (BIT(Setup->mode, TEAM_PLAY)
-	&& eyes != NULL
 	&& eyesId != id
 	&& other != NULL
-	&& eyes->team == other->team) {
+	&& eyeTeam == other->team) {
 	/* Paint teammates and allies ships with last life in teamLWColor */
 	if (BIT(Setup->mode, LIMITED_LIVES)
 	    && (other->life == 0))
@@ -696,7 +695,7 @@ static int Gui_calculate_ship_color(int id, other_t *other)
 	if (eyes != NULL
 	    && eyes->id != id
 	    && other != NULL
-	    && eyes->team != other->team
+	    && eyeTeam != other->team
 	    && other->life == 0) {
 	    ship_color = enemyLWColor;
 	}

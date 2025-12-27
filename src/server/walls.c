@@ -83,8 +83,6 @@ static unsigned char **walldist;
 /* kps compatibility hacks - plz remove if you can */
 static void Walls_init_old(void);
 static void Walls_init_new(void);
-static void Move_init_old(void);
-static void Move_init_new(void);
 static void Move_object_old(object *obj);
 static void Move_object_new(object *obj);
 static void Move_player_old(int ind);
@@ -102,10 +100,60 @@ void Walls_init(void)
 
 void Move_init(void)
 {
-    if (!is_polygon_map)
-	Move_init_old();
-    else
-	Move_init_new();
+    mp.click_width = PIXEL_TO_CLICK(World.width);
+    mp.click_height = PIXEL_TO_CLICK(World.height);
+
+    LIMIT(maxObjectWallBounceSpeed, 0, World.hypotenuse);
+    LIMIT(maxShieldedWallBounceSpeed, 0, World.hypotenuse);
+    LIMIT(maxUnshieldedWallBounceSpeed, 0, World.hypotenuse);
+
+    /* kps - ng does not want the following 2 */
+    LIMIT(maxShieldedWallBounceAngle, 0, 180);
+    LIMIT(maxUnshieldedWallBounceAngle, 0, 180);
+
+    LIMIT(playerWallBrakeFactor, 0, 1);
+    LIMIT(objectWallBrakeFactor, 0, 1);
+    LIMIT(objectWallBounceLifeFactor, 0, 1);
+    LIMIT(wallBounceFuelDrainMult, 0, 1000);
+    wallBounceExplosionMult = sqrt(wallBounceFuelDrainMult);
+
+    /* kps - ng does not want the following 2 */
+    mp.max_shielded_angle = (int)(maxShieldedWallBounceAngle * RES / 360);
+    mp.max_unshielded_angle = (int)(maxUnshieldedWallBounceAngle * RES / 360);
+
+    mp.obj_bounce_mask = 0;
+    if (sparksWallBounce) {
+	SET_BIT(mp.obj_bounce_mask, OBJ_SPARK);
+    }
+    if (debrisWallBounce) {
+	SET_BIT(mp.obj_bounce_mask, OBJ_DEBRIS);
+    }
+    if (shotsWallBounce) {
+	SET_BIT(mp.obj_bounce_mask, OBJ_SHOT|OBJ_CANNON_SHOT);
+    }
+    if (itemsWallBounce) {
+	SET_BIT(mp.obj_bounce_mask, OBJ_ITEM);
+    }
+    if (missilesWallBounce) {
+	SET_BIT(mp.obj_bounce_mask, OBJ_SMART_SHOT|OBJ_TORPEDO|OBJ_HEAT_SHOT);
+    }
+    if (minesWallBounce) {
+	SET_BIT(mp.obj_bounce_mask, OBJ_MINE);
+    }
+    if (ballsWallBounce) {
+	SET_BIT(mp.obj_bounce_mask, OBJ_BALL);
+    }
+    if (asteroidsWallBounce) {
+	SET_BIT(mp.obj_bounce_mask, OBJ_ASTEROID);
+    }
+
+    mp.obj_cannon_mask = (KILLING_SHOTS) | OBJ_MINE | OBJ_SHOT | OBJ_PULSE |
+			OBJ_SMART_SHOT | OBJ_TORPEDO | OBJ_HEAT_SHOT |
+			OBJ_ASTEROID;
+    if (cannonsUseItems)
+	mp.obj_cannon_mask |= OBJ_ITEM;
+    mp.obj_target_mask = mp.obj_cannon_mask | OBJ_BALL | OBJ_SPARK;
+    mp.obj_treasure_mask = mp.obj_bounce_mask | OBJ_BALL | OBJ_PULSE;
 }
 
 void Move_object(object *obj)
@@ -344,64 +392,6 @@ void Treasure_init(void)
     }
 }
 
-static void Move_init_old(void)
-{
-    mp.click_width = PIXEL_TO_CLICK(World.width);
-    mp.click_height = PIXEL_TO_CLICK(World.height);
-
-#if 0
-    xpprintf(__FILE__ ":" "mp.click_width  = %d\n", mp.click_width);
-    xpprintf(__FILE__ ":" "mp.click_heigth = %d\n", mp.click_height);
-#endif
-
-    LIMIT(maxObjectWallBounceSpeed, 0, World.hypotenuse);
-    LIMIT(maxShieldedWallBounceSpeed, 0, World.hypotenuse);
-    LIMIT(maxUnshieldedWallBounceSpeed, 0, World.hypotenuse);
-    LIMIT(maxShieldedWallBounceAngle, 0, 180);
-    LIMIT(maxUnshieldedWallBounceAngle, 0, 180);
-    LIMIT(playerWallBrakeFactor, 0, 1);
-    LIMIT(objectWallBrakeFactor, 0, 1);
-    LIMIT(objectWallBounceLifeFactor, 0, 1);
-    LIMIT(wallBounceFuelDrainMult, 0, 1000);
-    wallBounceExplosionMult = sqrt(wallBounceFuelDrainMult);
-
-    mp.max_shielded_angle = (int)(maxShieldedWallBounceAngle * RES / 360);
-    mp.max_unshielded_angle = (int)(maxUnshieldedWallBounceAngle * RES / 360);
-
-    mp.obj_bounce_mask = 0;
-    if (sparksWallBounce) {
-	SET_BIT(mp.obj_bounce_mask, OBJ_SPARK);
-    }
-    if (debrisWallBounce) {
-	SET_BIT(mp.obj_bounce_mask, OBJ_DEBRIS);
-    }
-    if (shotsWallBounce) {
-	SET_BIT(mp.obj_bounce_mask, OBJ_SHOT|OBJ_CANNON_SHOT);
-    }
-    if (itemsWallBounce) {
-	SET_BIT(mp.obj_bounce_mask, OBJ_ITEM);
-    }
-    if (missilesWallBounce) {
-	SET_BIT(mp.obj_bounce_mask, OBJ_SMART_SHOT|OBJ_TORPEDO|OBJ_HEAT_SHOT);
-    }
-    if (minesWallBounce) {
-	SET_BIT(mp.obj_bounce_mask, OBJ_MINE);
-    }
-    if (ballsWallBounce) {
-	SET_BIT(mp.obj_bounce_mask, OBJ_BALL);
-    }
-    if (asteroidsWallBounce) {
-	SET_BIT(mp.obj_bounce_mask, OBJ_ASTEROID);
-    }
-
-    mp.obj_cannon_mask = (KILLING_SHOTS) | OBJ_MINE | OBJ_SHOT | OBJ_PULSE |
-			OBJ_SMART_SHOT | OBJ_TORPEDO | OBJ_HEAT_SHOT |
-			OBJ_ASTEROID;
-    if (cannonsUseItems)
-	mp.obj_cannon_mask |= OBJ_ITEM;
-    mp.obj_target_mask = mp.obj_cannon_mask | OBJ_BALL | OBJ_SPARK;
-    mp.obj_treasure_mask = mp.obj_bounce_mask | OBJ_BALL | OBJ_PULSE;
-}
 
 static void Bounce_edge(move_state_t *ms, move_bounce_t bounce)
 {
@@ -1066,15 +1056,7 @@ void Move_segment(move_state_t *ms)
 			break;
 		    }
 
-		    ball->life = 0;
-		    SET_BIT(ball->status, (NOEXPLOSION|RECREATE));
-
-		    SCORE(GetInd[pl->id], 5, tt->pos.x, tt->pos.y,
-			  "Treasure: ");
-		    sprintf(msg, " < %s (team %d) has replaced the treasure >",
-			    pl->name, pl->team);
-		    Set_message(msg);
-		    Rank_SavedBall(pl);
+		    Ball_is_replaced(ball, tt, pl);
 		    break;
 		}
 		if (ball->owner == NO_ID) {
@@ -1084,18 +1066,7 @@ void Move_segment(move_state_t *ms)
 		if (BIT(World.rules->mode, TEAM_PLAY)
 		    && World.treasures[ms->treasure].team ==
 		       Players[GetInd[ball->owner]]->team) {
-		    long frames = (LONG_MAX - ball->life) / timeStep;
-		    int ind = GetInd[ball->owner];
-		    DFLOAT tm = ((DFLOAT)frames) / framesPerSecond;
-
-		    /*
-		     * Ball has been brought back to home treasure.
-		     * The team should be punished.
-		     */
-		    sprintf(msg," < The ball was loose for %ld frames (%d) "
-			    "/ %.2f seconds >",
-			    frames, Rank_GetBestBall(Players[ind]), tm);
-		    Set_message(msg);
+		    Ball_is_destroyed(ball);
 		    if (captureTheFlag
 			&& !World.treasures[ms->treasure].have
 			&& !World.treasures[ms->treasure].empty) {
@@ -1103,9 +1074,9 @@ void Move_segment(move_state_t *ms)
 			       "can cash an opponent's!");
 			Set_player_message(Players[GetInd[ball->owner]], msg);
 		    } else if (Punish_team(GetInd[ball->owner],
-				    ball->treasure, ms->treasure))
+					   ball->treasure,
+					   ball->pos.cx, ball->pos.cy))
 			CLR_BIT(ball->status, RECREATE);
-		    Rank_BallRun(Players[ind], frames);
 		}
 		ball->life = 0;
 		return;
@@ -1987,11 +1958,11 @@ void Move_object_old(object *obj)
     if (dist > 2) {
 	int max = ((dist - 2) * BLOCK_SZ) >> 1;
 	if (sqr(max) >= sqr(obj->vel.x) + sqr(obj->vel.y)) {
-	    DFLOAT x = obj->pos.cx + FLOAT_TO_CLICK(obj->vel.x) * timeStep2;
-	    DFLOAT y = obj->pos.cy + FLOAT_TO_CLICK(obj->vel.y) * timeStep2;
-	    x = WRAP_XCLICK(x);
-	    y = WRAP_YCLICK(y);
-	    Object_position_set_clicks(obj, (int)(x), (int)(y));
+	    int cx = obj->pos.cx + FLOAT_TO_CLICK(obj->vel.x * timeStep2);
+	    int cy = obj->pos.cy + FLOAT_TO_CLICK(obj->vel.y * timeStep2);
+	    cx = WRAP_XCLICK(cx);
+	    cy = WRAP_YCLICK(cy);
+	    Object_position_set_clicks(obj, cx, cy);
 	    Cell_add_object(obj);
 	    return;
 	}
@@ -2015,8 +1986,8 @@ void Move_object_old(object *obj)
     ms.pos.x = obj->pos.cx;
     ms.pos.y = obj->pos.cy;
     ms.vel = obj->vel;
-    ms.todo.x = FLOAT_TO_CLICK(ms.vel.x) * timeStep2;
-    ms.todo.y = FLOAT_TO_CLICK(ms.vel.y) * timeStep2;
+    ms.todo.x = FLOAT_TO_CLICK(ms.vel.x * timeStep2);
+    ms.todo.y = FLOAT_TO_CLICK(ms.vel.y * timeStep2);
     ms.dir = obj->missile_dir;
     ms.mip = &mi;
 
@@ -2296,8 +2267,8 @@ static void Move_player_old(int ind)
 
     if (BIT(pl->status, PLAYING|PAUSE|GAME_OVER|KILLED) != PLAYING) {
 	if (!BIT(pl->status, KILLED|PAUSE)) {
-	    pos.x = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x) * timeStep2;
-	    pos.y = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y) * timeStep2;
+	    pos.x = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x * timeStep2);
+	    pos.y = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y * timeStep2);
 	    pos.x = WRAP_XCLICK(pos.x);
 	    pos.y = WRAP_YCLICK(pos.y);
 	    if (pos.x != pl->pos.cx || pos.y != pl->pos.cy) {
@@ -2336,8 +2307,8 @@ static void Move_player_old(int ind)
     if (dist > 3) {
 	int max = ((dist - 3) * BLOCK_SZ) >> 1;
 	if (max >= pl->velocity) {
-	    pos.x = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x) * timeStep2;
-	    pos.y = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y) * timeStep2;
+	    pos.x = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x * timeStep2);
+	    pos.y = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y * timeStep2);
 	    pos.x = WRAP_XCLICK(pos.x);
 	    pos.y = WRAP_YCLICK(pos.y);
 	    Player_position_set_clicks(pl, pos.x, pos.y);
@@ -2358,8 +2329,8 @@ static void Move_player_old(int ind)
     mi.phased = BIT(pl->used, HAS_PHASING_DEVICE);
 
     vel = pl->vel;
-    todo.x = FLOAT_TO_CLICK(vel.x) * timeStep2;
-    todo.y = FLOAT_TO_CLICK(vel.y) * timeStep2;
+    todo.x = FLOAT_TO_CLICK(vel.x * timeStep2);
+    todo.y = FLOAT_TO_CLICK(vel.y * timeStep2);
     for (i = 0; i < pl->ship->num_points; i++) {
 	ms[i].pos.x = pl->pos.cx + pl->ship->pts[i][pl->dir].cx;
 	ms[i].pos.y = pl->pos.cy + pl->ship->pts[i][pl->dir].cy;
@@ -2817,11 +2788,7 @@ static void Turn_player_old(int ind)
 
 /* polygon map related stuff */
 
-/* kpskps */
-
 /* start */
-
-/*#include "math.h" kps ? */
 
 /* Maximum line length 32767-B_CLICKS, 30000 used in checks
    There's a minimum map size to avoid "too much wrapping". A bit smaller
@@ -3166,10 +3133,7 @@ static void Player_crash_new(player *pl, struct move *move, int crashtype)
 	}
 	if (num_pushers == 0) {
 	    sc = Rate(WALL_SCORE, pl->score);
-	    SCORE(ind, -sc,
-		  OBJ_X_IN_BLOCKS(pl),
-		  OBJ_Y_IN_BLOCKS(pl),
-		  hudmsg);
+	    SCORE(ind, -sc, pl->pos.cx, pl->pos.cy, hudmsg);
 	    strcat(msg, ".");
 	    Set_message(msg);
 	}
@@ -3198,16 +3162,11 @@ static void Player_crash_new(player *pl, struct move *move, int crashtype)
 		sc = cnt[i] * (int)floor(Rate(pusher->score, pl->score)
 				    * shoveKillScoreMult) / total_pusher_count;
 		SCORE(GetInd[pusher->id], sc,
-		      OBJ_X_IN_BLOCKS(pl),
-		      OBJ_Y_IN_BLOCKS(pl),
-		      pl->name);
+		      pl->pos.cx, pl->pos.cy, pl->name);
 	    }
 	    sc = (int)floor(Rate(average_pusher_score, pl->score)
 		       * shoveKillScoreMult);
-	    SCORE(ind, -sc,
-		  OBJ_X_IN_BLOCKS(pl),
-		  OBJ_Y_IN_BLOCKS(pl),
-		  "[Shove]");
+	    SCORE(ind, -sc, pl->pos.cx, pl->pos.cy, "[Shove]");
 	    strcpy(msg_ptr, ".");
 	    Set_message(msg);
 	}
@@ -4852,48 +4811,6 @@ void Walls_init_new(void)
 static char msg[MSG_LEN];
 
 
-void Move_init_new(void)
-{
-    LIMIT(maxObjectWallBounceSpeed, 0, World.hypotenuse);
-    LIMIT(maxShieldedWallBounceSpeed, 0, World.hypotenuse);
-    LIMIT(maxUnshieldedWallBounceSpeed, 0, World.hypotenuse);
-    LIMIT(playerWallBrakeFactor, 0, 1);
-    LIMIT(objectWallBrakeFactor, 0, 1);
-    LIMIT(objectWallBounceLifeFactor, 0, 1);
-    LIMIT(wallBounceFuelDrainMult, 0, 1000);
-    wallBounceExplosionMult = sqrt(wallBounceFuelDrainMult);
-
-    mp.obj_bounce_mask = 0;
-    if (sparksWallBounce) {
-	SET_BIT(mp.obj_bounce_mask, OBJ_SPARK);
-    }
-    if (debrisWallBounce) {
-	SET_BIT(mp.obj_bounce_mask, OBJ_DEBRIS);
-    }
-    if (shotsWallBounce) {
-	SET_BIT(mp.obj_bounce_mask, OBJ_SHOT);
-    }
-    if (itemsWallBounce) {
-	SET_BIT(mp.obj_bounce_mask, OBJ_ITEM);
-    }
-    if (missilesWallBounce) {
-	SET_BIT(mp.obj_bounce_mask, OBJ_SMART_SHOT|OBJ_TORPEDO|OBJ_HEAT_SHOT);
-    }
-    if (minesWallBounce) {
-	SET_BIT(mp.obj_bounce_mask, OBJ_MINE);
-    }
-    if (ballsWallBounce) {
-	SET_BIT(mp.obj_bounce_mask, OBJ_BALL);
-    }
-
-    mp.obj_cannon_mask = (KILLING_SHOTS) | OBJ_MINE | OBJ_SHOT | OBJ_PULSE |
-			OBJ_SMART_SHOT | OBJ_TORPEDO | OBJ_HEAT_SHOT;
-    if (cannonsUseItems)
-	mp.obj_cannon_mask |= OBJ_ITEM;
-    mp.obj_target_mask = mp.obj_cannon_mask | OBJ_BALL | OBJ_SPARK;
-    mp.obj_treasure_mask = mp.obj_bounce_mask | OBJ_BALL | OBJ_PULSE;
-}
-
 
 #if 0
 static void Bounce_wall(move_state_t *ms, move_bounce_t bounce)
@@ -5977,8 +5894,7 @@ static void Object_hits_target(move_state_t *ms, long player_cost)
 	sc = Rate(Players[killer]->score, CANNON_SCORE)/4;
 	sc = sc * (targets_total - targets_remaining) / (targets_total + 1);
 	if (sc > 0) {
-	    SCORE(killer, sc,
-		  targ->pos.x, targ->pos.y, "Target: ");
+	    SCORE(killer, sc, targ->pos.x, targ->pos.y, "Target: ");
 	}
 	/*
 	 * If players can't collide with their own targets, we
@@ -6093,8 +6009,8 @@ static void Move_ball_new(object *obj)
     struct collans ans;
     int owner;
 
-    move.delta.x = FLOAT_TO_CLICK(obj->vel.x) * timeStep2;
-    move.delta.y = FLOAT_TO_CLICK(obj->vel.y) * timeStep2;
+    move.delta.x = FLOAT_TO_CLICK(obj->vel.x * timeStep2);
+    move.delta.y = FLOAT_TO_CLICK(obj->vel.y * timeStep2);
     obj->extmove.x = move.delta.x;
     obj->extmove.y = move.delta.y;
 
@@ -6248,8 +6164,8 @@ static void Move_player_new(int ind)
 
     if (BIT(pl->status, PLAYING|PAUSE|GAME_OVER|KILLED) != PLAYING) {
 	if (!BIT(pl->status, KILLED|PAUSE)) {
-	    pos.x = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x) * timeStep2;
-	    pos.y = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y) * timeStep2;
+	    pos.x = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x * timeStep2);
+	    pos.y = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y * timeStep2);
 	    pos.x = WRAP_XCLICK(pos.x);
 	    pos.y = WRAP_YCLICK(pos.y);
 	    if (pos.x != pl->pos.cx || pos.y != pl->pos.cy) {
@@ -6269,8 +6185,8 @@ static void Move_player_new(int ind)
 
     pl->collmode = 1;
 
-    move.delta.x = FLOAT_TO_CLICK(pl->vel.x) * timeStep2;
-    move.delta.y = FLOAT_TO_CLICK(pl->vel.y) * timeStep2;
+    move.delta.x = FLOAT_TO_CLICK(pl->vel.x * timeStep2);
+    move.delta.y = FLOAT_TO_CLICK(pl->vel.y * timeStep2);
 #if 0
     pl->extmove.x = move.delta.x;
     pl->extmove.y = move.delta.y;

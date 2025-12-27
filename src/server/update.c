@@ -103,8 +103,18 @@ static void Transport_to_home(int ind)
 	cx = World.base[pl->home_base].pos.x;
 	cy = World.base[pl->home_base].pos.y;
     }
-    dx = CENTER_XCLICK(cx - pl->pos.cx);
-    dy = CENTER_YCLICK(cy - pl->pos.cy);
+
+    /* kps - hack - check definitions of
+       WRAP_DX, WRAP_XCLICK and CENTER_XCLICK */
+
+    dx = WRAP_XCLICK(cx - pl->pos.cx);
+    dy = WRAP_YCLICK(cy - pl->pos.cy);
+
+    if (BIT(World.rules->mode, WRAP_PLAY)) {
+	dx = CENTER_XCLICK(dx);
+	dy = CENTER_YCLICK(dy);
+    }
+
     t = pl->count + 0.5f;
     if (2 * t <= T) {
 	m = 2 / t;
@@ -789,6 +799,34 @@ void Update_objects(void)
 	if (pl->damaged > 0)
 	    pl->damaged--;
 
+
+	/* kps - fix these */
+	if (pl->flooding > FPS + 1) {
+	    char msg[MSG_LEN];
+	    sprintf(msg, "%s was kicked out because of flooding.", pl->name);
+	    Destroy_connection(pl->conn, "flooding");
+	    i--;
+	    continue;
+	} else if ( pl->flooding >= 0 )
+	    pl->flooding--;
+
+#define IDLETHRESHOLD (FPS * 60)
+
+	if (IS_HUMAN_PTR(pl)) {
+	    pl->rank->score = pl->score;
+	    if ( pl->mychar == ' ' ) {
+		if ( pl->idleCount++ == IDLETHRESHOLD ) {
+		    if ( NumPlayers - 1 > NumPseudoPlayers + NumRobots ) {
+			/* Kill player, he/she will be paused when returned
+			   to base, unless he/she wakes up. */
+			Kill_player(i);
+			Rank_IgnoreLastDeath(pl);
+		    } else
+			pl->idleCount = 0;
+		}
+	    }
+	}
+
 	if (pl->count >= 0) {
 	    pl->count -= timeStep;
 	    if (pl->count > 0) {
@@ -800,6 +838,23 @@ void Update_objects(void)
 	    } else {
 		pl->count = -1;
 		if (!BIT(pl->status, PLAYING)) {
+		    
+		    if (pl->idleCount >= IDLETHRESHOLD) { /* idle */
+			if (!game_lock && Team_zero_pausing_available()) {
+			    sprintf(msg,
+				    "%s was pause-swapped because of idling.",
+				    Players[i]->name);
+			    sprintf(team_0,"team 0");
+			    Handle_player_command(Players[i],team_0);
+			} else {
+			    Pause_player(i, 1);
+			    sprintf(msg, "%s was paused for idling.",
+				    Players[i]->name);
+			}
+			Set_message(msg);
+			continue;
+		    }
+
 		    SET_BIT(pl->status, PLAYING);
 		    Go_home(i);
 		}
@@ -818,10 +873,6 @@ void Update_objects(void)
 		}
 	    }
 	}
-
-	/* kps - add flooding check here */
-
-	/* kps - add idle check here */
 
 	if (BIT(pl->status, PLAYING|GAME_OVER|PAUSE) != PLAYING)
 	    continue;
@@ -1353,7 +1404,17 @@ void Update_objects(void)
 	    if (IS_HUMAN_PTR(pl)) {
 		if (frame_loops - pl->frame_last_busy > 60 * FPS) {
 		    if ((NumPlayers - NumRobots - NumPseudoPlayers) > 1) {
-			Pause_player(i, 1);
+			if (!game_lock && Team_zero_pausing_available()) {
+			    sprintf(msg, "%s was pause-swapped because of "
+				    "idling.", Players[i]->name);
+			    sprintf(team_0, "team 0");
+			    Handle_player_command(Players[i],team_0);
+			} else {
+			    Pause_player(i, 1);
+			    sprintf(msg, "%s was paused for idling.",
+				    Players[i]->name);
+	    		}
+			Set_message(msg);
 		    }
 		}
 	    }
@@ -1362,6 +1423,7 @@ void Update_objects(void)
 	if (maxPauseTime > 0
 	    && IS_HUMAN_PTR(pl)
 	    && BIT(pl->status, PAUSE)
+	    && (!(teamZeroPausing && pl->team == 0))
 	    && frame_loops - pl->frame_last_busy > maxPauseTime) {
 	    sprintf(msg,
 		    "%s was auto-kicked for pausing too long [*Server notice*]",

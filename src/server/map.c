@@ -102,7 +102,7 @@ void Init_map_new(void)
 	World.teams[i].NumTreasures = 0;
 	World.teams[i].TreasuresDestroyed = 0;
 	World.teams[i].TreasuresLeft = 0;
-	World.teams[i].SwapperId = -1;
+	World.teams[i].SwapperId = NO_ID;
     }
     World.NumBases = 0;
     World.NumTreasures = 0;
@@ -631,6 +631,7 @@ static bool Grok_map_old(void)
 	World.teams[i].TreasuresLeft = 0;
 	World.teams[i].score = 0;
 	World.teams[i].prev_score = 0;
+	World.teams[i].SwapperId = NO_ID;
     }
 
     /*
@@ -1271,15 +1272,19 @@ DFLOAT Wrap_findDir(DFLOAT dx, DFLOAT dy)
 
 DFLOAT Wrap_cfindDir(int dx, int dy)
 {
-    dx = CENTER_XCLICK(dx);
-    dy = CENTER_YCLICK(dy);
+    if (BIT(World.rules->mode, TEAM_PLAY)) {
+	dx = CENTER_XCLICK(dx);
+	dy = CENTER_YCLICK(dy);
+    }
     return findDir(dx, dy);
 }
 
 DFLOAT Wrap_length(int dx, int dy)
 {
-    dx = CENTER_XCLICK(dx);
-    dy = CENTER_YCLICK(dy);
+    if (BIT(World.rules->mode, TEAM_PLAY)) {
+	dx = CENTER_XCLICK(dx);
+	dy = CENTER_YCLICK(dy);
+    }
     return LENGTH(dx, dy);
 }
 

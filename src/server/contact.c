@@ -87,7 +87,6 @@ extern time_t		serverTime;
 
 static bool Owner(char request, char *real_name, char *host_addr,
 		  int host_port, int pass);
-/* kps - ng does not want this */
 static int Enter_player(char *real, char *nick, char *disp, int team,
 			char *addr, char *host, unsigned version, int port,
 			int *login_port);
@@ -197,7 +196,7 @@ static int Kick_robot_players(int team)
  * Kick paused players?
  * Return the number of kicked players.
  */
-static int Kick_paused_players(int team)
+static int do_kick(int team, int nonlast)
 {
     int			i;
     int			num_unpaused = 0;
@@ -205,7 +204,14 @@ static int Kick_paused_players(int team)
     for (i = NumPlayers - 1; i >= 0; i--) {
 	if (Players[i]->conn != NOT_CONNECTED
 	    && BIT(Players[i]->status, PAUSE)
-	    && (team == TEAM_NOT_SET || Players[i]->team == team)) {
+	    && (team == TEAM_NOT_SET || Players[i]->team == team)
+	    && !(Players[i]->privs & PRIV_NOAUTOKICK)
+	    && (!nonlast || !(Players[i]->privs & PRIV_AUTOKICKLAST))) {
+
+	    /* team 0 pausers have special privileges =) */ 
+	    if (teamZeroPausing && Players[i]->team == 0)
+		continue;
+
 	    if (team == TEAM_NOT_SET) {
 		sprintf(msg,
 			"The paused \"%s\" was kicked because the game is full.",
@@ -223,6 +229,18 @@ static int Kick_paused_players(int team)
     }
 
     return num_unpaused;
+}
+
+
+static int Kick_paused_players(int team)
+{
+    int  ret;
+
+    ret = do_kick(team, 1);
+    if (ret < 1)
+	ret = do_kick(team, 0);
+
+    return ret;
 }
 
 
@@ -271,7 +289,7 @@ static int Check_names(char *nick_name, char *real_name, char *host_name)
     }
     for (i = 0; i < NumPlayers; i++) {
 	if (strcasecmp(Players[i]->name, nick_name) == 0) {
-	    D(printf("%s %s\n", Players[i]->name, nick_name);)
+	    D(printf("%s %s\n", Players[i]->name, nick_name));
 	    return E_IN_USE;
 	}
     }
@@ -373,7 +391,7 @@ void Contact(int fd, void *arg)
 	|| (version > MAX_CLIENT_VERSION
 	    && reply_to != CONTACT_pack)) {
 	D(error("Incompatible version with %s@%s (%04x,%04x)",
-	    real_name, host_addr, MY_VERSION, version);)
+		real_name, host_addr, MY_VERSION, version));
 	Sockbuf_clear(&ibuf);
 	Packet_printf(&ibuf, "%u%c%c", MAGIC, reply_to, E_VERSION);
 	Reply(host_addr, port);
@@ -423,7 +441,7 @@ void Contact(int fd, void *arg)
 	 */
 	if (Packet_scanf(&ibuf, "%s%s%s%d", nick_name, disp_name, host_name,
 			 &team) <= 0) {
-	    D(printf("Incomplete enter queue from %s@%s", real_name, host_addr);)
+	    D(printf("Incomplete enter queue from %s@%s", real_name, host_addr));
 	    return;
 	}
 	Fix_nick_name(nick_name);
@@ -453,7 +471,7 @@ void Contact(int fd, void *arg)
 	 */
 	if (Packet_scanf(&ibuf, "%s%s%s%d", nick_name, disp_name, host_name,
 			 &team) <= 0) {
-	    D(printf("Incomplete login from %s@%s", real_name, host_addr);)
+	    D(printf("Incomplete login from %s@%s", real_name, host_addr));
 	    return;
 	}
 	Fix_nick_name(nick_name);
@@ -528,7 +546,7 @@ void Contact(int fd, void *arg)
 	 * Got contact message from client.
 	 */
 
-	D(printf("Got CONTACT from %s.\n", host_addr);)
+	D(printf("Got CONTACT from %s.\n", host_addr));
 	Sockbuf_clear(&ibuf);
 	Packet_printf(&ibuf, "%u%c%c", my_magic, reply_to, status);
     }
@@ -699,7 +717,6 @@ void Contact(int fd, void *arg)
     }
 	return;
 
-	/* kps - ng does not want MAX_ROBOT_pack */
     case MAX_ROBOT_pack:	{
 	/*
 	 * Set the maximum of robots wanted in the server
@@ -730,7 +747,7 @@ void Contact(int fd, void *arg)
 	 * Incorrect packet type.
 	 */
 	D(printf("Unknown packet type (%d) from %s@%s.\n",
-	    reply_to, real_name, host_addr);)
+		 reply_to, real_name, host_addr));
 
 	Sockbuf_clear(&ibuf);
 	Packet_printf(&ibuf, "%u%c%c", my_magic, reply_to, E_VERSION);
@@ -739,7 +756,7 @@ void Contact(int fd, void *arg)
     Reply(host_addr, port);
 }
 
-/* kps - ng does not want this */
+
 static int Enter_player(char *real, char *nick, char *disp, int team,
 			char *addr, char *host, unsigned version, int port,
 			int *login_port)
@@ -752,7 +769,10 @@ static int Enter_player(char *real, char *nick, char *disp, int team,
      * Game locked?
      */
     if (game_lock) {
-	return E_GAME_LOCKED;
+	if (!Team_zero_pausing_available())
+	    return E_GAME_LOCKED;
+	else
+	    team = 0;
     }
 
     /*
@@ -1077,7 +1097,10 @@ static int Queue_player(char *real, char *nick, char *disp, int team,
 	return E_GAME_FULL;
     }
     if (game_lock && !rplayback) {
-	return E_GAME_LOCKED;
+	if (!Team_zero_pausing_available())
+	    return E_GAME_LOCKED;
+	else
+	    team = 0;
     }
 
     qp = (struct queued_player *)malloc(sizeof(struct queued_player));
@@ -1160,7 +1183,7 @@ int Queue_advance_player(char *name, char *msg)
     return 0;
 }
 
-/* kps - ng does not want this */
+
 int Queue_show_list(char *msg)
 {
     int				len, count;

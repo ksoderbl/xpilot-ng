@@ -25,7 +25,7 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/stat.h>
-#include <crypt.h>
+/*#include <crypt.h>*/
 #include <stdlib.h>
 #include <ctype.h>
 #include <time.h>

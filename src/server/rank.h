@@ -82,7 +82,7 @@ void Rank_get_saved_score(struct player *pl);
 
 void Rank_write_score_file(void);
 
-void Rank_rank_score(void);
+void Rank_write_webpage(void);
 
 void Rank_save_score(const struct player * pl);
 
@@ -92,7 +92,7 @@ void Rank_show_ranks(void);
 
 bool Rank_IsLegalNameUserHost(const char string[]);
 
-RankInfo *Rank_rank_by_name(char *name);
+RankInfo *Rank_get_by_name(char *name);
 
 void Rank_nuke_score(RankInfo *rank);
 

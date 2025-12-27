@@ -48,11 +48,10 @@
 char play_version[] = VERSION;
 
 
-int Punish_team(int ind, int t_destroyed, int t_target)
+int Punish_team(int ind, int t_destroyed, int cx, int cy)
 {
     static char		msg[MSG_LEN];
     treasure_t		*td = &World.treasures[t_destroyed];
-    treasure_t		*tt = &World.treasures[t_target];
     player		*pl = Players[ind];
     int			i;
     int			win_score = 0,lose_score = 0;
@@ -81,7 +80,7 @@ int Punish_team(int ind, int t_destroyed, int t_target)
 		    somebody_flag = 1;
 		}
 	    }
-	    else if (Players[i]->team == tt->team) {
+	    else if (Players[i]->team == pl->team) {
 		win_score += Players[i]->score;
 		win_team_members++;
 	    }
@@ -94,14 +93,13 @@ int Punish_team(int ind, int t_destroyed, int t_target)
     Set_message(msg);
 
     if (!somebody_flag) {
-	SCORE(ind, Rate(pl->score, CANNON_SCORE)/2, tt->pos.x, tt->pos.y,
-	      "Treasure:");
+	SCORE(ind, Rate(pl->score, CANNON_SCORE)/2, cx, cy, "Treasure:");
 	return 0;
     }
 
     td->destroyed++;
     World.teams[td->team].TreasuresLeft--;
-    World.teams[tt->team].TreasuresDestroyed++;
+    World.teams[pl->team].TreasuresDestroyed++;
 
 
     sc  = 3 * Rate(win_score, lose_score);
@@ -117,12 +115,12 @@ int Punish_team(int ind, int t_destroyed, int t_target)
 	    continue;
 	}
 	if (Players[i]->team == td->team) {
-	    SCORE(i, -sc, tt->pos.x, tt->pos.y, "Treasure: ");
+	    SCORE(i, -sc, cx, cy, "Treasure: ");
 	    Rank_LostBall(Players[i]);
 	    if (treasureKillTeam)
 		SET_BIT(Players[i]->status, KILLED);
 	}
-	else if (Players[i]->team == tt->team &&
+	else if (Players[i]->team == pl->team &&
 		 (Players[i]->team != TEAM_NOT_SET || i == ind)) {
 	    if (lose_team_members > 0) {
 		if (i == ind) {
@@ -130,8 +128,7 @@ int Punish_team(int ind, int t_destroyed, int t_target)
 		}
 		Rank_WonBall(Players[i]);
 	    }
-	    SCORE(i, (i == ind ? 3*por : 2*por), tt->pos.x, tt->pos.y,
-		  "Treasure: ");
+	    SCORE(i, (i == ind ? 3*por : 2*por), cx, cy, "Treasure: ");
 	}
     }
 
@@ -234,106 +231,46 @@ void Make_debris(
     }
 }
 
-/* poly */
 
-
-static int Punish_team_new(int ind, int t_destroyed, int posx, int posy)
+void Ball_is_replaced(ballobject *ball, treasure_t *tt, player *pl)
 {
-    static char		msg[MSG_LEN];
-    treasure_t		*td = &World.treasures[t_destroyed];
-    player		*pl = Players[ind];
-    int			i;
-    int			win_score = 0,lose_score = 0;
-    int			win_team_members = 0, lose_team_members = 0;
-    int			somebody_flag = 0;
-    int			sc, por;
+    char msg[MSG_LEN];
 
-    Check_team_members (td->team);
-    if (td->team == pl->team)
-	return 0;
-
-    if (BIT(World.rules->mode, TEAM_PLAY)) {
-	for (i = 0; i < NumPlayers; i++) {
-	    if (IS_TANK_IND(i)
-		|| (BIT(Players[i]->status, PAUSE)
-		    && Players[i]->count <= 0)
-		|| (BIT(Players[i]->status, GAME_OVER)
-		    && Players[i]->mychar == 'W')) {
-		continue;
-	    }
-	    if (Players[i]->team == td->team) {
-		lose_score += Players[i]->score;
-		lose_team_members++;
-		if (BIT(Players[i]->status, GAME_OVER) == 0) {
-		    somebody_flag = 1;
-		}
-	    }
-	    else if (Players[i]->team == pl->team) {
-		win_score += Players[i]->score;
-		win_team_members++;
-	    }
-	}
-    }
-
-    sound_play_all(DESTROY_BALL_SOUND);
-    sprintf(msg, " < %s's (%d) team has destroyed team %d treasure >",
-	    pl->name, pl->team, td->team);
+    ball->life = 0;
+    SET_BIT(ball->status, (NOEXPLOSION|RECREATE));
+    
+    SCORE(GetInd[pl->id], 5, tt->pos.x, tt->pos.y, "Treasure: ");
+    sprintf(msg, " < %s (team %d) has replaced the treasure >",
+	    pl->name, pl->team);
     Set_message(msg);
-
-    if (!somebody_flag) {
-	SCORE(ind, Rate(pl->score, CANNON_SCORE)/2,
-	      posx, posy, "Treasure:");
-	return 0;
-    }
-
-    td->destroyed++;
-    World.teams[td->team].TreasuresLeft--;
-    World.teams[pl->team].TreasuresDestroyed++;
-
-
-    sc  = 3 * Rate(win_score, lose_score);
-    por = (sc * lose_team_members) / (2 * win_team_members + 1);
-
-    for (i = 0; i < NumPlayers; i++) {
-	if (IS_TANK_IND(i)
-	    || (BIT(Players[i]->status, PAUSE)
-		&& Players[i]->count <= 0)
-	    || (BIT(Players[i]->status, GAME_OVER)
-		&& Players[i]->mychar == 'W'
-		&& Players[i]->score == 0)) {
-	    continue;
-	}
-	if (Players[i]->team == td->team) {
-	    SCORE(i, -sc, posx, posy,
-		  "Treasure: ");
-	    Rank_LostBall(Players[i]);
-	    if (treasureKillTeam)
-		SET_BIT(Players[i]->status, KILLED);
-	}
-	else if (Players[i]->team == pl->team &&
-		 (Players[i]->team != TEAM_NOT_SET || i == ind)) {
-	    if (i == ind && lose_team_members > 0)
-		Rank_CashedBall(Players[i]);
-	    Rank_WonBall(Players[i]);
-	    SCORE(i, (i == ind ? 3*por : 2*por), posx, posy,
-		  "Treasure: ");
-	}
-    }
-
-    if (treasureKillTeam)
-	Rank_AddKill(Players[ind]);
-
-    updateScores = true;
-
-    return 1;
+    Rank_SavedBall(pl);
 }
 
 
-/* kps -fix this */
-void Ball_hits_goal(ballobject *ball, int group)
+void Ball_is_destroyed(ballobject *ball)
 {
     char msg[MSG_LEN];
-    if (ball->owner == -1) {	/* Probably the player quit */
+    long frames = (LONG_MAX - ball->life) / timeStep;
+    int ind = GetInd[ball->owner];
+    DFLOAT seconds = ((DFLOAT)frames) / framesPerSecond;
+    DFLOAT frames12 = ((DFLOAT)frames) / FPSMultiplier;
+
+    /*
+     * Ball has been brought back to home treasure.
+     * The team should be punished.
+     */
+    sprintf(msg," < The ball was loose for %ld frames (best %d) "
+	    "/ %.2f frames @ 12fps / %.2f seconds >",
+	    frames, Rank_GetBestBall(Players[ind]), frames12, seconds);
+    Set_message(msg);
+    Rank_BallRun(Players[ind], frames);
+}
+
+
+
+void Ball_hits_goal(ballobject *ball, int group)
+{
+    if (ball->owner == NO_ID) {	/* Probably the player quit */
 	SET_BIT(ball->status, (NOEXPLOSION|RECREATE));
 	return;
     }
@@ -345,27 +282,12 @@ void Ball_hits_goal(ballobject *ball, int group)
 	 * should be replaced into the hoop without exploding and
 	 * the player gets some points.
 	 */
-	treasure_t	*tt = &World.treasures[ball->treasure];
-	player	*pl = Players[GetInd[ball->owner]];
-
-	SET_BIT(ball->status, (NOEXPLOSION|RECREATE));
-
-	SCORE(GetInd[pl->id], 5,
-	      tt->pos.x, tt->pos.y, "Treasure: ");
-	sprintf(msg, " < %s (team %d) has replaced the treasure >",
-		pl->name, pl->team);
-	Set_message(msg);
-	Rank_SavedBall(pl);
+	Ball_is_replaced(ball, &World.treasures[ball->treasure],
+			 Players[GetInd[ball->owner]]);
 	return;
     }
-    /*
-     * Ball has been brought back to home treasure.
-     * The team should be punished.
-     */
-    sprintf(msg," < The ball was loose for %ld frames >",
-	    (LONG_MAX - ball->life) / timeStep);
-    Set_message(msg);
-    if (Punish_team_new(GetInd[ball->owner], ball->treasure,
-			ball->pos.cx, ball->pos.cy))
+    Ball_is_destroyed(ball);
+    if (Punish_team(GetInd[ball->owner], ball->treasure,
+		    ball->pos.cx, ball->pos.cy))
 	CLR_BIT(ball->status, RECREATE);
 }

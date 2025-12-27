@@ -77,7 +77,12 @@
       ((y_) % World.cheight + World.cheight))
 
 
-#define CENTER_XCLICK(X) (((X) < -(World.cwidth >> 1)) ? (X) + World.cwidth : (((X) >= (World.cwidth >> 1)) ? (X) - World.cwidth : (X)))
+#define CENTER_XCLICK(X) \
+        (((X) < -(World.cwidth >> 1)) ? \
+             (X) + World.cwidth : \
+             (((X) >= (World.cwidth >> 1)) ? \
+                 (X) - World.cwidth : \
+                 (X)))
 
 #define CENTER_YCLICK(X) \
         (((X) < -(World.cheight >> 1)) ? \

@@ -234,10 +234,16 @@ int Player_lock_closest(int ind, int next)
 }
 
 
+bool Team_zero_pausing_available(void)
+{
+    return (teamZeroPausing && !lock_zero
+	    && World.teams[0].NumBases > 0
+	    && World.teams[0].NumBases > World.teams[0].NumMembers);
+}
+
 void Pause_player(int ind, int onoff)
 {
     player		*pl = Players[ind];
-    int			i;
 
     if (onoff != 0 && !BIT(pl->status, PAUSE)) { /* Turn pause mode on */
 	if (pl->team != TEAM_NOT_SET)
@@ -248,18 +254,20 @@ void Pause_player(int ind, int onoff)
 	SET_BIT(pl->status, PAUSE);
 	pl->mychar = 'P';
 	updateScores = true;
-	/*strcpy(pl->scorenode->logout, "paused"); - kps add */
+	strcpy(pl->rank->entry.logout, "paused");
 	if (BIT(pl->have, HAS_BALL))
 	    Detach_ball(ind, -1);
-	Player_lock_closest(ind, 0); /* kps - ng addition */
+	/*Player_lock_closest(ind, 0);*/ /* kps - ng wants this */
     }
     else if (onoff == 0 && BIT(pl->status, PAUSE)) { /* Turn pause mode off */
 	if (pl->count <= 0) {
 	    bool toolate = false;
 
+	    pl->idleCount = 0;
 	    CLR_BIT(pl->status, PAUSE);
 	    updateScores = true;
 	    if (BIT(World.rules->mode, LIMITED_LIVES)) {
+#if 0
 		for (i = 0; i < NumPlayers; i++) {
 		    /* If a non-team member has lost a life,
 		     * then it's too late to join. */
@@ -273,7 +281,11 @@ void Pause_player(int ind, int onoff)
 			break;
 		    }
 		}
+#endif
+		/* Its always too late */
+		toolate = true;
 	    }
+	    strcpy(pl->rank->entry.logout, "playing");
 	    if (toolate) {
 		pl->life = 0;
 		pl->mychar = 'W';
@@ -853,7 +865,21 @@ int Handle_keyboard(int ind)
 			Autopilot(ind, 0);
 
 		    /* toggle pause mode */
-		    Pause_player(ind, !BIT(pl->status, PAUSE));
+		    /* team 0 pausing */
+		    sprintf(team_0, "team 0");
+		    if (teamZeroPausing && (pl->team == 0)) {
+			Pause_player(ind, 1);
+		    } else {
+			/* allow players who get idlepaused to unpause */
+			if (Team_zero_pausing_available()
+			    && !BIT(pl->status, PAUSE)) {
+			    Handle_player_command(pl, team_0);
+			} else {
+			    Pause_player(ind, !BIT(pl->status, PAUSE));
+			}
+		    }
+		    /* end team 0 pausing */
+
 		    if (BIT(pl->status, PLAYING)) {
 			BITV_SET(pl->last_keyv, key);
 			BITV_SET(pl->prev_keyv, key);

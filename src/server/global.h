@@ -280,7 +280,13 @@ extern int		asteroidConcentratorRadius;
 extern DFLOAT		asteroidConcentratorProb;
 extern DFLOAT		gameDuration;
 extern bool		allowViewing;
+extern bool		fullFramerate;
+extern bool		fullZeroFramerate;
+extern bool		teamZeroPausing;
 extern int		game_lock;
+extern int		lock_zero;
+extern int		mute_zero;
+extern char		team_0[];
 
 extern char		*motdFileName;
 extern char	       	*scoreTableFileName;
@@ -309,7 +315,7 @@ extern int		round_delay_send;
 extern int		maxRoundTime;
 extern int		roundtime;
 extern int		roundsToPlay;
-extern int		roundsPlayed;
+/*extern int		roundsPlayed;*/
 
 extern bool		useWreckage;
 extern bool		ignore20MaxFPS;

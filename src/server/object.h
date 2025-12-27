@@ -178,11 +178,6 @@ struct _objposition {
     int		px, py;			/* object position in pixels. */
     int		bx, by;			/* object position in blocks. */
 };
-/* kps - ng does not want the click and pixel versions */
-#define OBJ_X_IN_CLICKS(obj)	((obj)->pos.cx)
-#define OBJ_Y_IN_CLICKS(obj)	((obj)->pos.cy)
-#define OBJ_X_IN_PIXELS(obj)	((obj)->pos.px)
-#define OBJ_Y_IN_PIXELS(obj)	((obj)->pos.py)
 #define OBJ_X_IN_BLOCKS(obj)	((obj)->pos.bx)
 #define OBJ_Y_IN_BLOCKS(obj)	((obj)->pos.by)
 
@@ -353,7 +348,7 @@ struct _ballobject {
 
     int 		owner;		/* Who's object is this ? */
     int			treasure;	/* treasure for ball */	
-    DFLOAT		length;		/* distance ball to player */
+    /*DFLOAT		length;*/	/* distance ball to player */
 
 #ifdef __cplusplus
 			_ballobject() {}
@@ -579,6 +574,8 @@ struct player {
     char	mychar;			/* Special char for player */
     char	prev_mychar;		/* Special char for player */
     char	name[MAX_CHARS];	/* Nick-name of player */
+    char	rawname[MAX_CHARS];	/* Not legalized Nick-name */
+    char	auth_nick[MAX_CHARS];	/* Original nick (/auth command) */
     char	realname[MAX_CHARS];	/* Real name of player */
     char	hostname[MAX_CHARS];	/* Hostname of client player uses */
     unsigned short	pseudo_team;	/* Which team for detaching tanks */
@@ -631,9 +628,14 @@ struct player {
     int		isoperator;		/* If player has operator privileges. */
     int		rectype;		/* normal, saved or spectator */
     RankInfo	*rank;
-    /*ScoreNode	*scorenode;*/
-    char	auth_nick[MAX_CHARS];	/* Original nick (/auth command) */
 
+    int		idleCount;		/* idle */
+    int	 	flooding;
+    int	 	grabbedBallFrame;
+
+    int		privs;			/* Player privileges */
+#define PRIV_NOAUTOKICK		1
+#define PRIV_AUTOKICKLAST	2
 
 #ifdef __cplusplus
 		player() {}

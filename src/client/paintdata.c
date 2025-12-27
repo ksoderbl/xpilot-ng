@@ -114,6 +114,7 @@ int		num_seg[MAX_COLORS], max_seg[MAX_COLORS];
 int		eyesId;		/* Player we get frame updates for */
 other_t		*eyes;		/* Player we get frame updates for */
 short		snooping;	/* are we snooping on someone else? */
+int		eyeTeam = TEAM_NOT_SET;
 
 unsigned long	current_foreground;
 
@@ -666,6 +667,8 @@ int Handle_ship(int x, int y, int id, int dir, int shield, int cloak, int eshiel
 	int radarx, radary;
         eyesId = id;
 	eyes = Other_by_id(eyesId);
+	if (eyes != NULL)
+	    eyeTeam = eyes->team;
 	selfVisible = (self && (id == self->id));
 	radarx = (int)((double)(x * RadarWidth) / Setup->width + 0.5);
 	radary = (int)((double)(y * RadarHeight) / Setup->height + 0.5);

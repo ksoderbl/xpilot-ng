@@ -521,7 +521,7 @@ void Paint_world(void)
 			    break;
 
 			target = type - SETUP_TARGET;
-			own = (self && (self->team == target));
+			own = (eyeTeam == target);
 
 			Gui_paint_setup_target(x, y, target, damage, own);
 
@@ -543,7 +543,7 @@ void Paint_world(void)
 			bool	own;
 
 			treasure = type - SETUP_TREASURE;
-			own = (self && self->team == treasure);
+			own = (eyeTeam == treasure);
 
 			Gui_paint_setup_treasure(x, y, treasure, own);
 		    }
