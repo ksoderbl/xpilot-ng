@@ -175,6 +175,7 @@ static int		num_logins, num_logouts;
  * This works well for most maps which have lots of series of the
  * same map object and is simple enough to got implemented quickly.
  */
+/* kps - ng does not want this */
 static int Compress_map(unsigned char *map, int size)
 {
     int			i, j, k;
@@ -1023,6 +1024,9 @@ static int Handle_login(int ind, char *errmsg, int errsize)
 
     Pick_startpos(NumPlayers);
     Go_home(NumPlayers);
+
+    Rank_get_saved_score(pl);
+
     if (pl->team != TEAM_NOT_SET) {
 	World.teams[pl->team].NumMembers++;
 	if (teamShareScore) {
@@ -1370,10 +1374,6 @@ static int Send_self_items(int ind, player *pl)
     int			i, n;
     int			item_count = 0;
 
-    /* older clients should have the items sent as part of the self packet. */
-    if (connp->version < 0x4203) {
-	return 1;
-    }
     /* build mask with one bit for each item type which the player owns. */
     for (i = 0; i < NUM_ITEMS; i++) {
 	if (pl->item[i] > 0) {
@@ -1419,63 +1419,18 @@ int Send_self(int ind,
     connection_t	*connp = &Conn[ind];
     int			n;
     u_byte		stat = (u_byte)status;
-    int			sbuf_len = connp->w.len;
-
-    if (connp->version >= 0x4203) {
-	n = Packet_printf(&connp->w,
-			  "%c"
-			  "%hd%hd%hd%hd%c"
-			  "%c%c%c"
-			  "%hd%hd%c%c"
-			  "%c%hd%hd"
-			  "%hd%hd%c"
-			  "%c%c"
-			  ,
-			  PKT_SELF,
-			  (int) (pl->pos.x + 0.5), (int) (pl->pos.y + 0.5),
-			  (int) pl->vel.x, (int) pl->vel.y,
-			  pl->dir,
-			  (int) (pl->power + 0.5),
-			  (int) (pl->turnspeed + 0.5),
-			  (int) (pl->turnresistance * 255.0 + 0.5),
-			  lock_id, lock_dist, lock_dir,
-			  pl->check,
-
-			  pl->fuel.current,
-			  pl->fuel.sum >> FUEL_SCALE_BITS,
-			  pl->fuel.max >> FUEL_SCALE_BITS,
-
-			  connp->view_width, connp->view_height,
-			  connp->debris_colors,
-
-			  stat,
-			  autopilotlight
-
-			  );
-	if (n <= 0) {
-	    return n;
-	}
-	n = Send_self_items(ind, pl);
-	if (n <= 0) {
-	    return n;
-	}
-	return Send_modifiers(ind, mods);
-    }
 
     n = Packet_printf(&connp->w,
 		      "%c"
 		      "%hd%hd%hd%hd%c"
 		      "%c%c%c"
 		      "%hd%hd%c%c"
-		      "%c%c%c%c%c"
-		      "%c%c%c%c%c"
-		      "%c%c%c%c"
 		      "%c%hd%hd"
 		      "%hd%hd%c"
 		      "%c%c"
 		      ,
 		      PKT_SELF,
-		      (int) (pl->pos.x + 0.5), (int) (pl->pos.y + 0.5),
+		      CLICK_TO_PIXEL(pl->pos.cx), CLICK_TO_PIXEL(pl->pos.cy),
 		      (int) pl->vel.x, (int) pl->vel.y,
 		      pl->dir,
 		      (int) (pl->power + 0.5),
@@ -1483,82 +1438,25 @@ int Send_self(int ind,
 		      (int) (pl->turnresistance * 255.0 + 0.5),
 		      lock_id, lock_dist, lock_dir,
 		      pl->check,
-
-		      pl->item[ITEM_CLOAK],
-		      pl->item[ITEM_SENSOR],
-		      pl->item[ITEM_MINE],
-		      pl->item[ITEM_MISSILE],
-		      pl->item[ITEM_ECM],
-
-		      pl->item[ITEM_TRANSPORTER],
-		      pl->item[ITEM_WIDEANGLE],
-		      pl->item[ITEM_REARSHOT],
-		      pl->item[ITEM_AFTERBURNER],
-		      pl->fuel.num_tanks,
-
-		      pl->item[ITEM_LASER],
-		      pl->item[ITEM_EMERGENCY_THRUST],
-		      pl->item[ITEM_TRACTOR_BEAM],
-		      pl->item[ITEM_AUTOPILOT],
-
+		      
 		      pl->fuel.current,
 		      pl->fuel.sum >> FUEL_SCALE_BITS,
 		      pl->fuel.max >> FUEL_SCALE_BITS,
-
+		      
 		      connp->view_width, connp->view_height,
 		      connp->debris_colors,
-
+		      
 		      stat,
 		      autopilotlight
-
-		      );
+		      
+	);
     if (n <= 0) {
 	return n;
     }
-    if (connp->version >= 0x3800) {
-	n = Packet_printf(&connp->w,
-			  "%c%c%c%c",	/* %c", */
-			  pl->item[ITEM_EMERGENCY_SHIELD],
-			  pl->item[ITEM_DEFLECTOR],
-			  pl->item[ITEM_HYPERJUMP],
-			  pl->item[ITEM_PHASING] /* ,
-			  pl->item[ITEM_MIRROR] */
-			  );
-	if (n <= 0) {
-	    connp->w.len = sbuf_len;
-	    return n;
-	}
-	if (connp->version >= 0x4100) {
-	    n = Packet_printf(&connp->w,
-			      "%c",
-			      pl->item[ITEM_MIRROR]
-			      );
-	    if (n <= 0) {
-		connp->w.len = sbuf_len;
-		return n;
-	    }
-	    if (connp->version >= 0x4201) {
-		n = Packet_printf(&connp->w,
-				  "%c",
-				  pl->item[ITEM_ARMOR]
-				  );
-		if (n <= 0) {
-		    connp->w.len = sbuf_len;
-		    return n;
-		}
-	    }
-	}
+    n = Send_self_items(ind, pl);
+    if (n <= 0) {
+	return n;
     }
-    else if (connp->version >= 0x3200) {
-	n = Packet_printf(&connp->w,
-			  "%c",
-			  pl->item[ITEM_EMERGENCY_SHIELD]);
-	if (n <= 0) {
-	    connp->w.len = sbuf_len;
-	    return n;
-	}
-    }
-
     return Send_modifiers(ind, mods);
 }
 
@@ -1711,9 +1609,6 @@ int Send_timing(int ind, int id, int check, int round)
 {
     connection_t	*connp = &Conn[ind];
 
-    if (connp->version < 0x3261) {
-	return 1;
-    }
     if (!BIT(connp->state, CONN_PLAYING | CONN_READY)) {
 	errno = 0;
 	error("Connection not ready for timing(%d,%d)",
@@ -1749,9 +1644,11 @@ int Send_fuel(int ind, int num, int fuel)
 			 num, fuel >> FUEL_SCALE_BITS);
 }
 
-int Send_score_object(int ind, DFLOAT score, int x, int y, const char *string)
+int Send_score_object(int ind, DFLOAT score, int cx, int cy,
+		      const char *string)
 {
     connection_t	*connp = &Conn[ind];
+    int			bx, by;
 
     if (!BIT(connp->state, CONN_PLAYING | CONN_READY)) {
 	errno = 0;
@@ -1759,15 +1656,20 @@ int Send_score_object(int ind, DFLOAT score, int x, int y, const char *string)
 	    connp->state, connp->id);
 	return 0;
     }
+
+    bx = cx / BLOCK_CLICKS;
+    by = cy / BLOCK_CLICKS;
+
+    /* kps - fix this so that older (4.3.1X) clients don't get decimals */
     if (connp->version < 0x4500) {
 	/* older clients don't get decimals of the score */
 	return Packet_printf(&Conn[ind].c, "%c%hd%hu%hu%s",PKT_SCORE_OBJECT,
 			     (int)(score + (score > 0 ? 0.5 : -0.5)),
-			     x, y, string);
+			     bx, by, string);
     } else {
 	return Packet_printf(&Conn[ind].c, "%c%d%hu%hu%s",PKT_SCORE_OBJECT,
 			     (int)(score * 100 + (score > 0 ? 0.5 : -0.5)),
-			     x, y, string);
+			     bx, by, string);
     }
 }
 
@@ -1795,25 +1697,16 @@ int Send_thrusttime(int ind, int count, int max)
 
 int Send_shieldtime(int ind, int count, int max)
 {
-    if (Conn[ind].version < 0x3200) {
-	return 1;
-    }
     return Packet_printf(&Conn[ind].w, "%c%hd%hd", PKT_SHIELDTIME, count, max);
 }
 
 int Send_phasingtime(int ind, int count, int max)
 {
-    if (Conn[ind].version < 0x3800) {
-	return 1;
-    }
     return Packet_printf(&Conn[ind].w, "%c%hd%hd", PKT_PHASINGTIME, count, max);
 }
 
 int Send_rounddelay(int ind, int count, int max)
 {
-    if (Conn[ind].version < 0x3800) {
-	return 1;
-    }
     return(Packet_printf(&Conn[ind].w, "%c%hd%hd", PKT_ROUNDDELAY, count, max));
 }
 
@@ -1845,10 +1738,6 @@ int Send_debris(int ind, int type, unsigned char *p, int n)
 
 int Send_wreckage(int ind, int x, int y, u_byte wrtype, u_byte size, u_byte rot)
 {
-    if (Conn[ind].version < 0x3800) {
-	return 1;
-    }
-
     if (wreckageCollisionMayKill && Conn[ind].version > 0x4201) {
 	/* Set the highest bit when wreckage is deadly. */
 	wrtype |= 0x80;
@@ -1865,7 +1754,7 @@ int Send_asteroid(int ind, int x, int y, u_byte type, u_byte size, u_byte rot)
     u_byte	type_size;
 
     if (Conn[ind].version < 0x4400) {
-	return Send_ecm(ind, x, y, 2 * (int) ASTEROID_RADIUS(size));
+	return Send_ecm(ind, x, y, 2 * (int) ASTEROID_RADIUS(size) / CLICK);
     }
 
     type_size = ((type & 0x0F) << 4) | (size & 0x0F);
@@ -1950,11 +1839,6 @@ int Send_wormhole(int ind, int x, int y)
 
 int Send_item(int ind, int x, int y, int type)
 {
-    if (type >= ITEM_EMERGENCY_SHIELD) {
-	if (Conn[ind].version < 0x3200) {
-	    return 1;
-	}
-    }
     return Packet_printf(&Conn[ind].w, "%c%hd%hd%c", PKT_ITEM, x, y, type);
 }
 
@@ -1977,21 +1861,15 @@ int Send_trans(int ind, int x1, int y1, int x2, int y2)
 int Send_ship(int ind, int x, int y, int id, int dir,
 	      int shield, int cloak, int emergency_shield, int phased, int deflector)
 {
-    if (Conn[ind].version < 0x4300) {
-	/* cloaking bit was also true if phased and that was used
-	 * to determine how to draw the ship.
-	 */
-	cloak = (cloak || phased);
-    }
     return Packet_printf(&Conn[ind].w,
 			 "%c%hd%hd%hd" "%c" "%c",
 			 PKT_SHIP, x, y, id,
 			 dir,
 			 (shield != 0) 
-				| ((cloak != 0) << 1)
-			    | ((emergency_shield != 0) << 2)
-				| ((phased != 0) << 3)		/* clients older than 3.8.0 will ignore this */
-				| ((deflector != 0) << 4)	/* clients older than 3.8.0 will ignore this */
+			 | ((cloak != 0) << 1)
+			 | ((emergency_shield != 0) << 2)
+			 | ((phased != 0) << 3)
+			 | ((deflector != 0) << 4)
 			);
 }
 
@@ -2023,11 +1901,6 @@ int Send_radar(int ind, int x, int y, int size)
 {
     connection_t *connp = &Conn[ind];
 
-    /* Only since 4.2.1 can clients correctly handle teammates in green. */
-    /* Except the original patch from kth.se was 4.1.0 "experimental 1" */
-    if (connp->version < 0x4210 && connp->version != 0x4101) {
-	size &= ~0x80;
-    }
     return Packet_printf(&connp->w, "%c%hd%hd%c", PKT_RADAR, x, y, size);
 }
 
@@ -2101,11 +1974,6 @@ int Send_message(int ind, const char *msg)
 
 int Send_loseitem(int lose_item_index, int ind)
 {
-    if (Conn[ind].version < 0x3400) { /* this should never hit since */
-				      /* only a 3.4+ client would send */
-				      /* the loseitem key */
-	return 1;
-    }
     return Packet_printf(&Conn[ind].w, "%c%c", PKT_LOSEITEM, lose_item_index);
 }
 
@@ -2185,10 +2053,6 @@ static int Receive_keyboard(int ind)
     u_byte		ch;
     int			size = KEYBOARD_SIZE;
 
-    if (connp->version < 0x3800) {
-	/* older servers have a keyboard_size of 8 bytes instead of 9. */
-	size--;
-    }
     if (connp->r.ptr - connp->r.buf + size + 1 + 4 > connp->r.len) {
 	/*
 	 * Incomplete client packet.

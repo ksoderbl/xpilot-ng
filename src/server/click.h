@@ -51,20 +51,38 @@
 #define WRAP_XCLICK(x_)	\
 	(BIT(World.rules->mode, WRAP_PLAY) \
 	    ? ((x_) < 0 \
-		? (x_) + mp.click_width \
-		: ((x_) >= mp.click_width \
-		    ? (x_) - mp.click_width \
+		? (x_) + World.cwidth \
+		: ((x_) >= World.cwidth \
+		    ? (x_) - World.cwidth \
 		    : (x_))) \
 	    : (x_))
 
 #define WRAP_YCLICK(y_)	\
 	(BIT(World.rules->mode, WRAP_PLAY) \
 	    ? ((y_) < 0 \
-		? (y_) + mp.click_height \
-		: ((y_) >= mp.click_height \
-		    ? (y_) - mp.click_height \
+		? (y_) + World.cheight \
+		: ((y_) >= World.cheight \
+		    ? (y_) - World.cheight \
 		    : (y_))) \
 	    : (y_))
+
+#define TWRAP_XCLICK(x_) \
+     ((x_) > 0 ? (x_) % World.cwidth : \
+      ((x_) % World.cwidth + World.cwidth))
+
+#define TWRAP_YCLICK(y_) \
+     ((y_) > 0 ? (y_) % World.cheight : \
+      ((y_) % World.cheight + World.cheight))
+
+
+#define CENTER_XCLICK(X) (((X) < -(World.cwidth >> 1)) ? (X) + World.cwidth : (((X) >= (World.cwidth >> 1)) ? (X) - World.cwidth : (X)))
+
+#define CENTER_YCLICK(X) \
+        (((X) < -(World.cheight >> 1)) ? \
+	     (X) + World.cheight : \
+	     (((X) >= (World.cheight >> 1)) ? \
+	         (X) - World.cheight : \
+	         (X)))
 
 typedef int click_t;
 

@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <limits.h>
+#include <time.h>
 
 #ifdef _WINDOWS
 # include "NT/winServer.h"
@@ -56,7 +57,7 @@ static list_t	Asteroid_list = NULL;
 /*
 ** Prototypes.
 */
-static void Make_asteroid(DFLOAT x, DFLOAT y,
+static void Make_asteroid(int cx, int cy,
 			  int size, int dir,
 			  DFLOAT speed);
 
@@ -123,11 +124,11 @@ void Break_asteroid(int ind)
     DFLOAT	speed, speed1, speed2, radius;
     DFLOAT	velx1, vely1, velx2, vely2, velx3, vely3;
     int		dir, dir1, dir2, split_dir;
-    int		x1, y1, x2, y2;
+    int		cx1, cy1, cx2, cy2;
 
     if (asteroid->size == 1) {
 	mass = asteroid->mass / 2;
-	Make_wreckage(asteroid->pos.x, asteroid->pos.y,
+	Make_wreckage(asteroid->pos.cx, asteroid->pos.cy,
 		      asteroid->vel.x, asteroid->vel.y,
 		      -1,
 		      TEAM_NOT_SET,
@@ -139,7 +140,7 @@ void Break_asteroid(int ind)
 		      0, RES-1,
 		      5, 10,
 		      3, 10);
-	Make_debris(asteroid->pos.x, asteroid->pos.y,
+	Make_debris(asteroid->pos.cx, asteroid->pos.cy,
 		    asteroid->vel.x, asteroid->vel.y,
 		    -1,
 		    TEAM_NOT_SET,
@@ -148,7 +149,7 @@ void Break_asteroid(int ind)
 		    GRAVITY,
 		    RED,
 		    8,
-		    20, 50,
+		    20 + 30 * rfrac(),
 		    0, RES-1,
 		    5, 10,
 		    3, 10);
@@ -175,15 +176,15 @@ void Break_asteroid(int ind)
 	vely2 = tsin(dir2) * speed2;
 	split_dir = MOD2(dir - RES/4, RES);
 	radius = ASTEROID_RADIUS(asteroid->size - 1);
-	x1 = WRAP_XPIXEL(asteroid->pos.x + tcos(split_dir) * radius);
-	y1 = WRAP_YPIXEL(asteroid->pos.y + tsin(split_dir) * radius);
-	x2 = WRAP_XPIXEL(asteroid->pos.x - tcos(split_dir) * radius);
-	y2 = WRAP_YPIXEL(asteroid->pos.y - tsin(split_dir) * radius);
+	cx1 = WRAP_XCLICK(asteroid->pos.cx + tcos(split_dir) * radius);
+	cy1 = WRAP_YCLICK(asteroid->pos.cy + tsin(split_dir) * radius);
+	cx2 = WRAP_XCLICK(asteroid->pos.cx - tcos(split_dir) * radius);
+	cy2 = WRAP_YCLICK(asteroid->pos.cy - tsin(split_dir) * radius);
 	velx3 = asteroid->vel.x;
 	vely3 = asteroid->vel.y;
-	Make_asteroid(x1, y1, asteroid->size - 1, dir1, speed1);
-	Make_asteroid(x2, y2, asteroid->size - 1, dir2, speed2);
-	Make_wreckage(asteroid->pos.x, asteroid->pos.y,
+	Make_asteroid(cx1, cy1, asteroid->size - 1, dir1, speed1);
+	Make_asteroid(cx2, cy2, asteroid->size - 1, dir2, speed2);
+	Make_wreckage(asteroid->pos.cx, asteroid->pos.cy,
 		      velx3, vely3,
 		      -1,
 		      TEAM_NOT_SET,
@@ -195,7 +196,7 @@ void Break_asteroid(int ind)
 		      0, RES-1,
 		      5, 10,
 		      3, 10);
-	Make_debris(asteroid->pos.x, asteroid->pos.y,
+	Make_debris(asteroid->pos.cx, asteroid->pos.cy,
 		    velx3, vely3,
 		    -1,
 		    TEAM_NOT_SET,
@@ -204,7 +205,7 @@ void Break_asteroid(int ind)
 		    GRAVITY,
 		    RED,
 		    8,
-		    20, 50,
+		    20 + 30 * rfrac(),
 		    0, RES-1,
 		    5, 10,
 		    3, 10);
@@ -235,14 +236,15 @@ void Break_asteroid(int ind)
 						  - World.items[item].min_per_pack));
 	    }
 
-	    Make_item(asteroid->pos.x, asteroid->pos.y,
+	    Make_item(asteroid->pos.cx, asteroid->pos.cy,
 		      vx, vy,
 		      item, num_per_pack,
 		      status);
 	}
     }	
 	
-    sound_play_sensors(asteroid->pos.x, asteroid->pos.y, ASTEROID_BREAK_SOUND);
+    sound_play_sensors(asteroid->pos.cx, asteroid->pos.cy,
+		       ASTEROID_BREAK_SOUND);
 
     World.asteroids.num -= 1 << (asteroid->size - 1);
 
@@ -253,14 +255,14 @@ void Break_asteroid(int ind)
 /*
  * Creates an asteroid with the given characteristics.
  */
-static void Make_asteroid(DFLOAT x, DFLOAT y,
+static void Make_asteroid(int cx, int cy,
 			  int size, int dir,
 			  DFLOAT speed)
 {
     wireobject	*asteroid;
     DFLOAT	radius;
-	int		bx;
-	int		by;
+    int		bx;
+    int		by;
 
     if (NumObjs >= MAX_TOTAL_SHOTS) {
 	return;
@@ -270,38 +272,31 @@ static void Make_asteroid(DFLOAT x, DFLOAT y,
 	return;
     }
 
-    if (BIT(World.rules->mode, WRAP_PLAY)) {
-	if (x < 0) x += World.width;
-	else if (x >= World.width) x -= World.width;
-	if (y < 0) y += World.height;
-	else if (y >= World.height) y -= World.height;
-    }
-    if (x < 0 || x >= World.width || y < 0 || y >= World.height) {
-	return;
-    }
+    cx = WRAP_XCLICK(cx);
+    cy = WRAP_YCLICK(cy);
 
-    bx = x / BLOCK_SZ;
-	by = y / BLOCK_SZ;
+    bx = cx / BLOCK_CLICKS;
+    by = cy / BLOCK_CLICKS;
     if (BIT(World.block[bx][by], FILLED_BIT|FUEL_BIT|TARGET_BIT|TREASURE_BIT)) {
 	return;
     } else if (BIT(World.block[bx][by], REC_LU|REC_RU|REC_LD|REC_RD)) {
-	DFLOAT	x_in_b = x - bx * BLOCK_SZ,
-		y_in_b = y - by * BLOCK_SZ;
+	DFLOAT	cx_in_b = cx - bx * BLOCK_CLICKS,
+		cy_in_b = cy - by * BLOCK_CLICKS;
 	switch (World.block[bx][by]) {
 	case REC_LU:
-	    if (x_in_b < y_in_b)
+	    if (cx_in_b < cy_in_b)
 		return;
 	    break;
 	case REC_RU:
-	    if (x_in_b + y_in_b > BLOCK_SZ)
+	    if (cx_in_b + cy_in_b > BLOCK_CLICKS)
 		return;
 	    break;
 	case REC_LD:
-	    if (x_in_b + y_in_b < BLOCK_SZ)
+	    if (cx_in_b + cy_in_b < BLOCK_CLICKS)
 		return;
 	    break;
 	case REC_RD:
-	    if (x_in_b > y_in_b)
+	    if (cx_in_b > cy_in_b)
 		return;
 	    break;
 	}
@@ -318,7 +313,7 @@ static void Make_asteroid(DFLOAT x, DFLOAT y,
     asteroid->type = OBJ_ASTEROID;
 
     /* Position */
-    Object_position_init_pixels(OBJ_PTR(asteroid), x, y);
+    Object_position_init_clicks(OBJ_PTR(asteroid), cx, cy);
 
     asteroid->vel.x = tcos(dir) * speed;
     asteroid->vel.y = tsin(dir) * speed;
@@ -329,7 +324,7 @@ static void Make_asteroid(DFLOAT x, DFLOAT y,
     asteroid->rotation = (int)(rfrac() * RES);
     asteroid->size = size;
     asteroid->info = (int)(rfrac() * 256);
-    radius = ASTEROID_RADIUS(size);
+    radius = ASTEROID_RADIUS(size) / CLICK;
     asteroid->pl_range = radius;
     asteroid->pl_radius = radius;
     asteroid->fuselife = asteroid->life - 1;
@@ -350,11 +345,13 @@ static void Make_asteroid(DFLOAT x, DFLOAT y,
  * Tries to place a new asteroid on the map.
  * Calls Make_asteroid() to actually create the new asteroid
  */
+/* kps - change to use clicks instead of pixels  */
 static void Place_asteroid(void)
 {
     int			place_count;
     int			px = 0, py = 0;
     int			bx, by;
+    int			cx = 0, cy = 0;
     int			dir, dist;
     unsigned		space;
     int			okay;
@@ -401,6 +398,8 @@ static void Place_asteroid(void)
 	}
 	bx = px / BLOCK_SZ;
 	by = py / BLOCK_SZ;
+	cx = px * CLICK;
+	cy = py * CLICK;
 
 	if (BIT(1U << World.block[bx][by], space)) {
 	    int i, dpx, dpy, ox, oy;
@@ -423,7 +422,7 @@ static void Place_asteroid(void)
 	}
     }
     if (okay == true) {
-	Make_asteroid(px, py,
+	Make_asteroid(cx, cy,
 		      (int)(1 + rfrac() * ASTEROID_MAX_SIZE),
 		      (int)(rfrac() * RES),
 		      (DFLOAT)ASTEROID_START_SPEED);

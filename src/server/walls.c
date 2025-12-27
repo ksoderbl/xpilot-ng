@@ -28,6 +28,7 @@
 #include <errno.h>
 #include <math.h>
 #include <limits.h>
+#include <time.h>
 
 #ifdef _WINDOWS
 # include "NT/winServer.h"
@@ -287,6 +288,11 @@ void Move_init(void)
 {
     mp.click_width = PIXEL_TO_CLICK(World.width);
     mp.click_height = PIXEL_TO_CLICK(World.height);
+
+    /* kps hacks start */
+    xpprintf(__FILE__ ":" "mp.click_width  = %d\n", mp.click_width);
+    xpprintf(__FILE__ ":" "mp.click_heigth = %d\n", mp.click_height);
+    /* kps hacks end */
 
     LIMIT(maxObjectWallBounceSpeed, 0, World.hypotenuse);
     LIMIT(maxShieldedWallBounceSpeed, 0, World.hypotenuse);
@@ -1004,10 +1010,12 @@ void Move_segment(move_state_t *ms)
 		    SET_BIT(ball->status, (NOEXPLOSION|RECREATE));
 
 		    SCORE(GetInd[pl->id], 5,
-			  tt->pos.x, tt->pos.y, "Treasure: ");
+			  tt->pos.x * BLOCK_CLICKS,
+			  tt->pos.y * BLOCK_CLICKS, "Treasure: ");
 		    sprintf(msg, " < %s (team %d) has replaced the treasure >",
 			    pl->name, pl->team);
 		    Set_message(msg);
+		    Rank_SavedBall(pl);
 		    break;
 		}
 		if (ball->owner == NO_ID) {
@@ -1017,21 +1025,26 @@ void Move_segment(move_state_t *ms)
 		if (BIT(World.rules->mode, TEAM_PLAY)
 		    && World.treasures[ms->treasure].team ==
 		       Players[GetInd[ball->owner]]->team) {
+		    long frames = LONG_MAX - ball->life;
+		    int ind = GetInd[ball->owner];
+
 		    /*
 		     * Ball has been brought back to home treasure.
 		     * The team should be punished.
 		     */
-		    sprintf(msg," < The ball was loose for %ld frames >",
-			    LONG_MAX - ball->life);
+		    sprintf(msg," < The ball was loose for %ld frames (%d)>",
+			    frames, Rank_GetBestBall(Players[ind]));
 		    Set_message(msg);
 		    if (captureTheFlag
 			&& !World.treasures[ms->treasure].have
 			&& !World.treasures[ms->treasure].empty) {
-			strcpy(msg, "Your treasure must be safe before you can cash an opponent's!");
+			strcpy(msg, "Your treasure must be safe before you "
+			       "can cash an opponent's!");
 			Set_player_message(Players[GetInd[ball->owner]], msg);
 		    } else if (Punish_team(GetInd[ball->owner],
 				    ball->treasure, ms->treasure))
 			CLR_BIT(ball->status, RECREATE);
+		    Rank_BallRun(Players[ind], frames);
 		}
 		ball->life = 0;
 		return;
@@ -1553,8 +1566,8 @@ void Move_segment(move_state_t *ms)
 static void Cannon_dies(move_state_t *ms)
 {
     cannon_t           *cannon = World.cannon + ms->cannon;
-    int			x = (int)cannon->pix_pos.x;
-    int			y = (int)cannon->pix_pos.y;
+    int			cx = cannon->clk_pos.x;
+    int			cy = cannon->clk_pos.y;
     int			killer = -1;
     player		*pl = NULL;
 
@@ -1563,9 +1576,9 @@ static void Cannon_dies(move_state_t *ms)
     World.block[cannon->blk_pos.x][cannon->blk_pos.y] = SPACE;
     Cannon_throw_items(ms->cannon);
     Cannon_init(ms->cannon);
-    sound_play_sensors(x, y, CANNON_EXPLOSION_SOUND);
+    sound_play_sensors(cx, cy, CANNON_EXPLOSION_SOUND);
     Make_debris(
-	/* pos.x, pos.y   */ x, y,
+	/* pos.x, pos.y   */ cx, cy,
 	/* vel.x, vel.y   */ 0.0, 0.0,
 	/* owner id       */ NO_ID,
 	/* owner team	  */ cannon->team,
@@ -1574,13 +1587,13 @@ static void Cannon_dies(move_state_t *ms)
 	/* status         */ GRAVITY,
 	/* color          */ RED,
 	/* radius         */ 6,
-	/* min,max debris */ 20, 40,
+	/* num debris     */ 20 + 20 * rfrac(),
 	/* min,max dir    */ (int)(cannon->dir - (RES * 0.2)), (int)(cannon->dir + (RES * 0.2)),
 	/* min,max speed  */ 20, 50,
 	/* min,max life   */ 8, 68
 	);
     Make_wreckage(
-	/* pos.x, pos.y   */ x, y,
+	/* pos.x, pos.y   */ cx, cy,
 	/* vel.x, vel.y   */ 0.0, 0.0,
 	/* owner id       */ NO_ID,
 	/* owner team	  */ cannon->team,
@@ -1613,8 +1626,8 @@ static void Cannon_dies(move_state_t *ms)
 	    if (pl->score <= cannonMaxScore
 		&& !(BIT(World.rules->mode, TEAM_PLAY)
 		     && pl->team == cannon->team)) {
-		SCORE(killer, cannonPoints, cannon->blk_pos.x,
-					    cannon->blk_pos.y, "");
+		SCORE(killer, cannonPoints, cannon->clk_pos.x,
+					    cannon->clk_pos.y, "");
 	    }
 	}
     }
@@ -1715,7 +1728,7 @@ static void Object_hits_target(move_state_t *ms, long player_cost)
     World.block[x][y] = SPACE;
 
     Make_debris(
-	/* pos.x, pos.y   */ (x+0.5f) * BLOCK_SZ, (y+0.5f) * BLOCK_SZ,
+	/* pos.x, pos.y   */ (x+0.5f) * BLOCK_CLICKS, (y+0.5f) * BLOCK_CLICKS,
 	/* vel.x, vel.y   */ 0.0, 0.0,
 	/* owner id       */ NO_ID,
 	/* owner team	  */ targ->team,
@@ -1724,7 +1737,7 @@ static void Object_hits_target(move_state_t *ms, long player_cost)
 	/* status         */ GRAVITY,
 	/* color          */ RED,
 	/* radius         */ 6,
-	/* min,max debris */ 75, 150,
+	/* num debris     */ 75 + 75 * rfrac(),
 	/* min,max dir    */ 0, RES-1,
 	/* min,max speed  */ 20, 70,
 	/* min,max life   */ 10, 100
@@ -1767,14 +1780,16 @@ static void Object_hits_target(move_state_t *ms, long player_cost)
 	return;
     }
 
-    sound_play_sensors(x, y, DESTROY_TARGET_SOUND);
+    sound_play_sensors(PIXEL_TO_CLICK(x), PIXEL_TO_CLICK(y),
+		       DESTROY_TARGET_SOUND);
 
     if (targets_remaining > 0) {
 	sc = Rate(Players[killer]->score, CANNON_SCORE)/4;
 	sc = sc * (targets_total - targets_remaining) / (targets_total + 1);
 	if (sc >= 0.01) {
 	    SCORE(killer, sc,
-		  targ->pos.x, targ->pos.y, "Target: ");
+		  targ->pos.x * BLOCK_CLICKS,
+		  targ->pos.y * BLOCK_CLICKS, "Target: ");
 	}
 	/*
 	 * If players can't collide with their own targets, we
@@ -1796,7 +1811,7 @@ static void Object_hits_target(move_state_t *ms, long player_cost)
     Set_message(msg);
 
     if (targetKillTeam) {
-	Players[killer]->kills++;
+	Rank_AddTargetKill(Players[killer]);
     }
 
     sc  = Rate(win_score, lose_score);
@@ -1816,12 +1831,14 @@ static void Object_hits_target(move_state_t *ms, long player_cost)
 		&& targets_remaining == 0
 		&& !BIT(Players[j]->status, KILLED|PAUSE|GAME_OVER))
 		SET_BIT(Players[j]->status, KILLED);
-	    SCORE(j, -sc, targ->pos.x, targ->pos.y,
+	    SCORE(j, -sc,
+		  targ->pos.x * BLOCK_CLICKS, targ->pos.y * BLOCK_CLICKS,
 		  "Target: ");
 	}
 	else if (Players[j]->team == Players[killer]->team &&
 		 (Players[j]->team != TEAM_NOT_SET || j == killer)) {
-	    SCORE(j, por, targ->pos.x, targ->pos.y,
+	    SCORE(j, por,
+		  targ->pos.x * BLOCK_CLICKS, targ->pos.y * BLOCK_CLICKS,
 		  "Target: ");
 	}
     }
@@ -1869,7 +1886,7 @@ static void Object_crash(move_state_t *ms)
 			GRAVITY,
 			RED,
 			1,
-			5, 10,
+			5 + 5 * rfrac(),
 			MOD2(ms->dir - RES/4, RES), MOD2(ms->dir + RES/4, RES),
 			15, 25,
 			5, 15);
@@ -2046,38 +2063,38 @@ static void Player_crash(move_state_t *ms, int pt, bool turning)
     case CrashWall:
 	howfmt = "%s crashed%s against a wall";
 	hudmsg = "[Wall]";
-	sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
 	break;
 
     case CrashWallSpeed:
 	howfmt = "%s smashed%s against a wall";
 	hudmsg = "[Wall]";
-	sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
 	break;
 
     case CrashWallNoFuel:
 	howfmt = "%s smacked%s against a wall";
 	hudmsg = "[Wall]";
-	sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
 	break;
 
     case CrashWallAngle:
 	howfmt = "%s was trashed%s against a wall";
 	hudmsg = "[Wall]";
-	sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
 	break;
 
     case CrashTarget:
 	howfmt = "%s smashed%s against a target";
 	hudmsg = "[Target]";
-	sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
 	Object_hits_target(ms, -1);
 	break;
 
     case CrashTreasure:
 	howfmt = "%s smashed%s against a treasure";
 	hudmsg = "[Treasure]";
-	sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
 	break;
 
     case CrashCannon:
@@ -2085,7 +2102,7 @@ static void Player_crash(move_state_t *ms, int pt, bool turning)
 	    != (HAS_SHIELD|HAS_EMERGENCY_SHIELD)) {
 	    howfmt = "%s smashed%s against a cannon";
 	    hudmsg = "[Cannon]";
-	    sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_CANNON_SOUND);
+	    sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_CANNON_SOUND);
 	}
 	if (!BIT(World.cannon[ms->cannon].used, HAS_EMERGENCY_SHIELD)) {
 	    Cannon_dies(ms);
@@ -2095,13 +2112,13 @@ static void Player_crash(move_state_t *ms, int pt, bool turning)
     case CrashUniverse:
 	howfmt = "%s left the known universe%s";
 	hudmsg = "[Universe]";
-	sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
 	break;
 
     case CrashUnknown:
 	howfmt = "%s slammed%s into a programming error";
 	hudmsg = "[Bug]";
-	sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
 	break;
     }
 
@@ -2141,10 +2158,7 @@ static void Player_crash(move_state_t *ms, int pt, bool turning)
 	}
 	if (num_pushers == 0) {
 	    sc = Rate(WALL_SCORE, pl->score);
-	    SCORE(ind, -sc,
-		  OBJ_X_IN_BLOCKS(pl),
-		  OBJ_Y_IN_BLOCKS(pl),
-		  hudmsg);
+	    SCORE(ind, -sc, pl->pos.cx, pl->pos.cy, hudmsg);
 	    strcat(msg, ".");
 	    Set_message(msg);
 	}
@@ -2173,9 +2187,7 @@ static void Player_crash(move_state_t *ms, int pt, bool turning)
 		sc = cnt[i] * Rate(pusher->score, pl->score)
 				    * shoveKillScoreMult / total_pusher_count;
 		SCORE(GetInd[pusher->id], sc,
-		      OBJ_X_IN_BLOCKS(pl),
-		      OBJ_Y_IN_BLOCKS(pl),
-		      pl->name);
+		      pl->pos.cx, pl->pos.cy, pl->name);
 		if (i >= num_pushers - 1) {
 		    pusher->kills++;
 		}
@@ -2183,10 +2195,7 @@ static void Player_crash(move_state_t *ms, int pt, bool turning)
 	    }
 	    sc = Rate(average_pusher_score, pl->score)
 		       * shoveKillScoreMult;
-	    SCORE(ind, -sc,
-		  OBJ_X_IN_BLOCKS(pl),
-		  OBJ_Y_IN_BLOCKS(pl),
-		  "[Shove]");
+	    SCORE(ind, -sc, pl->pos.cx, pl->pos.cy, "[Shove]");
 
 	    strcpy(msg_ptr, ".");
 	    Set_message(msg);
@@ -2297,10 +2306,8 @@ void Move_player(int ind)
     todo.x = FLOAT_TO_CLICK(vel.x);
     todo.y = FLOAT_TO_CLICK(vel.y);
     for (i = 0; i < pl->ship->num_points; i++) {
-	DFLOAT x = pl->ship->pts[i][pl->dir].x;
-	DFLOAT y = pl->ship->pts[i][pl->dir].y;
-	ms[i].pos.x = pl->pos.cx + FLOAT_TO_CLICK(x);
-	ms[i].pos.y = pl->pos.cy + FLOAT_TO_CLICK(y);
+	ms[i].pos.x = pl->pos.cx + pl->ship->pts[i][pl->dir].cx;
+	ms[i].pos.y = pl->pos.cy + pl->ship->pts[i][pl->dir].cy;
 	ms[i].vel = vel;
 	ms[i].todo = todo;
 	ms[i].dir = pl->dir;
@@ -2310,8 +2317,8 @@ void Move_player(int ind)
 
     for (;; moves_made++) {
 
-	pos.x = ms[0].pos.x - FLOAT_TO_CLICK(pl->ship->pts[0][ms[0].dir].x);
-	pos.y = ms[0].pos.y - FLOAT_TO_CLICK(pl->ship->pts[0][ms[0].dir].y);
+	pos.x = ms[0].pos.x - pl->ship->pts[0][ms[0].dir].cx;
+	pos.y = ms[0].pos.y - pl->ship->pts[0][ms[0].dir].cy;
 	pos.x = WRAP_XCLICK(pos.x);
 	pos.y = WRAP_YCLICK(pos.y);
 	block.x = pos.x / BLOCK_CLICKS;
@@ -2516,7 +2523,7 @@ void Move_player(int ind)
 		if (cost) {
 		    int intensity = (int)(cost * wallBounceExplosionMult);
 		    Make_debris(
-			/* pos.x, pos.y   */ pl->pos.x, pl->pos.y,
+			/* pos.x, pos.y   */ pl->pos.cx, pl->pos.cy,
 			/* vel.x, vel.y   */ pl->vel.x, pl->vel.y,
 			/* owner id       */ pl->id,
 			/* owner team	  */ pl->team,
@@ -2525,12 +2532,12 @@ void Move_player(int ind)
 			/* status         */ GRAVITY | OWNERIMMUNE | FROMBOUNCE,
 			/* color          */ RED,
 			/* radius         */ 1,
-			/* min,max debris */ intensity>>1, intensity,
+			/* num debris     */ (intensity>>1) + ((intensity>>1) * rfrac()),
 			/* min,max dir    */ wall_dir - (RES/4), wall_dir + (RES/4),
 			/* min,max speed  */ 20, 20 + (intensity>>2),
 			/* min,max life   */ 10, 10 + (intensity>>1)
 			);
-		    sound_play_sensors(pl->pos.x, pl->pos.y,
+		    sound_play_sensors(pl->pos.cx, pl->pos.cy,
 				       PLAYER_BOUNCED_SOUND);
 		    if (ms[worst].target >= 0) {
 			cost <<= FUEL_SCALE_BITS;
@@ -2581,8 +2588,8 @@ void Move_player(int ind)
 	}
     }
 
-    pos.x = ms[worst].pos.x - FLOAT_TO_CLICK(pl->ship->pts[worst][pl->dir].x);
-    pos.y = ms[worst].pos.y - FLOAT_TO_CLICK(pl->ship->pts[worst][pl->dir].y);
+    pos.x = ms[worst].pos.x - pl->ship->pts[worst][pl->dir].cx;
+    pos.y = ms[worst].pos.y - pl->ship->pts[worst][pl->dir].cy;
     pos.x = WRAP_XCLICK(pos.x);
     pos.y = WRAP_YCLICK(pos.y);
     Player_position_set_clicks(pl, pos.x, pos.y);
@@ -2659,33 +2666,33 @@ void Turn_player(int ind)
 	if (!mi.edge_wrap) {
 	    if (pos.x <= 22 * CLICK) {
 		for (i = 0; i < pl->ship->num_points; i++) {
-		    if (pos.x + FLOAT_TO_CLICK(pl->ship->pts[i][dir].x) < 0) {
-			pos.x = -FLOAT_TO_CLICK(pl->ship->pts[i][dir].x);
+		    if (pos.x + pl->ship->pts[i][dir].cx < 0) {
+			pos.x = -pl->ship->pts[i][dir].cx;
 		    }
 		}
 	    }
 	    if (pos.x >= mp.click_width - 22 * CLICK) {
 		for (i = 0; i < pl->ship->num_points; i++) {
-		    if (pos.x + FLOAT_TO_CLICK(pl->ship->pts[i][dir].x)
+		    if (pos.x + pl->ship->pts[i][dir].cx
 			>= mp.click_width) {
 			pos.x = mp.click_width - 1
-			       - FLOAT_TO_CLICK(pl->ship->pts[i][dir].x);
+			       - pl->ship->pts[i][dir].cx;
 		    }
 		}
 	    }
 	    if (pos.y <= 22 * CLICK) {
 		for (i = 0; i < pl->ship->num_points; i++) {
-		    if (pos.y + FLOAT_TO_CLICK(pl->ship->pts[i][dir].y) < 0) {
-			pos.y = -FLOAT_TO_CLICK(pl->ship->pts[i][dir].y);
+		    if (pos.y + pl->ship->pts[i][dir].cy < 0) {
+			pos.y = -pl->ship->pts[i][dir].cy;
 		    }
 		}
 	    }
 	    if (pos.y >= mp.click_height - 22 * CLICK) {
 		for (i = 0; i < pl->ship->num_points; i++) {
-		    if (pos.y + FLOAT_TO_CLICK(pl->ship->pts[i][dir].y)
+		    if (pos.y + pl->ship->pts[i][dir].cy
 			>= mp.click_height) {
 			pos.y = mp.click_height - 1
-			       - FLOAT_TO_CLICK(pl->ship->pts[i][dir].y);
+			       - pl->ship->pts[i][dir].cy;
 		    }
 		}
 	    }
@@ -2696,10 +2703,10 @@ void Turn_player(int ind)
 
 	for (i = 0; i < pl->ship->num_points; i++) {
 	    ms[i].mip = &mi;
-	    ms[i].pos.x = pos.x + FLOAT_TO_CLICK(pl->ship->pts[i][pl->dir].x);
-	    ms[i].pos.y = pos.y + FLOAT_TO_CLICK(pl->ship->pts[i][pl->dir].y);
-	    ms[i].todo.x = pos.x + FLOAT_TO_CLICK(pl->ship->pts[i][dir].x) - ms[i].pos.x;
-	    ms[i].todo.y = pos.y + FLOAT_TO_CLICK(pl->ship->pts[i][dir].y) - ms[i].pos.y;
+	    ms[i].pos.x = pos.x + pl->ship->pts[i][pl->dir].cx;
+	    ms[i].pos.y = pos.y + pl->ship->pts[i][pl->dir].cy;
+	    ms[i].todo.x = pos.x + pl->ship->pts[i][dir].cx - ms[i].pos.x;
+	    ms[i].todo.y = pos.y + pl->ship->pts[i][dir].cy - ms[i].pos.y;
 	    ms[i].vel.x = ms[i].todo.x + salt.x;
 	    ms[i].vel.y = ms[i].todo.y + salt.y;
 	    ms[i].target = -1;

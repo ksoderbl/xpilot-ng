@@ -44,7 +44,7 @@ RSC=rc.exe
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /MD /W3 /GX /O2 /D "WIN32" /D "NDEBUG" /D "_WINDOWS" /D "_AFXDLL" /D "_MBCS" /Yu"stdafx.h" /c
-# ADD CPP /nologo /MD /W3 /GX /I "..\..\common" /I "..\..\common\NT" /D "NDEBUG" /D "_MBCS" /D "WIN32" /D "_WINDOWS" /D "_AFXDLL" /D "X_SOUND" /D "WINDOWSCALING" /D PAINT_FREE=0 /FR /FD /c
+# ADD CPP /nologo /MD /W3 /GX /I "..\..\common" /I "..\..\common\NT" /I "..\..\..\zlib\include" /D "NDEBUG" /D "_MBCS" /D "WIN32" /D "_WINDOWS" /D "_AFXDLL" /D "X_SOUND" /D "WINDOWSCALING" /D PAINT_FREE=0 /FR /FD /c
 # SUBTRACT CPP /YX /Yc /Yu
 # ADD BASE MTL /nologo /D "NDEBUG" /win32
 # ADD MTL /nologo /D "NDEBUG" /mktyplib203 /win32
@@ -55,7 +55,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 /nologo /subsystem:windows /machine:I386
-# ADD LINK32 winmm.lib /nologo /subsystem:windows /map /machine:I386
+# ADD LINK32 winmm.lib ..\..\..\zlib\lib\libz.lib /nologo /subsystem:windows /map /machine:I386
 # Begin Special Build Tool
 SOURCE="$(InputPath)"
 PostBuild_Cmds=copy Release\XPilot.exe C:\XPilot
@@ -75,7 +75,7 @@ PostBuild_Cmds=copy Release\XPilot.exe C:\XPilot
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /MDd /W3 /Gm /GX /Zi /Od /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /D "_AFXDLL" /D "_MBCS" /Yu"stdafx.h" /c
-# ADD CPP /nologo /MDd /W3 /Gm /GX /ZI /Od /I "..\..\common" /I "..\..\common\NT" /D "_DEBUG" /D "_MEMPOD" /D "WIN32" /D "_WINDOWS" /D "_AFXDLL" /D "X_SOUND" /D "WINDOWSCALING" /D PAINT_FREE=0 /FR /FD /c
+# ADD CPP /nologo /MDd /W3 /Gm /GX /ZI /Od /I "..\..\common" /I "..\..\common\NT" /I "..\..\..\zlib\include" /D "_DEBUG" /D "_MEMPOD" /D "WIN32" /D "_WINDOWS" /D "_AFXDLL" /D "X_SOUND" /D "WINDOWSCALING" /D PAINT_FREE=0 /FR /FD /c
 # SUBTRACT CPP /YX /Yc /Yu
 # ADD BASE MTL /nologo /D "_DEBUG" /win32
 # ADD MTL /nologo /D "_DEBUG" /mktyplib203 /win32
@@ -86,7 +86,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 /nologo /subsystem:windows /debug /machine:I386
-# ADD LINK32 winmm.lib /nologo /subsystem:windows /debug /machine:I386
+# ADD LINK32 winmm.lib ..\..\..\zlib\lib\libz.lib /nologo /subsystem:windows /debug /machine:I386
 # SUBTRACT LINK32 /map
 
 !ELSEIF  "$(CFG)" == "XPilot - Win32 ReleasePentium"
@@ -104,7 +104,7 @@ LINK32=link.exe
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /MD /W3 /GX /Zd /O2 /D "NDEBUG" /D "WIN32" /D "_WINDOWS" /D "_AFXDLL" /D "_MBCS" /D "x_BETAEXPIRE" /FR /c
 # SUBTRACT BASE CPP /YX /Yc /Yu
-# ADD CPP /nologo /G5 /MD /W3 /GX /Zd /O2 /I "..\..\common" /I "..\..\common\NT" /D "NDEBUG" /D "_MBCS" /D "x_BETAEXPIRE" /D "WIN32" /D "_WINDOWS" /D "_AFXDLL" /D "X_SOUND" /D "WINDOWSCALING" /D PAINT_FREE=0 /FR /FD /c
+# ADD CPP /nologo /G5 /MD /W3 /GX /Zd /O2 /I "..\..\common" /I "..\..\common\NT" /I "..\..\..\zlib\include" /D "NDEBUG" /D "_MBCS" /D "x_BETAEXPIRE" /D "WIN32" /D "_WINDOWS" /D "_AFXDLL" /D "X_SOUND" /D "WINDOWSCALING" /D PAINT_FREE=0 /FR /FD /c
 # SUBTRACT CPP /YX /Yc /Yu
 # ADD BASE MTL /nologo /D "NDEBUG" /win32
 # ADD MTL /nologo /D "NDEBUG" /mktyplib203 /win32
@@ -115,7 +115,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 /nologo /subsystem:windows /map /machine:I386 /out:"Release/XPilotNT.exe"
-# ADD LINK32 winmm.lib /nologo /subsystem:windows /map /machine:I386 /out:".\Release\XPilot.exe"
+# ADD LINK32 winmm.lib ..\..\..\zlib\lib\libz.lib /nologo /subsystem:windows /map /machine:I386 /out:".\Release\XPilot.exe"
 # Begin Special Build Tool
 SOURCE="$(InputPath)"
 PostBuild_Cmds=copy Release\XPilot.exe c:\XPilot
@@ -144,11 +144,11 @@ SOURCE=..\about.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\blockbitmaps.c
+SOURCE=..\bitmaps.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\blockbitmaps.h
+SOURCE=..\bitmaps.h
 # End Source File
 # Begin Source File
 
@@ -161,6 +161,14 @@ SOURCE=..\client.c
 # Begin Source File
 
 SOURCE=..\client.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\clientrank.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\clientrank.h
 # End Source File
 # Begin Source File
 
@@ -236,7 +244,19 @@ SOURCE=..\icon.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\ignore.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\ignore.h
+# End Source File
+# Begin Source File
+
 SOURCE=..\join.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\mapdata.c
 # End Source File
 # Begin Source File
 
@@ -301,6 +321,10 @@ SOURCE=..\record.h
 # Begin Source File
 
 SOURCE=..\recordfmt.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\shipshape_c.c
 # End Source File
 # Begin Source File
 
@@ -458,11 +482,11 @@ SOURCE=.\winBitmap.c
 # End Source File
 # Begin Source File
 
-SOURCE=.\winBitmap.h
+SOURCE=.\winClient.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\winClient.h
+SOURCE=.\winColors.c
 # End Source File
 # Begin Source File
 
@@ -611,10 +635,6 @@ SOURCE=..\..\common\rules.h
 # Begin Source File
 
 SOURCE=..\..\common\setup.h
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\common\shipshape.c
 # End Source File
 # Begin Source File
 

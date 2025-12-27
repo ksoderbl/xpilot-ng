@@ -28,6 +28,7 @@
 #include <errno.h>
 #include <math.h>
 #include <limits.h>
+#include <time.h>
 
 #ifdef _WINDOWS
 # include "NT/winServer.h"
@@ -46,6 +47,7 @@
 #include "netserver.h"
 #include "error.h"
 #include "commonproto.h"
+#include "click.h"
 
 char shot_version[] = VERSION;
 
@@ -83,7 +85,7 @@ void Place_mine(int ind)
     }
 
     Place_general_mine(ind, pl->team, 0,
-		       pl->pos.x, pl->pos.y, 0.0, 0.0, pl->mods);
+		       pl->pos.cx, pl->pos.cy, 0.0, 0.0, pl->mods);
 }
 
 
@@ -112,11 +114,11 @@ void Place_moving_mine(int ind)
     }
 
     Place_general_mine(ind, pl->team, GRAVITY,
-		       pl->pos.x, pl->pos.y, vx, vy, pl->mods);
+		       pl->pos.cx, pl->pos.cy, vx, vy, pl->mods);
 }
 
 void Place_general_mine(int ind, unsigned short team, long status,
-			DFLOAT x, DFLOAT y,
+			int cx, int cy,
 			DFLOAT vx, DFLOAT vy, modifiers mods)
 {
     char		msg[MSG_LEN];
@@ -129,22 +131,16 @@ void Place_general_mine(int ind, unsigned short team, long status,
 
     if (NumObjs + mods.mini >= MAX_TOTAL_SHOTS)
 	return;
-    if (BIT(World.rules->mode, WRAP_PLAY)) {
-	if (x < 0) x += World.width;
-	else if (x >= World.width) x -= World.width;
-	if (y < 0) y += World.height;
-	else if (y >= World.height) y -= World.height;
-    }
-    if (x < 0 || x >= World.width || y < 0 || y >= World.height) {
-	return;
-    }
+
+    cx = WRAP_XCLICK(cx);
+    cy = WRAP_YCLICK(cy);
 
     if (pl && BIT(pl->status, KILLED)) {
-	life = (int)(rfrac() * FPS);
+	life = (int)(rfrac() * 12 /* * TIME_FACT */);
     } else if (BIT(status, FROMCANNON)) {
 	life = CANNON_SHOT_LIFE;
     } else {
-	life = (mineLife ? mineLife : MINE_LIFETIME);
+	life = (mineLife ? mineLife /* * TIME_FACT*/: MINE_LIFETIME);
     }
 
     if (!BIT(mods.warhead, CLUSTER))
@@ -195,9 +191,11 @@ void Place_general_mine(int ind, unsigned short team, long status,
 		if (i != ind
 		    && !Team_immune(Players[i]->id, pl->id)
 		    && !IS_TANK_IND(i)) {
-		    int dx = (int)(x/BLOCK_SZ - World.base[Players[i]->home_base].pos.x);
-		    int dy = (int)(y/BLOCK_SZ - World.base[Players[i]->home_base].pos.y);
-		    if (sqr(dx) + sqr(dy) <= sqr(baseMineRange)) {
+		    int dx = cx - World.base[Players[i]->home_base].pos.x
+			* BLOCK_CLICKS;
+		    int dy = cy - World.base[Players[i]->home_base].pos.y
+			* BLOCK_CLICKS;
+		    if (Wrap_length(dx, dy) <= baseMineRange * BLOCK_CLICKS) {
 			Set_player_message(pl, "No base mining!");
 			return;
 		    }
@@ -214,7 +212,7 @@ void Place_general_mine(int ind, unsigned short team, long status,
 	    Set_message(msg);
 	    sound_play_all(NUKE_LAUNCH_SOUND);
 	} else {
-	    sound_play_sensors(pl->pos.x, pl->pos.y,
+	    sound_play_sensors(pl->pos.cx, pl->pos.cy,
 	      BIT(status, GRAVITY) ? DROP_MOVING_MINE_SOUND : DROP_MINE_SOUND);
 	}
     }
@@ -237,7 +235,7 @@ void Place_general_mine(int ind, unsigned short team, long status,
 	mine->id = (pl ? pl->id : NO_ID);
 	mine->team = team;
 	mine->owner = mine->id;
-	Object_position_init_pixels(OBJ_PTR(mine), x, y);
+	Object_position_init_clicks(OBJ_PTR(mine), cx, cy);
 	if (minis > 1) {
 	    int		space = RES/minis;
 	    int		dir;
@@ -293,7 +291,7 @@ void Detonate_mines(int ind)
     int			i;
     int			closest = -1;
     DFLOAT		dist;
-    DFLOAT		min_dist = World.hypotenuse + 1;
+    DFLOAT		min_dist = World.hypotenuse * CLICK + 1;
 
     if (BIT(pl->used, HAS_PHASING_DEVICE))
 	return;
@@ -308,7 +306,8 @@ void Detonate_mines(int ind)
 	 * by the reprogrammer, not by the original mine placer:
 	 */
 	if (mine->id == pl->id) {
-	    dist = Wrap_length(pl->pos.x - mine->pos.x, pl->pos.y - mine->pos.y);
+	    dist = Wrap_length(pl->pos.cx - mine->pos.cx,
+			       pl->pos.cy - mine->pos.cy);
 	    if (dist < min_dist) {
 		min_dist = dist;
 		closest = i;
@@ -328,6 +327,9 @@ void Make_treasure_ball(int treasure)
     treasure_t *t = &(World.treasures[treasure]);
     DFLOAT	x = (t->pos.x + 0.5) * BLOCK_SZ,
 		y = (t->pos.y * BLOCK_SZ) + 10;
+    int cx = PIXEL_TO_CLICK(x);
+    int cy = PIXEL_TO_CLICK(y);
+    /*int cx = t->pos.x, cy = t->pos.y; kps - ng wants this */
 
     if (t->empty)
 	return;
@@ -343,14 +345,14 @@ void Make_treasure_ball(int treasure)
 	return;
     }
 
-    ball->length = ballConnectorLength;
+    ball->length = ballConnectorLength; /* kps - ng wants this removed */
     ball->life = LONG_MAX;
     ball->mass = ballMass;
     ball->vel.x = 0;	  	/* make the ball stuck a little */
     ball->vel.y = 0;		/* longer to the ground */
     ball->acc.x = 0;
     ball->acc.y = 0;
-    Object_position_init_pixels(OBJ_PTR(ball), x, y);
+    Object_position_init_clicks(OBJ_PTR(ball), cx, cy);
     ball->id = NO_ID;
     ball->owner = NO_ID;
     ball->team = t->team;
@@ -438,95 +440,90 @@ char *Describe_shot(int type, long status, modifiers mods, int hit)
 void Fire_main_shot(int ind, int type, int dir)
 {
     player *pl = Players[ind];
-    DFLOAT x,
-	  y;
+    int cx, cy;
 
-    if (pl->shots >= pl->shot_max || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
+    if (pl->shots >= ShotsMax || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
 	return;
 
-    x = pl->pos.x + pl->ship->m_gun[pl->dir].x;
-    y = pl->pos.y + pl->ship->m_gun[pl->dir].y;
+    cx = pl->pos.cx + pl->ship->m_gun[pl->dir].cx;
+    cy = pl->pos.cy + pl->ship->m_gun[pl->dir].cy;
 
-    Fire_general_shot(ind, pl->team, 0, x, y, type, dir, pl->mods, -1);
+    Fire_general_shot(ind, pl->team, 0, cx, cy, type, dir, pl->mods, -1);
 }
 
 void Fire_shot(int ind, int type, int dir)
 {
     player *pl = Players[ind];
 
-    if (pl->shots >= pl->shot_max || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
+    if (pl->shots >= ShotsMax || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
 	return;
 
-    Fire_general_shot(ind, pl->team, 0, pl->pos.x, pl->pos.y,
+    Fire_general_shot(ind, pl->team, 0, pl->pos.cx, pl->pos.cy,
 		      type, dir, pl->mods, -1);
 }
 
 void Fire_left_shot(int ind, int type, int dir, int gun)
 {
     player *pl = Players[ind];
-    DFLOAT x,
-	  y;
+    int cx, cy;
 
-    if (pl->shots >= pl->shot_max || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
+    if (pl->shots >= ShotsMax || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
 	return;
 
-    x = pl->pos.x + pl->ship->l_gun[gun][pl->dir].x;
-    y = pl->pos.y + pl->ship->l_gun[gun][pl->dir].y;
+    cx = pl->pos.cx + pl->ship->l_gun[gun][pl->dir].cx;
+    cy = pl->pos.cy + pl->ship->l_gun[gun][pl->dir].cy;
 
-    Fire_general_shot(ind, pl->team, 0, x, y, type, dir, pl->mods, -1);
+    Fire_general_shot(ind, pl->team, 0, cx, cy, type, dir, pl->mods, -1);
 
 }
 
 void Fire_right_shot(int ind, int type, int dir, int gun)
 {
     player *pl = Players[ind];
-    DFLOAT x,
-	  y;
+    int cx, cy;
 
-    if (pl->shots >= pl->shot_max || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
+    if (pl->shots >= ShotsMax || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
 	return;
 
-    x = pl->pos.x + pl->ship->r_gun[gun][pl->dir].x;
-    y = pl->pos.y + pl->ship->r_gun[gun][pl->dir].y;
+    cx = pl->pos.cx + pl->ship->r_gun[gun][pl->dir].cx;
+    cy = pl->pos.cy + pl->ship->r_gun[gun][pl->dir].cy;
 
-    Fire_general_shot(ind, pl->team, 0, x, y, type, dir, pl->mods, -1);
+    Fire_general_shot(ind, pl->team, 0, cx, cy, type, dir, pl->mods, -1);
 
 }
 
 void Fire_left_rshot(int ind, int type, int dir, int gun)
 {
     player *pl = Players[ind];
-    DFLOAT x,
-	  y;
+    int cx, cy;
 
-    if (pl->shots >= pl->shot_max || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
+    if (pl->shots >= ShotsMax || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
 	return;
 
-    x = pl->pos.x + pl->ship->l_rgun[gun][pl->dir].x;
-    y = pl->pos.y + pl->ship->l_rgun[gun][pl->dir].y;
+    cx = pl->pos.cx + pl->ship->l_rgun[gun][pl->dir].cx;
+    cy = pl->pos.cy + pl->ship->l_rgun[gun][pl->dir].cy;
 
-    Fire_general_shot(ind, pl->team, 0, x, y, type, dir, pl->mods, -1);
+    Fire_general_shot(ind, pl->team, 0, cx, cy, type, dir, pl->mods, -1);
 
 }
 
 void Fire_right_rshot(int ind, int type, int dir, int gun)
 {
     player *pl = Players[ind];
-    DFLOAT x,
-	  y;
+    int cx, cy;
 
-    if (pl->shots >= pl->shot_max || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
+    if (pl->shots >= ShotsMax || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
 	return;
 
-    x = pl->pos.x + pl->ship->r_rgun[gun][pl->dir].x;
-    y = pl->pos.y + pl->ship->r_rgun[gun][pl->dir].y;
+    cx = pl->pos.cx + pl->ship->r_rgun[gun][pl->dir].cx;
+    cy = pl->pos.cy + pl->ship->r_rgun[gun][pl->dir].cy;
 
-    Fire_general_shot(ind, pl->team, 0, x, y, type, dir, pl->mods, -1);
+    Fire_general_shot(ind, pl->team, 0, cx, cy, type, dir, pl->mods, -1);
 
 }
 
 void Fire_general_shot(int ind, unsigned short team, bool cannon,
-		       DFLOAT x, DFLOAT y,
+		       int cx, int cy,
 		       int type, int dir,
 		       modifiers mods, int target)
 {
@@ -554,7 +551,7 @@ void Fire_general_shot(int ind, unsigned short team, bool cannon,
 			angle,
 			spread;
     vector		mv;
-    position		shotpos;
+    ipos		shotpos;
     object		*mini_objs[MODS_MINI_MAX + 1];
 
     if (NumObjs >= MAX_TOTAL_SHOTS)
@@ -585,8 +582,8 @@ void Fire_general_shot(int ind, unsigned short team, bool cannon,
 	    if (pl->fuel.sum < -ED_SHOT)
 		return;
 	    Add_fuel(&(pl->fuel), (long)(ED_SHOT));
-	    sound_play_sensors(pl->pos.x, pl->pos.y, FIRE_SHOT_SOUND);
-	    pl->shots++;
+	    sound_play_sensors(pl->pos.cx, pl->pos.cy, FIRE_SHOT_SOUND);
+	    Rank_FireShot(pl);
 	}
 	if (!ShotsGravity) {
 	    CLR_BIT(status, GRAVITY);
@@ -649,9 +646,9 @@ void Fire_general_shot(int ind, unsigned short team, bool cannon,
 	}
 
 	if (pl && BIT(pl->status, KILLED)) {
-	    life = (int)(rfrac() * FPS);
+	    life = (int)(rfrac() * 12 /* * TIME_FACT*/);
 	} else if (!cannon) {
-	    life = (missileLife ? missileLife : MISSILE_LIFETIME);
+	    life = (missileLife ? missileLife /* * TIME_FACT */: MISSILE_LIFETIME);
 	}
 
 	switch (type) {
@@ -672,7 +669,8 @@ void Fire_general_shot(int ind, unsigned short team, bool cannon,
 	    }
 #endif /* HEAT_LOCK */
 	    if (pl) {
-		sound_play_sensors(pl->pos.x, pl->pos.y, FIRE_HEAT_SHOT_SOUND);
+		sound_play_sensors(pl->pos.cx, pl->pos.cy,
+				   FIRE_HEAT_SHOT_SOUND);
 	    }
 	    max_speed = SMART_SHOT_MAX_SPEED * HEAT_SPEED_FACT;
 	    turnspeed = SMART_TURNSPEED * HEAT_SPEED_FACT;
@@ -717,9 +715,9 @@ void Fire_general_shot(int ind, unsigned short team, bool cannon,
 		Set_message(msg);
 		sound_play_all(NUKE_LAUNCH_SOUND);
 	    } else if (type == OBJ_SMART_SHOT) {
-		sound_play_sensors(pl->pos.x, pl->pos.y, FIRE_SMART_SHOT_SOUND);
+		sound_play_sensors(pl->pos.cx, pl->pos.cy, FIRE_SMART_SHOT_SOUND);
 	    } else if (type == OBJ_TORPEDO) {
-		sound_play_sensors(pl->pos.x, pl->pos.y, FIRE_TORPEDO_SOUND);
+		sound_play_sensors(pl->pos.cx, pl->pos.cy, FIRE_TORPEDO_SOUND);
 	    }
 	}
 	break;
@@ -954,7 +952,8 @@ void Fire_general_shot(int ind, unsigned short team, bool cannon,
 	}
 
 	shot->life 	= life / minis;
-	shot->fuselife	= shot->life - fuse;
+	shot->fuselife	= shot->life - fuse; /* kps - ng does not want this */
+	shot->fuseframe	= frame_loops + fuse;
 	shot->mass	= mass / minis;
 	shot->count 	= 0;
 	shot->info 	= lock;
@@ -968,8 +967,8 @@ void Fire_general_shot(int ind, unsigned short team, bool cannon,
 	    MISSILE_PTR(shot)->max_speed = max_speed;
 	}
 
-	shotpos.x	= x;
-	shotpos.y	= y;
+	shotpos.x	= cx;
+	shotpos.y	= cy;
 	if (pl && type != OBJ_SHOT) {
 	    if (r == on_this_rack) {
 		/*
@@ -982,17 +981,13 @@ void Fire_general_shot(int ind, unsigned short team, bool cannon,
 		    rack_no = 0;
 		r = 0;
 	    }
-	    shotpos.x += pl->ship->m_rack[rack_no][pl->dir].x;
-	    shotpos.y += pl->ship->m_rack[rack_no][pl->dir].y;
-	    side = (int)(pl->ship->m_rack[rack_no][0].y);
+	    shotpos.x += pl->ship->m_rack[rack_no][pl->dir].cx;
+	    shotpos.y += pl->ship->m_rack[rack_no][pl->dir].cy;
+	    side = CLICK_TO_PIXEL(pl->ship->m_rack[rack_no][0].cy);
 	}
-	shotpos.x = WRAP_XPIXEL(shotpos.x);
-	shotpos.y = WRAP_YPIXEL(shotpos.y);
-	if (shotpos.x < 0 || shotpos.x >= World.width
-	    || shotpos.y < 0 || shotpos.y >= World.height) {
-	    continue;
-	}
-	Object_position_init_pixels(shot, shotpos.x, shotpos.y);
+	shotpos.x = WRAP_XCLICK(shotpos.x);
+	shotpos.y = WRAP_YCLICK(shotpos.y);
+	Object_position_init_clicks(shot, shotpos.x, shotpos.y);
 
 	if (type == OBJ_SHOT || !pl) {
 	    angle = 0.0;
@@ -1073,12 +1068,18 @@ void Fire_normal_shots(int ind)
 {
     player		*pl = Players[ind];
     int			i, shot_angle;
-
+#if 1
     if (frame_loops < pl->shot_time + fireRepeatRate) {
 	return;
     }
     pl->shot_time = frame_loops;
-
+#else
+    /* kps - ng wants this */
+    if (frame_time < pl->shot_time + fireRepeatRate) {
+ 	return;
+    }
+    pl->shot_time = frame_time;
+#endif
     shot_angle = MODS_SPREAD_MAX - pl->mods.spread;
 
     Fire_main_shot(ind, OBJ_SHOT, pl->dir);
@@ -1188,7 +1189,14 @@ void Delete_shot(int ind)
 	    addBall = 1;
 	    if (BIT(ball->status, NOEXPLOSION))
 		break;
-	    sound_play_sensors(ball->pos.x, ball->pos.y, EXPLODE_BALL_SOUND);
+	    sound_play_sensors(ball->pos.cx, ball->pos.cy, EXPLODE_BALL_SOUND);
+#if 0 /* kps - ng wants this */
+	    /* The ball could be inside a BallArea, check whether the sparks
+	     * can exist here. Should we set a team? */
+	    if (is_inside(ball->prevpos.x, ball->prevpos.y,
+			  NONBALL_BIT | NOTEAM_BIT) != -1)
+		break;
+#endif
 	    Make_debris(
 		/* pos.x, pos.y   */ ball->prevpos.x, ball->prevpos.y,
 		/* vel.x, vel.y   */ ball->vel.x, ball->vel.y,
@@ -1199,10 +1207,10 @@ void Delete_shot(int ind)
 		/* status         */ GRAVITY,
 		/* color          */ RED,
 		/* radius         */ 8,
-		/* min,max debris */ 10, 20,
+		/* num debris     */ 10 + 10 * rfrac(),
 		/* min,max dir    */ 0, RES-1,
 		/* min,max speed  */ 10, 50,
-		/* min,max life   */ 10, 2*(FPS+15)
+		/* min,max life   */ 10/* * TIME_FACT */, 54/* * TIME_FACT */
 		);
 
 	}
@@ -1230,9 +1238,11 @@ void Delete_shot(int ind)
 	    sound_play_all(NUKE_EXPLOSION_SOUND);
 	}
 	else if (BIT(shot->type, OBJ_MINE)) {
-	    sound_play_sensors(shot->pos.x, shot->pos.y, MINE_EXPLOSION_SOUND);
+	    sound_play_sensors(shot->pos.cx, shot->pos.cy,
+			       MINE_EXPLOSION_SOUND);
 	} else {
-	    sound_play_sensors(shot->pos.x, shot->pos.y, OBJECT_EXPLOSION_SOUND);
+	    sound_play_sensors(shot->pos.cx, shot->pos.cy,
+			       OBJECT_EXPLOSION_SOUND);
 	}
 
 	if (BIT(shot->mods.warhead, CLUSTER)) {
@@ -1306,13 +1316,13 @@ void Delete_shot(int ind)
 	    /* status         */ status,
 	    /* color          */ color,
 	    /* radius         */ 6,
-	    /* min,max debris */ (int)(0.20f * intensity * num_modv),
-				 (int)(0.30f * intensity * num_modv),
+	    /* num debris     */ (int)((0.20f * intensity * num_modv) +
+	                         (0.10f * intensity * num_modv * rfrac())),
 	    /* min,max dir    */ 0, RES-1,
 	    /* min,max speed  */ 20 * speed_modv,
 				 (intensity >> 2) * speed_modv,
-	    /* min,max life   */ (int)(8 * life_modv),
-				 (int)((intensity >> 1) * life_modv)
+	    /* min,max life   */ (int)(8 /* * TIME_FACT */ * life_modv),
+	                         (int)((intensity >> 1) /* * TIME_FACT */ * life_modv)
 	    );
 	break;
 
@@ -1392,12 +1402,12 @@ void Delete_shot(int ind)
 	if (addMine) {
 	    long gravity_status = ((rfrac() < 0.5f) ? GRAVITY : 0);
 	    Place_general_mine(-1, TEAM_NOT_SET, gravity_status,
-			       shot->pos.x, shot->pos.y,
+			       shot->pos.cx, shot->pos.cy,
 			       0.0, 0.0, mods);
 	}
 	else if (addHeat) {
 	    Fire_general_shot(-1, TEAM_NOT_SET, 0,
-			      shot->pos.x, shot->pos.y,
+			      shot->pos.cx, shot->pos.cy,
 			      OBJ_HEAT_SHOT, (int)(rfrac() * RES),
 			      mods, -1);
 	}
@@ -1411,25 +1421,25 @@ void Delete_shot(int ind)
 void Fire_laser(int ind)
 {
     player	*pl = Players[ind];
-    DFLOAT	x, y;
-    
+    int		cx, cy;
+
     if (pl->item[ITEM_LASER] > pl->num_pulses
 	&& pl->velocity < PULSE_SPEED - PULSE_SAMPLE_DISTANCE) {
 	if (pl->fuel.sum <= -ED_LASER) {
 	    CLR_BIT(pl->used, HAS_LASER);
 	} else {
-	    x = pl->pos.x + pl->ship->m_gun[pl->dir].x + pl->vel.x;
-	    y = pl->pos.y + pl->ship->m_gun[pl->dir].y + pl->vel.y;
-	    x = WRAP_XPIXEL(x);
-	    y = WRAP_YPIXEL(y);
-	    if (x >= 0 && x < World.width && y >= 0 && y < World.height) {
-		Fire_general_laser(ind, pl->team, x, y, pl->dir, pl->mods);
-	    }
+	    cx = pl->pos.cx + pl->ship->m_gun[pl->dir].cx
+		+ PIXEL_TO_CLICK(pl->vel.x);
+	    cy = pl->pos.cy + pl->ship->m_gun[pl->dir].cy
+		+ PIXEL_TO_CLICK(pl->vel.y);
+	    cx = WRAP_XCLICK(cx);
+	    cy = WRAP_YCLICK(cy);
+	    Fire_general_laser(ind, pl->team, cx, cy, pl->dir, pl->mods);
 	}
     }
 }
 
-void Fire_general_laser(int ind, unsigned short team, DFLOAT x, DFLOAT y,
+void Fire_general_laser(int ind, unsigned short team, int cx, int cy,
 			int dir, modifiers mods)
 {
     player		*pl = ((ind == -1) ? NULL : Players[ind]);
@@ -1438,7 +1448,7 @@ void Fire_general_laser(int ind, unsigned short team, DFLOAT x, DFLOAT y,
 
     if (pl) {
 	Add_fuel(&(pl->fuel), (long)ED_LASER);
-	sound_play_sensors(x, y, FIRE_LASER_SOUND);
+	sound_play_sensors(cx, cy, FIRE_LASER_SOUND);
 	life = (int)PULSE_LIFE(pl->item[ITEM_LASER]);
     } else {
 	life = (int)PULSE_LIFE(CANNON_PULSES);
@@ -1460,8 +1470,8 @@ void Fire_general_laser(int ind, unsigned short team, DFLOAT x, DFLOAT y,
     pulse->life = life;
     pulse->mods = mods;
     pulse->refl = false;
-    pulse->pos.x = x - PULSE_SPEED * tcos(dir);
-    pulse->pos.y = y - PULSE_SPEED * tsin(dir);
+    pulse->pos.x = CLICK_TO_PIXEL(cx) - PULSE_SPEED * tcos(dir);
+    pulse->pos.y = CLICK_TO_PIXEL(cy) - PULSE_SPEED * tsin(dir);
     NumPulses++;
     if (pl)
 	pl->num_pulses++;
@@ -1487,8 +1497,8 @@ void Move_ball(int ind)
     vector		F;
     const DFLOAT		k = 10.0,
 			a = 0.01,
-			l = Wrap_length(pl->pos.x - ball->pos.x,
-					pl->pos.y - ball->pos.y),
+			l = Wrap_length(pl->pos.cx - ball->pos.cx,
+					pl->pos.cy - ball->pos.cy) / CLICK,
 			c = k * (1.0 - ballConnectorLength / l)
 			    - a * ABS(ball->length - l) * (ball->length - l);
 
@@ -1565,8 +1575,8 @@ void Move_ball(int ind)
     /* const DFLOAT		max_spring_ratio = 0.30; */
 
     /* compute the normalized vector between the ball and the player */
-    D.x = WRAP_DX(pl->pos.x - ball->pos.x);
-    D.y = WRAP_DY(pl->pos.y - ball->pos.y);
+    D.x = WRAP_DX(pl->pos.px - ball->pos.px);
+    D.y = WRAP_DY(pl->pos.py - ball->pos.py);
     length = VECTOR_LENGTH(D);
     if (length > 0.0) {
 	D.x /= length;
@@ -1650,10 +1660,10 @@ void Move_smart_shot(int ind)
 	if (shot->info >= 0) {
 	    /* Get player and set min to distance */
 	    pl = Players[ GetInd[shot->info] ];
-	    range = Wrap_length(pl->pos.x + pl->ship->engine[pl->dir].x
-				- shot->pos.x,
-				pl->pos.y + pl->ship->engine[pl->dir].y
-				- shot->pos.y);
+	    range = Wrap_length(pl->pos.cx + pl->ship->engine[pl->dir].cx
+				- shot->pos.cx,
+				pl->pos.cy + pl->ship->engine[pl->dir].cy
+				- shot->pos.cy) / CLICK;
 	} else {
 	    /* No player. Number of moves so that new target is searched */
 	    pl = 0;
@@ -1689,10 +1699,10 @@ void Move_smart_shot(int ind)
 		    if (!BIT(p->status, THRUSTING))
 			continue;
 
-		    l = Wrap_length(p->pos.x + p->ship->engine[p->dir].x
-				    - shot->pos.x,
-				    p->pos.y + p->ship->engine[p->dir].y
-				    - shot->pos.y);
+		    l = Wrap_length(p->pos.cx + p->ship->engine[p->dir].cx
+				    - shot->pos.cx,
+				    p->pos.cy + p->ship->engine[p->dir].cy
+				    - shot->pos.cy) / CLICK;
 		    /*
 		     * After burners can be detected easier;
 		     * so scale the length:
@@ -1763,11 +1773,12 @@ void Move_smart_shot(int ind)
      */
     acc *= (1 + (shot->mods.power * MISSILE_POWER_SPEED_FACT));
     if ((shot_speed = VECTOR_LENGTH(shot->vel)) < 1) shot_speed = 1;
-    range = Wrap_length(pl->pos.x - shot->pos.x, pl->pos.y - shot->pos.y);
+    range = Wrap_length(pl->pos.cx - shot->pos.cx,
+			pl->pos.cy - shot->pos.cy) / CLICK;
     x_dif += pl->vel.x * (range / shot_speed);
     y_dif += pl->vel.y * (range / shot_speed);
-    theta = (int)Wrap_findDir(pl->pos.x + x_dif - shot->pos.x,
-						 pl->pos.y + y_dif - shot->pos.y);
+    theta = (int)Wrap_findDir(pl->pos.px + x_dif - shot->pos.px,
+			      pl->pos.py + y_dif - shot->pos.py);
 
     {
 	DFLOAT x, y, vx, vy;
@@ -1783,7 +1794,7 @@ void Move_smart_shot(int ind)
 	vy = shot->vel.y;
 	x = shot_speed / (BLOCK_SZ*BLOCK_PARTS);
 	vx /= x; vy /= x;
-	x = shot->pos.x; y = shot->pos.y;
+	x = shot->pos.px; y = shot->pos.py;
 	foundw = 0;
 
 	for (i = SMART_SHOT_LOOK_AH; i > 0 && foundw == 0; i--) {
@@ -1820,7 +1831,7 @@ void Move_smart_shot(int ind)
 	xi = OBJ_X_IN_BLOCKS(shot);
 	yi = OBJ_Y_IN_BLOCKS(shot);
 
-	for (j=2, angle=-1, freemax=0; j>=-2; --j) {
+	for (j = 2, angle = -1, freemax = 0; j >= -2; --j) {
 	    int si, xt, yt;
 
 	    for (si=1, k=0; si >= -1; --si) {
@@ -1862,9 +1873,9 @@ void Move_smart_shot(int ind)
 	if (angle >= 0) {
 	    i = angle&7;
 	    theta = (int)Wrap_findDir((yi + sur[i].dy) * BLOCK_SZ
-			    - (shot->pos.y + 2 * shot->vel.y),
+			    - (shot->pos.py + 2 * shot->vel.y),
 			    (xi + sur[i].dx) * BLOCK_SZ
-			    - (shot->pos.x - 2 * shot->vel.x));
+			    - (shot->pos.px - 2 * shot->vel.x));
 #ifdef SHOT_EXTRA_SLOWDOWN
 	    if (!foundw && range > (SHOT_LOOK_AH-i) * BLOCK_SZ) {
 		if (shot_speed

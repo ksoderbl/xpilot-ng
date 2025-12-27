@@ -59,9 +59,10 @@
 #include "sched.h"
 #include "error.h"
 #include "checknames.h"
-#include "server.h"
+#include "server.h" /* kps - ng does not want this */
 #include "commonproto.h"
 #include "portability.h"
+#include "srecord.h"
 
 char contact_version[] = VERSION;
 
@@ -80,8 +81,13 @@ static char		msg[MSG_LEN];
 extern int		login_in_progress;
 extern char		ShutdownReason[];
 
+extern int		game_lock;
+extern time_t		gameOverTime;
+extern time_t		serverTime;
+
 static bool Owner(char request, char *real_name, char *host_addr,
 		  int host_port, int pass);
+/* kps - ng does not want this */
 static int Enter_player(char *real, char *nick, char *disp, int team,
 			char *addr, char *host, unsigned version, int port,
 			int *login_port);
@@ -92,6 +98,9 @@ static int Queue_player(char *real, char *nick, char *disp, int team,
 void Contact(int fd, void *arg);
 static int Check_address(char *addr);
 
+#ifdef	_WINDOWS
+#define	getpid()	_getpid()
+#endif
 
 void Contact_cleanup(void)
 {
@@ -123,7 +132,7 @@ int Contact_init(void)
    }
 
     install_input(Contact, contactSocket.fd, (void *) &contactSocket);
-	return(TRUE);
+    return(TRUE);
 }
 
 /*
@@ -279,7 +288,7 @@ static int Check_names(char *nick_name, char *real_name, char *host_name)
  */
 static unsigned Version_to_magic(unsigned version)
 {
-    if (version >= 0x3100 && version <= MY_VERSION) {
+    if (version >= 0x4203 /*0x3100*/ && version <= MY_VERSION) {
 	return VERSION2MAGIC(version);
     }
     return MAGIC;
@@ -437,6 +446,7 @@ void Contact(int fd, void *arg)
     }
 	break;
 
+	/* kps - ng does not want ENTER_GAME_pack */
     case ENTER_GAME_pack:	{
 	/*
 	 * Someone wants to enter the game.
@@ -689,6 +699,7 @@ void Contact(int fd, void *arg)
     }
 	return;
 
+	/* kps - ng does not want MAX_ROBOT_pack */
     case MAX_ROBOT_pack:	{
 	/*
 	 * Set the maximum of robots wanted in the server
@@ -728,6 +739,7 @@ void Contact(int fd, void *arg)
     Reply(host_addr, port);
 }
 
+/* kps - ng does not want this */
 static int Enter_player(char *real, char *nick, char *disp, int team,
 			char *addr, char *host, unsigned version, int port,
 			int *login_port)
@@ -839,7 +851,7 @@ struct queued_player {
     long			last_ack_recv;
 };
 
-static struct queued_player	*qp_list;
+struct queued_player	*qp_list;
 
 static void Queue_remove(struct queued_player *qp, struct queued_player *prev)
 {
@@ -850,6 +862,30 @@ static void Queue_remove(struct queued_player *qp, struct queued_player *prev)
     }
     free(qp);
     NumQueuedPlayers--;
+}
+
+void Queue_kick(const char *nick)
+{
+    unsigned int magic;
+    struct queued_player *qp = qp_list, *prev = NULL;
+    
+    while (qp) {
+	if (!strcasecmp(qp->nick_name, nick))
+	    break;
+	prev = qp;
+	qp = qp->next;
+    }
+    
+    if (!qp)
+	return;
+    
+    magic = Version_to_magic(qp->version);
+    Sockbuf_clear(&ibuf);
+    Packet_printf(&ibuf, "%u%c%c", magic, ENTER_GAME_pack, E_IN_USE);
+    Reply(qp->host_addr, qp->port);
+    Queue_remove(qp, prev);
+
+    return;
 }
 
 static void Queue_ack(struct queued_player *qp, int qpos)
@@ -916,11 +952,11 @@ void Queue_loop(void)
 	if (last_unqueued_loops + 2 + (FPS >> 2) < main_loops) {
 
 	    /* is there a homebase available? */
-	    if (NumPlayers - NumPseudoPlayers + login_in_progress < World.NumBases
+	    if (NumPlayers - NumPseudoPlayers + login_in_progress < World.NumBases - playerLimit
 		|| (Kick_robot_players(TEAM_NOT_SET)
-		    && NumPlayers - NumPseudoPlayers + login_in_progress < World.NumBases)
+		    && NumPlayers - NumPseudoPlayers + login_in_progress < World.NumBases - playerLimit)
 		|| (Kick_paused_players(TEAM_NOT_SET)
-		    && NumPlayers - NumPseudoPlayers + login_in_progress < World.NumBases)) {
+		    && NumPlayers - NumPseudoPlayers + login_in_progress < World.NumBases - playerLimit)) {
 
 		/* find a team for this fellow. */
 		if (BIT(World.rules->mode, TEAM_PLAY)) {
@@ -1010,7 +1046,7 @@ static int Queue_player(char *real, char *nick, char *disp, int team,
 	}
 
 	/* same nick? */
-	if (!strcmp(nick, qp->nick_name)) {
+	if (!strcasecmp(nick, qp->nick_name)) {
 	    /* same screen? */
 	    if (!strcmp(addr, qp->host_addr)
 		&& !strcmp(real, qp->real_name)
@@ -1040,7 +1076,7 @@ static int Queue_player(char *real, char *nick, char *disp, int team,
     if (NumQueuedPlayers >= MaxQueuedPlayers) {
 	return E_GAME_FULL;
     }
-    if (game_lock) {
+    if (game_lock && !rplayback) {
 	return E_GAME_LOCKED;
     }
 
@@ -1124,7 +1160,7 @@ int Queue_advance_player(char *name, char *msg)
     return 0;
 }
 
-
+/* kps - ng does not want this */
 int Queue_show_list(char *msg)
 {
     int				len, count;

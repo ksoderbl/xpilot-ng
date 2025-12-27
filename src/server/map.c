@@ -61,8 +61,8 @@ char map_version[] = VERSION;
 World_map World;
 
 
-static void Init_map(void);
-static void Alloc_map(void);
+/*static void Init_map(void);
+  static void Alloc_map(void);*/
 static void Generate_random_map(void);
 
 static void Find_base_order(void);
@@ -92,7 +92,7 @@ static void Print_map(void)			/* Debugging only. */
 #endif
 
 
-static void Init_map(void)
+/*static*/ void Init_map(void)
 {
     World.x		= 256;
     World.y		= 256;
@@ -157,7 +157,7 @@ void Free_map(void)
 }
 
 
-static void Alloc_map(void)
+/*static*/ void Alloc_map(void)
 {
     int x;
 
@@ -216,7 +216,7 @@ static void Alloc_map(void)
     }
 }
 
-
+/* kps - ng does not want this */
 static void Map_extra_error(int line_num)
 {
 #ifndef SILENT
@@ -282,8 +282,25 @@ bool Grok_map(void)
     World.width = World.x * BLOCK_SZ;
     World.height = World.y * BLOCK_SZ;
     World.hypotenuse = (int) LENGTH(World.width, World.height);
+    World.cwidth = World.width * CLICK;
+    World.cheight = World.height * CLICK;
     strlcpy(World.name, mapName, sizeof(World.name));
     strlcpy(World.author, mapAuthor, sizeof(World.author));
+
+    /* kps hacks start */
+    xpprintf(__FILE__ ":" "mapWidth = %d\n", mapWidth);
+    xpprintf(__FILE__ ":" "mapHeight = %d\n", mapHeight);
+    xpprintf(__FILE__ ":" "World.x = %d\n", World.x);
+    xpprintf(__FILE__ ":" "World.y = %d\n", World.y);
+    xpprintf(__FILE__ ":" "World.width  = %d\n", World.width);
+    xpprintf(__FILE__ ":" "World.height = %d\n", World.height);
+    xpprintf(__FILE__ ":" "World.cwidth  = %d\n", World.cwidth);
+    xpprintf(__FILE__ ":" "World.cheight = %d\n", World.cheight);
+    xpprintf(__FILE__ ":" "mapWidth  * CLICK = %d\n", mapWidth  * CLICK);
+    xpprintf(__FILE__ ":" "mapHeight * CLICK = %d\n", mapHeight * CLICK);
+    xpprintf(__FILE__ ":" "mp.click_width  = %d\n", PIXEL_TO_CLICK(World.width));
+    xpprintf(__FILE__ ":" "mp.click_heigth = %d\n", PIXEL_TO_CLICK(World.height));
+    /* kps hacks end */
 
     if (!mapData) {
 	errno = 0;
@@ -556,10 +573,10 @@ bool Grok_map(void)
 		    World.cannon[World.NumCannons].dir = DIR_UP;
 		    World.cannon[World.NumCannons].blk_pos.x = x;
 		    World.cannon[World.NumCannons].blk_pos.y = y;
-		    World.cannon[World.NumCannons].pix_pos.x =
-						(x + 0.5) * BLOCK_SZ;
-		    World.cannon[World.NumCannons].pix_pos.y =
-						(y + 0.333) * BLOCK_SZ;
+		    World.cannon[World.NumCannons].clk_pos.x =
+			(x + 0.5) * BLOCK_CLICKS;
+		    World.cannon[World.NumCannons].clk_pos.y =
+			(y + 0.333) * BLOCK_CLICKS;
 		    World.cannon[World.NumCannons].dead_time = 0;
 		    World.cannon[World.NumCannons].conn_mask = (unsigned)-1;
 		    World.cannon[World.NumCannons].team = TEAM_NOT_SET;
@@ -572,10 +589,10 @@ bool Grok_map(void)
 		    World.cannon[World.NumCannons].dir = DIR_LEFT;
 		    World.cannon[World.NumCannons].blk_pos.x = x;
 		    World.cannon[World.NumCannons].blk_pos.y = y;
-		    World.cannon[World.NumCannons].pix_pos.x =
-						(x + 0.667) * BLOCK_SZ;
-		    World.cannon[World.NumCannons].pix_pos.y =
-						(y + 0.5) * BLOCK_SZ;
+		    World.cannon[World.NumCannons].clk_pos.x =
+						(x + 0.667) * BLOCK_CLICKS;
+		    World.cannon[World.NumCannons].clk_pos.y =
+						(y + 0.5) * BLOCK_CLICKS;
 		    World.cannon[World.NumCannons].dead_time = 0;
 		    World.cannon[World.NumCannons].conn_mask = (unsigned)-1;
 		    World.cannon[World.NumCannons].team = TEAM_NOT_SET;
@@ -588,10 +605,10 @@ bool Grok_map(void)
 		    World.cannon[World.NumCannons].dir = DIR_RIGHT;
 		    World.cannon[World.NumCannons].blk_pos.x = x;
 		    World.cannon[World.NumCannons].blk_pos.y = y;
-		    World.cannon[World.NumCannons].pix_pos.x =
-						(x + 0.333) * BLOCK_SZ;
-		    World.cannon[World.NumCannons].pix_pos.y =
-						(y + 0.5) * BLOCK_SZ;
+		    World.cannon[World.NumCannons].clk_pos.x =
+						(x + 0.333) * BLOCK_CLICKS;
+		    World.cannon[World.NumCannons].clk_pos.y =
+						(y + 0.5) * BLOCK_CLICKS;
 		    World.cannon[World.NumCannons].dead_time = 0;
 		    World.cannon[World.NumCannons].conn_mask = (unsigned)-1;
 		    World.cannon[World.NumCannons].team = TEAM_NOT_SET;
@@ -604,10 +621,10 @@ bool Grok_map(void)
 		    World.cannon[World.NumCannons].dir = DIR_DOWN;
 		    World.cannon[World.NumCannons].blk_pos.x = x;
 		    World.cannon[World.NumCannons].blk_pos.y = y;
-		    World.cannon[World.NumCannons].pix_pos.x =
-						(x + 0.5) * BLOCK_SZ;
-		    World.cannon[World.NumCannons].pix_pos.y =
-						(y + 0.667) * BLOCK_SZ;
+		    World.cannon[World.NumCannons].clk_pos.x =
+						(x + 0.5) * BLOCK_CLICKS;
+		    World.cannon[World.NumCannons].clk_pos.y =
+						(y + 0.667) * BLOCK_CLICKS;
 		    World.cannon[World.NumCannons].dead_time = 0;
 		    World.cannon[World.NumCannons].conn_mask = (unsigned)-1;
 		    World.cannon[World.NumCannons].team = TEAM_NOT_SET;
@@ -620,8 +637,8 @@ bool Grok_map(void)
 		    itemID[y] = World.NumFuels;
 		    World.fuel[World.NumFuels].blk_pos.x = x;
 		    World.fuel[World.NumFuels].blk_pos.y = y;
-		    World.fuel[World.NumFuels].pix_pos.x = (x+0.5f)*BLOCK_SZ;
-		    World.fuel[World.NumFuels].pix_pos.y = (y+0.5f)*BLOCK_SZ;
+		    World.fuel[World.NumFuels].clk_pos.x = (x+0.5f)*BLOCK_CLICKS;
+		    World.fuel[World.NumFuels].clk_pos.y = (y+0.5f)*BLOCK_CLICKS;
 		    World.fuel[World.NumFuels].fuel = START_STATION_FUEL;
 		    World.fuel[World.NumFuels].conn_mask = (unsigned)-1;
 		    World.fuel[World.NumFuels].last_change = frame_loops;
@@ -957,6 +974,8 @@ bool Grok_map(void)
 /*
  * Use wildmap to generate a random map.
  */
+/* kps - we need a poly random map generator */
+
 static void Generate_random_map(void)
 {
     int		width, height;
@@ -983,6 +1002,7 @@ static void Generate_random_map(void)
  * If a base attractor is adjacent to a base then the base will point
  * to the attractor.
  */
+/* kps - ng does not want this */
 void Find_base_direction(void)
 {
     int	i;
@@ -1066,6 +1086,7 @@ void Find_base_direction(void)
 /*
  * Return the team that is closest to this position.
  */
+/* kps - ng does not want this */
 unsigned short Find_closest_team(int posx, int posy)
 {
     unsigned short team = TEAM_NOT_SET;
@@ -1076,8 +1097,8 @@ unsigned short Find_closest_team(int posx, int posy)
 	if (World.base[i].team == TEAM_NOT_SET)
 	    continue;
 
-	l = Wrap_length((posx - World.base[i].pos.x)*BLOCK_SZ,
-			(posy - World.base[i].pos.y)*BLOCK_SZ);
+	l = Wrap_length((posx - World.base[i].pos.x)*BLOCK_CLICKS,
+			(posy - World.base[i].pos.y)*BLOCK_CLICKS);
 
 	if (l < closest) {
 	    team = World.base[i].team;
@@ -1093,10 +1114,12 @@ unsigned short Find_closest_team(int posx, int posy)
  * Determine the order in which players are placed
  * on starting positions after race mode reset.
  */
+/* kps - ng does not want this */
 static void Find_base_order(void)
 {
     int			i, j, k, n;
-    DFLOAT		cx, cy, dist;
+    DFLOAT		dist;
+    int			cx, cy;
 
     if (!BIT(World.rules->mode, TIMING)) {
 	World.baseorder = NULL;
@@ -1113,11 +1136,11 @@ static void Find_base_order(void)
 	exit(-1);
     }
 
-    cx = World.check[0].x * BLOCK_SZ;
-    cy = World.check[0].y * BLOCK_SZ;
+    cx = World.check[0].x * BLOCK_CLICKS;
+    cy = World.check[0].y * BLOCK_CLICKS;
     for (i = 0; i < n; i++) {
-	dist = Wrap_length(World.base[i].pos.x * BLOCK_SZ - cx,
-			   World.base[i].pos.y * BLOCK_SZ - cy);
+	dist = Wrap_length(World.base[i].pos.x * BLOCK_CLICKS - cx,
+			   World.base[i].pos.y * BLOCK_CLICKS - cy) / CLICK;
 	for (j = 0; j < i; j++) {
 	    if (World.baseorder[j].dist > dist) {
 		break;
@@ -1139,11 +1162,17 @@ DFLOAT Wrap_findDir(DFLOAT dx, DFLOAT dy)
     return findDir(dx, dy);
 }
 
-
-DFLOAT Wrap_length(DFLOAT dx, DFLOAT dy)
+DFLOAT Wrap_cfindDir(int dx, int dy)
 {
-    dx = WRAP_DX(dx);
-    dy = WRAP_DY(dy);
+    dx = CENTER_XCLICK(dx);
+    dy = CENTER_YCLICK(dy);
+    return findDir(dx, dy);
+}
+
+DFLOAT Wrap_length(int dx, int dy)
+{
+    dx = CENTER_XCLICK(dx);
+    dy = CENTER_YCLICK(dy);
     return LENGTH(dx, dy);
 }
 

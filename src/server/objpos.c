@@ -24,6 +24,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
 
 #ifdef _WINDOWS
 # include <windows.h>
@@ -46,7 +47,7 @@ void Object_position_set_clicks(object *obj, int cx, int cy)
 {
     struct _objposition		*pos = (struct _objposition *)&obj->pos;
 
-#if 0
+#if 1
     if (cx < 0 || cx >= PIXEL_TO_CLICK(World.width) || 
 	cy < 0 || cy >= PIXEL_TO_CLICK(World.height)) {
 	printf("BUG!  Illegal object position %d,%d\n", cx, cy);
@@ -55,34 +56,30 @@ void Object_position_set_clicks(object *obj, int cx, int cy)
     }
 #endif
     pos->cx = cx;
-    pos->x = CLICK_TO_PIXEL(cx);
-    pos->bx = pos->x / BLOCK_SZ;
+    pos->px = CLICK_TO_PIXEL(cx);
+    pos->bx = pos->px / BLOCK_SZ;
     pos->cy = cy;
-    pos->y = CLICK_TO_PIXEL(cy);
-    pos->by = pos->y / BLOCK_SZ;
+    pos->py = CLICK_TO_PIXEL(cy);
+    pos->by = pos->py / BLOCK_SZ;
 }
 
-void Object_position_set_pixels(object *obj, DFLOAT x, DFLOAT y)
+void Object_position_init_clicks(object *obj, int cx, int cy)
 {
-    Object_position_set_clicks(obj, FLOAT_TO_CLICK(x), FLOAT_TO_CLICK(y));
-}
-
-void Object_position_init_pixels(object *obj, DFLOAT x, DFLOAT y)
-{
-    Object_position_set_clicks(obj, FLOAT_TO_CLICK(x), FLOAT_TO_CLICK(y));
+    Object_position_set_clicks(obj, cx, cy);
     Object_position_remember(obj);
+    obj->collmode = 0;
 }
 
 void Player_position_restore(player *pl)
 {
-    Player_position_set_pixels(pl, pl->prevpos.x, pl->prevpos.y);
+    Player_position_set_clicks(pl, pl->prevpos.x, pl->prevpos.y);
 }
 
 void Player_position_set_clicks(player *pl, int cx, int cy)
 {
     struct _objposition		*pos = (struct _objposition *)&pl->pos;
 
-#if 0
+#if 1
     if (cx < 0 || cx >= PIXEL_TO_CLICK(World.width) || 
 	cy < 0 || cy >= PIXEL_TO_CLICK(World.height)) {
 	printf("BUG!  Illegal player position %d,%d\n", cx, cy);
@@ -91,28 +88,24 @@ void Player_position_set_clicks(player *pl, int cx, int cy)
     }
 #endif
     pos->cx = cx;
-    pos->x = CLICK_TO_PIXEL(cx);
-    pos->bx = pos->x / BLOCK_SZ;
+    pos->px = CLICK_TO_PIXEL(cx);
+    pos->bx = pos->px / BLOCK_SZ;
     pos->cy = cy;
-    pos->y = CLICK_TO_PIXEL(cy);
-    pos->by = pos->y / BLOCK_SZ;
+    pos->py = CLICK_TO_PIXEL(cy);
+    pos->by = pos->py / BLOCK_SZ;
 }
 
-void Player_position_set_pixels(player *pl, DFLOAT x, DFLOAT y)
+void Player_position_init_clicks(player *pl, int cx, int cy)
 {
-    Player_position_set_clicks(pl, FLOAT_TO_CLICK(x), FLOAT_TO_CLICK(y));
-}
-
-void Player_position_init_pixels(player *pl, DFLOAT x, DFLOAT y)
-{
-    Player_position_set_clicks(pl, FLOAT_TO_CLICK(x), FLOAT_TO_CLICK(y));
+    Player_position_set_clicks(pl, cx, cy);
     Player_position_remember(pl);
+    pl->collmode = 0;
 }
 
 void Player_position_limit(player *pl)
 {
-    int			x = pl->pos.x, ox = x;
-    int			y = pl->pos.y, oy = y;
+    int			x = pl->pos.px, ox = x;
+    int			y = pl->pos.py, oy = y;
 
     LIMIT(x, 0, World.width - 1);
     LIMIT(y, 0, World.height - 1);

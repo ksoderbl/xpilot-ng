@@ -2978,8 +2978,8 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
 
     Get_int_resource(rDB, "team", my_team);
 
-    IFWINDOWS( Config_get_name(name); )
-    IFWINDOWS( Config_get_team(my_team); )
+    IFWINDOWS( Config_get_name(name) );
+    IFWINDOWS( Config_get_team(my_team) );
 
     if (*my_team < 0 || *my_team > 9) {
 	*my_team = TEAM_NOT_SET;
@@ -3054,7 +3054,7 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
     multibuffer = (i != 0) ? true : false;
 
     /* Windows already derived maxColors in InitWinX */
-    IFNWINDOWS( Get_int_resource(rDB, "maxColors", &maxColors); )
+    IFNWINDOWS( Get_int_resource(rDB, "maxColors", &maxColors) );
 
     Get_string_resource(rDB, "black", color_names[0], sizeof(color_names[0]));
     Get_string_resource(rDB, "white", color_names[1], sizeof(color_names[1]));
@@ -3206,8 +3206,8 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
     Get_int_resource(rDB, "maxFPS", &maxFPS);
     oldMaxFPS = maxFPS;
 
-    IFWINDOWS( Get_int_resource(rDB, "radarDivisor", &RadarDivisor); )
-    IFWINDOWS( Get_bool_resource(rDB, "threadedDraw", &ThreadedDraw); )
+    IFWINDOWS( Get_int_resource(rDB, "radarDivisor", &RadarDivisor) );
+    IFWINDOWS( Get_bool_resource(rDB, "threadedDraw", &ThreadedDraw) );
 
     Get_float_resource(rDB, "scaleFactor", &scaleFactor);
     if (scaleFactor == 0.0) {
@@ -3350,7 +3350,7 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
 
 void	defaultCleanup(void)
 {
-    IFWINDOWS( Get_xpilotini_file(-1); )
+    IFWINDOWS( Get_xpilotini_file(-1) );
 
     if (keyDefs) {
 	free(keyDefs);

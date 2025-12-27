@@ -48,13 +48,20 @@
 #define	STR80	(80)
 
 typedef struct {
-    char	owner[STR80];
+    char	owner[STR80]; /* ng wants this to be name */
     char	host[STR80];
-} server_t;
+} server;
+
+
 
 /*
  * Global data.
  */
+
+extern DFLOAT		tbl_sin[];
+extern DFLOAT		tbl_cos[];
+
+#ifdef SERVER
 #define FPS		framesPerSecond
 #define NumObjs		(ObjCount + 0)
 
@@ -64,7 +71,11 @@ extern pulse_t		*Pulses[];
 extern ecm_t		*Ecms[];
 extern trans_t		*Transporters[];
 extern long		frame_loops;
+extern unsigned long	frame_time;
+extern int		observerStart;
 extern int		NumPlayers;
+extern int		NumObservers;
+extern int		NumOperators;
 extern int		NumPseudoPlayers;
 extern int		NumQueuedPlayers;
 extern int		ObjCount;
@@ -81,7 +92,7 @@ extern int		robotLeaveScore, robotLeaveRatio;
 extern int		robotTeam;
 extern bool		restrictRobots, reserveRobotTeam;
 extern World_map	World;
-extern server_t		Server;
+extern server		Server;
 extern list_t		expandList;
 extern DFLOAT		ShotsMass, ShipMass, ShotsSpeed, Gravity;
 extern DFLOAT		ballMass;
@@ -215,6 +226,7 @@ extern bool		allowClusters;
 extern bool		allowModifiers;
 extern bool		allowLaserModifiers;
 extern bool		allowShipShapes;
+extern bool		allowPlayerPasswords;
 
 extern bool		shieldedItemPickup;
 extern bool		shieldedMining;
@@ -274,6 +286,7 @@ extern char		*motdFileName;
 extern char	       	*scoreTableFileName;
 extern char		*adminMessageFileName;
 extern int		adminMessageFileSizeLimit;
+extern time_t		gameOverTime;
 
 extern DFLOAT		friction;
 extern DFLOAT		blockFriction;
@@ -323,12 +336,25 @@ extern int		maxPauseTime;
 extern long		KILLING_SHOTS;
 extern unsigned		SPACE_BLOCKS;
 
-extern char		*playerPasswordsFileName;
-extern int		playerPasswordsFileSizeLimit;
-
+extern int		timerResolution;
+extern char		*password;
+extern int		numberOfRounds;
+extern int		playerLimit;
 extern int		recordMode;
 extern int		recordFlushInterval;
+extern int		constantScoring;
+extern int		eliminationRace;
+extern char		*dataURL;
+extern int		clientPortStart;
+extern int		clientPortEnd;
 extern char		*recordFileName;
+extern int		FPSMultiplier;
+extern int		framespeed;
+extern DFLOAT		framespeed2;
+extern char		*playerPasswordsFileName;
+extern int		playerPasswordsFileSizeLimit;
+ 
+#endif /* SERVER */
 
 #endif /* GLOBAL_H */
 

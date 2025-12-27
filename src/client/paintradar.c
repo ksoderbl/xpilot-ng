@@ -34,7 +34,7 @@
 #endif
 
 #ifdef _WINDOWS
-# include "NT/winX.h"
+# include "NT/winX_.h"
 # include "NT/winXXPilot.h"
 #endif
 
@@ -49,6 +49,7 @@
 #include "paint.h"
 #include "paintdata.h"
 #include "xinit.h"
+#include "portability.h"
 
 char paintradar_version[] = VERSION;
 
@@ -124,8 +125,6 @@ static void Windows_copy_sliding_radar(float xf, float yf)
 		    slidingradar_x, slidingradar_y,
 		    256-slidingradar_x, RadarHeight-slidingradar_y);
     p_radar = radar;
-
-    XSetForeground(dpy, radarGC, colors[WHITE].pixel);
 }
 #endif
 
@@ -277,9 +276,7 @@ void Paint_radar(void)
 	Windows_copy_sliding_radar(xf, yf);
     }
     else
-    {
 	Copy_static_radar();
-    }
 #else
     Copy_static_radar();
 #endif
@@ -324,7 +321,6 @@ void Paint_sliding_radar(void)
     }
 }
 
-
 static void Paint_world_radar_old(void)
 {
     int			i, xi, yi, xm, ym, xp, yp = 0;
@@ -342,10 +338,6 @@ static void Paint_world_radar_old(void)
 
     radar_exposures = 2;
 
-#ifdef _WINDOWS
-    XSetForeground(dpy, s_radar, colors[BLACK].pixel);
-    XFillRectangle(dpy, s_radar, radarGC, 0, 0, 256, RadarHeight);
-#else
     if (s_radar == p_radar) {
 	XSetPlaneMask(dpy, radarGC,
 		      AllPlanes & ~(dpl_1[0] | dpl_1[1]));
@@ -357,7 +349,6 @@ static void Paint_world_radar_old(void)
     } else {
 	XClearWindow(dpy, radar);
     }
-#endif
 
     /*
      * Calculate an array which is later going to be indexed
@@ -458,11 +449,7 @@ static void Paint_world_radar_old(void)
 			}
 			start = end = yp;
 			currColor = visibleColor[type];
-#ifdef _WINDOWS
-			XSetForeground(dpy, s_radar, currColor);
-#else
 			XSetForeground(dpy, radarGC, colors[currColor].pixel);
-#endif
 		    } else {
 			end = yp;
 			visibleColorChange = (visibleColor[type] != currColor);
@@ -547,11 +534,7 @@ static void Paint_world_radar_old(void)
 			}
 			start = end = yp;
 			currColor = visibleColor[type];
-#ifdef _WINDOWS
-			XSetForeground(dpy, s_radar, currColor);
-#else
 			XSetForeground(dpy, radarGC, colors[currColor].pixel);
-#endif
 		    } else {
 			end = yp;
 			visibleColorChange = visibleColor[type] != currColor;
@@ -597,11 +580,7 @@ static void Paint_world_radar_old(void)
 		    }
 		    start = end = yp;
 		    currColor = visibleColor[type];
-#ifdef _WINDOWS
-		    XSetForeground(dpy, s_radar, currColor);
-#else
 		    XSetForeground(dpy, radarGC, colors[currColor].pixel);
-#endif
 		}
 	    }
 	}
@@ -633,18 +612,13 @@ static void Paint_world_radar_old(void)
 }
 
 
-void Paint_world_radar(void)
+static void Paint_world_radar_new(void)
 {
     int i, j, k;
     static XPoint poly[10000];
     
 #define DBG if(0) printf
-    
-    if (oldServer) {
-	Paint_world_radar_old();
-	return;
-    }
-    
+	   
     /* what the heck is this? */
     radar_exposures = 2;
     
@@ -657,13 +631,8 @@ void Paint_world_radar(void)
     } else {
 	XClearWindow(dpy, radar);
     }
-    
-    
-#ifdef _WINDOWS
-    XSetForeground(dpy, s_radar, wallRadarColor);
-#else
+        
     XSetForeground(dpy, radarGC, colors[wallRadarColor].pixel);
-#endif
     
     /*
      * The radar is drawn 9 times into different locations
@@ -725,6 +694,19 @@ void Paint_world_radar(void)
     
     if (s_radar == p_radar)
 	XSetPlaneMask(dpy, radarGC, AllPlanes & (~(dpl_2[0] | dpl_2[1])));
+}
+
+void Paint_world_radar(void)
+{
+    IFWINDOWS(xid[radarGC].hgc.xidhwnd = s_radar);
+    
+    if (oldServer) {
+	Paint_world_radar_old();
+    } else {
+	Paint_world_radar_new();
+    }
+	
+    IFWINDOWS(xid[radarGC].hgc.xidhwnd = radar;)
 }
 
 

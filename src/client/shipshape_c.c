@@ -45,7 +45,7 @@
 #include "draw.h"
 #include "error.h"
 
-char shipshape_version[] = VERSION;
+char shipshape_c_version[] = VERSION;
 
 
 
@@ -61,8 +61,8 @@ void Rotate_point(position pt[RES])
     int			i;
 
     for (i = 1; i < RES; i++) {
-	pt[i].x = tcos(i) * pt[0].x - tsin(i) * pt[0].y;
-	pt[i].y = tsin(i) * pt[0].x + tcos(i) * pt[0].y;
+	pt[i].x = (tcos(i) * pt[0].x - tsin(i) * pt[0].y) + .5;
+	pt[i].y = (tsin(i) * pt[0].x + tcos(i) * pt[0].y) + .5;
     }
 }
 

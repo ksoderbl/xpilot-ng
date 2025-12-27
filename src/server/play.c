@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <limits.h>
 #include <math.h>
+#include <time.h>
 
 #ifdef _WINDOWS
 # include "NT/winServer.h"
@@ -41,6 +42,8 @@
 #include "saudio.h"
 #include "score.h"
 #include "objpos.h"
+#include "click.h"
+#include "object.h"
 
 char play_version[] = VERSION;
 
@@ -92,7 +95,9 @@ int Punish_team(int ind, int t_destroyed, int t_target)
 
     if (!somebody_flag) {
 	SCORE(ind, Rate(pl->score, CANNON_SCORE)/2,
-	      tt->pos.x, tt->pos.y, "Treasure:");
+	      tt->pos.x * BLOCK_CLICKS,
+	      tt->pos.y * BLOCK_CLICKS,
+	      "Treasure:");
 	return 0;
     }
 
@@ -114,20 +119,29 @@ int Punish_team(int ind, int t_destroyed, int t_target)
 	    continue;
 	}
 	if (Players[i]->team == td->team) {
-	    SCORE(i, -sc, tt->pos.x, tt->pos.y,
+	    SCORE(i, -sc,
+		  tt->pos.x * BLOCK_CLICKS, tt->pos.y * BLOCK_CLICKS,
 		  "Treasure: ");
+	    Rank_LostBall(Players[i]);
 	    if (treasureKillTeam)
 		SET_BIT(Players[i]->status, KILLED);
 	}
 	else if (Players[i]->team == tt->team &&
 		 (Players[i]->team != TEAM_NOT_SET || i == ind)) {
-	    SCORE(i, (i == ind ? 3*por : 2*por), tt->pos.x, tt->pos.y,
+	    if (lose_team_members > 0) {
+		if (i == ind) {
+		    Rank_CashedBall(Players[i]);
+		}
+		Rank_WonBall(Players[i]);
+	    }
+	    SCORE(i, (i == ind ? 3*por : 2*por),
+		  tt->pos.x * BLOCK_CLICKS, tt->pos.y * BLOCK_CLICKS,
 		  "Treasure: ");
 	}
     }
 
     if (treasureKillTeam) {
-	Players[ind]->kills++;
+	Rank_AddKill(Players[ind]);
     }
 
     updateScores = true;
@@ -142,7 +156,7 @@ int Punish_team(int ind, int t_destroyed, int t_target)
 
 /* Create debris particles */
 void Make_debris(
-    /* pos.x, pos.y   */ DFLOAT  x,          DFLOAT y,
+    /* pos.x, pos.y   */ int    cx,          int   cy,
     /* vel.x, vel.y   */ DFLOAT  velx,       DFLOAT vely,
     /* owner id       */ int    id,
     /* owner team     */ unsigned short team,
@@ -151,39 +165,22 @@ void Make_debris(
     /* status         */ long   status,
     /* color          */ int    color,
     /* radius         */ int    radius,
-    /* min,max debris */ int    min_debris, int    max_debris,
+    /* num debris     */ int    num_debris,
     /* min,max dir    */ int    min_dir,    int    max_dir,
     /* min,max speed  */ DFLOAT  min_speed,  DFLOAT  max_speed,
     /* min,max life   */ int    min_life,   int    max_life
 )
 {
     object		*debris;
-    int			i, num_debris, life;
+    int			i, life;
     modifiers		mods;
 
-    if (BIT(World.rules->mode, WRAP_PLAY)) {
-	if (x < 0) x += World.width;
-	else if (x >= World.width) x -= World.width;
-	if (y < 0) y += World.height;
-	else if (y >= World.height) y -= World.height;
-    }
-    if (x < 0 || x >= World.width || y < 0 || y >= World.height) {
-	return;
-    }
+    cx = WRAP_XCLICK(cx);
+    cy = WRAP_YCLICK(cy);
+
     if (max_life < min_life)
 	max_life = min_life;
-    if (ShotsLife >= FPS) {
-	if (min_life > ShotsLife) {
-	    min_life = ShotsLife;
-	    max_life = ShotsLife;
-	} else if (max_life > ShotsLife) {
-	    max_life = ShotsLife;
-	}
-    }
-    if (min_speed * max_life > World.hypotenuse)
-	min_speed = World.hypotenuse / max_life;
-    if (max_speed * min_life > World.hypotenuse)
-	max_speed = World.hypotenuse / min_life;
+
     if (max_speed < min_speed)
 	max_speed = min_speed;
 
@@ -196,7 +193,6 @@ void Make_debris(
 	}
     }
 
-    num_debris = min_debris + (int)(rfrac() * (max_debris - min_debris));
     if (num_debris > MAX_TOTAL_SHOTS - NumObjs) {
 	num_debris = MAX_TOTAL_SHOTS - NumObjs;
     }
@@ -211,7 +207,7 @@ void Make_debris(
 	debris->color = color;
 	debris->id = id;
 	debris->team = team;
-	Object_position_init_pixels(debris, x, y);
+	Object_position_init_clicks(debris, cx, cy);
 	dir = MOD2(min_dir + (int)(rfrac() * (max_dir - min_dir)), RES);
 	dirplus = MOD2(dir + 1, RES);
 	diroff = rfrac();
@@ -232,11 +228,9 @@ void Make_debris(
 	}
 	debris->type = type;
 	life = (int)(min_life + rfrac() * (max_life - min_life) + 1);
-	if (life * speed > World.hypotenuse) {
-	    life = (long)(World.hypotenuse / speed);
-	}
 	debris->life = life;
-	debris->fuselife = life;
+	debris->fuselife = life; /* kps - remove this */
+	debris->fuseframe = 0;
 	debris->pl_range = radius;
 	debris->pl_radius = radius;
 	debris->status = status;

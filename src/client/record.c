@@ -202,9 +202,12 @@ static void RWriteHeader(void)
     for (i = 0; i < maxColors; i++) {
 	RWriteULong(colors[i].pixel);
 #ifdef _WINDOWS
-	RWriteUShort(256*GetRValue(objs[i].color));
-	RWriteUShort(256*GetGValue(objs[i].color));
-	RWriteUShort(256*GetBValue(objs[i].color));
+	{
+		COLORREF col = WinXPColour(colors[i].pixel);
+		RWriteUShort(256*GetRValue(col));
+		RWriteUShort(256*GetGValue(col));
+		RWriteUShort(256*GetBValue(col));
+	}
 #else
 	RWriteUShort(colors[i].red);
 	RWriteUShort(colors[i].green);

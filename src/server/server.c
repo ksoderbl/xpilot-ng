@@ -72,6 +72,8 @@
 #include "portability.h"
 #include "server.h"
 #include "commonproto.h"
+#include "srecord.h"
+#include "rank.h"
 
 char server_version[] = VERSION;
 
@@ -84,16 +86,19 @@ char xpilots_versionid[] = "@(#)$" TITLE " $";
  */
 int			NumPlayers = 0;
 int			NumAlliances = 0;
+int			NumObservers = 0;
+int			NumOperators = 0;
+int			observerStart;
 player			**Players;
-int			GetInd_1;
-int			GetInd[NUM_IDS+1];
-server_t		Server;
+int			GetInd[NUM_IDS + MAX_OBSERVERS + 1];
+server			Server;
 char			*serverAddr;
 int			ShutdownServer = -1;
 int			ShutdownDelay = 1000;
 char			ShutdownReason[MAX_CHARS];
 int 			framesPerSecond = 18;
 long			main_loops = 0;		/* needed in events.c */
+int 			roundCounter = 1;
 
 #ifdef LOG
 static bool		Log = true;
@@ -157,6 +162,8 @@ int main(int argc, char **argv)
 
     Treasure_init();
 
+    Rank_init_saved_scores();
+
     /*
      * Get server's official name.
      */
@@ -186,6 +193,8 @@ int main(int argc, char **argv)
 		return(FALSE);
 
     Meta_init();
+
+    Timing_setup();
 
     if (Setup_net_server() == -1) {
 	End_game();
@@ -323,6 +332,10 @@ int End_game(void)
     Meta_gone();
 
     Contact_cleanup();
+
+    /* Ranking. */
+    Rank_rank_score();
+    Rank_write_score_file();
 
     Free_players();
     Free_shots();
@@ -772,6 +785,7 @@ void Server_log_admin_message(int ind, const char *str)
  * for incorrectly compiled programs.
  */
 extern char asteroid_version[];
+extern char auth_version[];
 extern char cannon_version[];
 extern char cell_version[];
 extern char checknames_version[];
@@ -806,7 +820,7 @@ extern char sched_version[];
 extern char score_version[];
 extern char server_version[];
 extern char ship_version[];
-extern char shipshape_version[];
+extern char shipshape_s_version[];
 extern char shot_version[];
 extern char socklib_version[];
 extern char update_version[];
@@ -820,6 +834,7 @@ static void Check_server_versions(void)
 	char		*versionstr;
     } file_versions[] = {
 	{ "asteroid", asteroid_version },
+	{ "auth", auth_version },
 	{ "cannon", cannon_version },
 	{ "cell", cell_version },
 	{ "checknames", checknames_version },
@@ -854,7 +869,7 @@ static void Check_server_versions(void)
 	{ "score", score_version },
 	{ "server", server_version },
 	{ "ship", ship_version },
-	{ "shipshape", shipshape_version },
+	{ "shipshape_s", shipshape_s_version },
 	{ "shot", shot_version },
 	{ "socklib", socklib_version },
 	{ "update", update_version },

@@ -760,7 +760,7 @@ static void Gui_paint_shields_deflectors(int x, int y, int radius, int shield,
     int		ecolor = -1;
 
 /*    IFWINDOWS(Trace("shield=%d deflector=%d eshield=%d\n",
-	shield, deflector, eshield);)
+	shield, deflector, eshield));
 */
     if (shield) 
 	scolor = ship_color;

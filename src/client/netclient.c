@@ -44,6 +44,7 @@
 #endif
 
 #ifdef _WINDOWS
+# include <limits.h>
 # include "NT/winclient.h"
 # include "NT/winNet.h"
 # include "NT/winAudio.h"

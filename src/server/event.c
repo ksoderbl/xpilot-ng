@@ -26,6 +26,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
+#include <time.h>
 
 #ifdef _WINDOWS
 # include "NT/winServer.h"
@@ -68,8 +69,8 @@ static void Refuel(int ind)
     for (i=0; i<World.NumFuels; i++) {
 	if (World.block[World.fuel[i].blk_pos.x]
 		       [World.fuel[i].blk_pos.y] == FUEL) {
-	    l = Wrap_length(pl->pos.x - World.fuel[i].pix_pos.x,
-			    pl->pos.y - World.fuel[i].pix_pos.y);
+	    l = Wrap_length(pl->pos.cx - World.fuel[i].clk_pos.x,
+			    pl->pos.cy - World.fuel[i].clk_pos.y) / CLICK;
 	    if (BIT(pl->used, HAS_REFUEL) == 0
 		|| l < dist) {
 		SET_BIT(pl->used, HAS_REFUEL);
@@ -96,9 +97,9 @@ static void Repair(int ind)
     for (i = 0; i < World.NumTargets; i++, targ++) {
 	if (targ->team == pl->team
 	    && targ->dead_time <= 0) {
-	    x = targ->pos.x*BLOCK_SZ + BLOCK_SZ/2;
-	    y = targ->pos.y*BLOCK_SZ + BLOCK_SZ/2;
-	    l = Wrap_length(pl->pos.x - x, pl->pos.y - y);
+	    x = targ->pos.x * BLOCK_CLICKS + BLOCK_CLICKS/2;
+	    y = targ->pos.y * BLOCK_CLICKS + BLOCK_CLICKS/2;
+	    l = Wrap_length(pl->pos.cx - x, pl->pos.cy - y) / CLICK;
 	    if (BIT(pl->used, HAS_REPAIR) == 0 || l < dist) {
 		SET_BIT(pl->used, HAS_REPAIR);
 		pl->repair_target = i;
@@ -192,8 +193,8 @@ int Player_lock_closest(int ind, int next)
 
     if (BIT(pl->lock.tagged, LOCK_PLAYER)) {
 	lock = GetInd[pl->lock.pl_id];
-	dist = Wrap_length(Players[lock]->pos.x - pl->pos.x,
-			   Players[lock]->pos.y - pl->pos.y);
+	dist = Wrap_length(Players[lock]->pos.cx - pl->pos.cx,
+			   Players[lock]->pos.cy - pl->pos.cy);
     } else {
 	lock = -1;
 	dist = 0.0;
@@ -209,8 +210,8 @@ int Player_lock_closest(int ind, int next)
 	    || ALLIANCE(ind, i)) {
 	    continue;
 	}
-	l = Wrap_length(Players[i]->pos.x - pl->pos.x,
-			Players[i]->pos.y - pl->pos.y);
+	l = Wrap_length(Players[i]->pos.cx - pl->pos.cx,
+			Players[i]->pos.cy - pl->pos.cy);
 	if (l >= dist && l < best) {
 	    best = l;
 	    newpl = i;

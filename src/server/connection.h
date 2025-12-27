@@ -122,6 +122,7 @@ typedef struct {
     shipobj		*ship;			/* ship shape of player */
     char		*addr;			/* address of players host */
     char		*host;			/* hostname of players host */
+    int			rectype;		/* normal/saved/spectator */
 } connection_t;
 
 #endif

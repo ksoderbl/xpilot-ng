@@ -101,12 +101,8 @@
 #define MAX_LIGHT_PTS	    3
 #define MAX_RACK_PTS	    4
 
-#if 0 /* kps - CAUSES CRASH!, need to enable later */
 #ifdef SERVER
-#define SHIPCOORD ipos
-#else
-#define SHIPCOORD position
-#endif
+#define SHIPCOORD cpos
 #else
 #define SHIPCOORD position
 #endif
@@ -146,7 +142,7 @@ extern void Calculate_shield_radius(shipobj *w);
 extern int Validate_shape_str(char *str);
 extern void Convert_ship_2_string(shipobj *w, char *buf, char *ext,
 				  unsigned shape_version);
-void Rotate_point(position pt[RES]);
+void Rotate_point(SHIPCOORD pt[RES]);
 
 extern DFLOAT rfrac(void);
 

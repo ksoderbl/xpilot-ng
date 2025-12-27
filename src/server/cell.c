@@ -28,6 +28,7 @@
 #include <math.h>
 #include <limits.h>
 #include <assert.h>
+#include <time.h>
 
 #ifdef _WINDOWS
 # include "NT/winServer.h"

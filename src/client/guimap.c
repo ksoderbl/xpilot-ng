@@ -334,27 +334,33 @@ void Gui_paint_fuel(int x, int y, int fuel)
 
 void Gui_paint_base(int x, int y, int id, int team, int type)
 {
-    int baseColor = BLUE;
+    int baseColor;
+    int i;
+
+    if (!blockBitmaps)
+	baseColor = BLUE;
+    else
+	baseColor = WHITE;
+
+    /* Mara's flashy basewarning */
+    if (baseWarningType & 2) {
+	for (i = 0; i < 10; i++) {
+	    if (deatharray[i].id == id &&
+		deatharray[i].deathtime > loops - 3 * FPS) {
+		if ((loops % 2) == 1) {
+		    baseColor = WHITE;
+		    /*Paint_baseInfoOnHudRadar(x,y); */
+		} else
+		    baseColor = RED;
+	    }
+	}
+    }
 
     if (!blockBitmaps) {
 	const int BORDER = 4;		/* in pixels */
-	int size, i;
+	int size;
 	other_t *other;
 	char s[3];
-
-	/* Mara's flashy basewarning */
-	if (baseWarningType & 2) {
-	    for (i = 0; i < 10; i++) {
-		if (deatharray[i].id == id &&
-		    deatharray[i].deathtime > loops - 3 * FPS) {
-		    if ((loops % 2) == 1) {
-			baseColor = WHITE;
-			/*Paint_baseInfoOnHudRadar(x,y); */
-		    } else
-			baseColor = RED;
-		}
-	    }
-	}
 
 	SET_FG(colors[baseColor].pixel);
 
@@ -453,7 +459,7 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
 	other_t *other;
 	char s[3];
 
-	SET_FG(colors[WHITE].pixel);
+	SET_FG(colors[baseColor].pixel);
 
 	switch (type) {
 	case SETUP_BASE_UP:

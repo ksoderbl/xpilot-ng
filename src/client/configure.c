@@ -1600,7 +1600,7 @@ static int Config_update_instruments(int widget_desc, void *data, bool *val)
     }
     if (BIT(bit, SHOW_REVERSE_SCROLL)) {
 	/* a callback for `reverseScroll' in the config menu */
-	IFNWINDOWS( Talk_reverse_cut(); )
+	IFNWINDOWS( Talk_reverse_cut() );
     }
 
     return 0;
@@ -2092,7 +2092,7 @@ static int Config_save(int widget_desc, void *button_str, const char **strptr)
 	Config_save_resource(fp, buf, modBankStr[i]);
     }
 
-    IFWINDOWS( Config_save_window_positions(); )
+    IFWINDOWS( Config_save_window_positions() );
 
 #ifndef _WINDOWS
     Xpilotrc_end(fp);
@@ -2124,7 +2124,7 @@ static int Config_save_confirm_callback(int widget_desc, void *popup_desc, const
 
 int Config(bool doit)
 {
-    IFWINDOWS( Trace("***Config %d\n", doit); )
+    IFWINDOWS( Trace("***Config %d\n", doit) );
     if (config_created == false) {
 	if (doit == false) {
 	    return 0;

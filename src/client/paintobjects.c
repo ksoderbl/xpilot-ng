@@ -469,7 +469,7 @@ static void Paint_teamshots(int i, int t_, int x_areas, int y_areas, int areas)
     /*
      * Teamshots are in range DEBRIS_TYPES to DEBRIS_TYPES*2-1 in fastshot.
      */
-    /* IFWINDOWS( Trace("t_=%d\n", t_); )*/
+    /* IFWINDOWS( Trace("t_=%d\n", t_) );*/
     if (num_fastshot[t_] > 0) {
 
 	x = BASE_X(i);

@@ -32,7 +32,7 @@ Window                   changedwin;
 int                      prefx = PREF_X, prefy = PREF_Y;
 int                      prevdraw_x, prevdraw_y;
 int                      prevline_x, prevline_y, prevlinend_x, prevlinend_y;
-int                      selectfrom_x =-1,selectfrom_y,selectto_x,selectto_y;
+int                      selectfrom_x = -1,selectfrom_y,selectto_x,selectto_y;
 undo_t                   *undolist = NULL;
 
 /***************************************************************************/

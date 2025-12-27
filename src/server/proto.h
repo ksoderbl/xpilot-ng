@@ -71,6 +71,7 @@ void Move_init(void);
 void Move_object(object *obj);
 void Move_player(int ind);
 void Turn_player(int ind);
+int is_inside(int x, int y, int hit_mask);
 
 /*
  * Prototypes for event.c
@@ -84,12 +85,15 @@ void filter_mods(modifiers *mods);
 /*
  * Prototypes for map.c
  */
+void Init_map(void);
+void Alloc_map(void);
 void Free_map(void);
-bool Grok_map(void);
+bool Grok_map(void); /* kps - ng wants this to return void */
 void Find_base_direction(void);
 void Compute_gravity(void);
 DFLOAT Wrap_findDir(DFLOAT dx, DFLOAT dy);
-DFLOAT Wrap_length(DFLOAT dx, DFLOAT dy);
+DFLOAT Wrap_cfindDir(int dx, int dy);
+DFLOAT Wrap_length(int dx, int dy);
 unsigned short Find_closest_team(int posx, int posy);
 
 int Wildmap(
@@ -139,20 +143,21 @@ void Update_tanks(pl_fuel_t *);
 void Place_item(int type, int ind);
 int Choose_random_item(void);
 void Tractor_beam(int ind);
-void General_tractor_beam(int ind, DFLOAT x, DFLOAT y,
+void General_tractor_beam(int ind, int cx, int cy,
 			  int items, int target, bool pressor);
 void Place_mine(int ind);
 void Place_moving_mine(int ind);
-void Place_general_mine(int ind, unsigned short team, long status, DFLOAT x, DFLOAT y,
-  			DFLOAT vx, DFLOAT vy, modifiers mods);
+void Place_general_mine(int ind, unsigned short team, long status,
+			int cx, int cy, DFLOAT vx, DFLOAT vy, modifiers mods);
 void Detonate_mines(int ind);
 char *Describe_shot(int type, long status, modifiers mods, int hit);
 void Fire_ecm(int ind);
-void Fire_general_ecm(int ind, unsigned short team, DFLOAT x, DFLOAT y);
-void Move_ball(int ind);
+void Fire_general_ecm(int ind, unsigned short team, int cx, int cy);
+void Move_ball(int ind); /* kps - ng does not want this */
+void Connector_force(int ind);
 void Fire_shot(int ind, int type, int dir);
 void Fire_general_shot(int ind, unsigned short team, bool cannon,
-		       DFLOAT x, DFLOAT y, int type, int dir,
+		       int cx, int cy, int type, int dir,
 		       modifiers mods, int target);
 void Fire_normal_shots(int ind);
 void Fire_main_shot(int ind, int type, int dir);
@@ -163,20 +168,21 @@ void Fire_left_rshot(int ind, int type, int dir, int gun);
 void Fire_right_rshot(int ind, int type, int dir, int gun);
 void Make_treasure_ball(int treasure);
 int Punish_team(int ind, int t_destroyed, int t_target);
+void Ball_hits_goal(object *ball, int group);
 void Delete_shot(int ind);
 void Fire_laser(int ind);
-void Fire_general_laser(int ind, unsigned short team, DFLOAT x, DFLOAT y, int dir,
+void Fire_general_laser(int ind, unsigned short team, int cx, int cy, int dir,
 			modifiers mods);
 void Do_deflector(int ind);
 void Do_transporter(int ind);
-void Do_general_transporter(int ind, DFLOAT x, DFLOAT y, int target,
+void Do_general_transporter(int ind, int cx, int cy, int target,
 			    int *item, long *amount);
 void do_hyperjump(player *pl);
 void do_lose_item(int ind);
 void Move_smart_shot(int ind);
 void Move_mine(int ind);
 void Make_debris(
-	    /* pos.x, pos.y   */ DFLOAT  x,          DFLOAT y,
+	    /* pos.x, pos.y   */ int    cx,          int   cy,
 	    /* vel.x, vel.y   */ DFLOAT  velx,       DFLOAT vely,
 	    /* owner id       */ int    id,
 	    /* owner team     */ unsigned short team,
@@ -185,13 +191,13 @@ void Make_debris(
 	    /* status         */ long   status,
 	    /* color          */ int    color,
 	    /* radius         */ int    radius,
-	    /* min,max debris */ int    min_debris, int    max_debris,
+	    /* num debris     */ int    num_debris,
 	    /* min,max dir    */ int    min_dir,    int    max_dir,
 	    /* min,max speed  */ DFLOAT  min_speed,  DFLOAT  max_speed,
 	    /* min,max life   */ int    min_life,   int    max_life
 	    );
 void Make_wreckage(
-	    /* pos.x, pos.y   */ DFLOAT x,          DFLOAT y,
+	    /* pos.x, pos.y   */ int    cx,         int    cy,
 	    /* vel.x, vel.y   */ DFLOAT velx,       DFLOAT vely,
 	    /* owner id       */ int    id,
 	    /* owner team     */ unsigned short team,
@@ -204,7 +210,7 @@ void Make_wreckage(
 	    /* min,max speed  */ DFLOAT min_speed,  DFLOAT max_speed,
 	    /* min,max life   */ int    min_life,   int    max_life
 	    );
-void Make_item(int px, int py,
+void Make_item(int cx, int cy,
 	       int vx, int vy,
 	       int item, int num_per_pack,
 	       long status);
@@ -313,6 +319,7 @@ void Main_loop(void);
 void Contact_cleanup(void);
 int Contact_init(void);
 void Contact(int fd, void *arg);
+void Queue_kick(const char *nick);
 void Queue_loop(void);
 int Queue_advance_player(char *name, char *msg);
 int Queue_show_list(char *msg);
@@ -416,22 +423,21 @@ void Handle_recording_buffers(void);
 /*
  * Prototypes for rank.c
  */
-
 void Rank_init_saved_scores(void);
-void Rank_get_saved_score(player * pl);
+void Rank_get_saved_score(player *pl);
 void Rank_save_data(void);
 void Rank_web_scores(void);
-void Rank_save_score(const player * pl);
+void Rank_save_score(const player *pl);
 void Rank_show_standings(void);
-void Rank_kill(player * pl);
-void Rank_lost_ball(player * pl);
-void Rank_cashed_ball(player * pl);
-void Rank_won_ball(player * pl);
-void Rank_saved_ball(player * pl);
-void Rank_death(player * pl);
-void Rank_add_score(player * pl, DFLOAT points);
-void Rank_set_score(player * pl, DFLOAT points);
-void Rank_fire_shot(player * pl);
-void Rank_add_round(player * pl);
+void Rank_kill(player *pl);
+void Rank_lost_ball(player *pl);
+void Rank_cashed_ball(player *pl);
+void Rank_won_ball(player *pl);
+void Rank_saved_ball(player *pl);
+void Rank_death(player *pl);
+void Rank_add_score(player *pl, DFLOAT points);
+void Rank_set_score(player *pl, DFLOAT points);
+void Rank_fire_shot(player *pl);
 
 #endif
+

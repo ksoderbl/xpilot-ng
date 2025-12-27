@@ -1,4 +1,4 @@
-This is the README for XPilot.exe and XPilotServer.exe  4.5.4X-rc3-NT13.
+This is the README for XPilot.exe and XPilotServer.exe  4.5.4X-rc4-NT13.
 
 Copyright © 1991-2002 by Bjørn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska & Uoti Urpala.
 

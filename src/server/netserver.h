@@ -61,6 +61,7 @@ static int Send_motd(int ind);
 
 int Get_motd(char *buf, int offset, int maxlen, int *size_ptr);
 int Setup_net_server(void);
+void Conn_change_nick(int ind, const char *nick);
 void Destroy_connection(int ind, const char *reason);
 int Check_connection(char *real, char *nick, char *dpy, char *addr);
 int Setup_connection(char *real, char *nick, char *dpy, int team,
@@ -80,7 +81,7 @@ int Send_seek(int ind, int programmer_id, int robot_id, int sought_id);
 int Send_player(int ind, int id);
 int Send_score(int ind, int id, DFLOAT score,
 	       int life, int mychar, int alliance);
-int Send_score_object(int ind, DFLOAT score, int x, int y, const char *string);
+int Send_score_object(int ind, DFLOAT score, int cx, int cy, const char *string);
 int Send_team_score(int ind, int team, DFLOAT score);
 int Send_timing(int ind, int id, int check, int round);
 int Send_base(int ind, int id, int num);

@@ -27,6 +27,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <errno.h>
+#include <time.h>
 
 #ifdef _WINDOWS
 # include "NT/winServer.h"
@@ -46,6 +47,8 @@
 #include "error.h"
 #include "objpos.h"
 #include "draw.h"
+#include "click.h"
+#include "rank.h"
 
 char player_version[] = VERSION;
 
@@ -183,9 +186,9 @@ void Go_home(int ind)
 
     pl->dir = dir;
     pl->float_dir = dir;
-    Player_position_init_pixels(pl,
-				(x + 0.5) * BLOCK_SZ + vx,
-				(y + 0.5) * BLOCK_SZ + vy);
+    Player_position_init_clicks(pl,
+				PIXEL_TO_CLICK((x + 0.5) * BLOCK_SZ + vx),
+				PIXEL_TO_CLICK((y + 0.5) * BLOCK_SZ + vy));
     pl->vel.x = vx;
     pl->vel.y = vy;
     pl->velocity = velo;
@@ -462,8 +465,8 @@ int Init_player(int ind, shipobj *ship)
     pl->player_round	= 0;
     pl->player_count	= 0;
 
-    pl->kills		= 0;
-    pl->deaths		= 0;
+    Rank_ClearKills(pl);
+    Rank_ClearDeaths(pl);
 
     /*
      * If limited lives and if nobody has lost a life yet, you may enter
@@ -656,11 +659,14 @@ void Reset_all_players(void)
 		    continue;
 		}
 	    }
+	    Rank_IgnoreLastDeath(pl);
 	}
 	CLR_BIT(pl->status, GAME_OVER);
 	CLR_BIT(pl->have, HAS_BALL);
-	pl->kills = 0;
-	pl->deaths = 0;
+	Rank_ClearKills(pl);
+	Rank_ClearDeaths(pl);
+	if (!BIT(pl->status, PAUSE) && pl->mychar != 'W')
+	    Rank_AddRound(pl);
 	pl->round = 0;
 	pl->check = 0;
 	pl->time = 0;
@@ -850,10 +856,7 @@ static void Give_best_player_bonus(DFLOAT average_score,
 		bp->name,
 		bp->kills, bp->deaths);
 	points = best_ratio * Rate(bp->score, average_score);
-	SCORE(best_players[0], points,
-	      OBJ_X_IN_BLOCKS(bp),
-	      OBJ_Y_IN_BLOCKS(bp),
-	      "[Deadliest]");
+	SCORE(best_players[0], points, bp->pos.cx, bp->pos.cy, "[Deadliest]");
     }
     else {
 	msg[0] = '\0';
@@ -876,9 +879,7 @@ static void Give_best_player_bonus(DFLOAT average_score,
 	    strcat(msg, bp->name);
 	    points = (int) (best_ratio * score);
 	    SCORE(best_players[i], points,
-		  OBJ_X_IN_BLOCKS(bp),
-		  OBJ_Y_IN_BLOCKS(bp),
-		  "[Deadly]");
+		  bp->pos.cx, bp->pos.cy, "[Deadly]");
 	}
 	if (strlen(msg) + 64 >= sizeof(msg)) {
 	    Set_message(msg);
@@ -899,29 +900,28 @@ static void Give_individual_bonus(int ind, DFLOAT average_score)
 
     ratio = (DFLOAT) Players[ind]->kills / (Players[ind]->deaths + 1);
     points = ratio * Rate(Players[ind]->score, average_score);
-    SCORE(ind, points,
-	  OBJ_X_IN_BLOCKS(Players[ind]),
-	  OBJ_Y_IN_BLOCKS(Players[ind]),
+    SCORE(ind, points, Players[ind]->pos.cx, Players[ind]->pos.cy,
 	  "[Winner]");
 }
 
+
+extern int roundCounter;
 
 static void Count_rounds(void)
 {
     char		msg[MSG_LEN];
 
-    if (!roundsToPlay) {
+    if (!numberOfRounds) {
 	return;
     }
 
-    ++roundsPlayed;
-
     sprintf(msg, " < Round %d out of %d completed. >",
-	    roundsPlayed, roundsToPlay);
+	    roundCounter, numberOfRounds);
     Set_message(msg);
-    if (roundsPlayed >= roundsToPlay) {
+    if (roundCounter == numberOfRounds) {
 	Game_Over();
     }
+    roundCounter++;
 }
 
 
@@ -948,7 +948,7 @@ void Team_game_over(int winning_team, const char *reason)
 
     /* Print out the results of the round */
     if (winning_team != -1) {
-	sprintf(msg, " < Team %d has won the game%s! >", winning_team,
+	sprintf(msg, " < Team %d has won the round%s! >", winning_team,
 		reason);
 	sound_play_all(TEAM_WIN_SOUND);
     } else {
@@ -993,6 +993,11 @@ void Team_game_over(int winning_team, const char *reason)
     Count_rounds();
 
     free(best_players);
+
+    /* Ranking */
+    Rank_rank_score();
+    Rank_write_score_file();
+    Rank_show_ranks();
 }
 
 void Individual_game_over(int winner)
@@ -1020,11 +1025,11 @@ void Individual_game_over(int winner)
 	sound_play_all(PLAYER_DRAW_SOUND);
     }
     else if (winner == -2) {
-	Set_message(" < The robots have won the game! >");
+	Set_message(" < The robots have won the round! >");
 	/* Perhaps this should be a different sound? */
 	sound_play_all(PLAYER_WIN_SOUND);
     } else {
-	sprintf(msg, " < %s has won the game! >", Players[winner]->name);
+	sprintf(msg, " < %s has won the round! >", Players[winner]->name);
 	Set_message(msg);
 	sound_play_all(PLAYER_WIN_SOUND);
     }
@@ -1062,6 +1067,8 @@ void Individual_game_over(int winner)
     }
 
     Reset_all_players();
+
+    Count_rounds();
 
     free(best_players);
 }
@@ -1146,6 +1153,8 @@ void Race_game_over(void)
 	    Kill_player(i);
 	else
 	    Player_death_reset(i);
+	Rank_IgnoreLastDeath(pl);
+
 	if (pl != Players[i]) {
 	    continue;
 	}
@@ -1174,10 +1183,9 @@ void Race_game_over(void)
 			(num_best_players == 1) ? "had" : "shares",
 			(DFLOAT) bestlap / FPS);
 		Set_message(msg);
-		SCORE(i, 5 + num_active_players,
-		      OBJ_X_IN_BLOCKS(pl),
-		      OBJ_Y_IN_BLOCKS(pl),
-		      (num_best_players == 1) ? "[Fastest lap]" : "[Joint fastest lap]");
+		SCORE(i, 5 + num_active_players, pl->pos.cx, pl->pos.cy,
+		      (num_best_players == 1)
+		      ? "[Fastest lap]" : "[Joint fastest lap]");
 	    }
 	}
 
@@ -1329,10 +1337,7 @@ void Compute_game_status(void)
 			Set_message(msg);
 			sprintf(msg, "[Position %d%s]", position,
 				(num_finished_players == 1) ? "" : " (jointly)");
-			SCORE(i, pts,
-			      OBJ_X_IN_BLOCKS(pl),
-			      OBJ_Y_IN_BLOCKS(pl),
-			      msg);
+			SCORE(i, pts, pl->pos.cx, pl->pos.cy, msg);
 		    }
 		    else {
 			sprintf(msg,
@@ -1730,6 +1735,15 @@ void Delete_player(int ind)
 	NumPseudoPlayers--;
     }
 
+    /* Ranking. */
+    if (IS_HUMAN_PTR(pl)) {
+	Rank_save_score(pl);
+   	if (NumPlayers == NumRobots + NumPseudoPlayers) {
+	    Rank_rank_score();
+	    Rank_write_score_file();
+   	}
+    }
+
     if (pl->team != TEAM_NOT_SET && !IS_TANK_PTR(pl)) {
 	World.teams[pl->team].NumMembers--;
 	if (teamShareScore)
@@ -1826,7 +1840,7 @@ void Detach_ball(int ind, int obj)
 	if (cnt == 0)
 	    CLR_BIT(Players[ind]->have, HAS_BALL);
 	else {
-	    sound_play_sensors(Players[ind]->pos.x, Players[ind]->pos.y,
+	    sound_play_sensors(Players[ind]->pos.cx, Players[ind]->pos.cy,
 			       DROP_BALL_SOUND);
 	}
     }
@@ -1903,7 +1917,7 @@ void Player_death_reset(int ind)
 
     if (!BIT(pl->status, PAUSE)) {
 
-	pl->deaths++;
+	Rank_AddDeath(pl);
 
 	if (BIT(World.rules->mode, LIMITED_LIVES)) { 
 	    pl->life--;

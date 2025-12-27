@@ -829,7 +829,7 @@ int Init_playing_windows(void)
     draw = XCreateSimpleWindow(dpy, top, 258, 0,
 			       draw_width, draw_height,
 			       0, 0, colors[BLACK].pixel);
-    IFWINDOWS( if (draw != 1) error("draw != 1"); )
+    IFWINDOWS( if (draw != 1) error("draw != 1") );
     radar = XCreateSimpleWindow(dpy, top, 0, 0,
 				256, RadarHeight, 0, 0,
 				colors[BLACK].pixel);
@@ -1059,10 +1059,10 @@ int Alloc_msgs(void)
     for (i = 0; i < 2 * MAX_MSGS; i++) {
 	if (i < MAX_MSGS) {
 	    TalkMsg[i] = x;
-	    IFNWINDOWS( if (selectionAndHistory) TalkMsg_pending[i] = x2; )
+	    IFNWINDOWS( if (selectionAndHistory) TalkMsg_pending[i] = x2 );
 	} else {
 	    GameMsg[i - MAX_MSGS] = x;
-	    IFNWINDOWS( if (selectionAndHistory) GameMsg_pending[i - MAX_MSGS] = x2; )
+	    IFNWINDOWS( if (selectionAndHistory) GameMsg_pending[i - MAX_MSGS] = x2 );
 	}
 	x->txt[0] = '\0';
 	x->len = 0;

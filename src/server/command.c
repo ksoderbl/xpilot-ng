@@ -128,7 +128,14 @@ static int Cmd_kick(char *arg, player *pl, int oper, char *msg);
 static int Cmd_queue(char *arg, player *pl, int oper, char *msg);
 static int Cmd_advance(char *arg, player *pl, int oper, char *msg);
 static int Cmd_get(char *arg, player *pl, int oper, char *msg);
-
+static int Cmd_auth(char *arg, player *pl, int oper, char *msg);
+static int Cmd_setpass(char *arg, player *pl, int oper, char *msg);
+#if 0 /* kps - add these from marahacked */
+static int Cmd_addr(char *arg, player *pl, int oper, char *msg);
+static int Cmd_op(char *arg, player *pl, int oper, char *msg);
+static int Cmd_nuke(char *arg, player *pl, int oper, char *msg);
+static int Cmd_stats(char *arg, player *pl, int oper, char *msg);
+#endif
 
 typedef struct {
     const char		*name;
@@ -160,6 +167,14 @@ static Command_info commands[] = {
 	Cmd_ally
     },
     {
+	"auth",
+	"au",
+	"/auth <password>.  Use this command if your nick is "
+	"password-protected. ", 
+	0,
+	Cmd_auth
+    },
+    {
 	"get",
 	"g",
 	"/get <option>.  Gets a server option.",
@@ -176,14 +191,16 @@ static Command_info commands[] = {
     {
 	"kick",
 	"k",
-	"/kick <player name or ID number>.  Remove a player from game.  (operator)",
+	"/kick <player name or ID number>.  Remove a player from game.  "
+	"(operator)",
 	1,
 	Cmd_kick
     },
     {
 	"lock",
 	"l",
-	"Just /lock tells lock status.  /lock 1 locks, /lock 0 unlocks.  (operator)",
+	"Just /lock tells lock status.  /lock 1 locks, /lock 0 unlocks.  "
+	"(operator)",
 	0,      /* checked in the function */
 	Cmd_lock
     },
@@ -225,9 +242,18 @@ static Command_info commands[] = {
 	Cmd_set
     },
     {
+	"setpass",
+	"setp",
+	"/setpass <new pw> <new pw> [old pw]. "
+	"Protects your nick with a password. ",
+	0,
+	Cmd_setpass
+    },
+    {
 	"team",
 	"t",
-	"/team <team number> swaps you to given team.",
+	"/team <team number> swaps you to given team. "
+	"Can be used with full teams too.",
 	0,
 	Cmd_team
     },
@@ -268,11 +294,20 @@ void Handle_player_command(player *pl, char *cmd)
 	*args++ = '\0';
     }
 
+    /*
+     * Command matching changed so that setpass command can be
+     * given.
+     */
     for (i = 0; i < NELEM(commands); i++) {
-	if (!strncasecmp(cmd, commands[i].abbrev, strlen(commands[i].abbrev))) {
+	size_t len1 = strlen(commands[i].abbrev);
+	size_t len2 = strlen(cmd);
+	
+	if (!strncasecmp(cmd, commands[i].name,
+			 MAX(len1, len2))) {
 	    break;
 	}
     }
+
     if (i == NELEM(commands)) {
 	sprintf(msg, "Unknown command '%s'.  [*Server reply*]", cmd);
 	Set_player_message(pl, msg);
@@ -622,6 +657,8 @@ static int Cmd_help(char *arg, player *pl, int oper, char *msg)
 }
 
 
+extern int roundCounter;
+
 static int Cmd_reset(char *arg, player *pl, int oper, char *msg)
 {
     int			i;
@@ -632,7 +669,7 @@ static int Cmd_reset(char *arg, player *pl, int oper, char *msg)
 
     if (arg && !strcasecmp(arg, "all")) {
 	for (i = NumPlayers - 1; i >= 0; i--) {
-	    Players[i]->score = 0;
+	    Rank_SetScore(Players[i], 0);
 	}
 	for (i = 0; i < MAX_TEAMS; i++) {
 	    World.teams[i].score = 0;
@@ -641,7 +678,7 @@ static int Cmd_reset(char *arg, player *pl, int oper, char *msg)
 	if (gameDuration == -1) {
 	    gameDuration = 0;
 	}
-	roundsPlayed = 0;
+	roundCounter = 1;
 
 	sprintf(msg, " < Total reset by %s! >", pl->name);
 	Set_message(msg);
@@ -652,7 +689,8 @@ static int Cmd_reset(char *arg, player *pl, int oper, char *msg)
 	if (gameDuration == -1) {
 	    gameDuration = 0;
 	}
-
+	if (roundCounter == numberOfRounds + 1)
+	    numberOfRounds = 0;
 	sprintf(msg, " < Round reset by %s! >", pl->name);
 	Set_message(msg);
 	strcpy(msg, "");
@@ -837,4 +875,31 @@ static int Cmd_get(char *arg, player *pl, int oper, char *msg)
 
     return CMD_RESULT_ERROR;
 }
+
+static int Cmd_auth(char *arg, player *pl, int oper, char *msg)
+{
+    printf("AUTH!\n");
+    return CMD_RESULT_ERROR;
+}
+
+static int Cmd_setpass(char *arg, player *pl, int oper, char *msg)
+{
+    printf("SETPASS!\n");
+    return CMD_RESULT_ERROR;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

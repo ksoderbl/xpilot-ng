@@ -52,7 +52,7 @@
 
 /* score.c */
 
-void SCORE(int ind, DFLOAT points, int x, int y, const char *msg);
+void SCORE(int ind, DFLOAT points, int cx, int cy, const char *msg);
 void TEAM_SCORE(int team, DFLOAT points);
 void Alliance_score(int id, DFLOAT points);
 DFLOAT Rate(DFLOAT winner, DFLOAT loser);

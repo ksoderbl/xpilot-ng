@@ -180,6 +180,9 @@
 #define GRAVS_POWER		2.7
 
 #define ECM_DISTANCE		(VISIBILITY_DISTANCE*0.4)
+/* kps - maybe change this to ((VISIBILITY_DISTANCE*0.2) * CLICK),
+ *   or even better, do VISIBILITY_DISTANCE *= CLICK
+ */
 #define TRANSPORTER_DISTANCE	(VISIBILITY_DISTANCE*0.2)
 
 #define SHOT_MULT(o) \

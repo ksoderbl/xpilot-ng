@@ -654,7 +654,7 @@ static bool Process_commands(sockbuf_t *ibuf,
 			error("Incomplete queue reply from server");
 		    } else {
 			printf("... queued at position %2d\n", qpos);
-			IFWINDOWS(Progress("Queued at position %2d\n", qpos);)
+			IFWINDOWS(Progress("Queued at position %2d\n", qpos));
 		    }
 		    /*
 		     * Acknowledge each 10 seconds that we are still
@@ -819,7 +819,7 @@ int Contact_servers(int count, char **servers,
     sock_t		sock;
     int			retries;
     int			contacted;
-    int			compat_mode, ret;
+    int			compat_mode = 0 /* kps - had not default value */, ret;
     sockbuf_t		sbuf;			/* contact buffer */
 
 
@@ -848,10 +848,10 @@ int Contact_servers(int count, char **servers,
 	    }
 	    if (retries == 0) {
 		printf("Searching for a \"xpilots\" server on the local net...\n");
-		IFWINDOWS( Progress("Searching for a \"xpilots\" server on the local net..."); )
+		IFWINDOWS( Progress("Searching for a \"xpilots\" server on the local net...") );
 	    } else {
 		printf("Searching once more...\n");
-		IFWINDOWS( Progress("Searching once more..."); )
+		IFWINDOWS( Progress("Searching once more...") );
 	    }
 	    while (Get_contact_message(&sbuf, "", conpar)) {
 		contacted++;
@@ -890,7 +890,7 @@ int Contact_servers(int count, char **servers,
 	    retries = 0;
 	    contacted = 0;
 	    do {
-		IFWINDOWS( Progress("Contacting server %s", servers[i]); )
+	      IFWINDOWS( Progress("Contacting server %s", servers[i]) );
 		Sockbuf_clear(&sbuf);
 		Packet_printf(&sbuf, "%u%s%hu%c", MAGIC,
 			      conpar->real_name, sock_get_port(&sbuf.sock), CONTACT_pack);
@@ -899,7 +899,7 @@ int Contact_servers(int count, char **servers,
 			      sbuf.buf, sbuf.len) == -1) {
 		    if (sbuf.sock.error.call == SOCK_CALL_GETHOSTBYNAME) {
 			printf("Can't find %s\n", servers[i]);
-			IFWINDOWS( Progress("Can't find %s", servers[i]); )
+			IFWINDOWS( Progress("Can't find %s", servers[i]) );
 			break;
 		    }
 		    error("Can't contact %s on port %d",
@@ -907,7 +907,7 @@ int Contact_servers(int count, char **servers,
 		}
 		if (retries) {
 		    printf("Retrying %s...\n", servers[i]);
-		    IFWINDOWS( Progress("Retrying %s...", servers[i]); )
+		    IFWINDOWS( Progress("Retrying %s...", servers[i]) );
 		}
 		ret = Get_contact_message(&sbuf, servers[i], conpar);
 		if (ret == 2 && compat_mode == 0) {
@@ -918,7 +918,7 @@ int Contact_servers(int count, char **servers,
 		}
 		if (ret == 1) {
 		    contacted++;
-		    IFWINDOWS( Progress("Contacted %s", servers[i]); )
+		    IFWINDOWS( Progress("Contacted %s", servers[i]) );
 		    connected = Connect_to_server(auto_connect, list_servers,
 						  auto_shutdown, shutdown_reason,
 						  conpar);

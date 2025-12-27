@@ -28,6 +28,7 @@
 #include <errno.h>
 #include <math.h>
 #include <limits.h>
+#include <time.h>
 
 #ifdef _WINDOWS
 # include "NT/winServer.h"
@@ -66,11 +67,11 @@ void Thrust(int ind)
 					? (keep_rand)
 					: (keep_rand = randomMT())) & 0x03);
     int			tot_sparks = (int)((pl->power * 0.15) + this_rand + 1);
-    DFLOAT		x = pl->pos.x + pl->ship->engine[pl->dir].x;
-    DFLOAT		y = pl->pos.y + pl->ship->engine[pl->dir].y;
+    int			cx = pl->pos.cx + pl->ship->engine[pl->dir].cx; 
+    int			cy = pl->pos.cy + pl->ship->engine[pl->dir].cy; 
     int			afterburners, alt_sparks;
 
-    sound_play_sensors(pl->pos.x, pl->pos.y, THRUST_SOUND);
+    sound_play_sensors(pl->pos.cx, pl->pos.cy, THRUST_SOUND);
 
     afterburners = (BIT(pl->used, HAS_EMERGENCY_THRUST)
 		    ? MAX_AFTERBURNER
@@ -80,7 +81,7 @@ void Thrust(int ind)
 		    : 0;
 
     Make_debris(
-	/* pos.x, pos.y   */ x, y,
+	/* pos.x, pos.y   */ cx, cy,
 	/* vel.x, vel.y   */ pl->vel.x, pl->vel.y,
 	/* owner id       */ pl->id,
 	/* owner team	  */ pl->team,
@@ -89,14 +90,14 @@ void Thrust(int ind)
 	/* status         */ GRAVITY | OWNERIMMUNE,
 	/* color          */ RED,
 	/* radius         */ 8,
-	/* min,max debris */ tot_sparks-alt_sparks, tot_sparks-alt_sparks,
+	/* num debris     */ tot_sparks-alt_sparks,
 	/* min,max dir    */ min_dir, max_dir,
 	/* min,max speed  */ 1.0, max_speed,
 	/* min,max life   */ 3, max_life
 	);
 
     Make_debris(
-	/* pos.x, pos.y   */ x, y,
+	/* pos.x, pos.y   */ cx, cy,
 	/* vel.x, vel.y   */ pl->vel.x, pl->vel.y,
 	/* owner id       */ pl->id,
 	/* owner team	  */ pl->team,
@@ -105,7 +106,7 @@ void Thrust(int ind)
 	/* status         */ GRAVITY | OWNERIMMUNE,
 	/* color          */ BLUE,
 	/* radius         */ 8,
-	/* min,max debris */ alt_sparks, alt_sparks,
+	/* min,max debris */ alt_sparks,
 	/* min,max dir    */ min_dir, max_dir,
 	/* min,max speed  */ 1.0, max_speed,
 	/* min,max life   */ 3, max_life
@@ -116,15 +117,15 @@ void Thrust(int ind)
 void Turn_thrust(int ind,int num_sparks)
 {
     player	*pl = Players[ind];
-    int		x = pl->pos.x + pl->ship->pts[0][pl->dir].x;
-    int		y = pl->pos.y + pl->ship->pts[0][pl->dir].y;
     int		dir = pl->dir + ((pl->turnacc > 0.0) ? (RES/4) : (3*(RES/4)));
+    int		cx = pl->pos.cx + pl->ship->pts[0][pl->dir].cx;
+    int		cy = pl->pos.cy + pl->ship->pts[0][pl->dir].cy; 
 
     if (turnThrust
 	 && (!BIT(pl->used, HAS_CLOAKING_DEVICE)
 	     || cloakedExhaust))
 	Make_debris(
-	    /* pos.x, pos.y   */ x, y,
+	    /* pos.x, pos.y   */ cx, cy,
 	    /* vel.x, vel.y   */ pl->vel.x, pl->vel.y,
 	    /* owner id       */ pl->id,
 	    /* owner team	  */ pl->team,
@@ -133,7 +134,7 @@ void Turn_thrust(int ind,int num_sparks)
 	    /* status         */ GRAVITY | OWNERIMMUNE,
 	    /* color          */ RED,
 	    /* radius         */ 1,
-	    /* min,max debris */ num_sparks, num_sparks,
+	    /* num debris     */ num_sparks,
 	    /* min,max dir    */ dir - (RES*0.1) -1, dir + (RES*0.1) + 1,
 	    /* min,max speed  */ 1, 3,
 	    /* min,max life   */ 1, 2*FPS
@@ -238,8 +239,8 @@ void Obj_repel(object *obj1, object *obj2, int repel_dist)
 			dvx2, dvy2;
     int			obj_theta;
 
-    xd = WRAP_DX(obj2->pos.x - obj1->pos.x);
-    yd = WRAP_DY(obj2->pos.y - obj1->pos.y);
+    xd = WRAP_DX(obj2->pos.px - obj1->pos.px);
+    yd = WRAP_DY(obj2->pos.py - obj1->pos.py);
     force = (repel_dist - LENGTH(xd, yd));
 
     if (force <= 0)
@@ -421,7 +422,7 @@ void Tank_handle_detach(player *pl)
 	Player_remove_tank(NumPlayers, dummy->fuel.num_tanks);
     }
     SET_BIT(dummy->type_ext, OBJ_EXT_TANK);
-    Player_position_init_pixels(dummy, pl->pos.x, pl->pos.y);
+    Player_position_init_clicks(dummy, pl->pos.cx, pl->pos.cy);
     dummy->vel		= pl->vel;
     dummy->acc		= pl->acc;
     dummy->dir		= pl->dir;
@@ -478,7 +479,7 @@ void Tank_handle_detach(player *pl)
 	Player_join_alliance(GetInd[dummy->id], GetInd[pl->id]);
     }
 
-    sound_play_sensors(pl->pos.x, pl->pos.y, TANK_DETACH_SOUND);
+    sound_play_sensors(pl->pos.cx, pl->pos.cy, TANK_DETACH_SOUND);
 
     /* The tank uses shield and thrust */
     dummy->status = (DEF_BITS & ~KILL_BITS) | PLAYING | GRAVITY | THRUSTING;
@@ -513,7 +514,7 @@ void Tank_handle_detach(player *pl)
 
 
 void Make_wreckage(
-    /* pos.x, pos.y     */ DFLOAT x,            DFLOAT y,
+    /* pos.x, pos.y     */ int    cx,           int    cy,
     /* vel.x, vel.y     */ DFLOAT velx,         DFLOAT vely,
     /* owner id         */ int    id,
     /* owner team	*/ unsigned short team,
@@ -535,28 +536,13 @@ void Make_wreckage(
     if (!useWreckage) {
 	return;
     }
-    if (BIT(World.rules->mode, WRAP_PLAY)) {
-	if (x < 0) x += World.width;
-	else if (x >= World.width) x -= World.width;
-	if (y < 0) y += World.height;
-	else if (y >= World.height) y -= World.height;
-    }
-    if (x < 0 || x >= World.width || y < 0 || y >= World.height) {
-	return;
-    }
+
+    cx = WRAP_XCLICK(cx);
+    cy = WRAP_YCLICK(cy);
+
     if (max_life < min_life)
 	max_life = min_life;
-    if (ShotsLife >= FPS) {
-	if (min_life > ShotsLife) {
-	    min_life = ShotsLife;
-	    max_life = ShotsLife;
-	}
-    }
 
-    if (min_speed * max_life > World.hypotenuse)
-	min_speed = World.hypotenuse / max_life;
-    if (max_speed * min_life > World.hypotenuse)
-	max_speed = World.hypotenuse / min_life;
     if (max_speed < min_speed)
 	max_speed = min_speed;
 
@@ -592,7 +578,7 @@ void Make_wreckage(
 	wreckage->type = OBJ_WRECKAGE;
 
 	/* Position */
-	Object_position_init_pixels(OBJ_PTR(wreckage), x, y);
+	Object_position_init_clicks(OBJ_PTR(wreckage), cx, cy);
 
 	/* Direction */
 	dir = MOD2(min_dir + (int)(rfrac() * MOD2(max_dir - min_dir, RES)), RES);
@@ -610,11 +596,10 @@ void Make_wreckage(
 
 	/* Lifespan  */
 	life = (int)(min_life + rfrac() * (max_life - min_life) + 1);
-	if (life * speed > World.hypotenuse) {
-	    life = (long)(World.hypotenuse / speed);
-	}
+
 	wreckage->life = life;
-	wreckage->fuselife = wreckage->life;
+	wreckage->fuselife = wreckage->life; /* kps -remove this */
+	wreckage->fuseframe = 0;
 
 	/* Wreckage type, rotation, and size */
 	wreckage->turnspeed = 0.02 + rfrac() * 0.35;
@@ -642,7 +627,7 @@ void Explode_fighter(int ind)
     player *pl = Players[ind];
     int min_debris, max_debris;
 
-    sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_EXPLOSION_SOUND);
+    sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_EXPLOSION_SOUND);
 
     min_debris = (int)(1 + (pl->fuel.sum / (8.0 * FUEL_SCALE_FACT)));
     max_debris = (int)(min_debris + (pl->mass * 2.0));
@@ -651,7 +636,7 @@ void Explode_fighter(int ind)
     max_debris >>= 1;
 
     Make_debris(
-	/* pos.x, pos.y   */ pl->pos.x, pl->pos.y,
+	/* pos.x, pos.y   */ pl->pos.cx, pl->pos.cy,
 	/* vel.x, vel.y   */ pl->vel.x, pl->vel.y,
 	/* owner id       */ pl->id,
 	/* owner team	  */ pl->team,
@@ -660,7 +645,7 @@ void Explode_fighter(int ind)
 	/* status         */ GRAVITY,
 	/* color          */ RED,
 	/* radius         */ 8,
-	/* min,max debris */ min_debris, max_debris,
+	/* num debris     */ min_debris + (max_debris - min_debris) * rfrac(),
 	/* min,max dir    */ 0, RES-1,
 	/* min,max speed  */ 20.0, 20 + (((int)(pl->mass))>>1),
 	/* min,max life   */ 5, (int)(5 + (pl->mass * 1.5))
@@ -669,7 +654,7 @@ void Explode_fighter(int ind)
     if ( !BIT(pl->status, KILLED) )
 	return;
     Make_wreckage(
-	/* pos.x, pos.y     */ pl->pos.x, pl->pos.y,
+	/* pos.x, pos.y     */ pl->pos.cx, pl->pos.cy,
 	/* vel.x, vel.y     */ pl->vel.x, pl->vel.y,
 	/* owner id         */ pl->id,
 	/* owner team	    */ pl->team,

@@ -29,6 +29,7 @@
 
 
 #include <stdlib.h>
+#include <time.h>
 
 #ifndef _WINDOWS
 #endif

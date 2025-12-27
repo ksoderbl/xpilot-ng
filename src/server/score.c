@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <limits.h>
+#include <time.h>
 
 #ifdef _WINDOWS
 # include "NT/winServer.h"
@@ -45,25 +46,25 @@
 char score_version[] = VERSION;
 
 
-void SCORE(int ind, DFLOAT points, int x, int y, const char *msg)
+void SCORE(int ind, DFLOAT points, int cx, int cy, const char *msg)
 {
     player	*pl = Players[ind];
 
     if (BIT(World.rules->mode, TEAM_PLAY)) {
 	if (!teamShareScore) {
-	    Rank_add_score(pl, points);
+	    Rank_AddScore(pl, points);
 	}
 	TEAM_SCORE(pl->team, points);
     } else {
 	if (pl->alliance != ALLIANCE_NOT_SET && teamShareScore) {
 	    Alliance_score(pl->alliance, points);
 	} else {
-	    Rank_add_score(pl, points);
+	    Rank_AddScore(pl, points);
 	}
     }
 
     if (pl->conn != NOT_CONNECTED)
-	Send_score_object(pl->conn, points, x, y, msg);
+	Send_score_object(pl->conn, points, cx, cy, msg);
 
     updateScores = true;
 }
@@ -79,7 +80,7 @@ void TEAM_SCORE(int team, DFLOAT points)
 	DFLOAT share = World.teams[team].score / World.teams[team].NumMembers;
 	for (i = 0; i < NumPlayers; i++) {
 	    if (Players[i]->team == team) {
-		Rank_set_score(Players[i], share);
+		Rank_SetScore(Players[i], share);
 	    }
 	}
     }
@@ -95,7 +96,7 @@ void Alliance_score(int id, DFLOAT points)
 
     for (i = 0; i < NumPlayers; i++) {
 	if (Players[i]->alliance == id) {
-	    Rank_add_score(Players[i], share);
+	    Rank_AddScore(Players[i], share);
 	}
     }
 }
@@ -139,12 +140,12 @@ void Score_players(int winner, DFLOAT winner_score, char *winner_msg,
 	    loser_score = -loser_score;
     }
     SCORE(winner, winner_score,
-	  OBJ_X_IN_BLOCKS(Players[loser]),
-	  OBJ_Y_IN_BLOCKS(Players[loser]),
+	  Players[loser]->pos.cx,
+	  Players[loser]->pos.cy,
 	  winner_msg);
     SCORE(loser, loser_score,
-	  OBJ_X_IN_BLOCKS(Players[loser]),
-	  OBJ_Y_IN_BLOCKS(Players[loser]),
+	  Players[loser]->pos.cx,
+	  Players[loser]->pos.cy,
 	  loser_msg);
 }
 

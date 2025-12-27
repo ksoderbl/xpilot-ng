@@ -86,6 +86,7 @@ static char	msg[MSG_LEN];
 
 extern int	NumPlayers, NumRobots, NumPseudoPlayers, NumQueuedPlayers;
 extern int	login_in_progress;
+extern int	game_lock;
 extern time_t	serverTime;
 
 void Meta_send(char *mesg, int len)

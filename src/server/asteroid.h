@@ -51,6 +51,6 @@
 /* minimum distance asteroids start away from any player */
 #define ASTEROID_MIN_DIST	(5 * BLOCK_SZ)
 /* radius of asteroid size n */
-#define ASTEROID_RADIUS(size)	(0.8 * SHIP_SZ * (size))
+#define ASTEROID_RADIUS(size)	((0.8 * SHIP_SZ * (size)) * CLICK)
 
 #endif

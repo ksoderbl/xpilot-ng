@@ -49,10 +49,16 @@
 /* need CLICK */
 #include "click.h"
 #endif
+#ifndef RANK_H
+/* need RankInfo */
+#include "rank.h"
+#endif
 
 #ifdef _WINDOWS
 #include "NT/winNet.h"
 #endif
+
+
 
 /*
  * Different types of objects, including player.
@@ -157,6 +163,10 @@ typedef struct {
 
 #define NOT_CONNECTED		(-1)
 
+#define BALL_BIT		(1 << 11)
+#define NONBALL_BIT		(1 << 12)
+#define NOTEAM_BIT		(1 << 10)
+
 /*
  * Object position is non-modifiable, except at one place.
  *
@@ -165,13 +175,14 @@ typedef struct {
 typedef const struct _objposition objposition;
 struct _objposition {
     int		cx, cy;			/* object position in clicks. */
-    int		x, y;			/* object position in pixels. */
+    int		px, py;			/* object position in pixels. */
     int		bx, by;			/* object position in blocks. */
 };
+/* kps - ng does not want the click and pixel versions */
 #define OBJ_X_IN_CLICKS(obj)	((obj)->pos.cx)
 #define OBJ_Y_IN_CLICKS(obj)	((obj)->pos.cy)
-#define OBJ_X_IN_PIXELS(obj)	((obj)->pos.x)
-#define OBJ_Y_IN_PIXELS(obj)	((obj)->pos.y)
+#define OBJ_X_IN_PIXELS(obj)	((obj)->pos.px)
+#define OBJ_Y_IN_PIXELS(obj)	((obj)->pos.py)
 #define OBJ_X_IN_BLOCKS(obj)	((obj)->pos.bx)
 #define OBJ_Y_IN_BLOCKS(obj)	((obj)->pos.by)
 
@@ -191,6 +202,9 @@ struct _cell_node {
     unsigned short	team;		/* Team of player or cannon */	\
     objposition		pos;		/* World coordinates */		\
     ipos		prevpos;	/* previous position */		\
+    ipos		extmove;	/* For collision detection */	\
+    DFLOAT		wall_time;	/* bounce/crash time within frame */		\
+    int			collmode;	/* collision checking mode */	\
     vector		vel;		/* speed in x,y */		\
     vector		acc;		/* acceleration in x,y */	\
     DFLOAT		mass;		/* mass in unigrams */		\
@@ -199,14 +213,15 @@ struct _cell_node {
     int			type;		/* one bit of OBJ_XXX */	\
     int			count;		/* Misc timings */		\
     modifiers		mods;		/* Modifiers to this object */	\
-    u_byte		color;		/* Color of object */		\
+    /* kps - ng wants byte */ u_byte		color;		/* Color of object */		\
     u_byte		missile_dir;	/* missile direction */	\
 /* up to here all object types are the same as all player types. */
 
 #define OBJECT_EXTEND	\
     cell_node		cell;		/* node in cell linked list */	\
     long		info;		/* Miscellaneous info */	\
-    long		fuselife;	/* fuse duration ticks */	\
+/* kps - ng does not want this */    long		fuselife;	/* fuse duration ticks */	\
+    long		fuseframe;	/* Frame when considered fused */	\
     int			pl_range;	/* distance for collision */	\
     int			pl_radius;	/* distance for hit */		\
 /* up to here all object types are the same. */
@@ -419,7 +434,7 @@ typedef struct {
  * Structure holding the info for one pulse of a laser.
  */
 typedef struct {
-    position		pos;
+    position		pos; /* kps - this should be ipos */
     int			dir;
     int			len;
     int			life;
@@ -523,7 +538,7 @@ struct player {
     int		emergency_thrust_left;	/* how much emergency thrust left */
     int		emergency_thrust_max;	/* maximum time left */
     int		emergency_shield_left;	/* how much emergency shield left */
-    int		emergency_shield_max;	/* maximum time left */
+/* kps - ng does not want this */    int		emergency_shield_max;	/* maximum time left */
     int		phasing_left;		/* how much time left */
     int		phasing_max;		/* maximum time left */
 
@@ -537,7 +552,7 @@ struct player {
     DFLOAT	auto_turnresistance_s;	/* when autopilot turned off */
     modifiers	modbank[NUM_MODBANKS];	/* useful modifier settings */
     bool	tractor_is_pressor;	/* on if tractor is pressor */
-    int		shot_max;		/* Maximum number of shots active */
+/* kps -ng does not want this */    int		shot_max;		/* Maximum number of shots active */
     long	shot_time;		/* Time of last shot fired by player */
     int		repair_target;		/* Repairing this target */
     int		fs;			/* Connected to fuel station fs */
@@ -609,12 +624,18 @@ struct player {
     void	*audio;			/* audio private data */
 
     int		player_fps;		/* FPS that this player can do */
+/* kps - ng does not want player_round and player_count */
     int		player_round;		/* Divisor for player FPS calculation */
     int		player_count;		/* Player's current frame count */
 
     int		isowner;		/* If player started this server. */
     int		isoperator;		/* If player has operator privileges. */
-    ScoreNode	*scorenode;
+    int		rectype;		/* normal, saved or spectator */
+    RankInfo	*rank;
+    /*ScoreNode	*scorenode;*/
+    char	auth_nick[MAX_CHARS];	/* Original nick (/auth command) */
+
+
 #ifdef __cplusplus
 		player() {}
 #endif

@@ -35,23 +35,21 @@
 
 #include "../error.h"
 #include "../../client/NT/winClient.h" 	/* This needs to be removed */
-#define  WINMAXCOLORS 16
 
 const int	top = 0;
 /*****************************************************************************/
 XFillRectangle(Display* dpy, Drawable d, GC gc, int x, int y, 
 					   unsigned int w, unsigned int h)
 {
-	RECT	r;
-	HDC		hDC = xid[d].hwnd.hBmpDC;
-#ifdef PENS_OF_PLENTY
-	int		cur_color = xid[d].hwnd.cur_color;
-#endif
-	r.left   = x;
-	r.right  = x+w;
-	r.top    = y;
-	r.bottom = y+h;
-	FillRect(hDC, &r, objs[cur_color].brush);
+
+	HDC hDC = xid[d].hwnd.hBmpDC;
+	RECT r;
+	r.left = x;
+	r.top = y;
+	r.right = x + w;
+	r.bottom = y + h;
+	FillRect(hDC, &r, WinXGetBrush(xid[gc].hgc.xgcv.foreground));
+
 	return(0);
 }
 
@@ -60,36 +58,30 @@ XDrawRectangle(Display* dpy, Drawable d, GC gc, int x, int y,
 					   unsigned int w, unsigned int h)
 {
 
-	RECT	r;
-	HDC		hDC = xid[d].hwnd.hBmpDC;
-#ifdef PENS_OF_PLENTY
-	int		cur_color = xid[d].hwnd.cur_color;
-#endif
-	r.left   = x;
-	r.right  = x+w;
-	r.top    = y;
-	r.bottom = y+h;
-	FrameRect(hDC, &r, objs[cur_color].brush);
+	HDC hDC = xid[d].hwnd.hBmpDC;
+	MoveToEx(hDC, x, y, NULL);
+	LineTo(hDC, x + w, y);
+	LineTo(hDC, x + w, y + h);
+	LineTo(hDC, x, y + h);
+	LineTo(hDC, x, y);
+
 	return(0);
 }
 
 XFillRectangles(Display* dpy, Drawable d, GC gc, 
 				XRectangle* rects, int nrectangles)
 {
-	RECT	r;
-	int		i;
-	HDC		hDC = xid[d].hwnd.hBmpDC;
-#ifdef PENS_OF_PLENTY
-	int		cur_color = xid[d].hwnd.cur_color;
-#endif
+	int i;
+	HDC hDC = xid[d].hwnd.hBmpDC;
+	HBRUSH hBrush = WinXGetBrush(xid[gc].hgc.xgcv.foreground);
+	RECT r;
 
-	for (i=0; i<nrectangles; i++, rects++)
-	{
-		r.left   = rects->x;
-		r.right  = rects->x + rects->width;
-		r.top    = rects->y;
+	for (i = 0; i < nrectangles; i++, rects++) {
+		r.left = rects->x;
+		r.top = rects->y;
+		r.right = rects->x + rects->width;
 		r.bottom = rects->y + rects->height;
-		FillRect(hDC, &r, objs[cur_color].brush);
+		FillRect(hDC, &r, hBrush);
 	}
 	return(0);
 }
@@ -155,12 +147,8 @@ XDrawSegments(Display* dpy, Drawable d, GC gc,
 /*****************************************************************************/
 XDrawPoint(Display* dpy, Drawable d, GC gc, int x, int y)
 {
-	HDC		hDC = xid[d].hwnd.hBmpDC;
-#ifdef PENS_OF_PLENTY
-	int		cur_color = xid[d].hwnd.cur_color;
-#endif
-
-	SetPixelV(hDC, x, y, WinXPColour(cur_color));
+	HDC hDC = xid[d].hwnd.hBmpDC;
+	SetPixelV(hDC, x, y, WinXPColour(xid[gc].hgc.xgcv.foreground));
 	return(0);
 }
 
@@ -168,14 +156,12 @@ XDrawPoint(Display* dpy, Drawable d, GC gc, int x, int y)
 XDrawPoints(Display* dpy, Drawable d, GC gc, 
 					XPoint* points, int npoints, int mode)
 {
-	int		i;
-	HDC		hDC = xid[d].hwnd.hBmpDC;
-#ifdef PENS_OF_PLENTY
-	int		cur_color = xid[d].hwnd.cur_color;
-#endif
+	int i;
+	HDC hDC = xid[d].hwnd.hBmpDC;
+	COLORREF col = WinXPColour(xid[gc].hgc.xgcv.foreground);
 
 	for (i=0; i<npoints; i++, points++)
-		SetPixelV(hDC, points->x, points->y, WinXPColour(cur_color));
+		SetPixelV(hDC, points->x, points->y, col);
 
 	return(0);
 }
@@ -184,16 +170,71 @@ XDrawPoints(Display* dpy, Drawable d, GC gc,
 XFillPolygon(Display* dpy, Drawable d, GC gc, XPoint* points,
 					int npoints, int shape, int mode)
 {
-	HDC		hDC = xid[d].hwnd.hBmpDC;
-	int		i;
+	int i;
+	int px1, px2, py1, py2; // bounding box for the polygon
+	HDC hdc = xid[d].hwnd.hBmpDC;
 
-	BeginPath(hDC);
-	MoveToEx(hDC, points->x, points->y, NULL);
+	/* 
+	 * As Windows 95/98/ME doesn't support textured brushes with texture size 
+	 * over 8x8, I'll provide my own routine for painting textured polygons. 
+	 * It first creates a clipping region that restricts GDI operations to the
+	 * area of the polygon. Then it blits the texture bitmap over the polygon
+	 * so that it gets fully covered.
+	 */
+
+	if (!BeginPath(hdc)) return -1;
+
+	px1 = px2 = points->x;
+	py1 = py2 = points->y;
+	if (!MoveToEx(hdc, points->x, points->y, NULL)) return -1;
 	points++;
-	for (i=1; i<npoints; i++, points++)
-		LineTo(hDC, points->x, points->y);
-	EndPath(hDC);
-	StrokeAndFillPath(hDC);
+
+	for (i = 1; i < npoints; i++, points++) {
+		if (!LineTo(hdc, points->x, points->y)) return -1;
+		if (points->x < px1) px1 = points->x;
+		else if (points->x > px2) px2 = points->x;
+		if (points->y < py1) py1 = points->y;
+		else if (points->y > py2) py2 = points->y;
+	}
+
+	if (!EndPath(hdc)) return -1;
+
+
+	if (xid[gc].hgc.xgcv.fill_style != FillTiled) {
+		
+		if (!StrokeAndFillPath(hdc)) return -1;
+
+	} else {
+
+		int x, y;
+		int sx, sy; // where to start blitting
+		SIZE bs;    // bitmap dimensions
+		HBITMAP hBmp = (HBITMAP)xid[gc].hgc.xgcv.tile;
+		extern HDC itemsDC; // from winX.c
+
+		if (!GetBitmapDimensionEx(hBmp, &bs)) return -1;
+		if (!SelectObject(itemsDC, hBmp)) return -1;
+		if (!SelectPalette(itemsDC, myPal, FALSE)) return -1;
+		if (RealizePalette(itemsDC) == GDI_ERROR) return -1;
+
+		sx = xid[gc].hgc.xgcv.ts_x_origin - px1;
+		sx = (sx > 0) ? px1 + sx % bs.cx - bs.cx : px1 - sx % bs.cx;
+
+		sy = xid[gc].hgc.xgcv.ts_y_origin - py1;
+		sy = (sy > 0) ? py1 + sy % bs.cy - bs.cy : py1 - sy % bs.cy;
+
+		if (!SelectClipPath(hdc, RGN_AND)) return -1;
+
+		for (x = sx; x < px2; x += bs.cx) {
+			for (y = sy; y < py2; y += bs.cy) {
+				//XDrawRectangle(dpy, d, gc, x, y, bs.cx, bs.cy);
+				BitBlt(hdc, x, y, bs.cx, bs.cy, itemsDC, 0, 0, SRCCOPY);
+			}
+		}
+
+		SelectClipRgn(hdc, NULL);
+	}
+
 	return(0);
 }
 
@@ -263,17 +304,10 @@ XDrawString(Display* dpy, Drawable d, GC gc, int x, int y,
 	HDC		hDC = xid[d].hwnd.hBmpDC;
 	HFONT	hOldFont = NULL;
 
-/*	if (d == players)
-		hOldFont = SelectObject(hDC, hFixedFont);
-	else if (d == draw)
-		hOldFont = SelectObject(hDC, xid[gc].hgc.hfont);
-	else */
-		hOldFont = SelectObject(hDC, xid[gc].hgc.hfont);
-	SetTextColor(hDC, WinXPColour(cur_color));
-//	TextOut(hDC, x, y-16, string, length);
-	TextOut(hDC, x, y-xid[xid[gc].hgc.font].font.font->ascent, string, length);
-	if (hOldFont)
-		SelectObject(hDC, hOldFont);
+	hOldFont = SelectObject(hDC, xid[gc].hgc.hfont);
+	SetTextColor(hDC, WinXPColour(xid[gc].hgc.xgcv.foreground));
+	TextOut(hDC, x, y-xid[xid[gc].hgc.xgcv.font].font.font->ascent, string, length);
+	if (hOldFont) SelectObject(hDC, hOldFont);
 
 	return(0);
 }
@@ -281,7 +315,6 @@ XDrawString(Display* dpy, Drawable d, GC gc, int x, int y,
 /*****************************************************************************/
 XTextWidth(XFontStruct* font, const char* string, int length)
 {
-//	HDC		hDC = xid[draw].hwnd.hBmpDC;
 	HDC		hDC = xid[top].hwnd.hBmpDC;
 	SIZE	size;
 	XID		i, f;
@@ -298,7 +331,7 @@ XTextWidth(XFontStruct* font, const char* string, int length)
 	{
 		for (i=0; i<MAX_XIDS; i++)
 			if (xid[i].type == XIDTYPE_HDC)
-				if (xid[i].hgc.font == f)
+				if (xid[i].hgc.xgcv.font == f)
 					break;
 	}
 	if (i == MAX_XIDS)
@@ -312,125 +345,82 @@ XTextWidth(XFontStruct* font, const char* string, int length)
 	}
 
 	GetTextExtentPoint32(hDC, string, length, &size);
-/*	return WinXUnscale(size.cx); */
 	return(size.cx);
 }
 
 /*****************************************************************************/
 XChangeGC(Display* dpy, GC gc, unsigned long valuemask, XGCValues* values)
 {
-#ifdef PENS_OF_PLENTY
-	if (xid[gc].type == XIDTYPE_HDC)
-	{
-		int xidno = xid[gc].hgc.xidhwnd;
-	
-		if (valuemask & GCLineWidth)
-			xid[xidno].hwnd.line_width = values->line_width;
-		if (valuemask & GCLineStyle)
-			xid[xidno].hwnd.line_style = values->line_style;
-		
-		WinXSetPen(xidno);
-	}
-#endif
-	return(0);
+	XGCValues *xgcv;
+	if (xid[gc].type != XIDTYPE_HDC) return 0;
+
+	xgcv = &xid[gc].hgc.xgcv;
+
+	if (valuemask & GCFunction) xgcv->function = values->function;
+	if (valuemask & GCPlaneMask) xgcv->plane_mask = values->plane_mask;
+	if (valuemask & GCForeground) xgcv->foreground= values->foreground;
+	if (valuemask & GCBackground) xgcv->background = values->background;
+	if (valuemask & GCLineWidth) xgcv->line_width = values->line_width;
+	if (valuemask & GCLineStyle) xgcv->line_style = values->line_style;
+	if (valuemask & GCCapStyle) xgcv->cap_style = values->cap_style;
+	if (valuemask & GCJoinStyle) xgcv->join_style = values->join_style;
+	if (valuemask & GCFillStyle) xgcv->fill_style = values->fill_style;
+	if (valuemask & GCFillRule) xgcv->fill_rule = values->fill_rule;
+	if (valuemask & GCTile) xgcv->tile = values->tile;
+	if (valuemask & GCStipple) xgcv->stipple = values->stipple;
+	if (valuemask & GCTileStipXOrigin) xgcv->ts_x_origin = values->ts_x_origin;
+	if (valuemask & GCTileStipYOrigin) xgcv->ts_y_origin = values->ts_y_origin;
+	if (valuemask & GCFont) xgcv->font = values->font;
+	if (valuemask & GCSubwindowMode) xgcv->subwindow_mode = values->subwindow_mode;
+	if (valuemask & GCGraphicsExposures) xgcv->graphics_exposures = values->graphics_exposures;
+	if (valuemask & GCClipXOrigin) xgcv->clip_x_origin = values->clip_x_origin;
+	if (valuemask & GCClipYOrigin) xgcv->clip_y_origin = values->clip_y_origin;
+	if (valuemask & GCDashOffset) xgcv->dash_offset = values->dash_offset;
+	if (valuemask & GCArcMode) xgcv->arc_mode = values->arc_mode;
+
+	if (valuemask & (GCForeground | GCLineWidth | GCLineStyle)) WinXSelectPen(gc);
+
+	return(1);
 }
 
 /*****************************************************************************/
 int XGetGCValues(Display *dpy, GC gc, unsigned long valuemask, XGCValues *values)
 {
+	XGCValues *xgcv;
+	if (xid[gc].type != XIDTYPE_HDC) return 0;
+
+	xgcv = &xid[gc].hgc.xgcv;
+
+	if (valuemask & GCFunction) values->function = xgcv->function;
+	if (valuemask & GCPlaneMask) values->plane_mask = xgcv->plane_mask;
+	if (valuemask & GCForeground) values->foreground= xgcv->foreground;
+	if (valuemask & GCBackground) values->background = xgcv->background;
+	if (valuemask & GCLineWidth) values->line_width = xgcv->line_width;
+	if (valuemask & GCLineStyle) values->line_style = xgcv->line_style;
+	if (valuemask & GCCapStyle) values->cap_style = xgcv->cap_style;
+	if (valuemask & GCJoinStyle) values->join_style = xgcv->join_style;
+	if (valuemask & GCFillStyle) values->fill_style = xgcv->fill_style;
+	if (valuemask & GCFillRule) values->fill_rule = xgcv->fill_rule;
+	if (valuemask & GCTile) values->tile = xgcv->tile;
+	if (valuemask & GCStipple) values->stipple = xgcv->stipple;
+	if (valuemask & GCTileStipXOrigin) values->ts_x_origin = xgcv->ts_x_origin;
+	if (valuemask & GCTileStipYOrigin) values->ts_y_origin = xgcv->ts_y_origin;
+	if (valuemask & GCFont) values->font = xgcv->font;
+	if (valuemask & GCSubwindowMode) values->subwindow_mode = xgcv->subwindow_mode;
+	if (valuemask & GCGraphicsExposures) values->graphics_exposures = xgcv->graphics_exposures;
+	if (valuemask & GCClipXOrigin) values->clip_x_origin = xgcv->clip_x_origin;
+	if (valuemask & GCClipYOrigin) values->clip_y_origin = xgcv->clip_y_origin;
+	if (valuemask & GCDashOffset) values->dash_offset = xgcv->dash_offset;
+	if (valuemask & GCArcMode) values->arc_mode = xgcv->arc_mode;
+
+
 	if(valuemask & GCFunction)
 	{
 		values->function = GXcopy;
 	}
-
-	if(valuemask & GCForeground)
-	{
-		if(cur_color < WINMAXCOLORS)
-		{
-			values->foreground = cur_color;
-		}
-		else if(cur_color < WINMAXCOLORS + 2)
-		{		/* 2, dash white and dash blue */
-			values->foreground = cur_color - CLOAKCOLOROFS;
-		}
-		else if(cur_color == LASERCOLOR)
-		{
-			values->foreground = RED;
-		}
-		else if(cur_color == MISSILECOLOR)
-		{
-			values->foreground = WHITE;
-		}
-		else if(cur_color == LASERTEAMCOLOR)
-		{
-			values->foreground = BLUE;
-		}
-		else
-		{
-			error("Illegal color(%d) while recording\n", cur_color);
-		}
-	}
-
 	if(valuemask & GCBackground)
 	{
 		values->background = BLACK; /* always black */
-	}
-
-	if(valuemask & GCLineWidth)
-	{
-		switch(cur_color)
-		{
-		case LASERCOLOR:
-		case MISSILECOLOR:
-		case LASERTEAMCOLOR:
-			values->line_width = 3;
-			break;
-		default:
-			values->line_width = 0;
-		}
-	}
-
-	if(valuemask & GCLineStyle)
-	{
-		switch(cur_color)
-		{
-		case WHITE+CLOAKCOLOROFS:
-		case BLUE+CLOAKCOLOROFS:
-			values->line_style = LineOnOffDash;
-			break;
-		default:
-			values->line_style = LineSolid;
-		}
-	}
-
-	if(valuemask & GCFillStyle)
-	{
-		values->fill_style = FillSolid;
-	}
-
-	if(valuemask & GCTile)
-	{
-		values->tile = 0;
-	}
-
-	if(valuemask & GCTileStipXOrigin)
-	{
-		values->ts_x_origin = 0;
-	}
-
-	if(valuemask & GCTileStipYOrigin)
-	{
-		values->ts_y_origin = 0;
-	}
-
-	if(valuemask & GCFont)
-	{
-		values->font = xid[xid[gc].hgc.font].font.font->fid;
-	}
-
-	if(valuemask & GCDashOffset)
-	{
-		values->dash_offset = 0;
 	}
 
 	return 1;
@@ -440,17 +430,18 @@ int XGetGCValues(Display *dpy, GC gc, unsigned long valuemask, XGCValues *values
 XSetLineAttributes(Display* dpy, GC gc, unsigned int lwidth,
 						   int lstyle, int cap_style, int join_style)
 {
-#ifdef PENS_OF_PLENTY
-	if (xid[gc].type == XIDTYPE_HDC)
-	{
-		int xidno = xid[gc].hgc.xidhwnd;
-	
-		xid[xidno].hwnd.line_width = lwidth;
-		xid[xidno].hwnd.line_style = lstyle;
+	XGCValues *xgcv;
 
-		WinXSetPen(xidno);
-	}
-#endif
+	if (xid[gc].type != XIDTYPE_HDC) return -1;
+
+	xgcv = &xid[gc].hgc.xgcv;
+	xgcv->line_width = lwidth;
+	xgcv->line_style = lstyle;
+	xgcv->cap_style = cap_style;
+	xgcv->join_style = join_style;
+
+	WinXSelectPen(gc);
+
 	return(0);
 }
 
@@ -465,24 +456,33 @@ XCopyArea(Display* dpy, Drawable src, Drawable dest, GC gc,
 /*****************************************************************************/
 XSetTile(Display* dpy, GC gc, Pixmap tile)
 {
+	if (xid[gc].type != XIDTYPE_HDC) return -1;
+	xid[gc].hgc.xgcv.tile = tile;
 	return(0);
 }
 
 /*****************************************************************************/
 XSetTSOrigin(Display* dpy, GC gc, int ts_x_origin, int ts_y_origin)
 {
+	if (xid[gc].type != XIDTYPE_HDC) return -1;
+	xid[gc].hgc.xgcv.ts_x_origin = ts_x_origin;
+	xid[gc].hgc.xgcv.ts_y_origin = ts_y_origin;
 	return(0);
 }
 
 /*****************************************************************************/
 XSetFillStyle(Display* dpy, GC gc, int fill_style)
 {
+	if (xid[gc].type != XIDTYPE_HDC) return -1;
+	xid[gc].hgc.xgcv.fill_style = fill_style;
 	return(0);
 }
 
 /*****************************************************************************/
 XSetFunction(Display* dpy, GC gc, int function)
 {
+	if (xid[gc].type != XIDTYPE_HDC) return -1;
+	xid[gc].hgc.xgcv.function = function;
 	return(0);
 }
 
@@ -519,11 +519,8 @@ XCreatePixmap(Display* dpy, Drawable d,
 		return(0);
 	}
 	SelectObject(newDC, hbm);
-	if (bHasPal)
-	{
-		SelectPalette(newDC, myPal, FALSE);
-		RealizePalette(newDC);
-	}
+	SelectPalette(newDC, myPal, FALSE);
+	RealizePalette(newDC);
 
 	txid = GetFreeXid();
 	xid[txid].type = XIDTYPE_PIXMAP;
@@ -549,6 +546,8 @@ XFreePixmap(Display* dpy, Pixmap pixmap)
 /*****************************************************************************/
 XSetPlaneMask(Display* dpy, GC gc, unsigned long plane_mask)
 {
+	if (xid[gc].type != XIDTYPE_HDC) return -1;
+	xid[gc].hgc.xgcv.plane_mask = plane_mask;
 	return(0);
 }
 
@@ -560,14 +559,7 @@ XClearWindow(Display* dpy, Window w)
 	RECT	rect;
 
 	GetClientRect(hWnd, &rect);
-#ifdef SPECIAL_WIN_COLOURS
-	FillRect(hDC, &rect, GetStockObject(GRAY_BRUSH));
-#else
-	Trace("XClearWindow: %d color=%d %d/%d %d/%d\n", w, xid[w].hwnd.bgcolor,
-		rect.left, rect.top, rect.right, rect.bottom);
-	FillRect(hDC, &rect, objs[xid[w].hwnd.bgcolor].brush);
-//	InvalidateRect(hWnd, &rect, FALSE);
-#endif
+	FillRect(hDC, &rect, WinXGetBrush(xid[w].hwnd.bgcolor));
 	return(0);
 }
 
@@ -579,14 +571,11 @@ XClearArea(Display* d, Window w, int x, int y,
 	HDC		hDC = xid[w].hwnd.hBmpDC;
 	RECT	rect;
 
-//	GetClientRect(hWnd, &rect);
 	rect.left = x;
 	rect.top = y;
 	rect.right = x+width;
 	rect.bottom = y+height;
-	Trace("XClearArea: %d color=%d %d/%d %d/%d\n", w, xid[w].hwnd.bgcolor,
-		rect.left, rect.top, rect.right, rect.bottom);
-	FillRect(hDC, &rect, objs[xid[w].hwnd.bgcolor].brush);
+	FillRect(hDC, &rect, WinXGetBrush(xid[w].hwnd.bgcolor));
 	return(0);
 }
 
@@ -606,14 +595,15 @@ XLookupKeysym(XKeyEvent* key_event, int index)
 /*****************************************************************************/
 XFontStruct* XQueryFont(Display* dpy, XID font_ID)
 {
-	return(xid[xid[font_ID].hgc.font].font.font);
+	return(xid[xid[font_ID].hgc.xgcv.font].font.font);
 }
 
 /*****************************************************************************/
 XSetFont(Display* dpy, GC gc, Font font)
 {
+	if (xid[gc].type != XIDTYPE_HDC) return -1;
 	xid[gc].hgc.hfont = xid[font].font.font->hFont;
-	xid[gc].hgc.font = font;
+	xid[gc].hgc.xgcv.font = font;
 	return(0);
 }
 
@@ -675,12 +665,8 @@ Window XCreateSimpleWindow_(Display* dpy, Window parent, int x, int y,
 	else
 	{
 		HDC		hDC = GetDC(hWnd);
-		if (bHasPal)
-		{
-			SelectPalette(hDC, myPal, FALSE);
-			RealizePalette(hDC);
-		}
-//		SetBkMode(hDC, TRANSPARENT);
+		SelectPalette(hDC, myPal, FALSE);
+		RealizePalette(hDC);
 		SetBkMode(hDC, OPAQUE);
 		ReleaseDC(hWnd, hDC);
 	}
@@ -747,6 +733,7 @@ GC WinXCreateWinDC_(Window w
 /*****************************************************************************/
 XSetForeground(Display* dpy, GC gc, unsigned long foreground)
 {
+#if 0
 #ifdef PENS_OF_PLENTY
 	if (xid[gc].type == XIDTYPE_PIXMAP)
 	{
@@ -793,6 +780,22 @@ XSetForeground(Display* dpy, GC gc, unsigned long foreground)
 		}
 	}
 #endif
+#endif
+	//if (xid[gc].type == XIDTYPE_HDC) {
+
+		xid[gc].hgc.xgcv.foreground = foreground;
+		WinXSelectPen(gc);
+		WinXSelectBrush(gc);
+/*	} else {
+		// ouch, terrible hack, but fixing this properly would be difficult
+		HDC hDC;
+		extern HPEN pens[256][10][3];
+		extern HBRUSH brushes[256];
+		hDC = xid[gc].hpix.hDC;
+		SelectObject(hDC, pens[foreground][0][0]);
+		SelectObject(hDC, brushes[foreground]);
+	}
+*/
 	return(0);
 }
 
@@ -860,15 +863,13 @@ XMoveResizeWindow(Display* dpy, Window w, int x, int y,
 XSetDashes(Display* dpy, GC gc, int dash_offset, 
 		   const char *dash_list, int n)
 {
-#ifdef PENS_OF_PLENTY
-	if (xid[gc].type == XIDTYPE_HDC)
-	{
-		int	xidno = xid[gc].hgc.xidhwnd;
-		
-		xid[xidno].hwnd.nodash = (dash_list == cdashes);
-		WinXSetPen(xidno);
-	}
-#endif
+	if (xid[gc].type != XIDTYPE_HDC) return -1;
+	xid[gc].hgc.xgcv.dash_offset = dash_offset;
+	xid[gc].hgc.xgcv.dashes = dash_list[0];
+
+	xid[gc].hgc.xgcv.line_style = LineOnOffDash;
+
+	WinXSelectPen(gc);
 	return(0);
 }
 

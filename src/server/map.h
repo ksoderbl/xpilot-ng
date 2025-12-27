@@ -106,7 +106,7 @@
 
 typedef struct {
     ipos	blk_pos;
-    position	pix_pos;
+    ipos	clk_pos;
     long	fuel;
     unsigned	conn_mask;
     long	last_change;
@@ -124,6 +124,7 @@ typedef struct {
     unsigned short	team;
 } base_t;
 
+/* kps - ng does not want this */
 typedef struct {
     int		base_idx;	/* Index in World.base[] */
     DFLOAT	dist;		/* Distance to first checkpoint */
@@ -131,7 +132,7 @@ typedef struct {
 
 typedef struct {
     ipos		blk_pos;
-    position		pix_pos;
+    ipos		clk_pos;
     int			dir;
     int			dead_time;
     unsigned		conn_mask;
@@ -216,11 +217,14 @@ typedef struct {
     int			x, y;		/* Size of world in blocks */
     int			diagonal;	/* Diagonal length in blocks */
     int			width, height;	/* Size of world in pixels (optimization) */
+    int			cwidth, cheight;/* Size of world in clicks */
     int			hypotenuse;	/* Diagonal length in pixels (optimization) */
     rules_t		*rules;
     char		name[MAX_CHARS];
     char		author[MAX_CHARS];
+    char		dataURL[MAX_CHARS];
 
+    /* kps - ng does not want **block and **itemID */
     u_byte		**block;        /* type of item in each block */
 
 			/* index into mapobject depending on value of corresponding block,
@@ -238,7 +242,7 @@ typedef struct {
     int			NumTeamBases;      /* How many 'different' teams are allowed */
     int			NumBases;
     base_t		*base;
-    baseorder_t		*baseorder;
+    baseorder_t		*baseorder; /* kps - ng does not want this */
     int			NumFuels;
     fuel_t		*fuel;
     int			NumGravs;
@@ -246,6 +250,7 @@ typedef struct {
     int			NumCannons;
     cannon_t		*cannon;
     int			NumChecks;
+    /* kps - ng wants this to be *check; */
     ipos		check[OLD_MAX_CHECKS];
     int			NumWormholes;
     wormhole_t		*wormHoles;
@@ -259,4 +264,54 @@ typedef struct {
     asteroid_concentrator_t	*asteroidConcs;
 } World_map;
 
+
+struct polystyle {
+    char id[100];
+    int color;
+    int texture_id;
+    int defedge_id;
+    int flags;
+};
+
+struct edgestyle {
+    char id[100];
+    int width;
+    int color;
+    int style;
+};
+
+struct bmpstyle {
+    char id[100];
+    char filename[30];
+    int flags;
+};
+
+typedef struct {
+    int style;
+    int group;
+    int *edges;
+    int x, y;
+    int num_points;
+    int estyles_start;
+    int num_echanges;
+    int is_decor;
+} poly_t;
+
+struct group {
+    int type;
+    unsigned int hit_mask;
+    int team;
+};
+
+extern struct polystyle pstyles[256];
+extern struct edgestyle estyles[256];
+extern struct bmpstyle  bstyles[256];
+extern poly_t *pdata;
+extern int *estyleptr;
+extern struct group groups[];
+#define HITMASK(team) ((team) == TEAM_NOT_SET ? NOTEAM_BIT : 1 << (team))
+
+extern int num_pstyles, num_estyles, num_bstyles;
+
 #endif
+

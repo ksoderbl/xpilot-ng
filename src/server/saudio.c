@@ -25,6 +25,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
 
 #ifdef _WINDOWS
 # include <windows.h>
@@ -38,6 +39,7 @@
 #include "proto.h"
 #include "netserver.h"
 #include "saudio.h"
+#include "click.h"
 
 char saudio_version[] = VERSION;
 
@@ -45,7 +47,7 @@ char saudio_version[] = VERSION;
 
 #define SOUND_RANGE_FACTOR	0.5		/* factor to increase sound
 						 * range by */
-#define SOUND_DEFAULT_RANGE	(BLOCK_SZ*15)
+#define SOUND_DEFAULT_RANGE	(BLOCK_CLICKS*15)
 #define SOUND_MAX_VOLUME	100
 #define SOUND_MIN_VOLUME	10
 
@@ -90,10 +92,6 @@ int sound_player_init(player * pl)
     SDBG(printf("sound_player_init %p\n", pl);)
 
     pl->audio = NULL;
-
-    if (pl->version < 0x3250) {
-	SET_BIT(pl->status, WANT_AUDIO);
-    }
 
     return 0;
 }
@@ -151,17 +149,17 @@ void sound_play_all(int index)
  * is what the player can see on the screen. A volume is assigned to the
  * sound depending on the location within the sound range.
  */
-void sound_play_sensors(DFLOAT x, DFLOAT y, int index)
+void sound_play_sensors(int cx, int cy, int index)
 {
     int             i,
 		    volume;
-    DFLOAT           dx,
+    DFLOAT          dx,
 		    dy,
 		    range,
 		    factor;
     player         *pl;
 
-    SDBG(printf("sound_play_sensors %g, %g, %d\n", x, y, index);)
+    SDBG(printf("sound_play_sensors %d, %d, %d\n", cx, cy, index);)
 
     for (i = 0; i < NumPlayers; i++) {
 	pl = Players[i];
@@ -169,8 +167,8 @@ void sound_play_sensors(DFLOAT x, DFLOAT y, int index)
 	if (!BIT(pl->status, WANT_AUDIO))
 	    continue;
 
-	dx = ABS(pl->pos.x - x);
-	dy = ABS(pl->pos.y - y);
+	dx = ABS(pl->pos.cx - cx);
+	dy = ABS(pl->pos.cy - cy);
 	range = sound_range(pl);
 
 	if (dx >= 0 && dx <= range && dy >= 0 && dy <= range) {

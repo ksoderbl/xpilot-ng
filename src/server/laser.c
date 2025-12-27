@@ -28,6 +28,7 @@
 #include <errno.h>
 #include <math.h>
 #include <limits.h>
+#include <time.h>
 
 #ifdef _WINDOWS
 # include "NT/winServer.h"
@@ -158,7 +159,8 @@ static void Laser_pulse_find_victims(
 	if (vic->id == pulse->id && !pulse->refl) {
 	    continue;
 	}
-	dist = Wrap_length(vic->pos.x - midx, vic->pos.y - midy);
+	dist = Wrap_length(vic->pos.cx - PIXEL_TO_CLICK(midx),
+			   vic->pos.cy - PIXEL_TO_CLICK(midy)) / CLICK;
 	if (dist > pulse->len / 2 + SHIP_SZ) {
 	    continue;
 	}
@@ -171,8 +173,8 @@ static void Laser_pulse_find_victims(
 	    vicbuf->max_vic = NumPlayers;
 	}
 	vicbuf->vic_ptr[vicbuf->num_vic].ind = i;
-	vicbuf->vic_ptr[vicbuf->num_vic].pos.x = vic->pos.x;
-	vicbuf->vic_ptr[vicbuf->num_vic].pos.y = vic->pos.y;
+	vicbuf->vic_ptr[vicbuf->num_vic].pos.x = vic->pos.px;
+	vicbuf->vic_ptr[vicbuf->num_vic].pos.y = vic->pos.py;
 	vicbuf->vic_ptr[vicbuf->num_vic].prev_dist = 1e10;
 	vicbuf->num_vic++;
     }
@@ -215,8 +217,8 @@ static void Laser_pulse_hits_player(
 			    * PULSE_SAMPLE_DISTANCE;
 	pulse->pos.y = y - tsin(pulse->dir) * 0.5
 			    * PULSE_SAMPLE_DISTANCE;
-	pulse->dir = (int)Wrap_findDir(vicpl->pos.x - pulse->pos.x,
-				  vicpl->pos.y - pulse->pos.y)
+	pulse->dir = (int)Wrap_findDir(vicpl->pos.px - pulse->pos.x,
+				       vicpl->pos.py - pulse->pos.y)
 		     * 2 - RES / 2 - pulse->dir;
 	pulse->dir = MOD2(pulse->dir, RES);
 	pulse->life += vicpl->item[ITEM_MIRROR];
@@ -226,7 +228,7 @@ static void Laser_pulse_hits_player(
 	return;
     }
 
-    sound_play_sensors(vicpl->pos.x, vicpl->pos.y,
+    sound_play_sensors(vicpl->pos.cx, vicpl->pos.cy,
 		       PLAYER_EAT_LASER_SOUND);
     if (BIT(vicpl->used, (HAS_SHIELD|HAS_EMERGENCY_SHIELD))
 	== (HAS_SHIELD|HAS_EMERGENCY_SHIELD))
@@ -274,9 +276,7 @@ static void Laser_pulse_hits_player(
 			   * laserKillScoreMult
 			   * selfKillScoreMult;
 		    SCORE(victim->ind, -sc,
-			  OBJ_X_IN_BLOCKS(vicpl),
-			  OBJ_Y_IN_BLOCKS(vicpl),
-			  vicpl->name);
+			  vicpl->pos.cx, vicpl->pos.cy, vicpl->name);
 		    strcat(msg, " How strange!");
 		} else {
 		    sc = Rate(pl->score,
@@ -288,9 +288,7 @@ static void Laser_pulse_hits_player(
 		}
 	    } else {
 		sc = Rate(CANNON_SCORE, vicpl->score) / 4;
-		SCORE(victim->ind, -sc,
-		      OBJ_X_IN_BLOCKS(vicpl),
-		      OBJ_Y_IN_BLOCKS(vicpl),
+		SCORE(victim->ind, -sc, vicpl->pos.cx, vicpl->pos.cy,
 		      "Cannon");
 		if (BIT(World.rules->mode, TEAM_PLAY)
 		    && vicpl->team != pulse->team)
@@ -299,11 +297,11 @@ static void Laser_pulse_hits_player(
 		    "%s got roasted alive by cannonfire.",
 		    vicpl->name);
 	    }
-	    sound_play_sensors(vicpl->pos.x, vicpl->pos.y,
+	    sound_play_sensors(vicpl->pos.cx, vicpl->pos.cy,
 			       PLAYER_ROASTED_SOUND);
 	    Set_message(msg);
 	    if (pl && pl->id != vicpl->id) {
-		Rank_kill(pl);
+		Rank_AddLaserKill(pl);
 		Robot_war(victim->ind, ind);
 	    }
 	}
@@ -346,8 +344,9 @@ static int Laser_pulse_check_player_hits(
 
     for (j = vicbuf->num_vic - 1; j >= 0; --j) {
 	victim = &(vicbuf->vic_ptr[j]);
-	dist = Wrap_length(x - victim->pos.x,
-			   y - victim->pos.y);
+	dist = Wrap_length(PIXEL_TO_CLICK(x) - PIXEL_TO_CLICK(victim->pos.x),
+			   PIXEL_TO_CLICK(y) - PIXEL_TO_CLICK(victim->pos.y))
+	    / CLICK;
 	if (dist <= SHIP_SZ) {
 	    Laser_pulse_hits_player(
 			pulse,
@@ -403,8 +402,8 @@ static list_t Laser_pulse_get_object_list(
 		 LI_FORWARD(iter))
 	    {
 		ast = (object *) LI_DATA(iter);
-		dx = midx - ast->pos.x;
-		dy = midy - ast->pos.y;
+		dx = midx - ast->pos.px;
+		dy = midy - ast->pos.py;
 		dx = WRAP_DX(dx);
 		dy = WRAP_DX(dy);
 		range = ast->pl_radius + pulse->len / 2;
@@ -563,7 +562,8 @@ void Laser_pulse_collision(void)
 	if (pulse->id == NO_ID) {
 	    obj->status = FROMCANNON;
 	}
-	Object_position_init_pixels(obj, x1, y1);
+	Object_position_init_clicks(obj,
+				    PIXEL_TO_CLICK(x1), PIXEL_TO_CLICK(y1));
 
 	refl = false;
 
@@ -606,8 +606,8 @@ void Laser_pulse_collision(void)
 		{
 		    DFLOAT adx, ady;
 		    ast = LI_DATA(iter);
-		    adx = x - ast->pos.x;
-		    ady = y - ast->pos.y;
+		    adx = x - ast->pos.px;
+		    ady = y - ast->pos.py;
 		    adx = WRAP_DX(adx);
 		    ady = WRAP_DX(ady);
 		    if (sqr(adx) + sqr(ady) <= sqr(ast->pl_radius)) {
@@ -621,8 +621,7 @@ void Laser_pulse_collision(void)
 			    && asteroidPoints > 0
 			    && Players[ind]->score <= asteroidMaxScore) {
 			    SCORE(ind, asteroidPoints,
-				  OBJ_X_IN_BLOCKS(ast), OBJ_Y_IN_BLOCKS(ast),
-				  "");
+				  ast->pos.cx, ast->pos.cy, "");
 			}
 			break;
 		    }
