@@ -304,7 +304,7 @@ option options[] = {
     {
 	"power",
 	NULL,
-	"55.0",
+	"45.0",
 	KEY_DUMMY,
 	"Set the engine power.\n"
 	"Valid values are in the range 5-55.\n"
@@ -312,7 +312,7 @@ option options[] = {
     {
 	"turnSpeed",
 	NULL,
-	"32.0",
+	"35.0",
 	KEY_DUMMY,
 	"Set the ship's turn speed.\n"
 	"Valid values are in the range 4-64.\n"
@@ -321,7 +321,7 @@ option options[] = {
     {
 	"turnResistance",
 	NULL,
-	"0.0",
+	"0.12",
 	KEY_DUMMY,
 	"Set the ship's turn resistance.\n"
 	"This determines the speed at which a ship stops turning\n"
@@ -349,7 +349,7 @@ option options[] = {
     {
 	"altTurnResistance",
 	NULL,
-	"0.0",
+	"0.12",
 	KEY_DUMMY,
 	"Set the alternate ship's turn resistance.\n"
 	"See also the keySwapSettings option.\n"

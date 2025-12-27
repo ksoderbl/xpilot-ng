@@ -165,6 +165,7 @@ typedef struct {
 		team;		/* Team this base belongs to */
     irec	bounds;		/* Location on map */
     int		type;		/* orientation */
+    int		deathtime;	/* For base warning */
 } homebase_t;
 
 typedef struct {
@@ -395,6 +396,8 @@ extern int num_polygon_styles, max_polygon_styles;
 
 extern other_t *Others;
 extern int	num_others, max_others;
+
+extern int num_playing_teams;
 
 int Fuel_by_pos(int x, int y);
 int Target_alive(int x, int y, int *damage);

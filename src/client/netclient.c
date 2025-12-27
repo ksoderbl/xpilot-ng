@@ -490,6 +490,7 @@ static void parse_new(void)
 	    bases[i].type = SETUP_BASE_DOWN;
 	else
 	    bases[i].type = SETUP_BASE_RIGHT;
+	bases[i].deathtime = -10000; /* kps hack */
 	ptr++;
     }
     num_fuels = get_ushort(&ptr);

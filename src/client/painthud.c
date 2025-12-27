@@ -87,6 +87,7 @@ int	messagesColor;		/* Color index for messages */
 int	oldMessagesColor;	/* Color index for old messages */
 DFLOAT	scoreObjectTime;	/* How long to flash score objects */
 int	baseWarningType;	/* Which type of base warning you prefer */
+int	baseWarningFrames;	/* Duration of base warning */
 
 radar_t	*old_radar_ptr;
 int	old_num_radar, old_max_radar;
@@ -96,8 +97,6 @@ static const int meterColor2 = BLUE; /* Color index for meter border drawing */
 static const int meterWidth = 60;
 static const int meterHeight = 10;
 
-deathhack_t deatharray[10];
-int deathpos;
 bool ball_shout = false;
 bool need_cover = false;
 
@@ -1101,9 +1100,12 @@ static bool Msg_match_fmt(char *msg, char *fmt, msgnames_t *nm)
 /* Needed by base warning hack */
 void Msg_scan_death(int id)
 {
-    deatharray[deathpos].id = id;
-    deatharray[deathpos].deathtime = loops;
-    deathpos = (deathpos + 1) % 10;
+    int i;
+
+    for (i = 0; i < num_bases; i++) {
+	if (bases[i].id == id)
+	    bases[i].deathtime = loops;
+    }
 }
 
 static void Msg_parse(char *message, size_t len)
@@ -1281,6 +1283,33 @@ static void Msg_scan_for_total_reset(char *message)
 	killratio_deaths = 0;
 	killratio_totalkills = 0;
 	killratio_totaldeaths = 0;
+    }
+}
+
+static void Msg_scan_for_replace_treasure(char *message)
+{
+    char replace[40];
+
+    if (self == NULL)
+	return;
+
+    sprintf(replace, "(team %d) has replaced the treasure", self->team);
+    if (strstr(message, replace)) {
+	ball_shout = false;
+	return;
+    }
+
+    /*
+     * Ok, at this point we know that it was not someone in our team
+     * that replaced the treasure.
+     *
+     * If there are 2 teams playing only and the ball was replace and
+     * it was not our team that replaced the ball, it was the other team.
+     * In this case, we can clear the cover flag.
+     */
+    if (num_playing_teams == 2
+	&& strstr(message, "has replaced the treasure")) {
+	need_cover = false;
     }
 }
 
@@ -1466,10 +1495,10 @@ void Add_message(char *message)
 	&& Msg_is_team_msg(message))
 	Msg_do_bms(message);
 
-    if (Msg_is_in_angle_brackets(message))
+    if (Msg_is_in_angle_brackets(message)) {
 	Msg_scan_for_total_reset(message);
-
-
+	Msg_scan_for_replace_treasure(message);
+    }
 
 #ifndef _WINDOWS
     if (selectionAndHistory && is_drawn_talk_message) {

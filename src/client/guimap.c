@@ -344,9 +344,9 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
 
     /* Mara's flashy basewarning */
     if (baseWarningType & 2) {
-	for (i = 0; i < 10; i++) {
-	    if (deatharray[i].id == id &&
-		deatharray[i].deathtime > loops - 3 * FPS) {
+	for (i = 0; i < num_bases; i++) {
+	    if (bases[i].id == id &&
+		bases[i].deathtime > loops - baseWarningFrames) {
 		if ((loopsSlow % 2) == 1) {
 		    baseColor = WHITE;
 		    /*Paint_baseInfoOnHudRadar(x,y); */

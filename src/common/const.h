@@ -141,20 +141,29 @@ extern DFLOAT		tbl_cos[];
 /* changed the default to max to avoid sending lots of fuel ACKs */
 /*#define START_STATION_FUEL	(20<<FUEL_SCALE_BITS)*/
 #define START_STATION_FUEL	MAX_STATION_FUEL
-#define STATION_REGENERATION	(0.06*FUEL_SCALE_FACT/TIME_FACT)
+#define STATION_REGENERATION	((0.06*FUEL_SCALE_FACT*timeStep)/TIME_FACT)
 #define MAX_PLAYER_FUEL		(2600<<FUEL_SCALE_BITS)
 #define MIN_PLAYER_FUEL		(350<<FUEL_SCALE_BITS)
-#define REFUEL_RATE		((5<<FUEL_SCALE_BITS)/TIME_FACT)
+#define REFUEL_RATE		(((5<<FUEL_SCALE_BITS)*timeStep)/TIME_FACT)
 #define ENERGY_PACK_FUEL        ((500+(randomMT()&511))<<FUEL_SCALE_BITS)
 #define FUEL_NOTIFY		(3*12)
 
 #define TARGET_DAMAGE		(250<<FUEL_SCALE_BITS)
+#if 0
 #define TARGET_FUEL_REPAIR_PER_FRAME (TARGET_DAMAGE / (12 * 10 * TIME_FACT))
 #define TARGET_REPAIR_PER_FRAME	(TARGET_DAMAGE / (12 * 600 * TIME_FACT))
 #define TARGET_UPDATE_DELAY	(TARGET_DAMAGE / (TARGET_REPAIR_PER_FRAME \
 				    * BLOCK_SZ * TIME_FACT))
-/*#define TARGET_DEAD_TIME	(12 * 60)*/
-/*#define BALL_STRING_LENGTH      (120 * CLICK)*/
+#endif
+
+#define TARGET_FUEL_REPAIR_PER_FRAME ((TARGET_DAMAGE * timeStep) \
+                                     / (12 * 10 * TIME_FACT))
+
+#define TARGET_REPAIR_PER_FRAME	((TARGET_DAMAGE * timeStep) \
+                                 / (12 * 600 * TIME_FACT))
+
+#define TARGET_UPDATE_DELAY	(TARGET_DAMAGE / (TARGET_REPAIR_PER_FRAME \
+				    * BLOCK_SZ))
 
 
 /*

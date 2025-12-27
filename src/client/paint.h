@@ -85,13 +85,6 @@ typedef struct {
  * Global objects.
  */
 
-/* Message scan hack for basewarnings on old servers */
-typedef struct {
-    int id;
-    int deathtime;
-} deathhack_t;
-extern deathhack_t deatharray[10];
-extern int deadcount;
 extern bool roundend;
 extern int killratio_kills;
 extern int killratio_deaths;
@@ -180,6 +173,7 @@ extern int	connColor;		/* Color index for connector drawing */
 extern int	hudLockColor;           /* Color index for lock on HUD drawing */
 extern DFLOAT	scoreObjectTime;	/* how long score objects are flashed */
 extern int	baseWarningType;	/* Which type of base warning you prefer */
+extern int	baseWarningFrames;	/* Duration of base warning */
 extern int	wallColor;		/* Color index for wall drawing */
 extern int	wallRadarColor;		/* Color index for walls on radar */
 extern int	targetRadarColor;	/* Color index for targets on radar */

@@ -56,8 +56,6 @@ char item_version[] = VERSION;
 
 
 
-#define CONFUSED_TIME	3
-
 
 static void Item_update_flags(player *pl)
 {
@@ -72,17 +70,17 @@ static void Item_update_flags(player *pl)
 	CLR_BIT(pl->have, HAS_DEFLECTOR);
     if (pl->item[ITEM_AFTERBURNER] <= 0)
 	CLR_BIT(pl->have, HAS_AFTERBURNER);
-    if (pl->item[ITEM_PHASING] <=0
+    if (pl->item[ITEM_PHASING] <= 0
 	&& !BIT(pl->used, HAS_PHASING_DEVICE)
-	&& pl->phasing_left == 0)
+	&& pl->phasing_left <= 0)
 	CLR_BIT(pl->have, HAS_PHASING_DEVICE);
     if (pl->item[ITEM_EMERGENCY_THRUST] <= 0
 	&& !BIT(pl->used, HAS_EMERGENCY_THRUST)
-	&& pl->emergency_thrust_left == 0)
+	&& pl->emergency_thrust_left <= 0)
 	CLR_BIT(pl->have, HAS_EMERGENCY_THRUST);
     if (pl->item[ITEM_EMERGENCY_SHIELD] <= 0
 	&& !BIT(pl->used, HAS_EMERGENCY_SHIELD)
-	&& pl->emergency_shield_left == 0) {
+	&& pl->emergency_shield_left <= 0) {
 	if (BIT(pl->have, HAS_EMERGENCY_SHIELD)) {
 	    CLR_BIT(pl->have, HAS_EMERGENCY_SHIELD);
 	    if (!BIT(DEF_HAVE, HAS_SHIELD) && pl->shield_time <= 0) {
@@ -222,8 +220,8 @@ void Place_item(int item, int ind)
     if (pl) {
 	grav = GRAVITY;
 	rand = 0;
-	cx = pl->prevpos.x;
-	cy = pl->prevpos.y;
+	cx = pl->prevpos.cx;
+	cy = pl->prevpos.cy;
 	if (!BIT(pl->status, KILLED)) {
 	    /*
 	     * Player is dropping an item on purpose.
@@ -254,7 +252,8 @@ void Place_item(int item, int ind)
 	    if (is_inside(cx, cy, NOTEAM_BIT | NONBALL_BIT) != -1)
 		return;
 	} else {
-	    if (!BIT(1U << World.block[bx][by], SPACE_BLOCKS))
+	    /*if (!BIT(1U << World.block[bx][by], SPACE_BLOCKS))*/
+	    if (!EMPTY_SPACE(World.block[bx][by]))
 		return;
 	}
 
@@ -728,7 +727,7 @@ void Do_general_transporter(int ind, int cx, int cy, int target,
 		Transporters[NumTransporters]->pos.cy = cy;
 		Transporters[NumTransporters]->target = victim->id;
 		Transporters[NumTransporters]->id = (pl ? pl->id : NO_ID);
-		Transporters[NumTransporters]->count = 5;
+		Transporters[NumTransporters]->count = 5 * TIME_FACT;
 		NumTransporters++;
 	    }
 	}
@@ -1104,7 +1103,7 @@ void Fire_general_ecm(int ind, unsigned short team, int cx, int cy)
 		mine->life = 0;
 		break;
 	    }
-	    mine->count = ((int)(8*(1-range)) + 2) * 12;
+	    mine->count = (int)(((8 * (1 - range)) + 2) * 12 * TIME_FACT);
 	    if (   !BIT(mine->status, CONFUSED)
 		&& (closest_mine == NULL || range < closest_mine_range)) {
 		closest_mine = mine;
@@ -1146,7 +1145,8 @@ void Fire_general_ecm(int ind, unsigned short team, int cx, int cy)
 		c->item[ITEM_LASER] -= (int)(damage
 					     * c->item[ITEM_LASER] + 0.5);
 	    }
-	    c->damaged += (int)(24 * range * pow(0.75, c->item[ITEM_SENSOR]));
+	    c->damaged += (int)(24 * TIME_FACT * range
+				* pow(0.75, c->item[ITEM_SENSOR]));
 	}
     }
 
@@ -1191,9 +1191,9 @@ void Fire_general_ecm(int ind, unsigned short team, int cx, int cy)
 	    damage = 24.0f * range;
 
 	    if (p->item[ITEM_CLOAK] <= 1) {
-		p->forceVisible += (int)damage;
+		p->forceVisible += (int)(damage * TIME_FACT);
 	    } else {
-		p->forceVisible += (int)(damage
+		p->forceVisible += (int)(damage * TIME_FACT
 					 * pow(0.75, (p->item[ITEM_CLOAK]-1)));
 	    }
 
@@ -1220,7 +1220,7 @@ void Fire_general_ecm(int ind, unsigned short team, int cx, int cy)
 	    if (!IS_ROBOT_PTR(p) || !ecmsReprogramRobots || !pl) {
 		/* player is blinded by light flashes. */
 		long duration = (int)(damage * pow(0.75, p->item[ITEM_SENSOR]));
-		p->damaged += duration;
+		p->damaged += duration * TIME_FACT;
 		if (pl)
 		    Record_shove(p, pl, frame_loops + duration);
 	    } else {

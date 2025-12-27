@@ -420,7 +420,7 @@ struct _visibility {
 #define MAX_PLAYER_ECMS		8	/* Maximum simultaneous per player */
 typedef struct {
     int		size;
-    cpos	pos;
+    clpos	pos;
     int		id;
 } ecm_t;
 
@@ -428,7 +428,7 @@ typedef struct {
  * Structure holding the info for one pulse of a laser.
  */
 typedef struct {
-    cpos		pos;
+    clpos		pos;
     int			dir;
     int			len;
     int			life;
@@ -442,7 +442,7 @@ typedef struct {
  * Transporter info.
  */
 typedef struct {
-    cpos	pos;
+    clpos	pos;
     int		target;
     int		id;
     int		count;
@@ -548,6 +548,7 @@ struct player {
     bool	tractor_is_pressor;	/* on if tractor is pressor */
 /* kps -ng does not want this */    int		shot_max;		/* Maximum number of shots active */
     long	shot_time;		/* Time of last shot fired by player */
+    long	laser_time;		/* Time of last laser pulse fired by player */
     int		repair_target;		/* Repairing this target */
     int		fs;			/* Connected to fuel station fs */
     int		check;			/* Next check point to pass */

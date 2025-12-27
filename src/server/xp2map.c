@@ -1,4 +1,4 @@
-/* $Id: map.c,v 5.19 2002/01/18 22:34:26 kimiko Exp $
+/* $Id$
  *
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
@@ -205,7 +205,7 @@ static void tagstart(void *data, const char *el, const char **attr)
 		cy = atoi(*(attr + 1)) * scale;
 	    attr += 2;
 	}
-	Map_place_checkpoint(cx, cy, -1);
+	Map_place_check(cx, cy, -1);
 	return;
     }
 
@@ -263,6 +263,8 @@ static void tagstart(void *data, const char *el, const char **attr)
 	return;
     }
 
+    /* kps - this should be handled like balltarget */
+#if 0
     if (!strcasecmp(el, "Target")) {
 	int team = TEAM_NOT_SET, cx = -1, cy = -1;
 
@@ -278,6 +280,7 @@ static void tagstart(void *data, const char *el, const char **attr)
 	Map_place_target(cx, cy, team);
 	return;
     }
+#endif
 
     if (!strcasecmp(el, "Option")) {
 	const char *name = NULL, *value = NULL;

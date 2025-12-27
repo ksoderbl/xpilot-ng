@@ -54,15 +54,14 @@ char shot_version[] = VERSION;
 
 #define MISSILE_POWER_SPEED_FACT	0.25
 #define MISSILE_POWER_TURNSPEED_FACT	0.75
-#define MINI_TORPEDO_SPREAD_TIME	6
+#define MINI_TORPEDO_SPREAD_TIME	(6 * TIME_FACT)
 #define MINI_TORPEDO_SPREAD_SPEED	20
 #define MINI_TORPEDO_SPREAD_ANGLE	90
-#define MINI_MINE_SPREAD_TIME		18
+#define MINI_MINE_SPREAD_TIME		(18 * TIME_FACT)
 #define MINI_MINE_SPREAD_SPEED		8
 #define MINI_MISSILE_SPREAD_ANGLE	45
 
 #define CONFUSED_UPDATE_GRANULARITY	10
-#define CONFUSED_TIME			3
 
 
 /***********************
@@ -232,7 +231,7 @@ void Place_general_mine(int ind, unsigned short team, long status,
 
 	mine->type = OBJ_MINE;
 	mine->color = BLUE;
-	mine->info = mineFuseTime;
+	mine->info = mineFuseTime * TIME_FACT;
 	mine->status = status;
 	mine->id = (pl ? pl->id : NO_ID);
 	mine->team = team;
@@ -261,8 +260,8 @@ void Place_general_mine(int ind, unsigned short team, long status,
 	     * zero over the MINI_MINE_SPREAD_TIME.
 	     */
 	    mine->spread_left = MINI_MINE_SPREAD_TIME;
-	    mine->acc.x = -mv.x / MINI_MINE_SPREAD_TIME;
-	    mine->acc.y = -mv.y / MINI_MINE_SPREAD_TIME;
+	    mine->acc.x = -mv.x * TIME_FACT / MINI_MINE_SPREAD_TIME;
+	    mine->acc.y = -mv.y * TIME_FACT / MINI_MINE_SPREAD_TIME;
 	} else {
 	    mv.x = mv.y = mine->acc.x = mine->acc.y = 0.0;
 	    mine->spread_left = 0;
@@ -1034,8 +1033,8 @@ void Fire_general_shot(int ind, unsigned short team, bool cannon,
 	     *      regardless of minification.
 	     */
 	    TORP_PTR(shot)->spread_left = MINI_TORPEDO_SPREAD_TIME;
-	    shot->acc.x = -mv.x / MINI_TORPEDO_SPREAD_TIME;
-	    shot->acc.y = -mv.y / MINI_TORPEDO_SPREAD_TIME;
+	    shot->acc.x = -mv.x * TIME_FACT / MINI_TORPEDO_SPREAD_TIME;
+	    shot->acc.y = -mv.y * TIME_FACT / MINI_TORPEDO_SPREAD_TIME;
 	    ldir = dir;
 	    break;
 
@@ -1195,13 +1194,13 @@ void Delete_shot(int ind)
 	    if (is_polygon_map || !useOldCode) {
 		/* The ball could be inside a BallArea, check whether
 		 * the sparks can exist here. Should we set a team? */
-		if (is_inside(ball->prevpos.x, ball->prevpos.y,
+		if (is_inside(ball->prevpos.cx, ball->prevpos.cy,
 			      NONBALL_BIT | NOTEAM_BIT) != -1)
 		    break;
 	    }
 
 	    Make_debris(
-		/* pos.x, pos.y   */ ball->prevpos.x, ball->prevpos.y,
+		/* pos.x, pos.y   */ ball->prevpos.cx, ball->prevpos.cy,
 		/* vel.x, vel.y   */ ball->vel.x, ball->vel.y,
 		/* owner id       */ ball->id,
 		/* owner team     */ ball->team,
@@ -1310,7 +1309,7 @@ void Delete_shot(int ind)
 	}
 
 	Make_debris(
-	    /* pos.x, pos.y   */ shot->prevpos.x, shot->prevpos.y,
+	    /* pos.x, pos.y   */ shot->prevpos.cx, shot->prevpos.cy,
 	    /* vel.x, vel.y   */ shot->vel.x, shot->vel.y,
 	    /* owner id       */ shot->id,
 	    /* owner team     */ shot->team,
@@ -1349,7 +1348,7 @@ void Delete_shot(int ind)
 	case ITEM_MISSILE:
 	    if (shot->life <= 0 && shot->color != WHITE) {
 		shot->color = WHITE;
-		shot->life  = 12 * WARN_TIME * TIME_FACT;
+		shot->life  = WARN_TIME;
 		return;
 	    }
 	    if (shot->life <= 0 && rfrac() < rogueHeatProb) {
@@ -1360,7 +1359,7 @@ void Delete_shot(int ind)
 	case ITEM_MINE:
 	    if (shot->life <= 0 && shot->color != WHITE) {
 		shot->color = WHITE;
-		shot->life  = 12 * WARN_TIME * TIME_FACT;
+		shot->life  = WARN_TIME;
 		return;
 	    }
 	    if (shot->life <= 0 && rfrac() < rogueMineProb) {
@@ -1374,9 +1373,7 @@ void Delete_shot(int ind)
 	break;
 
     default:
-	xpprintf("%s Delete_shot(): Unkown shot type %d.\n",
-		 showtime(), shot->type);
-	printf("%s Delete_shot(): Unkown shot type %d.\n",
+	xpprintf("%s Delete_shot(): Unknown shot type %d.\n",
 		 showtime(), shot->type);
 	break;
     }
@@ -1426,6 +1423,11 @@ void Fire_laser(int ind)
     player	*pl = Players[ind];
     int		cx, cy;
 
+    if (frame_time < pl->laser_time + laserRepeatRate) {
+ 	return;
+    }
+    pl->laser_time = frame_time;
+
     if (pl->item[ITEM_LASER] > pl->num_pulses
 	&& pl->velocity < CLICK_TO_PIXEL(PULSE_LENGTH)) {
 	if (pl->fuel.sum <= -ED_LASER) {
@@ -1456,9 +1458,9 @@ void Fire_general_laser(int ind, unsigned short team, int cx, int cy,
     if (pl) {
 	Add_fuel(&(pl->fuel), (long)ED_LASER);
 	sound_play_sensors(cx, cy, FIRE_LASER_SOUND);
-	life = (int)PULSE_LIFE(pl->item[ITEM_LASER]) * TIME_FACT;
+	life = (int)PULSE_LIFE(pl->item[ITEM_LASER]);
     } else {
-	life = (int)PULSE_LIFE(CANNON_PULSES) * TIME_FACT;
+	life = (int)PULSE_LIFE(CANNON_PULSES);
     }
 
     if (NumPulses >= MAX_TOTAL_PULSES) {
@@ -1613,14 +1615,16 @@ void Move_smart_shot(int ind)
     if (shot->type == OBJ_TORPEDO) {
 	torpobject *torp = TORP_PTR(shot);
 	if (BIT(torp->mods.nuclear, NUCLEAR)) {
-	    acc = (torp->info++ < NUKE_SPEED_TIME) ? NUKE_ACC : 0.0;
+	    acc = (torp->info < NUKE_SPEED_TIME) ? NUKE_ACC : 0.0;
 	} else {
-	    acc = (torp->info++ < TORPEDO_SPEED_TIME) ? TORPEDO_ACC : 0.0;
+	    acc = (torp->info < TORPEDO_SPEED_TIME) ? TORPEDO_ACC : 0.0;
 	}
+	torp->info += timeStep;
 	acc *= (1 + (torp->mods.power * MISSILE_POWER_SPEED_FACT));
-	if (torp->spread_left-- <= 0) {
+	if ((torp->spread_left -= timeStep) <= 0) {
 	    torp->acc.x = 0;
 	    torp->acc.y = 0;
+	    torp->spread_left = 0;
 	}
 	torp->vel.x += acc * tcos(torp->missile_dir);
 	torp->vel.y += acc * tsin(torp->missile_dir);
@@ -1656,7 +1660,7 @@ void Move_smart_shot(int ind)
 		shot->count = HEAT_WIDE_ERROR;
 	    }
 	} else {
-	    shot->count++;
+	    shot->count += timeStep;
 	    /* Look for new target */
 	    if ((range < HEAT_CLOSE_RANGE
 		 && shot->count > HEAT_CLOSE_TIMEOUT + HEAT_CLOSE_ERROR)
@@ -1703,8 +1707,8 @@ void Move_smart_shot(int ind)
 	 * Heat seekers cannot fly exactly, if target is far away or thrust
 	 * isn't active.  So simulate the error:
 	 */
-	x_dif = (int)(rfrac() * 4 * shot->count);
-	y_dif = (int)(rfrac() * 4 * shot->count);
+	x_dif = (int)(rfrac() * 4 * shot->count / TIME_FACT);
+	y_dif = (int)(rfrac() * 4 * shot->count / TIME_FACT);
 
     }
     else if (shot->type == OBJ_SMART_SHOT) {
@@ -1714,10 +1718,11 @@ void Move_smart_shot(int ind)
 	    && (!(frame_loops % CONFUSED_UPDATE_GRANULARITY)
 		|| smart->count == CONFUSED_TIME)) {
 
-	    if (smart->count) {
+	    if (smart->count > 0) {
 		smart->info = Players[(int)(rfrac() * NumPlayers)]->id;
-		smart->count--;
+		smart->count -= timeStep;
 	    } else {
+		smart->count = 0;
 		CLR_BIT(smart->status, CONFUSED);
 
 		/* range is percentage from center to periphery of ecm burst */
@@ -1900,17 +1905,27 @@ void Move_mine(int ind)
 {
     mineobject	*mine = MINE_IND(ind);
 
-    if (BIT(mine->status, CONFUSED) && --mine->count <= 0)
-	CLR_BIT(mine->status, CONFUSED);
-
-    if (BIT(mine->status, OWNERIMMUNE) && mine->info) {
-	if (--mine->info <= 0)
-	    CLR_BIT(mine->status, OWNERIMMUNE);
+    if (BIT(mine->status, CONFUSED)) {
+	if ((mine->count -= timeStep) <= 0) {
+	    CLR_BIT(mine->status, CONFUSED);
+	    mine->count = 0;
+	}
     }
 
-    if (mine->mods.mini && mine->spread_left-- <= 0) {
-	mine->acc.x = 0;
-	mine->acc.y = 0;
+    /* if mineFuseTime == 0, owner immunity never expires */
+    if (BIT(mine->status, OWNERIMMUNE) && mine->info > 0) {
+	if ((mine->info -= timeStep) <= 0) {
+	    CLR_BIT(mine->status, OWNERIMMUNE);
+	    mine->info = 0;
+	}
+    }
+
+    if (mine->mods.mini) {
+	if ((mine->spread_left -= timeStep) <= 0) {
+	    mine->acc.x = 0;
+	    mine->acc.y = 0;
+	    mine->spread_left = 0;
+	}
     }
 }
 

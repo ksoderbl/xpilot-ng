@@ -936,53 +936,7 @@ int Setup_connection(char *real, char *nick, char *dpy, int team,
     }
     if (sock.fd == -1)
  	return -1;
-#if 0 /* kps -remove */
-    if (clientPortStart && (!clientPortEnd || clientPortEnd > 65535)) {
-	clientPortEnd = 65535;
-    }
-    if (clientPortEnd && (!clientPortStart || clientPortStart < 1024)) {
-	clientPortStart = 1024;
-    }
 
-    if (!clientPortStart || !clientPortEnd ||
-	(clientPortStart > clientPortEnd)) {
-
-        if (sock_open_udp(&sock, serverAddr, 0) == SOCK_IS_ERROR) {
-            error("Cannot create datagram socket (%d)", sock.error.error);
-            return -1;
-        }
-    }
-    else {
-	int found_socket = 0;
-        for (i = clientPortStart; i <= clientPortEnd; i++) {
-            if (sock_open_udp(&sock, serverAddr, i) != SOCK_IS_ERROR) {
-		found_socket = 1;
-                break;
-	    }
-	}
-	if (found_socket == 0) {
-	    error("Could not find a usable port in given port range");
-	    return -1;
-	}
-    }
-
-    if ((my_port = sock_get_port(&sock)) == -1) {
-	error("Cannot get port from socket");
-	sock_close(&sock);
-	return -1;
-    }
-    if (sock_set_non_blocking(&sock, 1) == -1) {
-	error("Cannot make client socket non-blocking");
-	sock_close(&sock);
-	return -1;
-    }
-    if (sock_set_receive_buffer_size(&sock, SERVER_RECV_SIZE + 256) == -1) {
-	error("Cannot set receive buffer size to %d", SERVER_RECV_SIZE + 256);
-    }
-    if (sock_set_send_buffer_size(&sock, SERVER_SEND_SIZE + 256) == -1) {
-	error("Cannot set send buffer size to %d", SERVER_SEND_SIZE + 256);
-    }
-#endif
     Sockbuf_init(&connp->w, &sock, SERVER_SEND_SIZE,
 		 SOCKBUF_WRITE | SOCKBUF_DGRAM);
 

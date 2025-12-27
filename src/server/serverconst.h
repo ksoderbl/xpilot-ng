@@ -213,11 +213,13 @@
 #define SMART_TURNSPEED         2.6
 #define SMART_SHOT_MAX_SPEED	22.0
 #define SMART_SHOT_LOOK_AH      4
-#define TORPEDO_SPEED_TIME      (2*12)
-#define TORPEDO_ACC 	(18.0*SMART_SHOT_MAX_SPEED/(12*TORPEDO_SPEED_TIME))
-#define TORPEDO_RANGE           (MINE_RANGE*0.45)
+#define CONFUSED_TIME		(3*TIME_FACT)
+#define TORPEDO_SPEED_TIME      (2*12*TIME_FACT)
+#define TORPEDO_ACC		((18.0*SMART_SHOT_MAX_SPEED*TIME_FACT)/\
+				 (12*TORPEDO_SPEED_TIME))
+#define TORPEDO_RANGE		(MINE_RANGE*0.45)
 
-#define NUKE_SPEED_TIME		(2*12)
+#define NUKE_SPEED_TIME		(2*12*TIME_FACT)
 #define NUKE_ACC 		(5*TORPEDO_ACC)
 #define NUKE_RANGE		(MINE_RANGE*1.5)
 #define NUKE_MASS_MULT		1
@@ -226,14 +228,14 @@
 
 #define HEAT_RANGE              (VISIBILITY_DISTANCE/2)
 #define HEAT_SPEED_FACT         1.7
-#define HEAT_CLOSE_TIMEOUT      (2*12)
+#define HEAT_CLOSE_TIMEOUT      (2*12*TIME_FACT)
 #define HEAT_CLOSE_RANGE        HEAT_RANGE
-#define HEAT_CLOSE_ERROR        0
-#define HEAT_MID_TIMEOUT        (4*12)
+#define HEAT_CLOSE_ERROR        (0*TIME_FACT)
+#define HEAT_MID_TIMEOUT        (4*12*TIME_FACT)
 #define HEAT_MID_RANGE          (2*HEAT_RANGE)
-#define HEAT_MID_ERROR          8
-#define HEAT_WIDE_TIMEOUT       (8*12)
-#define HEAT_WIDE_ERROR         16
+#define HEAT_MID_ERROR          (8*TIME_FACT)
+#define HEAT_WIDE_TIMEOUT       (8*12*TIME_FACT)
+#define HEAT_WIDE_ERROR         (16*TIME_FACT)
 
 #define CLUSTER_MASS_SHOTS(mass) ((mass) * 0.9 / ShotsMass)
 #define CLUSTER_MASS_DRAIN(mass) (CLUSTER_MASS_SHOTS(mass)*ED_SHOT)
@@ -245,8 +247,8 @@
 #define PULSE_SPEED		(90 * CLICK)
 #define PULSE_SAMPLE_DISTANCE	(5 * CLICK)
 #define PULSE_LENGTH		(PULSE_SPEED - PULSE_SAMPLE_DISTANCE)
-#define PULSE_MIN_LIFE		4.5
-#define PULSE_LIFE(lasers)	(PULSE_MIN_LIFE + ((lasers) / 4))
+#define PULSE_MIN_LIFE		(4.5 * TIME_FACT)
+#define PULSE_LIFE(lasers)	(PULSE_MIN_LIFE + ((lasers) / 4) * TIME_FACT)
 
 #define TRACTOR_MAX_RANGE(items)  (200 + (items) * 50)
 #define TRACTOR_MAX_FORCE(items)  (-40 + (items) * -20)
@@ -256,8 +258,9 @@
 #define TRACTOR_FORCE(tr_pr, percent, maxforce) \
 	((percent) * (maxforce) * ((tr_pr) ? -1 : 1))
 
-#define WARN_TIME               2
-#define EMERGENCY_SHIELD_TIME	(4*12)
+#define WARN_TIME		(2*12*TIME_FACT)
+#define EMERGENCY_SHIELD_TIME	(4*12*TIME_FACT)
+#define SHIELD_TIME		(2*12*TIME_FACT)
 
 #define ALLIANCE_NOT_SET	(-1)
 
@@ -270,5 +273,7 @@
 
 #define WORM_BRAKE_FACTOR	1
 #define WORMCOUNT		64
+
+#define POLYGON_MAX_OFFSET	30000
 
 #endif

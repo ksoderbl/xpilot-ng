@@ -108,16 +108,16 @@ void Free_map(void);
 bool Grok_map(void);
 bool Grok_map_new(void);
 
-void Map_place_base(int cx, int cy, int dir, int team);
-void Map_place_fuel(int cx, int cy, int team);
-void Map_place_treasure(int cx, int cy, int team, bool empty);
-void Map_place_wormhole(int cx, int cy, wormType type);
-void Map_place_check(int cx, int cy);
-void Map_place_target(int cx, int cy, int team);
-void Map_place_checkpoint(int cx, int cy, int index);
-void Map_place_item_concentrator(int cx, int cy);
-void Map_place_asteroid_concentrator(int cx, int cy);
-void Map_place_grav(int cx, int cy, DFLOAT force);
+int Map_place_cannon(int cx, int cy, int dir, int team);
+int Map_place_base(int cx, int cy, int dir, int team);
+int Map_place_fuel(int cx, int cy, int team);
+int Map_place_treasure(int cx, int cy, int team, bool empty);
+int Map_place_wormhole(int cx, int cy, wormType type);
+int Map_place_target(int cx, int cy, int team);
+int Map_place_check(int cx, int cy, int index);
+int Map_place_item_concentrator(int cx, int cy);
+int Map_place_asteroid_concentrator(int cx, int cy);
+int Map_place_grav(int cx, int cy, DFLOAT force, int type);
 
 void Find_base_direction(void);
 void Compute_gravity(void);
@@ -134,6 +134,17 @@ int Wildmap(
 	char **data,
 	int *width_ptr,
 	int *height_ptr);
+
+/*
+ * Prototypes for xpmap.c
+ */
+void Xpmap_print(void);
+void Xpmap_grok_map_data(void);
+void Xpmap_create_map_objects(void);
+void Xpmap_find_map_object_teams(void);
+void Xpmap_find_base_direction(void);
+void Xpmap_blocks_to_polygons(void);
+
 
 /*
  * Prototypes for xp2map.c
@@ -420,27 +431,6 @@ bool parsePasswordFile(const char *filename);
 bool parseMapFile(const char *filename);
 void expandKeyword(const char *keyword);
 
-void Blocks_to_polygons(void);
-
-void P_edgestyle(char *id, int width, int color, int style);
-void P_polystyle(char *id, int color, int texture_id, int defedge_id,
-		 int flags);
-void P_bmpstyle(char *id, char *filename, int flags);
-void P_start_polygon(int cx, int cy, int style);
-void P_offset(int offcx, int offcy, int edgestyle);
-void P_vertex(int cx, int cy, int edgestyle);
-void P_end_polygon(void);
-void P_start_ballarea(void);
-void P_end_ballarea(void);
-void P_start_balltarget(int team);
-void P_end_balltarget(void);
-void P_start_decor(void);
-void P_end_decor(void);
-int P_get_bmp_id(const char *s);
-int P_get_edge_id(const char *s);
-int P_get_poly_id(const char *s);
-
-
 /*
  * Prototypes for laser.c
  */
@@ -469,6 +459,33 @@ void Object_free_ind(int ind);
 void Object_free_ptr(object *obj);
 void Alloc_shots(int number);
 void Free_shots(void);
+
+/*
+ * Prototypes for polygon.c
+ */
+void P_edgestyle(char *id, int width, int color, int style);
+void P_polystyle(char *id, int color, int texture_id, int defedge_id,
+		 int flags);
+void P_bmpstyle(char *id, char *filename, int flags);
+void P_start_polygon(int cx, int cy, int style);
+void P_offset(int offcx, int offcy, int edgestyle);
+void P_vertex(int cx, int cy, int edgestyle);
+void P_end_polygon(void);
+void P_start_ballarea(void);
+void P_end_ballarea(void);
+void P_start_balltarget(int team);
+void P_end_balltarget(void);
+void P_start_target(int team, int ind);
+void P_end_target(void);
+void P_start_cannon(int team, int ind);
+void P_end_cannon(void);
+void P_start_wormhole(int ind);
+void P_end_wormhole(void);
+void P_start_decor(void);
+void P_end_decor(void);
+int P_get_bmp_id(const char *s);
+int P_get_edge_id(const char *s);
+int P_get_poly_id(const char *s);
 
 /*
  * Prototypes for showtime.c

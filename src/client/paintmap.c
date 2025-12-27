@@ -106,13 +106,14 @@ void Paint_vbase(void)
 	    Base_info_by_pos(vbase_ptr[i].xi, vbase_ptr[i].yi, &id, &team);
 	    Gui_paint_base(vbase_ptr[i].x, vbase_ptr[i].y, id, team,
 			   vbase_ptr[i].type);
-	    for (j = 0; j < 10; j++) {
-		if ((baseWarningType & 1) &&
-		    deatharray[j].id == id &&
-		    deatharray[j].deathtime > loops - 3 * FPS)
-		    Gui_paint_appearing(vbase_ptr[i].x + BLOCK_SZ / 2,
-					vbase_ptr[i].y + BLOCK_SZ / 2, id,
-					1);
+	    if (baseWarningType & 1) {
+		for (j = 0; j < num_bases; j++) {
+		    if (bases[j].id == id &&
+			bases[j].deathtime > loops - baseWarningFrames)
+			Gui_paint_appearing(vbase_ptr[i].x + BLOCK_SZ / 2,
+					    vbase_ptr[i].y + BLOCK_SZ / 2, id,
+					    1);
+		}
 	    }
 	}
 	RELEASE(vbase_ptr, num_vbase, max_vbase);
@@ -217,8 +218,6 @@ void Paint_objects(void)
 
     for (i = 0; i < num_bases; i++) {
 
-	int j;
-
         Compute_bounds(&min, &max, &bases[i].bounds);
 
         for (xoff = min.x; xoff <= max.x; xoff++) {
@@ -228,13 +227,13 @@ void Paint_objects(void)
                      bases[i].bounds.y + yoff * Setup->height,
                      bases[i].id, bases[i].team,
                      bases[i].type);
-		for (j = 0; j < 10; j++) {
-		    if ((baseWarningType & 1) &&
-			deatharray[j].id == bases[i].id &&
-			deatharray[j].deathtime > loops - 3 * FPS)
-			Gui_paint_appearing(bases[i].bounds.x + BLOCK_SZ / 2,
-					    bases[i].bounds.y + BLOCK_SZ / 2,
-					    bases[i].id, 1);
+
+		if ((baseWarningType & 1)
+		    && bases[i].deathtime > loops - baseWarningFrames) {
+		    Gui_paint_appearing(
+			bases[i].bounds.x + xoff * Setup->width + BLOCK_SZ / 2,
+			bases[i].bounds.y + yoff * Setup->height+ BLOCK_SZ / 2,
+			bases[i].id, 1);
 		}
             }
         }
@@ -334,6 +333,7 @@ void Paint_world(void)
 				 world.y + ext_view_height/2 + MAX_VIEW_SIZE/2);
     }
 
+    /* kps - this should be drawn more than one frame if fps is high */
     if (oldHRLimit != hrLimit) {
 	Gui_paint_visible_border(
 	    (int)(world.x + ext_view_width/2  - hrLimit * MAX_VIEW_SIZE/2),

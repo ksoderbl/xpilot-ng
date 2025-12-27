@@ -337,14 +337,14 @@ void Update_tanks(pl_fuel_t *ft)
 	    if (!fuel) {
 		if (t
 		    && t != ft->current
-		    && *f >= low_level + REFUEL_RATE * timeStep
-		    && *(f-1) <= TANK_CAP(t-1) - REFUEL_RATE * timeStep) {
+		    && *f >= low_level + REFUEL_RATE
+		    && *(f-1) <= TANK_CAP(t-1) - REFUEL_RATE) {
 
-		    *f -= REFUEL_RATE * timeStep;
-		    fuel = REFUEL_RATE * timeStep;
+		    *f -= REFUEL_RATE;
+		    fuel = REFUEL_RATE;
 		} else if (t && *f < low_level) {
-		    *f += REFUEL_RATE * timeStep;
-		    fuel = -REFUEL_RATE * timeStep;
+		    *f += REFUEL_RATE;
+		    fuel = -REFUEL_RATE;
 		}
 	    }
 	    if (fuel && t == 0) {

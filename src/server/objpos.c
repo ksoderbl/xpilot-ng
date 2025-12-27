@@ -73,7 +73,7 @@ void Object_position_init_clicks(object *obj, int cx, int cy)
 
 void Player_position_restore(player *pl)
 {
-    Player_position_set_clicks(pl, pl->prevpos.x, pl->prevpos.y);
+    Player_position_set_clicks(pl, pl->prevpos.cx, pl->prevpos.cy);
 }
 
 void Player_position_set_clicks(player *pl, int cx, int cy)

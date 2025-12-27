@@ -98,7 +98,9 @@
 #define MAX_RACK_PTS	    4
 
 #ifdef SERVER
-#define SHIPCOORD cpos
+/* kps - fix */
+#include "../server/click.h"
+#define SHIPCOORD clpos
 #else
 #define SHIPCOORD position
 #endif

@@ -118,8 +118,8 @@ void tuner_playershielding(void)
 	CLR_BIT(DEF_HAVE, HAS_SHIELD);
 
 	for (i = 0; i < NumPlayers; i++) {
-	    Players[i]->shield_time = 2 * FPS;
-	    /* 2 seconds to get to safety */
+	    Players[i]->shield_time = SHIELD_TIME;
+	    /* approx 2 seconds to get to safety */
 	}
     }
 }

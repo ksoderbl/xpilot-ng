@@ -71,7 +71,7 @@ int	round_delay = 0;	/* delay until start of next round */
 int	round_delay_send = 0;	/* number of frames to send round_delay */
 int	roundtime = -1;		/* time left this round */
 static int time_to_update = TIME_FACT;	/* time before less frequent updates */
-static int do_update_this_frame = 0;	/* less frequent update this frame? */
+static bool do_update_this_frame = false; /* less frequent update this frame */
 
 static char msg[MSG_LEN];
 
@@ -128,12 +128,12 @@ static void Transport_to_home(int ind)
 void Phasing (int ind, int on)
 {
     player	*pl = Players[ind];
-    const int	phasing_time = 4 * 12;
+    const int	phasing_time = 4 * 12 * TIME_FACT;
 
     if (on) {
 	if (pl->phasing_left <= 0) {
 	    pl->phasing_left = phasing_time;
-	    pl->phasing_max = phasing_time;
+	    pl->phasing_max += phasing_time;
 	    pl->item[ITEM_PHASING]--;
 	}
 	SET_BIT(pl->used, HAS_PHASING_DEVICE);
@@ -233,12 +233,12 @@ void Deflector(int ind, int on)
 void Emergency_thrust (int ind, int on)
 {
     player	*pl = Players[ind];
-    const int	emergency_thrust_time = 4 * 12;
+    const int	emergency_thrust_time = 4 * 12 * TIME_FACT;
 
     if (on) {
 	if (pl->emergency_thrust_left <= 0) {
 	    pl->emergency_thrust_left = emergency_thrust_time;
-	    pl->emergency_thrust_max = emergency_thrust_time;
+	    pl->emergency_thrust_max += emergency_thrust_time;
 	    pl->item[ITEM_EMERGENCY_THRUST]--;
 	}
 	if (!BIT(pl->used, HAS_EMERGENCY_THRUST)) {
@@ -267,7 +267,7 @@ void Emergency_shield (int ind, int on)
     if (on) {
 	if (BIT(pl->have, HAS_EMERGENCY_SHIELD)) {
 	    if (pl->emergency_shield_left <= 0) {
-		pl->emergency_shield_left = EMERGENCY_SHIELD_TIME;
+		pl->emergency_shield_left += EMERGENCY_SHIELD_TIME;
 		pl->item[ITEM_EMERGENCY_SHIELD]--;
 	    }
 	    if (cloakedShield || !BIT(pl->used, HAS_CLOAKING_DEVICE)) {
@@ -506,17 +506,18 @@ void Update_objects(void)
      * be represented accurately as an integer, FPSMultiplier makes these
      * things happen less often (in terms of frames) rather than smaller
      * amount each time.
+     *
+     * Can also be used to do some updates less frequently.
      */
-    do_update_this_frame = 0;
+    do_update_this_frame = false;
     if ((time_to_update -= timeStep) <= 0) {
-	do_update_this_frame = 1;
+	do_update_this_frame = true;
 	time_to_update += TIME_FACT;
     }
 
 #if 0
-    xpprintf(__FILE__ ": frame loops         : %ld\n", frame_loops);
-    xpprintf(__FILE__ ": update this frame   : %d\n", do_update_this_frame);
-    xpprintf(__FILE__ ": time to next update : %d\n\n", time_to_update);
+    xpprintf(__FILE__ ": frame loops / update : %ld / %d\n",
+	     frame_loops, do_update_this_frame);
 #endif
 
     /*
@@ -541,29 +542,31 @@ void Update_objects(void)
     /*
      * Special items.
      */
-    /* kps - this is done too often at high fps */
-    for (i=0; i<NUM_ITEMS; i++)
-	if (World.items[i].num < World.items[i].max
-	    && World.items[i].chance > 0
-	    && (rfrac() * World.items[i].chance) < 1.0f) {
-
-	    Place_item(i, -1);
-	}
+    if (do_update_this_frame) {
+	for (i = 0; i < NUM_ITEMS; i++)
+	    if (World.items[i].num < World.items[i].max
+		&& World.items[i].chance > 0
+		&& (rfrac() * World.items[i].chance) < 1.0f) {
+		
+		Place_item(i, -1);
+	    }
+    }
 
     /*
      * Let the fuel stations regenerate some fuel.
      */
     if (NumPlayers > 0) {
-	DFLOAT fuel = (NumPlayers * timeStep * STATION_REGENERATION);
+	DFLOAT fuel = (NumPlayers * STATION_REGENERATION);
 	int frames_per_update = MAX_STATION_FUEL / (fuel * BLOCK_SZ);
-	for (i=0; i<World.NumFuels; i++) {
+	for (i = 0; i < World.NumFuels; i++) {
 	    if (World.fuel[i].fuel == MAX_STATION_FUEL) {
 		continue;
 	    }
 	    if ((World.fuel[i].fuel += fuel) >= MAX_STATION_FUEL) {
 		World.fuel[i].fuel = MAX_STATION_FUEL;
 	    }
-	    else if (World.fuel[i].last_change + frames_per_update > frame_loops) {
+	    else if (World.fuel[i].last_change + frames_per_update
+		     > frame_loops) {
 		/*
 		 * We don't send fuelstation info to the clients every frame
 		 * if it wouldn't change their display.
@@ -613,6 +616,8 @@ void Update_objects(void)
     /*
      * Update ECM blasts
      */
+    /* kps - shifting by 1 bit each frame here is not too clever at
+     * high fps */
     for (i = 0; i < NumEcms; i++) {
 	if ((Ecms[i]->size >>= 1) == 0) {
 	    if (Ecms[i]->id != NO_ID)
@@ -628,7 +633,7 @@ void Update_objects(void)
      * Update transporters
      */
     for (i = 0; i < NumTransporters; i++) {
-	if (--Transporters[i]->count <= 0) {
+	if ((Transporters[i]->count -= timeStep) <= 0) {
 	    free(Transporters[i]);
 	    --NumTransporters;
 	    Transporters[i] = Transporters[NumTransporters];
@@ -646,7 +651,7 @@ void Update_objects(void)
     for (i = 0; i < World.NumCannons; i++) {
 	cannon_t *cannon = World.cannon + i;
 	if (cannon->dead_time > 0) {
-	    if (!--cannon->dead_time) {
+	    if ((cannon->dead_time -= timeStep) <= 0) {
 		int bx, by;
 
 		bx = CLICK_TO_BLOCK(cannon->pos.cx);
@@ -654,24 +659,28 @@ void Update_objects(void)
 		World.block[bx][by] = CANNON;
 		cannon->conn_mask = 0;
 		cannon->last_change = frame_loops;
+		cannon->dead_time = 0;
 	    }
 	    continue;
 	} else {
 	    /* don't check too often, because this gets quite expensive
 	       on maps with many cannons with defensive items */
-	    if (cannonsUseItems
+	    if (do_update_this_frame
+		&& cannonsUseItems
 		&& cannonsDefend
 		&& rfrac() < 0.65) {
 		Cannon_check_defense(i);
 	    }
-	    if (!BIT(cannon->used, HAS_EMERGENCY_SHIELD)
+	    if (do_update_this_frame
+		&& !BIT(cannon->used, HAS_EMERGENCY_SHIELD)
 		&& !BIT(cannon->used, HAS_PHASING_DEVICE)
-		&& !cannon->damaged
-		&& !cannon->tractor_count
+		&& (cannon->damaged <= 0)
+		&& (cannon->tractor_count <= 0)
 		&& rfrac() * 16 < 1) {
 		Cannon_check_fire(i);
 	    }
-	    else if (cannonsUseItems
+	    else if (do_update_this_frame
+		     && cannonsUseItems
 		     && itemProbMult > 0
 		     && cannonItemProbMult > 0) {
 		int item = (int)(rfrac() * NUM_ITEMS);
@@ -686,8 +695,8 @@ void Update_objects(void)
 		}
 	    }
 	}
-	if (cannon->damaged > 0) {
-	    cannon->damaged--;
+	if ((cannon->damaged -= timeStep) <= 0) {
+	    cannon->damaged = 0;
 	}
 	if (cannon->tractor_count > 0) {
 	    int ind = GetInd[cannon->tractor_target];
@@ -699,20 +708,22 @@ void Update_objects(void)
 		General_tractor_beam(-1, cannon->pos.cx, cannon->pos.cy,
 				     cannon->item[ITEM_TRACTOR_BEAM], ind,
 				     cannon->tractor_is_pressor);
-		cannon->tractor_count--;
+		if ((cannon->tractor_count -= timeStep) <= 0)
+		    cannon->tractor_count = 0;
 	    } else {
 		cannon->tractor_count = 0;
 	    }
 	}
 	if (cannon->emergency_shield_left > 0) {
-	    if (--cannon->emergency_shield_left <= 0) {
+	    if ((cannon->emergency_shield_left -= timeStep) <= 0) {
 		CLR_BIT(cannon->used, HAS_EMERGENCY_SHIELD);
 		sound_play_sensors(cannon->pos.cx, cannon->pos.cy,
 				   EMERGENCY_SHIELD_OFF_SOUND);
 	    }
 	}
 	if (cannon->phasing_left > 0) {
-	    if (--cannon->phasing_left <= 0) {
+	    if ((cannon->phasing_left -= timeStep) <= 0) {
+		
 		CLR_BIT(cannon->used, HAS_PHASING_DEVICE);
 	        sound_play_sensors(cannon->pos.cx, cannon->pos.cy,
 				   PHASING_OFF_SOUND);
@@ -725,12 +736,13 @@ void Update_objects(void)
      */
     for (i = 0; i < World.NumTargets; i++) {
 	if (World.targets[i].dead_time > 0) {
-	    if (!--World.targets[i].dead_time) {
+	    if ((World.targets[i].dead_time -= timeStep) <= 0) {
 		World.block[World.targets[i].pos.cx / BLOCK_CLICKS]
 		    [World.targets[i].pos.cy / BLOCK_CLICKS] = TARGET;
 		World.targets[i].conn_mask = 0;
 		World.targets[i].update_mask = (unsigned)-1;
 		World.targets[i].last_change = frame_loops;
+		World.targets[i].dead_time = 0;
 
 		if (targetSync) {
 		    unsigned short team = World.targets[i].team;
@@ -754,15 +766,13 @@ void Update_objects(void)
 	else if (World.targets[i].damage == TARGET_DAMAGE) {
 	    continue;
 	}
-	World.targets[i].damage += TARGET_REPAIR_PER_FRAME * timeStep;
+
+	World.targets[i].damage += TARGET_REPAIR_PER_FRAME;
 	if (World.targets[i].damage >= TARGET_DAMAGE) {
 	    World.targets[i].damage = TARGET_DAMAGE;
 	}
-	/* kps - bug
-	 * TARGET_REPAIR_PER_FRAME==0
-	 * TARGET_UPDATE_DELAY==infinite (C/0)
-	 */
-	else if (World.targets[i].last_change + TARGET_UPDATE_DELAY < frame_loops) {
+	else if (World.targets[i].last_change + TARGET_UPDATE_DELAY
+		 < frame_loops) {
 	    /*
 	     * We don't send target info to the clients every frame
 	     * if the latest repair wouldn't change their display.
@@ -780,7 +790,7 @@ void Update_objects(void)
      * Player loop. Computes miscellaneous updates.
      *
      */
-    for (i=0; i<NumPlayers; i++) {
+    for (i = 0; i < NumPlayers; i++) {
 	long tf = 0;
 
 	pl = Players[i];
@@ -791,8 +801,8 @@ void Update_objects(void)
 	LIMIT(pl->turnresistance, MIN_PLAYER_TURNRESISTANCE,
 				  MAX_PLAYER_TURNRESISTANCE);
 
-	if (pl->damaged > 0)
-	    pl->damaged--;
+	if ((pl->damaged -= timeStep) <= 0)
+	    pl->damaged = 0;
 
 
 	/* kps - fix these */
@@ -876,7 +886,9 @@ void Update_objects(void)
 	    continue;
 
 	if (pl->stunned > 0) {
-	    pl->stunned--;
+	    pl->stunned -= timeStep;
+	    if (pl->stunned <= 0)
+		pl->stunned = 0;
 	    CLR_BIT(pl->used, HAS_SHIELD|HAS_LASER|HAS_SHOT);
 	    CLR_BIT(pl->status, THRUSTING);
 	}
@@ -898,7 +910,7 @@ void Update_objects(void)
 	}
 
 	if (BIT(pl->used, HAS_PHASING_DEVICE)) {
-	    if (--pl->phasing_left <= 0) {
+	    if ((pl->phasing_left -= timeStep) <= 0) {
 		if (pl->item[ITEM_PHASING]) {
 		    Phasing(i, 1);
 		} else {
@@ -910,7 +922,7 @@ void Update_objects(void)
 	if (BIT(pl->used, HAS_EMERGENCY_THRUST)) {
 	    if (pl->fuel.sum > 0
 		&& BIT(pl->status, THRUSTING)
-		&& --pl->emergency_thrust_left <= 0) {
+		&& (pl->emergency_thrust_left -= timeStep) <= 0) {
 		if (pl->item[ITEM_EMERGENCY_THRUST]) {
 		    Emergency_thrust(i, true);
 		} else {
@@ -922,7 +934,7 @@ void Update_objects(void)
 	if (BIT(pl->used, HAS_EMERGENCY_SHIELD)) {
 	    if (pl->fuel.sum > 0
 		&& BIT(pl->used, HAS_SHIELD)
-		&& --pl->emergency_shield_left <= 0) {
+		&& ((pl->emergency_shield_left -= timeStep) <= 0)) {
 		if (pl->item[ITEM_EMERGENCY_SHIELD]) {
 		    Emergency_shield(i, true);
 		} else {
@@ -1020,7 +1032,7 @@ void Update_objects(void)
 #define UPDATE_RATE 100
 
 	for (j = 0; j < NumPlayers; j++) {
-	    if (pl->forceVisible)
+	    if (pl->forceVisible > 0)
 		Players[j]->visibility[i].canSee = 1;
 
 	    if (i == j || !BIT(Players[j]->used, HAS_CLOAKING_DEVICE))
@@ -1060,11 +1072,11 @@ void Update_objects(void)
 		int ct = pl->fuel.current;
 
 		do {
-		    if (World.fuel[pl->fs].fuel > REFUEL_RATE * timeStep) {
-			World.fuel[pl->fs].fuel -= REFUEL_RATE * timeStep;
+		    if (World.fuel[pl->fs].fuel > REFUEL_RATE) {
+			World.fuel[pl->fs].fuel -= REFUEL_RATE;
 			World.fuel[pl->fs].conn_mask = 0;
 			World.fuel[pl->fs].last_change = frame_loops;
-			Add_fuel(&(pl->fuel), REFUEL_RATE * timeStep);
+			Add_fuel(&(pl->fuel), REFUEL_RATE);
 		    } else {
 			Add_fuel(&(pl->fuel), World.fuel[pl->fs].fuel);
 			World.fuel[pl->fs].fuel = 0;
@@ -1097,12 +1109,11 @@ void Update_objects(void)
 		int ct = pl->fuel.current;
 
 		do {
-		    if (pl->fuel.tank[pl->fuel.current] >
-			REFUEL_RATE * timeStep) {
+		    if (pl->fuel.tank[pl->fuel.current] > REFUEL_RATE) {
 			targ->damage += TARGET_FUEL_REPAIR_PER_FRAME;
 			targ->conn_mask = 0;
 			targ->last_change = frame_loops;
-			Add_fuel(&(pl->fuel), -REFUEL_RATE * timeStep);
+			Add_fuel(&(pl->fuel), -REFUEL_RATE);
 			if (targ->damage > TARGET_DAMAGE) {
 			    targ->damage = TARGET_DAMAGE;
 			    break;
@@ -1123,7 +1134,7 @@ void Update_objects(void)
 	    CLR_BIT(pl->used, HAS_SHIELD|HAS_CLOAKING_DEVICE|HAS_DEFLECTOR);
 	    CLR_BIT(pl->status, THRUSTING);
 	}
-	if (pl->fuel.sum > (pl->fuel.max - REFUEL_RATE * timeStep))
+	if (pl->fuel.sum > (pl->fuel.max - REFUEL_RATE))
 	    CLR_BIT(pl->used, HAS_REFUEL);
 
 	/*
@@ -1307,7 +1318,7 @@ void Update_objects(void)
 					PIXEL_TO_CLICK(w.y));
 	    pl->vel.x *= WORM_BRAKE_FACTOR;
 	    pl->vel.y *= WORM_BRAKE_FACTOR;
-	    pl->forceVisible += 15;
+	    pl->forceVisible += 15 * TIME_FACT;
 
 	    if ((j != pl->wormHoleHit) && (pl->wormHoleHit != -1)) {
 		World.wormHoles[pl->wormHoleHit].lastdest = j;
@@ -1361,8 +1372,9 @@ void Update_objects(void)
 
 	pl->updateVisibility = 0;
 
-	if (pl->forceVisible) {
-	    pl->forceVisible--;
+	if (pl->forceVisible > 0) {
+	    if ((pl->forceVisible -= timeStep) <= 0)
+		pl->forceVisible = 0;
 
 	    if (!pl->forceVisible)
 		pl->updateVisibility = 1;

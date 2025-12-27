@@ -34,8 +34,8 @@ void Player_position_limit(player *pl);
 void Player_position_debug(player *pl, const char *msg);
 
 #define Object_position_remember(o_) \
-	((o_)->prevpos.x = (o_)->pos.cx, \
-	 (o_)->prevpos.y = (o_)->pos.cy)
+	((o_)->prevpos.cx = (o_)->pos.cx, \
+	 (o_)->prevpos.cy = (o_)->pos.cy)
 #define Player_position_remember(p_) Object_position_remember(p_)
 
 #endif

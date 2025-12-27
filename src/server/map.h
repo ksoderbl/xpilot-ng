@@ -105,7 +105,7 @@
 #define DIR_DOWN		(3*RES/4)
 
 typedef struct {
-    cpos	pos;
+    clpos	pos;
     long	fuel;
     unsigned	conn_mask;
     long	last_change;
@@ -113,12 +113,13 @@ typedef struct {
 } fuel_t;
 
 typedef struct {
-    cpos	pos;
+    clpos	pos;
     DFLOAT	force;
+    int		type;
 } grav_t;
 
 typedef struct {
-    cpos		pos;
+    clpos		pos;
     int			dir;
     unsigned short	team;
 } base_t;
@@ -130,7 +131,7 @@ typedef struct {
 } baseorder_t;
 
 typedef struct {
-    cpos		pos;
+    clpos		pos;
     int			dir;
     int			dead_time;
     unsigned		conn_mask;
@@ -168,7 +169,7 @@ typedef struct {
 typedef enum { WORM_NORMAL, WORM_IN, WORM_OUT } wormType;
 
 typedef struct {
-    cpos		pos;
+    clpos		pos;
     int			lastdest,	/* last destination wormhole */
 			countdown;	/* if >0 warp to lastdest else random */
     bool		temporary;	/* wormhole was left by hyperjump */
@@ -178,7 +179,7 @@ typedef struct {
 } wormhole_t;
 
 typedef struct {
-    cpos		pos;
+    clpos		pos;
     bool		have;	/* true if this treasure has ball in it */
     unsigned short	team;	/* team of this treasure */
     int 		destroyed;	/* how often this treasure destroyed */
@@ -186,7 +187,7 @@ typedef struct {
 } treasure_t;
 
 typedef struct {
-    cpos		pos;
+    clpos		pos;
     unsigned short	team;
     int			dead_time;
     int			damage;
@@ -209,7 +210,7 @@ typedef struct {
 } team_t;
 
 typedef struct {
-    cpos	pos;
+    clpos	pos;
 } item_concentrator_t, asteroid_concentrator_t;
 
 extern bool is_polygon_map;
@@ -251,7 +252,7 @@ typedef struct {
     int			NumCannons;
     cannon_t		*cannon;
     int			NumChecks;
-    cpos		*check;
+    clpos		*check;
     int			NumWormholes;
     wormhole_t		*wormHoles;
     int			NumTreasures;
@@ -301,6 +302,7 @@ struct group {
     int type;
     unsigned int hit_mask;
     int team;
+    int item_id;
 };
 
 extern struct polystyle pstyles[256];

@@ -74,6 +74,8 @@ int		ShotsMax;		/* Max shots pr. player */
 bool		ShotsGravity;		/* Shots affected by gravity */
 int		fireRepeatRate;		/* Frames per autorepeat fire (0=off) */
 static DFLOAT	fireRepeatRateSetting;	/* Above is set through this */
+int		laserRepeatRate;	/* Frames per autorepeat laser (0=off) */
+static DFLOAT	laserRepeatRateSetting;	/* Above is set through this */
 
 bool		RawMode;		/* Let robots live and calculate
 					   frames even if there are n
@@ -339,6 +341,8 @@ int		recordFlushInterval;	/* Max seconds between storing data */
 char		*recordFileName;
 
 bool		useOldCode;		/* Choice of new and old code */
+bool		polygonMode;		/* Run server in polygon mode even
+					   with block based (.xp) mapfile */
 
 /*
 ** Two functions which can be used if an option
@@ -485,6 +489,16 @@ static option_desc options[] = {
 	valReal,
 	Timing_setup,
 	"Number of frames per automatic fire (0=off).\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
+	"laserRepeatRate",
+	"laserRepeat",
+	"2.0",
+	&laserRepeatRateSetting,
+	valReal,
+	Timing_setup,
+	"Number of frames per automatic laser pulse (0=off).\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
@@ -3572,6 +3586,18 @@ static option_desc options[] = {
 	"Use old code in some places when playing on a block based map?\n",
 	OPT_ORIGIN_ANY | OPT_DEFAULTS
     },
+    {
+	"polygonMode",
+	"polygonMode",
+	"false",
+	&polygonMode,
+	valBool,
+	tuner_dummy,
+	"Force use of polygon protocol when communicating with clients?\n"
+	"(useful for debugging if you want to see the polygons created\n"
+	"in the blocks to polygons conversion function).\n",
+	OPT_ORIGIN_ANY | OPT_DEFAULTS
+    },
 };
 
 
@@ -3695,6 +3721,7 @@ void Timing_setup(void)
 
     ShotsLife = ShotsLifeSetting * TIME_FACT;
     fireRepeatRate = fireRepeatRateSetting * TIME_FACT;
+    laserRepeatRate = laserRepeatRateSetting * TIME_FACT;
 
     friction = frictionSetting;
 
@@ -3719,4 +3746,5 @@ void Timing_setup(void)
     xpprintf(__FILE__ ": friction          = %f\n", friction);
 #endif
 }
+
 

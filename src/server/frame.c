@@ -66,13 +66,14 @@ typedef unsigned short shuffle_t;
 
 /*
  * Structure for calculating if a click position is visible by a player.
+ * Used for map state info updating.
  * The following always holds:
  *	(world.cx >= realWorld.cx && world.cy >= realWorld.cy)
  */
 typedef struct {
-    cpos	world;			/* Lower left hand corner is this */
+    clpos	world;			/* Lower left hand corner is this */
 					/* world coordinate */
-    cpos	realWorld;		/* If the player is on the edge of
+    clpos	realWorld;		/* If the player is on the edge of
 					   the screen, these are the world
 					   coordinates before adjustment... */
 } click_visibility_t;
@@ -156,7 +157,11 @@ static unsigned		fastshot_num[DEBRIS_TYPES * 2],
     }
 
 
-
+/*
+ * Note - I've changed the block_inview calls to click_inview calls,
+ * which means that the center of a block has to be visible to be
+ * inview.
+ */
 static int click_inview(click_visibility_t *v, int cx, int cy)
 {
     return ((cx > v->world.cx && cx < v->world.cx + view_cwidth)
@@ -164,17 +169,6 @@ static int click_inview(click_visibility_t *v, int cx, int cy)
 	&& ((cy > v->world.cy && cy < v->world.cy + view_cheight)
 	    || (cy > v->realWorld.cy && cy < v->realWorld.cy + view_cheight));
 }
-
-#if 0
-/* kps - ng does not want this */
-static int block_inview(block_visibility_t *bv, int x, int y)
-{
-    return ((x > bv->world.x && x < bv->world.x + horizontal_blocks)
-	    || (x > bv->realWorld.x && x < bv->realWorld.x + horizontal_blocks))
-	&& ((y > bv->world.y && y < bv->world.y + vertical_blocks)
-	    || (y > bv->realWorld.y && y < bv->realWorld.y + vertical_blocks));
-}
-#endif
 
 #define DEBRIS_STORE(xd,yd,color,offset) \
     int			i;						  \
@@ -507,19 +501,19 @@ static int Frame_status(int conn, int ind)
 
     if (BIT(pl->used, HAS_EMERGENCY_THRUST))
 	Send_thrusttime(conn,
-			pl->emergency_thrust_left,
-			pl->emergency_thrust_max);
+			pl->emergency_thrust_left >> TIME_BITS,
+			pl->emergency_thrust_max >> TIME_BITS);
     if (BIT(pl->used, HAS_EMERGENCY_SHIELD))
 	Send_shieldtime(conn,
-			pl->emergency_shield_left,
-			EMERGENCY_SHIELD_TIME);
+			pl->emergency_shield_left >> TIME_BITS,
+			EMERGENCY_SHIELD_TIME >> TIME_BITS);
     if (BIT(pl->status, SELF_DESTRUCT) && pl->count > 0) {
 	Send_destruct(conn, pl->count >> TIME_BITS);
     }
     if (BIT(pl->used, HAS_PHASING_DEVICE))
 	Send_phasingtime(conn,
-			 pl->phasing_left,
-			 pl->phasing_max);
+			 pl->phasing_left >> TIME_BITS,
+			 pl->phasing_max >> TIME_BITS);
     if (ShutdownServer != -1) {
 	Send_shutdown(conn, ShutdownServer, ShutdownDelay);
     }
@@ -531,16 +525,12 @@ static int Frame_status(int conn, int ind)
     return 1;
 }
 
-/* kps - fix this asap, remove the block_inview stuff */
 static void Frame_map(int conn, int ind)
 {
     player		*pl = Players[ind];
     int			i,
 			k,
-			x,
-			y,
 			conn_bit = (1 << conn);
-    block_visibility_t	bv;
     const int		fuel_packet_size = 5;
     const int		cannon_packet_size = 5;
     const int		target_packet_size = 7;
@@ -549,27 +539,6 @@ static void Frame_map(int conn, int ind)
     int			max_packet;
     int			packet_count;
 
-    x = pl->pos.bx;
-    y = pl->pos.by;
-    bv.world.x = x - (horizontal_blocks >> 1);
-    bv.world.y = y - (vertical_blocks >> 1);
-    bv.realWorld = bv.world;
-    if (BIT(World.rules->mode, WRAP_PLAY)) {
-	if (bv.world.x < 0 && bv.world.x + horizontal_blocks < World.x) {
-	    bv.world.x += World.x;
-	}
-	else if (bv.world.x > 0 && bv.world.x + horizontal_blocks > World.x) {
-	    bv.realWorld.x -= World.x;
-	}
-	if (bv.world.y < 0 && bv.world.y + vertical_blocks < World.y) {
-	    bv.world.y += World.y;
-	}
-	else if (bv.world.y > 0 && bv.world.y + vertical_blocks > World.y) {
-	    bv.realWorld.y -= World.y;
-	}
-    }
-
-    /* kps - fix these for ng (remove block_inview stuff) */
     packet_count = 0;
     max_packet = MAX(5, bytes_left / target_packet_size);
     i = MAX(0, pl->last_target_update);
@@ -582,7 +551,7 @@ static void Frame_map(int conn, int ind)
 	if (BIT(targ->update_mask, conn_bit)
 	    || (BIT(targ->conn_mask, conn_bit) == 0
 		&& click_inview(&cv, targ->pos.cx, targ->pos.cy))) {
-	    Send_target(conn, i, targ->dead_time, targ->damage);
+	    Send_target(conn, i, targ->dead_time >> TIME_BITS, targ->damage);
 	    pl->last_target_update = i;
 	    bytes_left -= target_packet_size;
 	    if (++packet_count >= max_packet) {
@@ -600,7 +569,7 @@ static void Frame_map(int conn, int ind)
 	}
 	if (click_inview(&cv, World.cannon[i].pos.cx, World.cannon[i].pos.cy)) {
 	    if (BIT(World.cannon[i].conn_mask, conn_bit) == 0) {
-		Send_cannon(conn, i, World.cannon[i].dead_time);
+		Send_cannon(conn, i, World.cannon[i].dead_time >> TIME_BITS);
 		pl->last_cannon_update = i;
 		bytes_left -= max_packet * cannon_packet_size;
 		if (++packet_count >= max_packet) {
@@ -1408,7 +1377,7 @@ void Frame_update(void)
 	}
 
 	if (Players[ind]->damaged > 0) {
-	    Send_damaged(conn, Players[ind]->damaged);
+	    Send_damaged(conn, Players[ind]->damaged >> TIME_BITS);
 	} else {
 	    Frame_parameters(conn, ind);
 	    if (Frame_status(conn, ind) <= 0) {

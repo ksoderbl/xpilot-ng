@@ -45,7 +45,7 @@ SRCS = \
 	id.c item.c laser.c \
 	map.c metaserver.c netserver.c \
 	object.c objpos.c option.c \
-	parser.c play.c player.c \
+	parser.c play.c player.c polygon.c \
 	rank.c recwrap.c robot.c robotdef.c rules.c \
 	saudio.c sched.c score.c server.c \
 	ship.c shipshape_s.c shot.c showtime.c srecord.c stratbot.c \
@@ -59,7 +59,7 @@ OBJS = \
 	id.o item.o laser.o \
 	map.o metaserver.o netserver.o \
 	object.o objpos.o option.o \
-	parser.o play.o player.o \
+	parser.o play.o player.o polygon.o \
 	rank.o recwrap.o robot.o robotdef.o rules.o \
 	saudio.o sched.o score.o server.o \
 	ship.o shipshape_s.o shot.o showtime.o srecord.o stratbot.o \

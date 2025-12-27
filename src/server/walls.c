@@ -97,15 +97,117 @@ static void Move_player_new(int ind);
 static void Turn_player_old(int ind);
 static void Turn_player_new(int ind);
 
+
+/* polygon map related stuff */
+
+/* start */
+
+/* Maximum line length 32767-B_CLICKS, 30000 used in checks
+   There's a minimum map size to avoid "too much wrapping". A bit smaller
+   than that would cause rare errors for fast-moving things. I haven't
+   bothered to figure out what the limit is. 80k x 80k clicks should
+   be more than enough (probably...). */
+#define B_SHIFT 11
+#define B_CLICKS (1 << B_SHIFT)
+#define B_MASK (B_CLICKS - 1)
+#define CUTOFF (2 * BLOCK_CLICKS) /* Not sure about the optimum value */
+#define MAX_MOVE 32000
+#define SEPARATION_DIST 64
+/* This must be increased if the ship corners are allowed to go farther
+   when turning! */
+#define MAX_SHAPE_OFFSET (15 * CLICK)
+
+#if ((-3) / 2 != -1) || ((-3) % 2 != -1)
+#error "This code assumes that negative numbers round upwards."
+#endif
+
+struct collans {
+    int line;
+    int point;
+    clvec moved;
+};
+
+struct tl2 {
+    int base;
+    int x;
+    int y;
+};
+
+struct move {
+    clvec start;
+    clvec delta;
+    int hit_mask;
+};
+
+struct bline {
+    clvec start;
+    clvec delta;
+    DFLOAT c;
+    DFLOAT s;
+    short group;
+};
+
+struct blockinfo {
+    unsigned short distance;
+    unsigned short *lines;
+    unsigned short *points;
+};
+
+struct inside_block {
+    short *y;
+    short *lines;
+    struct inside_block *next;
+    short group;
+    char base_value;
+};
+
+struct inside_block *inside_table;
+
+struct test {
+    double distance;
+    int inside;
+    struct tempy *y;
+    struct templine *lines;
+};
+
+struct test *temparray;
+
+shipobj ball_wire;
+
+#define LINEY(X, Y, BASE, ARG)  (((Y)*(ARG)+(BASE))/(X))
+#define SIDE(X, Y, LINE) (linet[(LINE)].delta.cy * (X) - linet[(LINE)].delta.cx * (Y))
+#define SIGN(X) ((X) >= 0 ? 1 : -1)
+
+struct bline *linet;
+#define S_LINES 100 /* stupid hack */
+
+/* kps - dynamic creation of groups asap! */
+struct group groups[1000] = { /* !@# */
+    {0, 0},
+    {0, 0},
+    {0, 0}};
+
+struct blockinfo *blockline;
+
+unsigned short *llist;
+
+unsigned short *plist;
+
+int linec = 0;
+
+int num_polys = 0;
+
+int num_groups = 0;
+
+int mapx, mapy;
+
+
 void Walls_init(void)
 {
-#if 0
-    if (!is_polygon_map)
-	Walls_init_old();
-    else
-	Walls_init_new();
-#endif
-    /* kps hack */
+    /*
+     * Always do the walls_init_new(), since we treat the
+     * block map as a polygon map.
+     */
     if (!is_polygon_map)
 	Walls_init_old();
     Walls_init_new();
@@ -410,14 +512,14 @@ static void Bounce_edge(move_state_t *ms, move_bounce_t bounce)
 {
     if (bounce == BounceHorLo) {
 	if (ms->mip->edge_bounce) {
-	    ms->todo.x = -ms->todo.x;
+	    ms->todo.cx = -ms->todo.cx;
 	    ms->vel.x = -ms->vel.x;
 	    if (!ms->mip->pl) {
 		ms->dir = MOD2(RES / 2 - ms->dir, RES);
 	    }
 	}
 	else {
-	    ms->todo.x = 0;
+	    ms->todo.cx = 0;
 	    ms->vel.x = 0;
 	    if (!ms->mip->pl) {
 		ms->dir = (ms->vel.y < 0) ? (3*RES/4) : RES/4;
@@ -426,14 +528,14 @@ static void Bounce_edge(move_state_t *ms, move_bounce_t bounce)
     }
     else if (bounce == BounceHorHi) {
 	if (ms->mip->edge_bounce) {
-	    ms->todo.x = -ms->todo.x;
+	    ms->todo.cx = -ms->todo.cx;
 	    ms->vel.x = -ms->vel.x;
 	    if (!ms->mip->pl) {
 		ms->dir = MOD2(RES / 2 - ms->dir, RES);
 	    }
 	}
 	else {
-	    ms->todo.x = 0;
+	    ms->todo.cx = 0;
 	    ms->vel.x = 0;
 	    if (!ms->mip->pl) {
 		ms->dir = (ms->vel.y < 0) ? (3*RES/4) : RES/4;
@@ -442,14 +544,14 @@ static void Bounce_edge(move_state_t *ms, move_bounce_t bounce)
     }
     else if (bounce == BounceVerLo) {
 	if (ms->mip->edge_bounce) {
-	    ms->todo.y = -ms->todo.y;
+	    ms->todo.cy = -ms->todo.cy;
 	    ms->vel.y = -ms->vel.y;
 	    if (!ms->mip->pl) {
 		ms->dir = MOD2(RES - ms->dir, RES);
 	    }
 	}
 	else {
-	    ms->todo.y = 0;
+	    ms->todo.cy = 0;
 	    ms->vel.y = 0;
 	    if (!ms->mip->pl) {
 		ms->dir = (ms->vel.x < 0) ? (RES/2) : 0;
@@ -458,14 +560,14 @@ static void Bounce_edge(move_state_t *ms, move_bounce_t bounce)
     }
     else if (bounce == BounceVerHi) {
 	if (ms->mip->edge_bounce) {
-	    ms->todo.y = -ms->todo.y;
+	    ms->todo.cy = -ms->todo.cy;
 	    ms->vel.y = -ms->vel.y;
 	    if (!ms->mip->pl) {
 		ms->dir = MOD2(RES - ms->dir, RES);
 	    }
 	}
 	else {
-	    ms->todo.y = 0;
+	    ms->todo.cy = 0;
 	    ms->vel.y = 0;
 	    if (!ms->mip->pl) {
 		ms->dir = (ms->vel.x < 0) ? (RES/2) : 0;
@@ -482,28 +584,28 @@ static void Bounce_wall(move_state_t *ms, move_bounce_t bounce)
 	return;
     }
     if (bounce == BounceHorLo) {
-	ms->todo.x = -ms->todo.x;
+	ms->todo.cx = -ms->todo.cx;
 	ms->vel.x = -ms->vel.x;
 	if (!ms->mip->pl) {
 	    ms->dir = MOD2(RES/2 - ms->dir, RES);
 	}
     }
     else if (bounce == BounceHorHi) {
-	ms->todo.x = -ms->todo.x;
+	ms->todo.cx = -ms->todo.cx;
 	ms->vel.x = -ms->vel.x;
 	if (!ms->mip->pl) {
 	    ms->dir = MOD2(RES/2 - ms->dir, RES);
 	}
     }
     else if (bounce == BounceVerLo) {
-	ms->todo.y = -ms->todo.y;
+	ms->todo.cy = -ms->todo.cy;
 	ms->vel.y = -ms->vel.y;
 	if (!ms->mip->pl) {
 	    ms->dir = MOD2(RES - ms->dir, RES);
 	}
     }
     else if (bounce == BounceVerHi) {
-	ms->todo.y = -ms->todo.y;
+	ms->todo.cy = -ms->todo.cy;
 	ms->vel.y = -ms->vel.y;
 	if (!ms->mip->pl) {
 	    ms->dir = MOD2(RES - ms->dir, RES);
@@ -513,8 +615,8 @@ static void Bounce_wall(move_state_t *ms, move_bounce_t bounce)
 	clvec t = ms->todo;
 	vector v = ms->vel;
 	if (bounce == BounceLeftDown) {
-	    ms->todo.x = -t.y;
-	    ms->todo.y = -t.x;
+	    ms->todo.cx = -t.cy;
+	    ms->todo.cy = -t.cx;
 	    ms->vel.x = -v.y;
 	    ms->vel.y = -v.x;
 	    if (!ms->mip->pl) {
@@ -522,8 +624,8 @@ static void Bounce_wall(move_state_t *ms, move_bounce_t bounce)
 	    }
 	}
 	else if (bounce == BounceLeftUp) {
-	    ms->todo.x = t.y;
-	    ms->todo.y = t.x;
+	    ms->todo.cx = t.cy;
+	    ms->todo.cy = t.cx;
 	    ms->vel.x = v.y;
 	    ms->vel.y = v.x;
 	    if (!ms->mip->pl) {
@@ -531,8 +633,8 @@ static void Bounce_wall(move_state_t *ms, move_bounce_t bounce)
 	    }
 	}
 	else if (bounce == BounceRightDown) {
-	    ms->todo.x = t.y;
-	    ms->todo.y = t.x;
+	    ms->todo.cx = t.cy;
+	    ms->todo.cy = t.cx;
 	    ms->vel.x = v.y;
 	    ms->vel.y = v.x;
 	    if (!ms->mip->pl) {
@@ -540,8 +642,8 @@ static void Bounce_wall(move_state_t *ms, move_bounce_t bounce)
 	    }
 	}
 	else if (bounce == BounceRightUp) {
-	    ms->todo.x = -t.y;
-	    ms->todo.y = -t.x;
+	    ms->todo.cx = -t.cy;
+	    ms->todo.cy = -t.cx;
 	    ms->vel.x = -v.y;
 	    ms->vel.y = -v.x;
 	    if (!ms->mip->pl) {
@@ -595,41 +697,41 @@ void Move_segment_old(move_state_t *ms)
      */
     ms->crash = NotACrash;
     ms->bounce = NotABounce;
-    ms->done.x = 0;
-    ms->done.y = 0;
+    ms->done.cx = 0;
+    ms->done.cy = 0;
 
     enter = ms->pos;
-    if (enter.x < 0 || enter.x >= mp.click_width
-	|| enter.y < 0 || enter.y >= mp.click_height) {
+    if (enter.cx < 0 || enter.cx >= mp.click_width
+	|| enter.cy < 0 || enter.cy >= mp.click_height) {
 
 	if (!mi->edge_wrap) {
 	    ms->crash = CrashUniverse;
 	    return;
 	}
-	if (enter.x < 0) {
-	    enter.x += mp.click_width;
-	    if (enter.x < 0) {
+	if (enter.cx < 0) {
+	    enter.cx += mp.click_width;
+	    if (enter.cx < 0) {
 		ms->crash = CrashUniverse;
 		return;
 	    }
 	}
-	else if (enter.x >= mp.click_width) {
-	    enter.x -= mp.click_width;
-	    if (enter.x >= mp.click_width) {
+	else if (enter.cx >= mp.click_width) {
+	    enter.cx -= mp.click_width;
+	    if (enter.cx >= mp.click_width) {
 		ms->crash = CrashUniverse;
 		return;
 	    }
 	}
-	if (enter.y < 0) {
-	    enter.y += mp.click_height;
-	    if (enter.y < 0) {
+	if (enter.cy < 0) {
+	    enter.cy += mp.click_height;
+	    if (enter.cy < 0) {
 		ms->crash = CrashUniverse;
 		return;
 	    }
 	}
-	else if (enter.y >= mp.click_height) {
-	    enter.y -= mp.click_height;
-	    if (enter.y >= mp.click_height) {
+	else if (enter.cy >= mp.click_height) {
+	    enter.cy -= mp.click_height;
+	    if (enter.cy >= mp.click_height) {
 		ms->crash = CrashUniverse;
 		return;
 	    }
@@ -639,36 +741,36 @@ void Move_segment_old(move_state_t *ms)
 
     sign.x = (ms->vel.x < 0) ? -1 : 1;
     sign.y = (ms->vel.y < 0) ? -1 : 1;
-    block.x = enter.x / BLOCK_CLICKS;
-    block.y = enter.y / BLOCK_CLICKS;
+    block.x = enter.cx / BLOCK_CLICKS;
+    block.y = enter.cy / BLOCK_CLICKS;
     if (walldist[block.x][block.y] > 2) {
 	int maxcl = ((walldist[block.x][block.y] - 2) * BLOCK_CLICKS) >> 1;
-	if (maxcl >= sign.x * ms->todo.x && maxcl >= sign.y * ms->todo.y) {
+	if (maxcl >= sign.x * ms->todo.cx && maxcl >= sign.y * ms->todo.cy) {
 	    /* entire movement is possible. */
-	    ms->done.x = ms->todo.x;
-	    ms->done.y = ms->todo.y;
+	    ms->done.cx = ms->todo.cx;
+	    ms->done.cy = ms->todo.cy;
 	}
-	else if (sign.x * ms->todo.x > sign.y * ms->todo.y) {
+	else if (sign.x * ms->todo.cx > sign.y * ms->todo.cy) {
 	    /* horizontal movement. */
-	    ms->done.x = sign.x * maxcl;
-	    ms->done.y = ms->todo.y * maxcl / (sign.x * ms->todo.x);
+	    ms->done.cx = sign.x * maxcl;
+	    ms->done.cy = ms->todo.cy * maxcl / (sign.x * ms->todo.cx);
 	}
 	else {
 	    /* vertical movement. */
-	    ms->done.x = ms->todo.x * maxcl / (sign.y * ms->todo.y);
-	    ms->done.y = sign.y * maxcl;
+	    ms->done.cx = ms->todo.cx * maxcl / (sign.y * ms->todo.cy);
+	    ms->done.cy = sign.y * maxcl;
 	}
-	ms->todo.x -= ms->done.x;
-	ms->todo.y -= ms->done.y;
+	ms->todo.cx -= ms->done.cx;
+	ms->todo.cy -= ms->done.cy;
 	return;
     }
 
-    offset.x = enter.x - block.x * BLOCK_CLICKS;
-    offset.y = enter.y - block.y * BLOCK_CLICKS;
+    offset.cx = enter.cx - block.x * BLOCK_CLICKS;
+    offset.cy = enter.cy - block.y * BLOCK_CLICKS;
     inside = 1;
-    if (offset.x == 0) {
+    if (offset.cx == 0) {
 	inside = 0;
-	if (sign.x == -1 && (offset.x = BLOCK_CLICKS, --block.x < 0)) {
+	if (sign.x == -1 && (offset.cx = BLOCK_CLICKS, --block.x < 0)) {
 	    if (mi->edge_wrap) {
 		block.x += World.x;
 	    }
@@ -678,15 +780,15 @@ void Move_segment_old(move_state_t *ms)
 	    }
 	}
     }
-    else if (enter.x == mp.click_width - 1
+    else if (enter.cx == mp.click_width - 1
 	     && !mi->edge_wrap
 	     && ms->vel.x > 0) {
 	Bounce_edge(ms, BounceHorHi);
 	return;
     }
-    if (offset.y == 0) {
+    if (offset.cy == 0) {
 	inside = 0;
-	if (sign.y == -1 && (offset.y = BLOCK_CLICKS, --block.y < 0)) {
+	if (sign.y == -1 && (offset.cy = BLOCK_CLICKS, --block.y < 0)) {
 	    if (mi->edge_wrap) {
 		block.y += World.y;
 	    }
@@ -696,7 +798,7 @@ void Move_segment_old(move_state_t *ms)
 	    }
 	}
     }
-    else if (enter.y == mp.click_height - 1
+    else if (enter.cy == mp.click_height - 1
 	     && !mi->edge_wrap
 	     && ms->vel.y > 0) {
 	Bounce_edge(ms, BounceVerHi);
@@ -705,64 +807,64 @@ void Move_segment_old(move_state_t *ms)
 
     need_adjust = 0;
     if (sign.x == -1) {
-	if (offset.x + ms->todo.x < 0) {
-	    leave.x = enter.x - offset.x;
+	if (offset.cx + ms->todo.cx < 0) {
+	    leave.cx = enter.cx - offset.cx;
 	    need_adjust = 1;
 	}
 	else {
-	    leave.x = enter.x + ms->todo.x;
+	    leave.cx = enter.cx + ms->todo.cx;
 	}
     }
     else {
-	if (offset.x + ms->todo.x > BLOCK_CLICKS) {
-	    leave.x = enter.x + BLOCK_CLICKS - offset.x;
+	if (offset.cx + ms->todo.cx > BLOCK_CLICKS) {
+	    leave.cx = enter.cx + BLOCK_CLICKS - offset.cx;
 	    need_adjust = 1;
 	}
 	else {
-	    leave.x = enter.x + ms->todo.x;
+	    leave.cx = enter.cx + ms->todo.cx;
 	}
-	if (leave.x == mp.click_width && !mi->edge_wrap) {
-	    leave.x--;
+	if (leave.cx == mp.click_width && !mi->edge_wrap) {
+	    leave.cx--;
 	    need_adjust = 1;
 	}
     }
     if (sign.y == -1) {
-	if (offset.y + ms->todo.y < 0) {
-	    leave.y = enter.y - offset.y;
+	if (offset.cy + ms->todo.cy < 0) {
+	    leave.cy = enter.cy - offset.cy;
 	    need_adjust = 1;
 	}
 	else {
-	    leave.y = enter.y + ms->todo.y;
+	    leave.cy = enter.cy + ms->todo.cy;
 	}
     }
     else {
-	if (offset.y + ms->todo.y > BLOCK_CLICKS) {
-	    leave.y = enter.y + BLOCK_CLICKS - offset.y;
+	if (offset.cy + ms->todo.cy > BLOCK_CLICKS) {
+	    leave.cy = enter.cy + BLOCK_CLICKS - offset.cy;
 	    need_adjust = 1;
 	}
 	else {
-	    leave.y = enter.y + ms->todo.y;
+	    leave.cy = enter.cy + ms->todo.cy;
 	}
-	if (leave.y == mp.click_height && !mi->edge_wrap) {
-	    leave.y--;
+	if (leave.cy == mp.click_height && !mi->edge_wrap) {
+	    leave.cy--;
 	    need_adjust = 1;
 	}
     }
-    if (need_adjust && ms->todo.y && ms->todo.x) {
-	double wx = (double)(leave.x - enter.x) / ms->todo.x;
-	double wy = (double)(leave.y - enter.y) / ms->todo.y;
+    if (need_adjust && ms->todo.cy && ms->todo.cx) {
+	double wx = (double)(leave.cx - enter.cx) / ms->todo.cx;
+	double wy = (double)(leave.cy - enter.cy) / ms->todo.cy;
 	if (wx > wy) {
-	    double x = ms->todo.x * wy;
-	    leave.x = enter.x + DOUBLE_TO_INT(x);
+	    double x = ms->todo.cx * wy;
+	    leave.cx = enter.cx + DOUBLE_TO_INT(x);
 	}
 	else if (wx < wy) {
-	    double y = ms->todo.y * wx;
-	    leave.y = enter.y + DOUBLE_TO_INT(y);
+	    double y = ms->todo.cy * wx;
+	    leave.cy = enter.cy + DOUBLE_TO_INT(y);
 	}
     }
 
-    delta.x = leave.x - enter.x;
-    delta.y = leave.y - enter.y;
+    delta.cx = leave.cx - enter.cx;
+    delta.cy = leave.cy - enter.cy;
 
     block_type = World.block[block.x][block.y];
 
@@ -827,9 +929,9 @@ void Move_segment_old(move_state_t *ms)
 		&& last != hole
 		&& (OBJ_X_IN_BLOCKS(mi->obj) != block.x
 		 || OBJ_Y_IN_BLOCKS(mi->obj) != block.y) ) {
-		ms->done.x += (World.wormHoles[last].pos.cx
+		ms->done.cx += (World.wormHoles[last].pos.cx
 			       - World.wormHoles[hole].pos.cx);
-		ms->done.y += (World.wormHoles[last].pos.cy
+		ms->done.cy += (World.wormHoles[last].pos.cy
 			       - World.wormHoles[hole].pos.cy);
 		break;
 	    }
@@ -878,10 +980,10 @@ void Move_segment_old(move_state_t *ms)
 	    clpos mirx, miry, start, end, todo, done, diff, a, b;
 	    double d, w;
 
-	    mirx.x = 0;
-	    mirx.y = 0;
-	    miry.x = 0;
-	    miry.y = 0;
+	    mirx.cx = 0;
+	    mirx.cy = 0;
+	    miry.cx = 0;
+	    miry.cy = 0;
 	    switch (World.cannon[i].dir) {
 	    case DIR_UP:
 		mx.x = 1; mx.y = 0;
@@ -890,49 +992,49 @@ void Move_segment_old(move_state_t *ms)
 	    case DIR_DOWN:
 		mx.x = 1; mx.y = 0;
 		my.x = 0; my.y = -1;
-		miry.y = BLOCK_CLICKS;
+		miry.cy = BLOCK_CLICKS;
 		break;
 	    case DIR_RIGHT:
 		mx.x = 0; mx.y = 1;
 		my.x = -1; my.y = 0;
-		miry.x = BLOCK_CLICKS;
+		miry.cx = BLOCK_CLICKS;
 		break;
 	    case DIR_LEFT:
 		mx.x = 0; mx.y = -1;
 		my.x = 1; my.y = 0;
-		mirx.y = BLOCK_CLICKS;
+		mirx.cy = BLOCK_CLICKS;
 		break;
 	    }
-	    start.x = mirx.x + mx.x * offset.x + miry.x + my.x * offset.y;
-	    start.y = mirx.y + mx.y * offset.x + miry.y + my.y * offset.y;
-	    diff.x  =          mx.x * delta.x           + my.x * delta.y;
-	    diff.y  =          mx.y * delta.x           + my.y * delta.y;
+	    start.cx = mirx.cx + mx.x * offset.cx + miry.cx + my.x * offset.cy;
+	    start.cy = mirx.cy + mx.y * offset.cx + miry.cy + my.y * offset.cy;
+	    diff.cx  =          mx.x * delta.cx           + my.x * delta.cy;
+	    diff.cy  =          mx.y * delta.cx           + my.y * delta.cy;
 	    dir.x   =          mx.x * sign.x            + my.x * sign.y;
 	    dir.y   =          mx.y * sign.x            + my.y * sign.y;
-	    todo.x  =          mx.x * ms->todo.x       + my.x * ms->todo.y;
-	    todo.y  =          mx.y * ms->todo.x       + my.y * ms->todo.y;
+	    todo.cx  =          mx.x * ms->todo.cx       + my.x * ms->todo.cy;
+	    todo.cy  =          mx.y * ms->todo.cx       + my.y * ms->todo.cy;
 
-	    end.x = start.x + diff.x;
-	    end.y = start.y + diff.y;
+	    end.cx = start.cx + diff.cx;
+	    end.cy = start.cy + diff.cy;
 
-	    if (start.x <= BLOCK_CLICKS/2) {
-		if (3 * start.y <= 2 * start.x) {
+	    if (start.cx <= BLOCK_CLICKS/2) {
+		if (3 * start.cy <= 2 * start.cx) {
 		    ms->crash = CrashCannon;
 		    return;
 		}
-		if (end.x <= BLOCK_CLICKS/2) {
-		    if (3 * end.y > 2 * end.x) {
+		if (end.cx <= BLOCK_CLICKS/2) {
+		    if (3 * end.cy > 2 * end.cx) {
 			break;
 		    }
 		}
 	    }
 	    else {
-		if (3 * start.y <= 2 * (BLOCK_CLICKS - start.x)) {
+		if (3 * start.cy <= 2 * (BLOCK_CLICKS - start.cx)) {
 		    ms->crash = CrashCannon;
 		    return;
 		}
-		if (end.x > BLOCK_CLICKS/2) {
-		    if (3 * end.y > 2 * (BLOCK_CLICKS - end.x)) {
+		if (end.cx > BLOCK_CLICKS/2) {
+		    if (3 * end.cy > 2 * (BLOCK_CLICKS - end.cx)) {
 			break;
 		    }
 		}
@@ -941,32 +1043,32 @@ void Move_segment_old(move_state_t *ms)
 	    done = diff;
 
 	    /* is direction x-major? */
-	    if (dir.x * diff.x >= dir.y * diff.y) {
+	    if (dir.x * diff.cx >= dir.y * diff.cy) {
 		/* x-major */
-		w = (double) todo.y / todo.x;
-		if (3 * todo.y != 2 * todo.x) {
-		    d = (3 * start.y - 2 * start.x) / (2 - 3 * w);
-		    a.x = DOUBLE_TO_INT(d);
-		    a.y = (int)(a.x * w);
-		    if (dir.x * a.x < dir.x * done.x && dir.x * a.x >= 0) {
-			if (start.y + a.y <= BLOCK_CLICKS/3) {
+		w = (double) todo.cy / todo.cx;
+		if (3 * todo.cy != 2 * todo.cx) {
+		    d = (3 * start.cy - 2 * start.cx) / (2 - 3 * w);
+		    a.cx = DOUBLE_TO_INT(d);
+		    a.cy = (int)(a.cx * w);
+		    if (dir.x * a.cx < dir.x * done.cx && dir.x * a.cx >= 0) {
+			if (start.cy + a.cy <= BLOCK_CLICKS/3) {
 			    done = a;
-			    if (!(done.x | done.y)) {
+			    if (!(done.cx | done.cy)) {
 				ms->crash = CrashCannon;
 				return;
 			    }
 			}
 		    }
 		}
-		if (-3 * todo.y != 2 * todo.x) {
-		    d = (2 * BLOCK_CLICKS - 2 * start.x - 3 * start.y) /
+		if (-3 * todo.cy != 2 * todo.cx) {
+		    d = (2 * BLOCK_CLICKS - 2 * start.cx - 3 * start.cy) /
 			(2 + 3 * w);
-		    b.x = DOUBLE_TO_INT(d);
-		    b.y = (int)(b.x * w);
-		    if (dir.x * b.x < dir.x * done.x && dir.x * b.x >= 0) {
-			if (start.y + b.y <= BLOCK_CLICKS/3) {
+		    b.cx = DOUBLE_TO_INT(d);
+		    b.cy = (int)(b.cx * w);
+		    if (dir.x * b.cx < dir.x * done.cx && dir.x * b.cx >= 0) {
+			if (start.cy + b.cy <= BLOCK_CLICKS/3) {
 			    done = b;
-			    if (!(done.x | done.y)) {
+			    if (!(done.cx | done.cy)) {
 				ms->crash = CrashCannon;
 				return;
 			    }
@@ -975,27 +1077,27 @@ void Move_segment_old(move_state_t *ms)
 		}
 	    } else {
 		/* y-major */
-		w = (double) todo.x / todo.y;
-		d = (2 * start.x - 3 * start.y) / (3 - 2 * w);
-		a.y = DOUBLE_TO_INT(d);
-		a.x = (int)(a.y * w);
-		if (dir.y * a.y < dir.y * done.y && dir.y * a.y >= 0) {
-		    if (start.y + a.y <= BLOCK_CLICKS/3) {
+		w = (double) todo.cx / todo.cy;
+		d = (2 * start.cx - 3 * start.cy) / (3 - 2 * w);
+		a.cy = DOUBLE_TO_INT(d);
+		a.cx = (int)(a.cy * w);
+		if (dir.y * a.cy < dir.y * done.cy && dir.y * a.cy >= 0) {
+		    if (start.cy + a.cy <= BLOCK_CLICKS/3) {
 			done = a;
-			if (!(done.x | done.y)) {
+			if (!(done.cx | done.cy)) {
 			    ms->crash = CrashCannon;
 			    return;
 			}
 		    }
 		}
-		d = (2 * BLOCK_CLICKS - 2 * start.x - 3 * start.y) /
+		d = (2 * BLOCK_CLICKS - 2 * start.cx - 3 * start.cy) /
 		    (3 + 2 * w);
-		b.y = DOUBLE_TO_INT(d);
-		b.x = (int)(b.y * w);
-		if (dir.y * b.y < dir.y * done.y && dir.y * b.y >= 0) {
-		    if (start.y + b.y <= BLOCK_CLICKS/3) {
+		b.cy = DOUBLE_TO_INT(d);
+		b.cx = (int)(b.cy * w);
+		if (dir.y * b.cy < dir.y * done.cy && dir.y * b.cy >= 0) {
+		    if (start.cy + b.cy <= BLOCK_CLICKS/3) {
 			done = b;
-			if (!(done.x | done.y)) {
+			if (!(done.cx | done.cy)) {
 			    ms->crash = CrashCannon;
 			    return;
 			}
@@ -1003,8 +1105,8 @@ void Move_segment_old(move_state_t *ms)
 		}
 	    }
 
-	    delta.x = mx.x * done.x + mx.y * done.y;
-	    delta.y = my.x * done.x + my.y * done.y;
+	    delta.cx = mx.x * done.cx + mx.y * done.cy;
+	    delta.cy = my.x * done.cx + my.y * done.cy;
 	}
 	break;
 
@@ -1018,15 +1120,15 @@ void Move_segment_old(move_state_t *ms)
 		 * are not hitting the treasure.
 		 */
 		const DFLOAT r = 0.5f * BLOCK_CLICKS;
-		off2.x = offset.x + delta.x;
-		off2.y = offset.y + delta.y;
-		mid.x = (offset.x + off2.x) / 2;
-		mid.y = (offset.y + off2.y) / 2;
-		if (offset.y > r
-		    && off2.y > r
-		    && sqr(mid.x - r) + sqr(mid.y - r) > sqr(r)
-		    && sqr(off2.x - r) + sqr(off2.y - r) > sqr(r)
-		    && sqr(offset.x - r) + sqr(offset.y - r) > sqr(r)) {
+		off2.cx = offset.cx + delta.cx;
+		off2.cy = offset.cy + delta.cy;
+		mid.cx = (offset.cx + off2.cx) / 2;
+		mid.cy = (offset.cy + off2.cy) / 2;
+		if (offset.cy > r
+		    && off2.cy > r
+		    && sqr(mid.cx - r) + sqr(mid.cy - r) > sqr(r)
+		    && sqr(off2.cx - r) + sqr(off2.cy - r) > sqr(r)
+		    && sqr(offset.cx - r) + sqr(offset.cy - r) > sqr(r)) {
 		    break;
 		}
 
@@ -1107,8 +1209,8 @@ void Move_segment_old(move_state_t *ms)
 		 *     added itemID array for extra speed, (at cost of some memory.)
 		 *     
 		 *for (i = 0; ; i++) {
-		 *    if (World.targets[i].pos.x / BLOCK_CLICKS == block.x
-		 *	&& World.targets[i].pos.y / BLOCK_CLICKS == block.y) {
+		 *    if (World.targets[i].pos.cx / BLOCK_CLICKS == block.x
+		 *	&& World.targets[i].pos.cy / BLOCK_CLICKS == block.y) {
 		 *	break;
 		 *     }
 		 * }
@@ -1152,22 +1254,22 @@ void Move_segment_old(move_state_t *ms)
 	    ms->crash = CrashWall;
 	    return;
 	}
-	if (offset.x == 0) {
+	if (offset.cx == 0) {
 	    if (ms->vel.x > 0) {
 		wall_bounce |= BounceHorLo;
 	    }
 	}
-	else if (offset.x == BLOCK_CLICKS) {
+	else if (offset.cx == BLOCK_CLICKS) {
 	    if (ms->vel.x < 0) {
 		wall_bounce |= BounceHorHi;
 	    }
 	}
-	if (offset.y == 0) {
+	if (offset.cy == 0) {
 	    if (ms->vel.y > 0) {
 		wall_bounce |= BounceVerLo;
 	    }
 	}
-	else if (offset.y == BLOCK_CLICKS) {
+	else if (offset.cy == BLOCK_CLICKS) {
 	    if (ms->vel.y < 0) {
 		wall_bounce |= BounceVerHi;
 	    }
@@ -1175,15 +1277,15 @@ void Move_segment_old(move_state_t *ms)
 	if (wall_bounce) {
 	    break;
 	}
-	if (!(ms->todo.x | ms->todo.y)) {
+	if (!(ms->todo.cx | ms->todo.cy)) {
 	    /* no bouncing possible and no movement.  OK. */
 	    break;
 	}
-	if (!ms->todo.x && (offset.x == 0 || offset.x == BLOCK_CLICKS)) {
+	if (!ms->todo.cx && (offset.cx == 0 || offset.cx == BLOCK_CLICKS)) {
 	    /* tricky */
 	    break;
 	}
-	if (!ms->todo.y && (offset.y == 0 || offset.y == BLOCK_CLICKS)) {
+	if (!ms->todo.cy && (offset.cy == 0 || offset.cy == BLOCK_CLICKS)) {
 	    /* tricky */
 	    break;
 	}
@@ -1193,30 +1295,30 @@ void Move_segment_old(move_state_t *ms)
 
     case REC_LD:
 	/* test for bounces first. */
-	if (offset.x == 0) {
+	if (offset.cx == 0) {
 	    if (ms->vel.x > 0) {
 		wall_bounce |= BounceHorLo;
 	    }
-	    if (offset.y == BLOCK_CLICKS && ms->vel.x + ms->vel.y < 0) {
+	    if (offset.cy == BLOCK_CLICKS && ms->vel.x + ms->vel.y < 0) {
 		wall_bounce |= BounceLeftDown;
 	    }
 	}
-	if (offset.y == 0) {
+	if (offset.cy == 0) {
 	    if (ms->vel.y > 0) {
 		wall_bounce |= BounceVerLo;
 	    }
-	    if (offset.x == BLOCK_CLICKS && ms->vel.x + ms->vel.y < 0) {
+	    if (offset.cx == BLOCK_CLICKS && ms->vel.x + ms->vel.y < 0) {
 		wall_bounce |= BounceLeftDown;
 	    }
 	}
 	if (wall_bounce) {
 	    break;
 	}
-	if (offset.x + offset.y < BLOCK_CLICKS) {
+	if (offset.cx + offset.cy < BLOCK_CLICKS) {
 	    ms->crash = CrashWall;
 	    return;
 	}
-	if (offset.x + delta.x + offset.y + delta.y >= BLOCK_CLICKS) {
+	if (offset.cx + delta.cx + offset.cy + delta.cy >= BLOCK_CLICKS) {
 	    /* movement is entirely within the space part of the block. */
 	    break;
 	}
@@ -1224,32 +1326,32 @@ void Move_segment_old(move_state_t *ms)
 	 * Find out where we bounce exactly
 	 * and how far we can move before bouncing.
 	 */
-	if (sign.x * ms->todo.x >= sign.y * ms->todo.y) {
-	    double w = (double) ms->todo.y / ms->todo.x;
-	    delta.x = (int)((BLOCK_CLICKS - offset.x - offset.y) / (1 + w));
-	    delta.y = (int)(delta.x * w);
-	    if (offset.x + delta.x + offset.y + delta.y < BLOCK_CLICKS) {
-		delta.x++;
-		delta.y = (int)(delta.x * w);
+	if (sign.x * ms->todo.cx >= sign.y * ms->todo.cy) {
+	    double w = (double) ms->todo.cy / ms->todo.cx;
+	    delta.cx = (int)((BLOCK_CLICKS - offset.cx - offset.cy) / (1 + w));
+	    delta.cy = (int)(delta.cx * w);
+	    if (offset.cx + delta.cx + offset.cy + delta.cy < BLOCK_CLICKS) {
+		delta.cx++;
+		delta.cy = (int)(delta.cx * w);
 	    }
-	    leave.x = enter.x + delta.x;
-	    leave.y = enter.y + delta.y;
-	    if (!delta.x) {
+	    leave.cx = enter.cx + delta.cx;
+	    leave.cy = enter.cy + delta.cy;
+	    if (!delta.cx) {
 		wall_bounce |= BounceLeftDown;
 		break;
 	    }
 	}
 	else {
-	    double w = (double) ms->todo.x / ms->todo.y;
-	    delta.y = (int)((BLOCK_CLICKS - offset.x - offset.y) / (1 + w));
-	    delta.x = (int)(delta.y * w);
-	    if (offset.x + delta.x + offset.y + delta.y < BLOCK_CLICKS) {
-		delta.y++;
-		delta.x = (int)(delta.y * w);
+	    double w = (double) ms->todo.cx / ms->todo.cy;
+	    delta.cy = (int)((BLOCK_CLICKS - offset.cx - offset.cy) / (1 + w));
+	    delta.cx = (int)(delta.cy * w);
+	    if (offset.cx + delta.cx + offset.cy + delta.cy < BLOCK_CLICKS) {
+		delta.cy++;
+		delta.cx = (int)(delta.cy * w);
 	    }
-	    leave.x = enter.x + delta.x;
-	    leave.y = enter.y + delta.y;
-	    if (!delta.y) {
+	    leave.cx = enter.cx + delta.cx;
+	    leave.cy = enter.cy + delta.cy;
+	    if (!delta.cy) {
 		wall_bounce |= BounceLeftDown;
 		break;
 	    }
@@ -1257,58 +1359,58 @@ void Move_segment_old(move_state_t *ms)
 	break;
 
     case REC_LU:
-	if (offset.x == 0) {
+	if (offset.cx == 0) {
 	    if (ms->vel.x > 0) {
 		wall_bounce |= BounceHorLo;
 	    }
-	    if (offset.y == 0 && ms->vel.x < ms->vel.y) {
+	    if (offset.cy == 0 && ms->vel.x < ms->vel.y) {
 		wall_bounce |= BounceLeftUp;
 	    }
 	}
-	if (offset.y == BLOCK_CLICKS) {
+	if (offset.cy == BLOCK_CLICKS) {
 	    if (ms->vel.y < 0) {
 		wall_bounce |= BounceVerHi;
 	    }
-	    if (offset.x == BLOCK_CLICKS && ms->vel.x < ms->vel.y) {
+	    if (offset.cx == BLOCK_CLICKS && ms->vel.x < ms->vel.y) {
 		wall_bounce |= BounceLeftUp;
 	    }
 	}
 	if (wall_bounce) {
 	    break;
 	}
-	if (offset.x < offset.y) {
+	if (offset.cx < offset.cy) {
 	    ms->crash = CrashWall;
 	    return;
 	}
-	if (offset.x + delta.x >= offset.y + delta.y) {
+	if (offset.cx + delta.cx >= offset.cy + delta.cy) {
 	    break;
 	}
-	if (sign.x * ms->todo.x >= sign.y * ms->todo.y) {
-	    double w = (double) ms->todo.y / ms->todo.x;
-	    delta.x = (int)((offset.y - offset.x) / (1 - w));
-	    delta.y = (int)(delta.x * w);
-	    if (offset.x + delta.x < offset.y + delta.y) {
-		delta.x++;
-		delta.y = (int)(delta.x * w);
+	if (sign.x * ms->todo.cx >= sign.y * ms->todo.cy) {
+	    double w = (double) ms->todo.cy / ms->todo.cx;
+	    delta.cx = (int)((offset.cy - offset.cx) / (1 - w));
+	    delta.cy = (int)(delta.cx * w);
+	    if (offset.cx + delta.cx < offset.cy + delta.cy) {
+		delta.cx++;
+		delta.cy = (int)(delta.cx * w);
 	    }
-	    leave.x = enter.x + delta.x;
-	    leave.y = enter.y + delta.y;
-	    if (!delta.x) {
+	    leave.cx = enter.cx + delta.cx;
+	    leave.cy = enter.cy + delta.cy;
+	    if (!delta.cx) {
 		wall_bounce |= BounceLeftUp;
 		break;
 	    }
 	}
 	else {
-	    double w = (double) ms->todo.x / ms->todo.y;
-	    delta.y = (int)((offset.x - offset.y) / (1 - w));
-	    delta.x = (int)(delta.y * w);
-	    if (offset.x + delta.x < offset.y + delta.y) {
-		delta.y--;
-		delta.x = (int)(delta.y * w);
+	    double w = (double) ms->todo.cx / ms->todo.cy;
+	    delta.cy = (int)((offset.cx - offset.cy) / (1 - w));
+	    delta.cx = (int)(delta.cy * w);
+	    if (offset.cx + delta.cx < offset.cy + delta.cy) {
+		delta.cy--;
+		delta.cx = (int)(delta.cy * w);
 	    }
-	    leave.x = enter.x + delta.x;
-	    leave.y = enter.y + delta.y;
-	    if (!delta.y) {
+	    leave.cx = enter.cx + delta.cx;
+	    leave.cy = enter.cy + delta.cy;
+	    if (!delta.cy) {
 		wall_bounce |= BounceLeftUp;
 		break;
 	    }
@@ -1316,58 +1418,58 @@ void Move_segment_old(move_state_t *ms)
 	break;
 
     case REC_RD:
-	if (offset.x == BLOCK_CLICKS) {
+	if (offset.cx == BLOCK_CLICKS) {
 	    if (ms->vel.x < 0) {
 		wall_bounce |= BounceHorHi;
 	    }
-	    if (offset.y == BLOCK_CLICKS && ms->vel.x > ms->vel.y) {
+	    if (offset.cy == BLOCK_CLICKS && ms->vel.x > ms->vel.y) {
 		wall_bounce |= BounceRightDown;
 	    }
 	}
-	if (offset.y == 0) {
+	if (offset.cy == 0) {
 	    if (ms->vel.y > 0) {
 		wall_bounce |= BounceVerLo;
 	    }
-	    if (offset.x == 0 && ms->vel.x > ms->vel.y) {
+	    if (offset.cx == 0 && ms->vel.x > ms->vel.y) {
 		wall_bounce |= BounceRightDown;
 	    }
 	}
 	if (wall_bounce) {
 	    break;
 	}
-	if (offset.x > offset.y) {
+	if (offset.cx > offset.cy) {
 	    ms->crash = CrashWall;
 	    return;
 	}
-	if (offset.x + delta.x <= offset.y + delta.y) {
+	if (offset.cx + delta.cx <= offset.cy + delta.cy) {
 	    break;
 	}
-	if (sign.x * ms->todo.x >= sign.y * ms->todo.y) {
-	    double w = (double) ms->todo.y / ms->todo.x;
-	    delta.x = (int)((offset.y - offset.x) / (1 - w));
-	    delta.y = (int)(delta.x * w);
-	    if (offset.x + delta.x > offset.y + delta.y) {
-		delta.x--;
-		delta.y = (int)(delta.x * w);
+	if (sign.x * ms->todo.cx >= sign.y * ms->todo.cy) {
+	    double w = (double) ms->todo.cy / ms->todo.cx;
+	    delta.cx = (int)((offset.cy - offset.cx) / (1 - w));
+	    delta.cy = (int)(delta.cx * w);
+	    if (offset.cx + delta.cx > offset.cy + delta.cy) {
+		delta.cx--;
+		delta.cy = (int)(delta.cx * w);
 	    }
-	    leave.x = enter.x + delta.x;
-	    leave.y = enter.y + delta.y;
-	    if (!delta.x) {
+	    leave.cx = enter.cx + delta.cx;
+	    leave.cy = enter.cy + delta.cy;
+	    if (!delta.cx) {
 		wall_bounce |= BounceRightDown;
 		break;
 	    }
 	}
 	else {
-	    double w = (double) ms->todo.x / ms->todo.y;
-	    delta.y = (int)((offset.x - offset.y) / (1 - w));
-	    delta.x = (int)(delta.y * w);
-	    if (offset.x + delta.x > offset.y + delta.y) {
-		delta.y++;
-		delta.x = (int)(delta.y * w);
+	    double w = (double) ms->todo.cx / ms->todo.cy;
+	    delta.cy = (int)((offset.cx - offset.cy) / (1 - w));
+	    delta.cx = (int)(delta.cy * w);
+	    if (offset.cx + delta.cx > offset.cy + delta.cy) {
+		delta.cy++;
+		delta.cx = (int)(delta.cy * w);
 	    }
-	    leave.x = enter.x + delta.x;
-	    leave.y = enter.y + delta.y;
-	    if (!delta.y) {
+	    leave.cx = enter.cx + delta.cx;
+	    leave.cy = enter.cy + delta.cy;
+	    if (!delta.cy) {
 		wall_bounce |= BounceRightDown;
 		break;
 	    }
@@ -1375,58 +1477,58 @@ void Move_segment_old(move_state_t *ms)
 	break;
 
     case REC_RU:
-	if (offset.x == BLOCK_CLICKS) {
+	if (offset.cx == BLOCK_CLICKS) {
 	    if (ms->vel.x < 0) {
 		wall_bounce |= BounceHorHi;
 	    }
-	    if (offset.y == 0 && ms->vel.x + ms->vel.y > 0) {
+	    if (offset.cy == 0 && ms->vel.x + ms->vel.y > 0) {
 		wall_bounce |= BounceRightUp;
 	    }
 	}
-	if (offset.y == BLOCK_CLICKS) {
+	if (offset.cy == BLOCK_CLICKS) {
 	    if (ms->vel.y < 0) {
 		wall_bounce |= BounceVerHi;
 	    }
-	    if (offset.x == 0 && ms->vel.x + ms->vel.y > 0) {
+	    if (offset.cx == 0 && ms->vel.x + ms->vel.y > 0) {
 		wall_bounce |= BounceRightUp;
 	    }
 	}
 	if (wall_bounce) {
 	    break;
 	}
-	if (offset.x + offset.y > BLOCK_CLICKS) {
+	if (offset.cx + offset.cy > BLOCK_CLICKS) {
 	    ms->crash = CrashWall;
 	    return;
 	}
-	if (offset.x + delta.x + offset.y + delta.y <= BLOCK_CLICKS) {
+	if (offset.cx + delta.cx + offset.cy + delta.cy <= BLOCK_CLICKS) {
 	    break;
 	}
-	if (sign.x * ms->todo.x >= sign.y * ms->todo.y) {
-	    double w = (double) ms->todo.y / ms->todo.x;
-	    delta.x = (int)((BLOCK_CLICKS - offset.x - offset.y) / (1 + w));
-	    delta.y = (int)(delta.x * w);
-	    if (offset.x + delta.x + offset.y + delta.y > BLOCK_CLICKS) {
-		delta.x--;
-		delta.y = (int)(delta.x * w);
+	if (sign.x * ms->todo.cx >= sign.y * ms->todo.cy) {
+	    double w = (double) ms->todo.cy / ms->todo.cx;
+	    delta.cx = (int)((BLOCK_CLICKS - offset.cx - offset.cy) / (1 + w));
+	    delta.cy = (int)(delta.cx * w);
+	    if (offset.cx + delta.cx + offset.cy + delta.cy > BLOCK_CLICKS) {
+		delta.cx--;
+		delta.cy = (int)(delta.cx * w);
 	    }
-	    leave.x = enter.x + delta.x;
-	    leave.y = enter.y + delta.y;
-	    if (!delta.x) {
+	    leave.cx = enter.cx + delta.cx;
+	    leave.cy = enter.cy + delta.cy;
+	    if (!delta.cx) {
 		wall_bounce |= BounceRightUp;
 		break;
 	    }
 	}
 	else {
-	    double w = (double) ms->todo.x / ms->todo.y;
-	    delta.y = (int)((BLOCK_CLICKS - offset.x - offset.y) / (1 + w));
-	    delta.x = (int)(delta.y * w);
-	    if (offset.x + delta.x + offset.y + delta.y > BLOCK_CLICKS) {
-		delta.y--;
-		delta.x = (int)(delta.y * w);
+	    double w = (double) ms->todo.cx / ms->todo.cy;
+	    delta.cy = (int)((BLOCK_CLICKS - offset.cx - offset.cy) / (1 + w));
+	    delta.cx = (int)(delta.cy * w);
+	    if (offset.cx + delta.cx + offset.cy + delta.cy > BLOCK_CLICKS) {
+		delta.cy--;
+		delta.cx = (int)(delta.cy * w);
 	    }
-	    leave.x = enter.x + delta.x;
-	    leave.y = enter.y + delta.y;
-	    if (!delta.y) {
+	    leave.cx = enter.cx + delta.cx;
+	    leave.cy = enter.cy + delta.cy;
+	    if (!delta.cy) {
 		wall_bounce |= BounceRightUp;
 		break;
 	    }
@@ -1545,29 +1647,29 @@ void Move_segment_old(move_state_t *ms)
 	    default:
 		switch (block_type) {
 		case REC_LD:
-		    if ((offset.x == 0) ? (offset.y == BLOCK_CLICKS)
-			: (offset.x == BLOCK_CLICKS && offset.y == 0)
+		    if ((offset.cx == 0) ? (offset.cy == BLOCK_CLICKS)
+			: (offset.cx == BLOCK_CLICKS && offset.cy == 0)
 			&& ms->vel.x + ms->vel.y >= 0) {
 			wall_bounce = 0;
 		    }
 		    break;
 		case REC_LU:
-		    if ((offset.x == 0) ? (offset.y == 0)
-			: (offset.x == BLOCK_CLICKS && offset.y == BLOCK_CLICKS)
+		    if ((offset.cx == 0) ? (offset.cy == 0)
+			: (offset.cx == BLOCK_CLICKS && offset.cy == BLOCK_CLICKS)
 			&& ms->vel.x >= ms->vel.y) {
 			wall_bounce = 0;
 		    }
 		    break;
 		case REC_RD:
-		    if ((offset.x == 0) ? (offset.y == 0)
-			: (offset.x == BLOCK_CLICKS && offset.y == BLOCK_CLICKS)
+		    if ((offset.cx == 0) ? (offset.cy == 0)
+			: (offset.cx == BLOCK_CLICKS && offset.cy == BLOCK_CLICKS)
 			&& ms->vel.x <= ms->vel.y) {
 			wall_bounce = 0;
 		    }
 		    break;
 		case REC_RU:
-		    if ((offset.x == 0) ? (offset.y == BLOCK_CLICKS)
-			: (offset.x == BLOCK_CLICKS && offset.y == 0)
+		    if ((offset.cx == 0) ? (offset.cy == BLOCK_CLICKS)
+			: (offset.cx == BLOCK_CLICKS && offset.cy == 0)
 			&& ms->vel.x + ms->vel.y <= 0) {
 			wall_bounce = 0;
 		    }
@@ -1604,31 +1706,30 @@ void Move_segment_old(move_state_t *ms)
 	Bounce_wall(ms, (move_bounce_t) wall_bounce);
     }
     else {
-	ms->done.x += delta.x;
-	ms->done.y += delta.y;
-	ms->todo.x -= delta.x;
-	ms->todo.y -= delta.y;
+	ms->done.cx += delta.cx;
+	ms->done.cy += delta.cy;
+	ms->todo.cx -= delta.cx;
+	ms->todo.cy -= delta.cy;
     }
 }
 
-static void Cannon_dies(move_state_t *ms)
+
+
+static void Cannon_dies(int ind, player *pl)
 {
-    cannon_t           *cannon = World.cannon + ms->cannon;
+    cannon_t		*cannon = &World.cannon[ind];
     int			cx = cannon->pos.cx;
     int			cy = cannon->pos.cy;
-    int			bx = CLICK_TO_BLOCK(cx);
-    int			by = CLICK_TO_BLOCK(cy);
     int			killer = -1;
-    player		*pl = NULL;
 
-    cannon->dead_time = cannonDeadTime;
+    cannon->dead_time = cannonDeadTime * TIME_FACT;
     cannon->conn_mask = 0;
-    World.block[bx][by] = SPACE;
-    Cannon_throw_items(ms->cannon);
-    Cannon_init(ms->cannon);
+    World.block[CLICK_TO_BLOCK(cx)][CLICK_TO_BLOCK(cy)] = SPACE;
+    Cannon_throw_items(ind);
+    Cannon_init(ind);
     sound_play_sensors(cx, cy, CANNON_EXPLOSION_SOUND);
     Make_debris(
-	/* pos.x, pos.y   */ cx, cy,
+	/* pos.cx, pos.cy   */ cx, cy,
 	/* vel.x, vel.y   */ 0.0, 0.0,
 	/* owner id       */ NO_ID,
 	/* owner team	  */ cannon->team,
@@ -1643,7 +1744,7 @@ static void Cannon_dies(move_state_t *ms)
 	/* min,max life   */ 8 * TIME_FACT, 68 * TIME_FACT
 	);
     Make_wreckage(
-	/* pos.x, pos.y   */ cx, cy,
+	/* pos.cx, pos.cy   */ cx, cy,
 	/* vel.x, vel.y   */ 0.0, 0.0,
 	/* owner id       */ NO_ID,
 	/* owner team	  */ cannon->team,
@@ -1657,17 +1758,8 @@ static void Cannon_dies(move_state_t *ms)
 	/* min,max life   */ 8 * TIME_FACT, 68 * TIME_FACT
 	);
 
-    if (!ms->mip->pl) {
-	if (ms->mip->obj->id != NO_ID) {
-	    killer = GetInd[ms->mip->obj->id];
-	    pl = Players[killer];
-	}
-    } else if (BIT(ms->mip->pl->used, HAS_SHIELD|HAS_EMERGENCY_SHIELD)
-	       == (HAS_SHIELD|HAS_EMERGENCY_SHIELD)) {
-	pl = ms->mip->pl;
-	killer = GetInd[pl->id];
-    }
     if (pl) {
+	killer = GetInd[pl->id];
 	if (cannonPoints > 0) {
 	    if (BIT(World.rules->mode, TEAM_PLAY)
 		&& teamCannons) {
@@ -1683,10 +1775,26 @@ static void Cannon_dies(move_state_t *ms)
     }
 }
 
-static void Object_hits_target(move_state_t *ms, long player_cost)
+static void Cannon_dies_old(move_state_t *ms)
 {
-    target_t		*targ = &World.targets[ms->target];
-    object		*obj = ms->mip->obj;
+    int ind = ms->cannon;
+    player *pl = NULL;
+
+    if (!ms->mip->pl) {
+	if (ms->mip->obj->id != NO_ID) {
+	    pl = Players[GetInd[ms->mip->obj->id]];
+	}
+    } else if (BIT(ms->mip->pl->used, HAS_SHIELD|HAS_EMERGENCY_SHIELD)
+	       == (HAS_SHIELD|HAS_EMERGENCY_SHIELD)) {
+	pl = ms->mip->pl;
+    }
+
+    Cannon_dies(ind, pl);
+}
+
+static void Object_hits_target(target_t *targ, object *obj,
+			       long player_cost)
+{
     int			j,
 			x, y,
 			killer;
@@ -1767,7 +1875,7 @@ static void Object_hits_target(move_state_t *ms, long player_cost)
 
     targ->update_mask = (unsigned) -1;
     targ->damage = TARGET_DAMAGE;
-    targ->dead_time = targetDeadTime;
+    targ->dead_time = targetDeadTime * TIME_FACT;
 
     /*
      * Destroy target.
@@ -1778,7 +1886,7 @@ static void Object_hits_target(move_state_t *ms, long player_cost)
     World.block[x][y] = SPACE;
 
     Make_debris(
-	/* pos.x, pos.y   */ (x+0.5f) * BLOCK_CLICKS, (y+0.5f) * BLOCK_CLICKS,
+	/* pos.cx, pos.cy   */ targ->pos.cx, targ->pos.cy,
 	/* vel.x, vel.y   */ 0.0, 0.0,
 	/* owner id       */ NO_ID,
 	/* owner team	  */ targ->team,
@@ -1888,7 +1996,18 @@ static void Object_hits_target(move_state_t *ms, long player_cost)
     }
 }
 
-static void Object_crash(move_state_t *ms)
+
+static void Object_hits_target_old(move_state_t *ms, long player_cost)
+{
+    target_t		*targ = &World.targets[ms->target];
+    object		*obj = ms->mip->obj;
+
+    Object_hits_target(targ, obj, player_cost);
+}
+
+
+
+static void Object_crash_old(move_state_t *ms)
 {
     object		*obj = ms->mip->obj;
 
@@ -1910,7 +2029,8 @@ static void Object_crash(move_state_t *ms)
 
     case CrashTarget:
 	obj->life = 0;
-	Object_hits_target(ms, -1);
+	/*Object_hits_target_old(ms, -1);*/
+	Object_hits_target(&World.targets[ms->target], obj, -1);
 	break;
 
     case CrashWall:
@@ -1920,8 +2040,7 @@ static void Object_crash(move_state_t *ms)
 **       I'm not sure of the amount of sparks or the direction.
 */
 	if (!BIT(obj->type, OBJ_SPARK | OBJ_DEBRIS)) {
-	    Make_debris(CLICK_TO_FLOAT(ms->pos.x),
-			CLICK_TO_FLOAT(ms->pos.y),
+	    Make_debris(ms->pos.cx, ms->pos.cy,
 			0, 0,
 			obj->owner,
 			obj->team,
@@ -1951,7 +2070,7 @@ static void Object_crash(move_state_t *ms)
 		if (World.cannon[ms->cannon].item[ITEM_ARMOR] > 0)
 		    World.cannon[ms->cannon].item[ITEM_ARMOR]--;
 		else
-		    Cannon_dies(ms);
+		    Cannon_dies_old(ms);
 	    }
 	}
 	break;
@@ -2005,17 +2124,17 @@ void Move_object_old(object *obj)
 	mi.phased = 0;
     }
 
-    ms.pos.x = obj->pos.cx;
-    ms.pos.y = obj->pos.cy;
+    ms.pos.cx = obj->pos.cx;
+    ms.pos.cy = obj->pos.cy;
     ms.vel = obj->vel;
-    ms.todo.x = FLOAT_TO_CLICK(ms.vel.x * timeStep2);
-    ms.todo.y = FLOAT_TO_CLICK(ms.vel.y * timeStep2);
+    ms.todo.cx = FLOAT_TO_CLICK(ms.vel.x * timeStep2);
+    ms.todo.cy = FLOAT_TO_CLICK(ms.vel.y * timeStep2);
     ms.dir = obj->missile_dir;
     ms.mip = &mi;
 
     for (;;) {
 	Move_segment_old(&ms);
-	if (!(ms.done.x | ms.done.y)) {
+	if (!(ms.done.cx | ms.done.cy)) {
 	    pos_update |= (ms.crash | ms.bounce);
 	    if (ms.crash) {
 		break;
@@ -2044,41 +2163,41 @@ void Move_object_old(object *obj)
 		}
 		ms.vel.x *= objectWallBrakeFactor;
 		ms.vel.y *= objectWallBrakeFactor;
-		ms.todo.x = (int)(ms.todo.x * objectWallBrakeFactor);
-		ms.todo.y = (int)(ms.todo.y * objectWallBrakeFactor);
+		ms.todo.cx = (int)(ms.todo.cx * objectWallBrakeFactor);
+		ms.todo.cy = (int)(ms.todo.cy * objectWallBrakeFactor);
 	    }
 	    if (++nothing_done >= 5) {
 		ms.crash = CrashUnknown;
 		break;
 	    }
 	} else {
-	    ms.pos.x += ms.done.x;
-	    ms.pos.y += ms.done.y;
+	    ms.pos.cx += ms.done.cx;
+	    ms.pos.cy += ms.done.cy;
 	    nothing_done = 0;
 	}
-	if (!(ms.todo.x | ms.todo.y)) {
+	if (!(ms.todo.cx | ms.todo.cy)) {
 	    break;
 	}
     }
     if (mi.edge_wrap) {
-	if (ms.pos.x < 0) {
-	    ms.pos.x += mp.click_width;
+	if (ms.pos.cx < 0) {
+	    ms.pos.cx += mp.click_width;
 	}
-	if (ms.pos.x >= mp.click_width) {
-	    ms.pos.x -= mp.click_width;
+	if (ms.pos.cx >= mp.click_width) {
+	    ms.pos.cx -= mp.click_width;
 	}
-	if (ms.pos.y < 0) {
-	    ms.pos.y += mp.click_height;
+	if (ms.pos.cy < 0) {
+	    ms.pos.cy += mp.click_height;
 	}
-	if (ms.pos.y >= mp.click_height) {
-	    ms.pos.y -= mp.click_height;
+	if (ms.pos.cy >= mp.click_height) {
+	    ms.pos.cy -= mp.click_height;
 	}
     }
-    Object_position_set_clicks(obj, ms.pos.x, ms.pos.y);
+    Object_position_set_clicks(obj, ms.pos.cx, ms.pos.cy);
     obj->vel = ms.vel;
     obj->missile_dir = ms.dir;
     if (ms.crash) {
-	Object_crash(&ms);
+	Object_crash_old(&ms);
     }
     if (pos_update) {
 	Object_position_remember(obj);
@@ -2086,26 +2205,26 @@ void Move_object_old(object *obj)
     Cell_add_object(obj);
 }
 
-static void Player_crash_old(move_state_t *ms, int pt, bool turning)
+
+static void Player_crash(player *pl, struct move *move, int crashtype,
+			 int item_id, int pt)
 {
-    player		*pl = ms->mip->pl;
     int			ind = GetInd[pl->id];
     const char		*howfmt = NULL;
     const char          *hudmsg = NULL;
 
     msg[0] = '\0';
 
-    switch (ms->crash) {
+    switch (crashtype) {
 
     default:
     case NotACrash:
-	errno = 0;
-	error("Player_crash_old not a crash %d", ms->crash);
+	warn("Unrecognized crash %d", crashtype);
 	break;
 
     case CrashWormHole:
 	SET_BIT(pl->status, WARPING);
-	pl->wormHoleHit = ms->wormhole;
+	pl->wormHoleHit = item_id;
 	break;
 
     case CrashWall:
@@ -2136,7 +2255,8 @@ static void Player_crash_old(move_state_t *ms, int pt, bool turning)
 	howfmt = "%s smashed%s against a target";
 	hudmsg = "[Target]";
 	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
-	Object_hits_target(ms, -1);
+	/*Object_hits_target_old(ms, -1);*/
+	Object_hits_target(&World.targets[item_id], (object *)pl, -1);
 	break;
 
     case CrashTreasure:
@@ -2152,8 +2272,9 @@ static void Player_crash_old(move_state_t *ms, int pt, bool turning)
 	    hudmsg = "[Cannon]";
 	    sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_CANNON_SOUND);
 	}
-	if (!BIT(World.cannon[ms->cannon].used, HAS_EMERGENCY_SHIELD)) {
-	    Cannon_dies(ms);
+	if (!BIT(World.cannon[item_id].used, HAS_EMERGENCY_SHIELD)) {
+	    /*Cannon_dies_old(ms);*/
+	    Cannon_dies(item_id, pl);
 	}
 	break;
 
@@ -2180,6 +2301,8 @@ static void Player_crash_old(move_state_t *ms, int pt, bool turning)
 	DFLOAT		sc;
 
 	SET_BIT(pl->status, KILLED);
+	move->delta.cx = 0;
+	move->delta.cy = 0;
 	sprintf(msg, howfmt, pl->name, (!pt) ? " head first" : "");
 
 	/* get a list of who pushed me */
@@ -2262,6 +2385,32 @@ static void Player_crash_old(move_state_t *ms, int pt, bool turning)
     }
 }
 
+static void Player_crash_old(move_state_t *ms, int pt)
+{
+    player *pl = ms->mip->pl;
+    int crashtype = ms->crash;
+    int item_id = -1;
+    struct move move;
+
+    switch (crashtype) {
+    default:
+	break;
+    case CrashWormHole:
+	item_id = ms->wormhole;
+	break;
+    case CrashCannon:
+	item_id = ms->cannon;
+	break;
+    case CrashTarget:
+	item_id = ms->target;
+	break;
+    }
+
+    Player_crash(pl, &move, crashtype, item_id, pt);
+}
+
+
+
 static void Move_player_old(int ind)
 {
     player		*pl = Players[ind];
@@ -2289,13 +2438,13 @@ static void Move_player_old(int ind)
 
     if (BIT(pl->status, PLAYING|PAUSE|GAME_OVER|KILLED) != PLAYING) {
 	if (!BIT(pl->status, KILLED|PAUSE)) {
-	    pos.x = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x * timeStep2);
-	    pos.y = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y * timeStep2);
-	    pos.x = WRAP_XCLICK(pos.x);
-	    pos.y = WRAP_YCLICK(pos.y);
-	    if (pos.x != pl->pos.cx || pos.y != pl->pos.cy) {
+	    pos.cx = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x * timeStep2);
+	    pos.cy = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y * timeStep2);
+	    pos.cx = WRAP_XCLICK(pos.cx);
+	    pos.cy = WRAP_YCLICK(pos.cy);
+	    if (pos.cx != pl->pos.cx || pos.cy != pl->pos.cy) {
 		Player_position_remember(pl);
-		Player_position_set_clicks(pl, pos.x, pos.y);
+		Player_position_set_clicks(pl, pos.cx, pos.cy);
 	    }
 	}
 	pl->velocity = VECTOR_LENGTH(pl->vel);
@@ -2329,11 +2478,11 @@ static void Move_player_old(int ind)
     if (dist > 3) {
 	int max = ((dist - 3) * BLOCK_SZ) >> 1;
 	if (max >= pl->velocity) {
-	    pos.x = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x * timeStep2);
-	    pos.y = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y * timeStep2);
-	    pos.x = WRAP_XCLICK(pos.x);
-	    pos.y = WRAP_YCLICK(pos.y);
-	    Player_position_set_clicks(pl, pos.x, pos.y);
+	    pos.cx = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x * timeStep2);
+	    pos.cy = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y * timeStep2);
+	    pos.cx = WRAP_XCLICK(pos.cx);
+	    pos.cy = WRAP_YCLICK(pos.cy);
+	    Player_position_set_clicks(pl, pos.cx, pos.cy);
 	    pl->velocity = VECTOR_LENGTH(pl->vel);
 	    return;
 	}
@@ -2351,11 +2500,11 @@ static void Move_player_old(int ind)
     mi.phased = BIT(pl->used, HAS_PHASING_DEVICE);
 
     vel = pl->vel;
-    todo.x = FLOAT_TO_CLICK(vel.x * timeStep2);
-    todo.y = FLOAT_TO_CLICK(vel.y * timeStep2);
+    todo.cx = FLOAT_TO_CLICK(vel.x * timeStep2);
+    todo.cy = FLOAT_TO_CLICK(vel.y * timeStep2);
     for (i = 0; i < pl->ship->num_points; i++) {
-	ms[i].pos.x = pl->pos.cx + pl->ship->pts[i][pl->dir].cx;
-	ms[i].pos.y = pl->pos.cy + pl->ship->pts[i][pl->dir].cy;
+	ms[i].pos.cx = pl->pos.cx + pl->ship->pts[i][pl->dir].cx;
+	ms[i].pos.cy = pl->pos.cy + pl->ship->pts[i][pl->dir].cy;
 	ms[i].vel = vel;
 	ms[i].todo = todo;
 	ms[i].dir = pl->dir;
@@ -2365,58 +2514,58 @@ static void Move_player_old(int ind)
 
     for (;; moves_made++) {
 
-	pos.x = ms[0].pos.x - pl->ship->pts[0][ms[0].dir].cx;
-	pos.y = ms[0].pos.y - pl->ship->pts[0][ms[0].dir].cy;
-	pos.x = WRAP_XCLICK(pos.x);
-	pos.y = WRAP_YCLICK(pos.y);
-	block.x = pos.x / BLOCK_CLICKS;
-	block.y = pos.y / BLOCK_CLICKS;
+	pos.cx = ms[0].pos.cx - pl->ship->pts[0][ms[0].dir].cx;
+	pos.cy = ms[0].pos.cy - pl->ship->pts[0][ms[0].dir].cy;
+	pos.cx = WRAP_XCLICK(pos.cx);
+	pos.cy = WRAP_YCLICK(pos.cy);
+	block.x = pos.cx / BLOCK_CLICKS;
+	block.y = pos.cy / BLOCK_CLICKS;
 
 	if (walldist[block.x][block.y] > 3) {
 	    int maxcl = ((walldist[block.x][block.y] - 3) * BLOCK_CLICKS) >> 1;
 	    todo = ms[0].todo;
-	    sign.x = (todo.x < 0) ? -1 : 1;
-	    sign.y = (todo.y < 0) ? -1 : 1;
-	    if (maxcl >= sign.x * todo.x && maxcl >= sign.y * todo.y) {
+	    sign.x = (todo.cx < 0) ? -1 : 1;
+	    sign.y = (todo.cy < 0) ? -1 : 1;
+	    if (maxcl >= sign.x * todo.cx && maxcl >= sign.y * todo.cy) {
 		/* entire movement is possible. */
-		done.x = todo.x;
-		done.y = todo.y;
+		done.cx = todo.cx;
+		done.cy = todo.cy;
 	    }
-	    else if (sign.x * todo.x > sign.y * todo.y) {
+	    else if (sign.x * todo.cx > sign.y * todo.cy) {
 		/* horizontal movement. */
-		done.x = sign.x * maxcl;
-		done.y = todo.y * maxcl / (sign.x * todo.x);
+		done.cx = sign.x * maxcl;
+		done.cy = todo.cy * maxcl / (sign.x * todo.cx);
 	    }
 	    else {
 		/* vertical movement. */
-		done.x = todo.x * maxcl / (sign.y * todo.y);
-		done.y = sign.y * maxcl;
+		done.cx = todo.cx * maxcl / (sign.y * todo.cy);
+		done.cy = sign.y * maxcl;
 	    }
-	    todo.x -= done.x;
-	    todo.y -= done.y;
+	    todo.cx -= done.cx;
+	    todo.cy -= done.cy;
 	    for (i = 0; i < pl->ship->num_points; i++) {
-		ms[i].pos.x += done.x;
-		ms[i].pos.y += done.y;
+		ms[i].pos.cx += done.cx;
+		ms[i].pos.cy += done.cy;
 		ms[i].todo = todo;
 		ms[i].crash = NotACrash;
 		ms[i].bounce = NotABounce;
 		if (mi.edge_wrap) {
-		    if (ms[i].pos.x < 0) {
-			ms[i].pos.x += mp.click_width;
+		    if (ms[i].pos.cx < 0) {
+			ms[i].pos.cx += mp.click_width;
 		    }
-		    else if (ms[i].pos.x >= mp.click_width) {
-			ms[i].pos.x -= mp.click_width;
+		    else if (ms[i].pos.cx >= mp.click_width) {
+			ms[i].pos.cx -= mp.click_width;
 		    }
-		    if (ms[i].pos.y < 0) {
-			ms[i].pos.y += mp.click_height;
+		    if (ms[i].pos.cy < 0) {
+			ms[i].pos.cy += mp.click_height;
 		    }
-		    else if (ms[i].pos.y >= mp.click_height) {
-			ms[i].pos.y -= mp.click_height;
+		    else if (ms[i].pos.cy >= mp.click_height) {
+			ms[i].pos.cy -= mp.click_height;
 		    }
 		}
 	    }
 	    nothing_done = 0;
-	    if (!(todo.x | todo.y)) {
+	    if (!(todo.cx | todo.cy)) {
 		break;
 	    }
 	    else {
@@ -2483,8 +2632,8 @@ static void Move_player_old(int ind)
 
 		ms[worst].vel.x *= playerWallBrakeFactor;
 		ms[worst].vel.y *= playerWallBrakeFactor;
-		ms[worst].todo.x = (int)(ms[worst].todo.x * playerWallBrakeFactor);
-		ms[worst].todo.y = (int)(ms[worst].todo.y * playerWallBrakeFactor);
+		ms[worst].todo.cx = (int)(ms[worst].todo.cx * playerWallBrakeFactor);
+		ms[worst].todo.cy = (int)(ms[worst].todo.cy * playerWallBrakeFactor);
 
 		/* only use armor if neccessary */
 		if (speed > max_speed
@@ -2571,7 +2720,7 @@ static void Move_player_old(int ind)
 		if (cost) {
 		    int intensity = (int)(cost * wallBounceExplosionMult);
 		    Make_debris(
-			/* pos.x, pos.y   */ pl->pos.cx, pl->pos.cy,
+			/* pos.cx, pos.cy   */ pl->pos.cx, pl->pos.cy,
 			/* vel.x, vel.y   */ pl->vel.x, pl->vel.y,
 			/* owner id       */ pl->id,
 			/* owner team	  */ pl->team,
@@ -2591,15 +2740,15 @@ static void Move_player_old(int ind)
 		    if (ms[worst].target >= 0) {
 			cost <<= FUEL_SCALE_BITS;
 			cost = (long)(cost * (wallBounceFuelDrainMult / 4.0));
-			Object_hits_target(&ms[worst], cost);
+			Object_hits_target_old(&ms[worst], cost);
 		    }
 		}
 	    }
 	}
 	else {
 	    for (i = 0; i < pl->ship->num_points; i++) {
-		r[i].x = (vel.x) ? (DFLOAT) ms[i].todo.x / vel.x : 0;
-		r[i].y = (vel.y) ? (DFLOAT) ms[i].todo.y / vel.y : 0;
+		r[i].x = (vel.x) ? (DFLOAT) ms[i].todo.cx / vel.x : 0;
+		r[i].y = (vel.y) ? (DFLOAT) ms[i].todo.cy / vel.y : 0;
 		r[i].x = ABS(r[i].x);
 		r[i].y = ABS(r[i].y);
 	    }
@@ -2611,25 +2760,25 @@ static void Move_player_old(int ind)
 	    }
 	}
 
-	if (!(ms[worst].done.x | ms[worst].done.y)) {
+	if (!(ms[worst].done.cx | ms[worst].done.cy)) {
 	    if (++nothing_done >= 5) {
 		ms[worst].crash = CrashUnknown;
 		break;
 	    }
 	} else {
 	    nothing_done = 0;
-	    ms[worst].pos.x += ms[worst].done.x;
-	    ms[worst].pos.y += ms[worst].done.y;
+	    ms[worst].pos.cx += ms[worst].done.cx;
+	    ms[worst].pos.cy += ms[worst].done.cy;
 	}
-	if (!(ms[worst].todo.x | ms[worst].todo.y)) {
+	if (!(ms[worst].todo.cx | ms[worst].todo.cy)) {
 	    break;
 	}
 
 	vel = ms[worst].vel;
 	for (i = 0; i < pl->ship->num_points; i++) {
 	    if (i != worst) {
-		ms[i].pos.x += ms[worst].done.x;
-		ms[i].pos.y += ms[worst].done.y;
+		ms[i].pos.cx += ms[worst].done.cx;
+		ms[i].pos.cy += ms[worst].done.cy;
 		ms[i].vel = vel;
 		ms[i].todo = ms[worst].todo;
 		ms[i].dir = ms[worst].dir;
@@ -2637,16 +2786,16 @@ static void Move_player_old(int ind)
 	}
     }
 
-    pos.x = ms[worst].pos.x - pl->ship->pts[worst][pl->dir].cx;
-    pos.y = ms[worst].pos.y - pl->ship->pts[worst][pl->dir].cy;
-    pos.x = WRAP_XCLICK(pos.x);
-    pos.y = WRAP_YCLICK(pos.y);
-    Player_position_set_clicks(pl, pos.x, pos.y);
+    pos.cx = ms[worst].pos.cx - pl->ship->pts[worst][pl->dir].cx;
+    pos.cy = ms[worst].pos.cy - pl->ship->pts[worst][pl->dir].cy;
+    pos.cx = WRAP_XCLICK(pos.cx);
+    pos.cy = WRAP_YCLICK(pos.cy);
+    Player_position_set_clicks(pl, pos.cx, pos.cy);
     pl->vel = ms[worst].vel;
     pl->velocity = VECTOR_LENGTH(pl->vel);
 
     if (ms[worst].crash) {
-	Player_crash_old(&ms[worst], worst, false);
+	Player_crash_old(&ms[worst], worst /*, false*/);
     }
     if (pos_update) {
 	Player_position_remember(pl);
@@ -2708,56 +2857,56 @@ static void Turn_player_old(int ind)
     salt.y = (pl->vel.y > 0) ? 1e-6f : (pl->vel.y < 0) ? -1e-6f : 0;
 #endif
 
-    pos.x = pl->pos.cx;
-    pos.y = pl->pos.cy;
+    pos.cx = pl->pos.cx;
+    pos.cy = pl->pos.cy;
     for (; pl->dir != new_dir; turns_done++) {
 	dir = MOD2(pl->dir + sign, RES);
 	if (!mi.edge_wrap) {
-	    if (pos.x <= 22 * CLICK) {
+	    if (pos.cx <= 22 * CLICK) {
 		for (i = 0; i < pl->ship->num_points; i++) {
-		    if (pos.x + pl->ship->pts[i][dir].cx < 0) {
-			pos.x = -pl->ship->pts[i][dir].cx;
+		    if (pos.cx + pl->ship->pts[i][dir].cx < 0) {
+			pos.cx = -pl->ship->pts[i][dir].cx;
 		    }
 		}
 	    }
-	    if (pos.x >= mp.click_width - 22 * CLICK) {
+	    if (pos.cx >= mp.click_width - 22 * CLICK) {
 		for (i = 0; i < pl->ship->num_points; i++) {
-		    if (pos.x + pl->ship->pts[i][dir].cx
+		    if (pos.cx + pl->ship->pts[i][dir].cx
 			>= mp.click_width) {
-			pos.x = mp.click_width - 1
+			pos.cx = mp.click_width - 1
 			       - pl->ship->pts[i][dir].cx;
 		    }
 		}
 	    }
-	    if (pos.y <= 22 * CLICK) {
+	    if (pos.cy <= 22 * CLICK) {
 		for (i = 0; i < pl->ship->num_points; i++) {
-		    if (pos.y + pl->ship->pts[i][dir].cy < 0) {
-			pos.y = -pl->ship->pts[i][dir].cy;
+		    if (pos.cy + pl->ship->pts[i][dir].cy < 0) {
+			pos.cy = -pl->ship->pts[i][dir].cy;
 		    }
 		}
 	    }
-	    if (pos.y >= mp.click_height - 22 * CLICK) {
+	    if (pos.cy >= mp.click_height - 22 * CLICK) {
 		for (i = 0; i < pl->ship->num_points; i++) {
-		    if (pos.y + pl->ship->pts[i][dir].cy
+		    if (pos.cy + pl->ship->pts[i][dir].cy
 			>= mp.click_height) {
-			pos.y = mp.click_height - 1
+			pos.cy = mp.click_height - 1
 			       - pl->ship->pts[i][dir].cy;
 		    }
 		}
 	    }
-	    if (pos.x != pl->pos.cx || pos.y != pl->pos.cy) {
-		Player_position_set_clicks(pl, pos.x, pos.y);
+	    if (pos.cx != pl->pos.cx || pos.cy != pl->pos.cy) {
+		Player_position_set_clicks(pl, pos.cx, pos.cy);
 	    }
 	}
 
 	for (i = 0; i < pl->ship->num_points; i++) {
 	    ms[i].mip = &mi;
-	    ms[i].pos.x = pos.x + pl->ship->pts[i][pl->dir].cx;
-	    ms[i].pos.y = pos.y + pl->ship->pts[i][pl->dir].cy;
-	    ms[i].todo.x = pos.x + pl->ship->pts[i][dir].cx - ms[i].pos.x;
-	    ms[i].todo.y = pos.y + pl->ship->pts[i][dir].cy - ms[i].pos.y;
-	    ms[i].vel.x = ms[i].todo.x + salt.x;
-	    ms[i].vel.y = ms[i].todo.y + salt.y;
+	    ms[i].pos.cx = pos.cx + pl->ship->pts[i][pl->dir].cx;
+	    ms[i].pos.cy = pos.cy + pl->ship->pts[i][pl->dir].cy;
+	    ms[i].todo.cx = pos.cx + pl->ship->pts[i][dir].cx - ms[i].pos.cx;
+	    ms[i].todo.cy = pos.cy + pl->ship->pts[i][dir].cy - ms[i].pos.cy;
+	    ms[i].vel.x = ms[i].todo.cx + salt.x;
+	    ms[i].vel.y = ms[i].todo.cy + salt.y;
 	    ms[i].target = -1;
 
 	    do {
@@ -2781,12 +2930,12 @@ static void Turn_player_old(int ind)
 			break;
 		    }
 		}
-		else if (ms[i].done.x | ms[i].done.y) {
-		    ms[i].pos.x += ms[i].done.x;
-		    ms[i].pos.y += ms[i].done.y;
+		else if (ms[i].done.cx | ms[i].done.cy) {
+		    ms[i].pos.cx += ms[i].done.cx;
+		    ms[i].pos.cy += ms[i].done.cy;
 		    nothing_done = 0;
 		}
-	    } while (ms[i].todo.x | ms[i].todo.y);
+	    } while (ms[i].todo.cx | ms[i].todo.cy);
 	    if (blocked) {
 		break;
 	    }
@@ -2804,112 +2953,12 @@ static void Turn_player_old(int ind)
     }
 
     if (crash != -1) {
-	Player_crash_old(&ms[crash], crash, true);
+	Player_crash_old(&ms[crash], crash /*, true*/);
     }
 
 }
 
-/* polygon map related stuff */
 
-/* start */
-
-/* Maximum line length 32767-B_CLICKS, 30000 used in checks
-   There's a minimum map size to avoid "too much wrapping". A bit smaller
-   than that would cause rare errors for fast-moving things. I haven't
-   bothered to figure out what the limit is. 80k x 80k clicks should
-   be more than enough (probably...). */
-#define B_SHIFT 11
-#define B_CLICKS (1 << B_SHIFT)
-#define B_MASK (B_CLICKS - 1)
-#define CUTOFF (2 * BLOCK_CLICKS) /* Not sure about the optimum value */
-#define MAX_MOVE 32000
-#define SEPARATION_DIST 64
-/* This must be increased if the ship corners are allowed to go farther
-   when turning! */
-#define MAX_SHAPE_OFFSET (15 * CLICK)
-
-#if ((-3) / 2 != -1) || ((-3) % 2 != -1)
-#error "This code assumes that negative numbers round upwards."
-#endif
-
-struct collans {
-    int line;
-    int point;
-    clvec moved;
-};
-
-struct tl2 {
-    int base;
-    int x;
-    int y;
-};
-
-struct move {
-    clvec start;
-    clvec delta;
-    int hit_mask;
-};
-
-struct bline {
-    clvec start;
-    clvec delta;
-    DFLOAT c;
-    DFLOAT s;
-    short group;
-};
-
-struct blockinfo {
-    unsigned short distance;
-    unsigned short *lines;
-    unsigned short *points;
-};
-
-struct inside_block {
-    short *y;
-    short *lines;
-    struct inside_block *next;
-    short group;
-    char base_value;
-};
-
-struct inside_block *inside_table;
-
-struct test {
-    double distance;
-    int inside;
-    struct tempy *y;
-    struct templine *lines;
-};
-
-struct test *temparray;
-
-shipobj ball_wire;
-
-#define LINEY(X, Y, BASE, ARG)  (((Y)*(ARG)+(BASE))/(X))
-#define SIDE(X, Y, LINE) (linet[(LINE)].delta.y * (X) - linet[(LINE)].delta.x * (Y))
-#define SIGN(X) ((X) >= 0 ? 1 : -1)
-
-struct bline *linet;
-#define S_LINES 100 /* stupid hack */
-
-struct group groups[100] = { /* !@# */
-    {0, 0},
-    {0, 0},
-    {0, 0}};
-
-struct blockinfo *blockline;
-
-unsigned short *llist;
-
-unsigned short *plist;
-
-int linec = 0;
-
-int polyc = 0;
-
-int num_groups = 0;
-
-int mapx, mapy;
 
 static char msg[MSG_LEN];
 
@@ -2941,15 +2990,17 @@ static unsigned short *Shape_lines(const shipobj *shape, int dir)
     lastdir = dir;
 
     for (p = 0; p < shape->num_points; p++) {
-	linet[p + os].start.x = -shape->pts[p][dir].cx;
-	linet[p + os].start.y = -shape->pts[p][dir].cy;
+	linet[p + os].start.cx = -shape->pts[p][dir].cx;
+	linet[p + os].start.cy = -shape->pts[p][dir].cy;
     }
     for (p = 0; p < shape->num_points - 1; p++) {
-	linet[p + os].delta.x = linet[p + os + 1].start.x - linet[p + os].start.x;
-	linet[p + os].delta.y = linet[p + os + 1].start.y - linet[p + os].start.y;
+	linet[p + os].delta.cx
+	    = linet[p + os + 1].start.cx - linet[p + os].start.cx;
+	linet[p + os].delta.cy
+	    = linet[p + os + 1].start.cy - linet[p + os].start.cy;
     }
-    linet[p + os].delta.x = linet[os].start.x - linet[p + os].start.x;
-    linet[p + os].delta.y = linet[os].start.y - linet[p + os].start.y;
+    linet[p + os].delta.cx = linet[os].start.cx - linet[p + os].start.cx;
+    linet[p + os].delta.cy = linet[os].start.cy - linet[p + os].start.cy;
     for (p = 0; p < shape->num_points; p++)
 	foo[p] = p + os;
     foo[p] = 65535;
@@ -2961,10 +3012,11 @@ static int Bounce_object(object *obj, struct move *move, int line, int point)
 {
     DFLOAT fx, fy;
     DFLOAT c, s;
-    int group, type;
+    int group, type, item_id;
 
     group = linet[line >= linec ? point : line].group;
     type = groups[group].type;
+    item_id = groups[group].item_id;
 
     if (obj->collmode == 1) {
 	fx = ABS(obj->vel.x) + ABS(obj->vel.y);
@@ -2972,7 +3024,7 @@ static int Bounce_object(object *obj, struct move *move, int line, int point)
 	   collision detection can ignore the bounce. */
 	if (fx > 1) {
 	    obj->wall_time = 1 -
-		CLICK_TO_FLOAT(ABS(move->delta.x) + ABS(move->delta.y)) / fx;
+		CLICK_TO_FLOAT(ABS(move->delta.cx) + ABS(move->delta.cy)) / fx;
 	    obj->collmode = 2;
 	}
     }
@@ -2984,6 +3036,21 @@ static int Bounce_object(object *obj, struct move *move, int line, int point)
 	return 0;
     }
 
+    /* kps hack */
+    if (type == TARGET) {
+	Object_hits_target(&World.targets[item_id], obj, -1);
+	return 0;
+    }
+    /* kps hack */
+#if 0
+    /* kps hack */
+    if (type == WORMHOLE) {
+	/* kps - ??? */
+	/*Object_crash(obj, move, CrashWormHole, ???  );*/
+	return 0;
+    }
+    /* kps hack */
+#endif
     if (!BIT(mp.obj_bounce_mask, obj->type)) {
 	obj->life = 0;
 	return 0;
@@ -3014,8 +3081,8 @@ static int Bounce_object(object *obj, struct move *move, int line, int point)
 
     if (line >= linec) {
 	DFLOAT x, y, l2;
-	x = linet[line].delta.x;
-	y = linet[line].delta.y;
+	x = linet[line].delta.cx;
+	y = linet[line].delta.cy;
 	l2 = (x*x + y*y);
 	c = (x*x - y*y) / l2;
 	s = 2*x*y / l2;
@@ -3024,10 +3091,10 @@ static int Bounce_object(object *obj, struct move *move, int line, int point)
 	c = linet[line].c;
 	s = linet[line].s;
     }
-    fx = move->delta.x * c + move->delta.y * s;
-    fy = move->delta.x * s - move->delta.y * c;
-    move->delta.x = fx * objectWallBrakeFactor;
-    move->delta.y = fy * objectWallBrakeFactor;
+    fx = move->delta.cx * c + move->delta.cy * s;
+    fy = move->delta.cx * s - move->delta.cy * c;
+    move->delta.cx = fx * objectWallBrakeFactor;
+    move->delta.cy = fy * objectWallBrakeFactor;
     fx = obj->vel.x * c + obj->vel.y * s;
     fy = obj->vel.x * s - obj->vel.y * c;
     obj->vel.x = fx * objectWallBrakeFactor;
@@ -3038,175 +3105,17 @@ static int Bounce_object(object *obj, struct move *move, int line, int point)
 }
 
 
-static void Player_crash_new(player *pl, struct move *move, int crashtype)
-{
-    int			ind = GetInd[pl->id];
-    const char		*howfmt = NULL;
-    const char          *hudmsg = NULL;
-
-    msg[0] = '\0';
-
-    switch (crashtype) {
-
-    default:
-    case NotACrash:
-	warn("Unrecognized crash %d", crashtype);
-	exit(1);
-
-	/*  !@# target too */
-#if 0
-    case CrashWormHole:
-	SET_BIT(pl->status, WARPING);
-	pl->wormHoleHit = ms->wormhole;
-	break;
-#endif
-
-    case CrashWall:
-	howfmt = "%s crashed against a wall";
-	hudmsg = "[Wall]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
-	break;
-
-    case CrashWallSpeed:
-	howfmt = "%s smashed against a wall";
-	hudmsg = "[Wall]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
-	break;
-
-    case CrashWallNoFuel:
-	howfmt = "%s smacked against a wall";
-	hudmsg = "[Wall]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
-	break;
-
-#if 0
-    case CrashTarget:
-	howfmt = "%s smashed against a target";
-	hudmsg = "[Target]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
-	Object_hits_target(ms, -1);
-	break;
-#endif
-
-    case CrashTreasure:
-	howfmt = "%s smashed against a treasure";
-	hudmsg = "[Treasure]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
-	break;
-
-#if 0
-    case CrashCannon:
-	if (BIT(pl->used, HAS_SHIELD|HAS_EMERGENCY_SHIELD)
-	    != (HAS_SHIELD|HAS_EMERGENCY_SHIELD)) {
-	    howfmt = "%s smashed against a cannon";
-	    hudmsg = "[Cannon]";
-	    sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_CANNON_SOUND);
-	}
-	Cannon_dies(ms);
-	break;
-#endif
-
-    case CrashUniverse:
-	howfmt = "%s left the known universe";
-	hudmsg = "[Universe]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
-	break;
-
-    case CrashUnknown:
-	howfmt = "%s slammed into a programming error";
-	hudmsg = "[Bug]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
-	break;
-    }
-
-    if (howfmt && hudmsg) {
-	player		*pushers[MAX_RECORDED_SHOVES];
-	int		cnt[MAX_RECORDED_SHOVES];
-	int		num_pushers = 0;
-	int		total_pusher_count = 0;
-	int		total_pusher_score = 0;
-	int		i, j, sc;
-
-	SET_BIT(pl->status, KILLED);
-	move->delta.x = 0;
-	move->delta.y = 0;
-	sprintf(msg, howfmt, pl->name);
-
-	/* get a list of who pushed me */
-	for (i = 0; i < MAX_RECORDED_SHOVES; i++) {
-	    shove_t *shove = &pl->shove_record[i];
-	    if (shove->pusher_id == -1) {
-		continue;
-	    }
-	    if (shove->time < frame_loops - 20) {
-		continue;
-	    }
-	    for (j = 0; j < num_pushers; j++) {
-		if (shove->pusher_id == pushers[j]->id) {
-		    cnt[j]++;
-		    break;
-		}
-	    }
-	    if (j == num_pushers) {
-		pushers[num_pushers++] = Players[GetInd[shove->pusher_id]];
-		cnt[j] = 1;
-	    }
-	    total_pusher_count++;
-	    total_pusher_score += pushers[j]->score;
-	}
-	if (num_pushers == 0) {
-	    sc = Rate(WALL_SCORE, pl->score);
-	    SCORE(ind, -sc, pl->pos.cx, pl->pos.cy, hudmsg);
-	    strcat(msg, ".");
-	    Set_message(msg);
-	}
-	else {
-	    int		msg_len = strlen(msg);
-	    char	*msg_ptr = &msg[msg_len];
-	    int		average_pusher_score = total_pusher_score
-						/ total_pusher_count;
-
-	    for (i = 0; i < num_pushers; i++) {
-		player		*pusher = pushers[i];
-		const char	*sep = (!i) ? " with help from "
-					    : (i < num_pushers - 1) ? ", "
-					    : " and ";
-		int		sep_len = strlen(sep);
-		int		name_len = strlen(pusher->name);
-
-		if (msg_len + sep_len + name_len + 2 < sizeof msg) {
-		    strcpy(msg_ptr, sep);
-		    msg_len += sep_len;
-		    msg_ptr += sep_len;
-		    strcpy(msg_ptr, pusher->name);
-		    msg_len += name_len;
-		    msg_ptr += name_len;
-		}
-		sc = cnt[i] * (int)floor(Rate(pusher->score, pl->score)
-				    * shoveKillScoreMult) / total_pusher_count;
-		SCORE(GetInd[pusher->id], sc,
-		      pl->pos.cx, pl->pos.cy, pl->name);
-	    }
-	    sc = (int)floor(Rate(average_pusher_score, pl->score)
-		       * shoveKillScoreMult);
-	    SCORE(ind, -sc, pl->pos.cx, pl->pos.cy, "[Shove]");
-	    strcpy(msg_ptr, ".");
-	    Set_message(msg);
-	}
-    }
-}
-
 
 static void Bounce_player(player *pl, struct move *move, int line, int point)
 {
     DFLOAT fx, fy;
     DFLOAT c, s;
-    int group;
+    int group, type, item_id;
 
     if (line >= linec) {
 	DFLOAT x, y, l2;
-	x = linet[line].delta.x;
-	y = linet[line].delta.y;
+	x = linet[line].delta.cx;
+	y = linet[line].delta.cy;
 	l2 = (x*x + y*y);
 	c = (x*x - y*y) / l2;
 	s = 2*x*y / l2;
@@ -3217,10 +3126,26 @@ static void Bounce_player(player *pl, struct move *move, int line, int point)
 	c = linet[line].c;
 	s = linet[line].s;
     }
-    if (groups[group].type == TREASURE) {
-	Player_crash_new(pl, move, CrashTreasure);
+    type = groups[group].type;
+    item_id = groups[group].item_id;
+    if (type == TREASURE) {
+	Player_crash(pl, move, CrashTreasure, NO_ID, 1);
 	return;
     }
+    /* kps hack */
+    if (type == TARGET) {
+	/*Object_hits_target(&World.targets[item_id], obj, -1);*/
+	Player_crash(pl, move, CrashTarget, item_id, 1);
+	return;
+    }
+    /* kps hack */
+
+    /* kps hack */
+    if (type == WORMHOLE) {
+	Player_crash(pl, move, CrashWormHole, item_id, 1);
+	return;
+    }
+    /* kps hack */
 
     pl->last_wall_touch = frame_loops;
     {
@@ -3238,7 +3163,7 @@ static void Bounce_player(player *pl, struct move *move, int line, int point)
 	    max_speed = 100;
 	}
 	if (speed > max_speed) {
-	    Player_crash_new(pl, move, CrashWallSpeed);
+	    Player_crash(pl, move, CrashWallSpeed, NO_ID, 1);
 	    return;
 	}
 
@@ -3255,7 +3180,7 @@ static void Bounce_player(player *pl, struct move *move, int line, int point)
 	    Item_damage(GetInd[pl->id], wallBounceDestroyItemProb);
 	}
 	if (!pl->fuel.sum && wallBounceFuelDrainMult != 0) {
-	    Player_crash_new(pl, move, CrashWallNoFuel);
+	    Player_crash(pl, move, CrashWallNoFuel, NO_ID, 1);
 	    return;
 	}
 /* !@# I didn't implement wall direction calculation yet. */
@@ -3263,7 +3188,7 @@ static void Bounce_player(player *pl, struct move *move, int line, int point)
 #if 0
 	    int intensity = (int)(cost * wallBounceExplosionMult);
 	    Make_debris(
-			/* pos.x, pos.y   */ pl->pos.cx, pl->pos.cy,
+			/* pos.cx, pos.cy   */ pl->pos.cx, pl->pos.cy,
 			/* vel.x, vel.y   */ pl->vel.x, pl->vel.y,
 			/* owner id       */ pl->id,
 			/* owner team	  */ pl->team,
@@ -3285,15 +3210,15 @@ static void Bounce_player(player *pl, struct move *move, int line, int point)
 	    if (ms[worst].target >= 0) {
 		cost <<= FUEL_SCALE_BITS;
 		cost = (long)(cost * (wallBounceFuelDrainMult / 4.0));
-		Object_hits_target(&ms[worst], cost);
+		Object_hits_target_old(&ms[worst], cost);
 	    }
 #endif
 	}
     }
-    fx = move->delta.x * c + move->delta.y * s;
-    fy = move->delta.x * s - move->delta.y * c;
-    move->delta.x = fx * playerWallBrakeFactor;
-    move->delta.y = fy * playerWallBrakeFactor;
+    fx = move->delta.cx * c + move->delta.cy * s;
+    fy = move->delta.cx * s - move->delta.cy * c;
+    move->delta.cx = fx * playerWallBrakeFactor;
+    move->delta.cy = fy * playerWallBrakeFactor;
     fx = pl->vel.x * c + pl->vel.y * s;
     fy = pl->vel.x * s - pl->vel.y * c;
     pl->vel.x = fx * playerWallBrakeFactor;
@@ -3305,107 +3230,117 @@ static int Away(struct move *move, int line)
     int i, dx, dy, lsx, lsy, res;
     unsigned short *lines;
 
-    lsx = linet[line].start.x - move->start.x;
-    lsy = linet[line].start.y - move->start.y;
+    lsx = linet[line].start.cx - move->start.cx;
+    lsy = linet[line].start.cy - move->start.cy;
     lsx = CENTER_XCLICK(lsx);
     lsy = CENTER_YCLICK(lsy);
 
-    if (ABS(linet[line].delta.x) >= ABS(linet[line].delta.y)) {
+    if (ABS(linet[line].delta.cx) >= ABS(linet[line].delta.cy)) {
 	dx = 0;
-	dy = -SIGN(linet[line].delta.x);
+	dy = -SIGN(linet[line].delta.cx);
     }
     else {
 	dy = 0;
-	dx = SIGN(linet[line].delta.y);
+	dx = SIGN(linet[line].delta.cy);
     }
 
-    if ((ABS(lsx) > SEPARATION_DIST || ABS(lsy) > SEPARATION_DIST) && (ABS(lsx + linet[line].delta.x) > SEPARATION_DIST || ABS(lsy + linet[line].delta.y) > SEPARATION_DIST)) {
-	move->start.x = WRAP_XCLICK(move->start.x + dx);
-	move->start.y = WRAP_YCLICK(move->start.y + dy);
+    if ((ABS(lsx) > SEPARATION_DIST || ABS(lsy) > SEPARATION_DIST)
+	&& (ABS(lsx + linet[line].delta.cx) > SEPARATION_DIST
+	    || ABS(lsy + linet[line].delta.cy) > SEPARATION_DIST)) {
+	move->start.cx = WRAP_XCLICK(move->start.cx + dx);
+	move->start.cy = WRAP_YCLICK(move->start.cy + dy);
 	return -1;
     }
 
-    lines = blockline[(move->start.x >> B_SHIFT) + mapx * (move->start.y >> B_SHIFT)].lines;
+    lines = blockline[(move->start.cx >> B_SHIFT)
+		     + mapx * (move->start.cy >> B_SHIFT)].lines;
     while ( (i = *lines++) != 65535) {
 	if (i == line)
 	    continue;
-	if (linet[i].group && (groups[linet[i].group].hit_mask & move->hit_mask))
+	if (linet[i].group
+	    && (groups[linet[i].group].hit_mask & move->hit_mask))
 	    continue;
 
-	lsx = linet[i].start.x - move->start.x;
-	lsy = linet[i].start.y - move->start.y;
+	lsx = linet[i].start.cx - move->start.cx;
+	lsy = linet[i].start.cy - move->start.cy;
 	lsx = CENTER_XCLICK(lsx);
 	lsy = CENTER_YCLICK(lsy);
 
-	if ((ABS(lsx) > SEPARATION_DIST || ABS(lsy) > SEPARATION_DIST) && (ABS(lsx + linet[i].delta.x) > SEPARATION_DIST || ABS(lsy + linet[i].delta.y) > SEPARATION_DIST))
+	if ((ABS(lsx) > SEPARATION_DIST || ABS(lsy) > SEPARATION_DIST)
+	    && (ABS(lsx + linet[i].delta.cx) > SEPARATION_DIST
+		|| ABS(lsy + linet[i].delta.cy) > SEPARATION_DIST))
 	    continue;
 
-	if (lsx < dx && lsx + linet[i].delta.x < dx)
+	if (lsx < dx && lsx + linet[i].delta.cx < dx)
 	    continue;
-	if (lsx > dx && lsx + linet[i].delta.x > dx)
+	if (lsx > dx && lsx + linet[i].delta.cx > dx)
 	    continue;
-	if (lsy < dy && lsy + linet[i].delta.y < dy)
+	if (lsy < dy && lsy + linet[i].delta.cy < dy)
 	    continue;
-	if (lsy > dy && lsy + linet[i].delta.y > dy)
+	if (lsy > dy && lsy + linet[i].delta.cy > dy)
 	    continue;
 
-	if ((res = SIDE(lsx - dx, lsy - dy, i)) == 0 || res > 0 != SIDE(lsx, lsy, i) > 0) {
+	if ((res = SIDE(lsx - dx, lsy - dy, i)) == 0
+	    || res > 0 != SIDE(lsx, lsy, i) > 0) {
 	    if (res) {
-		if (lsx < 0 && lsx + linet[i].delta.x < 0)
+		if (lsx < 0 && lsx + linet[i].delta.cx < 0)
 		    continue;
-		if (lsx > 0 && lsx + linet[i].delta.x > 0)
+		if (lsx > 0 && lsx + linet[i].delta.cx > 0)
 		    continue;
-		if (lsy < 0 && lsy + linet[i].delta.y < 0)
+		if (lsy < 0 && lsy + linet[i].delta.cy < 0)
 		    continue;
-		if (lsy > 0 && lsy + linet[i].delta.y > 0)
+		if (lsy > 0 && lsy + linet[i].delta.cy > 0)
 		    continue;
 	    }
 	    return i;
 	}
     }
 
-    move->start.x = WRAP_XCLICK(move->start.x + dx);
-    move->start.y = WRAP_YCLICK(move->start.y + dy);
+    move->start.cx = WRAP_XCLICK(move->start.cx + dx);
+    move->start.cy = WRAP_YCLICK(move->start.cy + dy);
     return -1;
 }
 
-static int Shape_move1(int dx, int dy, struct move *move, const shipobj *shape, int dir, int *line, int *point)
+static int Shape_move1(int dx, int dy, struct move *move,
+		       const shipobj *shape, int dir, int *line, int *point)
 {
     int i, p, lsx, lsy, res;
     unsigned short *lines, *points;
     int block;
 
-    block = (move->start.x >> B_SHIFT) + mapx * (move->start.y >> B_SHIFT);
+    block = (move->start.cx >> B_SHIFT) + mapx * (move->start.cy >> B_SHIFT);
     for (p = 0; p < shape->num_points; p++) {
 	lines = blockline[block].lines;
 	/* Can use the same block for all points because the block of the
 	   center point contains lines for their start & end positions. */
 	while ( (i = *lines++) != 65535) {
-	    if (linet[i].group && (groups[linet[i].group].hit_mask & move->hit_mask))
+	    if (linet[i].group
+		&& (groups[linet[i].group].hit_mask & move->hit_mask))
 		continue;
-	    lsx = linet[i].start.x - move->start.x - shape->pts[p][dir].cx;
-	    lsy = linet[i].start.y - move->start.y - shape->pts[p][dir].cy;
+	    lsx = linet[i].start.cx - move->start.cx - shape->pts[p][dir].cx;
+	    lsy = linet[i].start.cy - move->start.cy - shape->pts[p][dir].cy;
 	    lsx = CENTER_XCLICK(lsx);
 	    lsy = CENTER_YCLICK(lsy);
 
-	    if (lsx < dx && lsx + linet[i].delta.x < dx)
+	    if (lsx < dx && lsx + linet[i].delta.cx < dx)
 		continue;
-	    if (lsx > dx && lsx + linet[i].delta.x > dx)
+	    if (lsx > dx && lsx + linet[i].delta.cx > dx)
 		continue;
-	    if (lsy < dy && lsy + linet[i].delta.y < dy)
+	    if (lsy < dy && lsy + linet[i].delta.cy < dy)
 		continue;
-	    if (lsy > dy && lsy + linet[i].delta.y > dy)
+	    if (lsy > dy && lsy + linet[i].delta.cy > dy)
 		continue;
 
-	    if ( (res = SIDE(lsx - dx, lsy - dy, i)) == 0 || res > 0 != SIDE(lsx, lsy, i) > 0) {
+	    if ( (res = SIDE(lsx - dx, lsy - dy, i)) == 0
+		 || res > 0 != SIDE(lsx, lsy, i) > 0) {
 		if (res) {
-		    if (lsx < 0 && lsx + linet[i].delta.x < 0)
+		    if (lsx < 0 && lsx + linet[i].delta.cx < 0)
 			continue;
-		    if (lsx > 0 && lsx + linet[i].delta.x > 0)
+		    if (lsx > 0 && lsx + linet[i].delta.cx > 0)
 			continue;
-		    if (lsy < 0 && lsy + linet[i].delta.y < 0)
+		    if (lsy < 0 && lsy + linet[i].delta.cy < 0)
 			continue;
-		    if (lsy > 0 && lsy + linet[i].delta.y > 0)
+		    if (lsy > 0 && lsy + linet[i].delta.cy > 0)
 			continue;
 		}
 		*line = i;
@@ -3416,33 +3351,35 @@ static int Shape_move1(int dx, int dy, struct move *move, const shipobj *shape, 
 
     points = blockline[block].points;
     while ( (p = *points++) != 65535) {
-	if (linet[p].group && (groups[linet[p].group].hit_mask & move->hit_mask))
+	if (linet[p].group
+	    && (groups[linet[p].group].hit_mask & move->hit_mask))
 	    continue;
 	lines = Shape_lines(shape, dir);
 	while ( (i = *lines++) != 65535) {
-	    lsx = linet[i].start.x + (linet[p].start.x - move->start.x);
-	    lsy = linet[i].start.y + (linet[p].start.y - move->start.y);
+	    lsx = linet[i].start.cx + (linet[p].start.cx - move->start.cx);
+	    lsy = linet[i].start.cy + (linet[p].start.cy - move->start.cy);
 	    lsx = CENTER_XCLICK(lsx);
 	    lsy = CENTER_YCLICK(lsy);
 
-	    if (lsx < dx && lsx + linet[i].delta.x < dx)
+	    if (lsx < dx && lsx + linet[i].delta.cx < dx)
 		continue;
-	    if (lsx > dx && lsx + linet[i].delta.x > dx)
+	    if (lsx > dx && lsx + linet[i].delta.cx > dx)
 		continue;
-	    if (lsy < dy && lsy + linet[i].delta.y < dy)
+	    if (lsy < dy && lsy + linet[i].delta.cy < dy)
 		continue;
-	    if (lsy > dy && lsy + linet[i].delta.y > dy)
+	    if (lsy > dy && lsy + linet[i].delta.cy > dy)
 		continue;
 
-	    if ( (res = SIDE(lsx - dx, lsy - dy, i)) == 0 || res > 0 != SIDE(lsx, lsy, i) > 0) {
+	    if ( (res = SIDE(lsx - dx, lsy - dy, i)) == 0
+		 || res > 0 != SIDE(lsx, lsy, i) > 0) {
 		if (res) {
-		    if (lsx < 0 && lsx + linet[i].delta.x < 0)
+		    if (lsx < 0 && lsx + linet[i].delta.cx < 0)
 			continue;
-		    if (lsx > 0 && lsx + linet[i].delta.x > 0)
+		    if (lsx > 0 && lsx + linet[i].delta.cx > 0)
 			continue;
-		    if (lsy < 0 && lsy + linet[i].delta.y < 0)
+		    if (lsy < 0 && lsy + linet[i].delta.cy < 0)
 			continue;
-		    if (lsy > 0 && lsy + linet[i].delta.y > 0)
+		    if (lsy > 0 && lsy + linet[i].delta.cy > 0)
 			continue;
 		}
 		*line = i;
@@ -3452,38 +3389,43 @@ static int Shape_move1(int dx, int dy, struct move *move, const shipobj *shape, 
 	}
     }
 
-    move->start.x = WRAP_XCLICK(move->start.x + dx);
-    move->start.y = WRAP_YCLICK(move->start.y + dy);
+    move->start.cx = WRAP_XCLICK(move->start.cx + dx);
+    move->start.cy = WRAP_YCLICK(move->start.cy + dy);
     return 1;
 }
 
-static int Shape_away(struct move *move, const shipobj *shape, int dir, int line, int *rline, int *rpoint)
+static int Shape_away(struct move *move, const shipobj *shape,
+		      int dir, int line, int *rline, int *rpoint)
 {
     int dx, dy;
 
-    if (ABS(linet[line].delta.x) >= ABS(linet[line].delta.y)) {
+    if (ABS(linet[line].delta.cx) >= ABS(linet[line].delta.cy)) {
 	dx = 0;
-	dy = -SIGN(linet[line].delta.x);
+	dy = -SIGN(linet[line].delta.cx);
     }
     else {
 	dy = 0;
-	dx = SIGN(linet[line].delta.y);
+	dx = SIGN(linet[line].delta.cy);
     }
     return Shape_move1(dx, dy, move, shape, dir, rline, rpoint);
 }
 
-static int Lines_check(int msx, int msy, int mdx, int mdy, int *mindone, const unsigned short *lines, int chx, int chy, int chxy, const struct move *move, int *minline, int *height)
+static int Lines_check(int msx, int msy, int mdx, int mdy, int *mindone,
+		       const unsigned short *lines, int chx, int chy,
+		       int chxy, const struct move *move, int *minline,
+		       int *height)
 {
     int lsx, lsy, ldx, ldy, temp, bigger, start, end, i, x, sy, ey, prod;
     int mbase = mdy >> 1, hit = 0;
 
     while ( (i = *lines++) != 65535) {
-	if (linet[i].group && (groups[linet[i].group].hit_mask & move->hit_mask))
+	if (linet[i].group
+	    && (groups[linet[i].group].hit_mask & move->hit_mask))
 	    continue;
-	lsx = linet[i].start.x;
-	lsy = linet[i].start.y;
-	ldx = linet[i].delta.x;
-	ldy = linet[i].delta.y;
+	lsx = linet[i].start.cx;
+	lsy = linet[i].start.cy;
+	ldx = linet[i].delta.cx;
+	ldy = linet[i].delta.cy;
 
 	if (chx) {
 	    lsx = -lsx;
@@ -3542,7 +3484,9 @@ static int Lines_check(int msx, int msy, int mdx, int mdy, int *mindone, const u
 	else {
 	    bigger = prod > 0;
 	    ey = LINEY(mdx, mdy, mbase, end);
-	    if ( ABS(prod) >= ldx && ABS( (prod = (end - lsx) * ldy - (ey - lsy) * ldx) ) >= ldx && prod > 0 == bigger)
+	    if ( ABS(prod) >= ldx
+		 && ABS( (prod = (end - lsx) * ldy - (ey - lsy) * ldx) ) 
+		 >= ldx && prod > 0 == bigger)
 		continue;
 	    {
 		int schs, sche;
@@ -3569,7 +3513,9 @@ static int Lines_check(int msx, int msy, int mdx, int mdy, int *mindone, const u
 		}
 
 		for (x = schs; x <= sche; x++)
-		    if ( (prod = (x - lsx) * ldy - (LINEY(mdx, mdy, mbase, x) - lsy) * ldx) >= 0 != bigger || prod == 0)
+		    if ( (prod = (x - lsx) * ldy
+			  - (LINEY(mdx, mdy, mbase, x) - lsy) * ldx)
+			 >= 0 != bigger || prod == 0)
 			goto found;
 		continue;
 	    found:
@@ -3577,7 +3523,10 @@ static int Lines_check(int msx, int msy, int mdx, int mdy, int *mindone, const u
 	    }
 	}
 
-	if (start < *mindone || (start == *mindone && *minline != -1 && SIDE(move->delta.x, move->delta.y, i) < 0)) {
+	if (start < *mindone
+	    || (start == *mindone
+		&& *minline != -1
+		&& SIDE(move->delta.cx, move->delta.cy, i) < 0)) {
 	    hit = 1;
 	    *mindone = start;
 	    *minline = i;
@@ -3594,14 +3543,14 @@ static void Move_point(const struct move *move, struct collans *answer)
 {
     int minline, mindone, minheight;
     int block;
-    int msx = move->start.x, msy = move->start.y;
-    int mdx = move->delta.x, mdy = move->delta.y;
+    int msx = move->start.cx, msy = move->start.cy;
+    int mdx = move->delta.cx, mdy = move->delta.cy;
     int mbase;
     int chxy = 0, chx = 0, chy = 0;
     int x, temp;
     unsigned short *lines;
 
-    block = (move->start.x >> B_SHIFT) + mapx * (move->start.y >> B_SHIFT);
+    block = (move->start.cx >> B_SHIFT) + mapx * (move->start.cy >> B_SHIFT);
     x = blockline[block].distance;
     lines = blockline[block].lines;
 
@@ -3642,7 +3591,8 @@ static void Move_point(const struct move *move, struct collans *answer)
 	    /* !@# change this so that the point always moves away from
 	       the current block */
 	    temp = msx > 0 ? B_CLICKS - (msx & B_MASK) : (-msx) & B_MASK;
-	    temp = MIN(temp, (msy > 0 ? B_CLICKS - (msy & B_MASK) : -msy & B_MASK));
+	    temp = MIN(temp,
+		       (msy > 0 ? B_CLICKS - (msy & B_MASK) : -msy & B_MASK));
 	    x += temp;
 	    x = MIN(x, MAX_MOVE);
 	}
@@ -3653,7 +3603,8 @@ static void Move_point(const struct move *move, struct collans *answer)
     }
     minline = -1;
 
-    Lines_check(msx, msy, mdx, mdy, &mindone, lines, chx, chy, chxy, move, &minline, &minheight);
+    Lines_check(msx, msy, mdx, mdy, &mindone, lines, chx, chy, chxy,
+		move, &minline, &minheight);
 
     answer->line = minline;
     if (chxy) {
@@ -3665,8 +3616,8 @@ static void Move_point(const struct move *move, struct collans *answer)
 	mindone = -mindone;
     if (chy)
 	minheight = -minheight;
-    answer->moved.x = mindone;
-    answer->moved.y = minheight;
+    answer->moved.cx = mindone;
+    answer->moved.cy = minheight;
 
     return;
 }
@@ -3678,12 +3629,13 @@ static void Move_point(const struct move *move, struct collans *answer)
  * For example, there's no need to consider all the points
  * separately if the ship is not close to a wall.
  */
-static void Shape_move(const struct move *move, const shipobj *shape, int dir, struct collans *answer)
+static void Shape_move(const struct move *move, const shipobj *shape,
+		       int dir, struct collans *answer)
 {
     int minline, mindone, minheight, minpoint;
     int p, block;
-    int msx = move->start.x, msy = move->start.y;
-    int mdx = move->delta.x, mdy = move->delta.y;
+    int msx = move->start.cx, msy = move->start.cy;
+    int mdx = move->delta.cx, mdy = move->delta.cy;
     int mbase;
     int chxy = 0, chx = 0, chy = 0;
     int x, temp;
@@ -3721,8 +3673,8 @@ static void Shape_move(const struct move *move, const shipobj *shape, int dir, s
     minpoint = -1;
 
     for (p = 0; p < shape->num_points; p++) {
-	msx = WRAP_XCLICK(move->start.x + shape->pts[p][dir].cx);
-	msy = WRAP_YCLICK(move->start.y + shape->pts[p][dir].cy);
+	msx = WRAP_XCLICK(move->start.cx + shape->pts[p][dir].cx);
+	msy = WRAP_YCLICK(move->start.cy + shape->pts[p][dir].cy);
 	block = (msx >> B_SHIFT) + mapx * (msy >> B_SHIFT);
 	if (chx)
 	    msx = -msx;
@@ -3740,7 +3692,10 @@ static void Shape_move(const struct move *move, const shipobj *shape, int dir, s
 	if (mindone > x) {
 	    if (x < MAX_MOVE) {
 		temp = msx > 0 ? B_CLICKS - (msx & B_MASK) : -msx & B_MASK;
-		temp = MIN(temp, (msy > 0 ? B_CLICKS - (msy & B_MASK) : -msy & B_MASK));
+		temp = MIN(temp,
+			   (msy > 0 ?
+			    B_CLICKS - (msy & B_MASK)
+			    : -msy & B_MASK));
 		x += temp;
 		x = MIN(x, MAX_MOVE);
 	    }
@@ -3750,19 +3705,21 @@ static void Shape_move(const struct move *move, const shipobj *shape, int dir, s
 	    }
 	}
 
-	if (Lines_check(msx, msy, mdx, mdy, &mindone, lines, chx, chy, chxy, move, &minline, &minheight))
+	if (Lines_check(msx, msy, mdx, mdy, &mindone, lines, chx, chy,
+			chxy, move, &minline, &minheight))
 	    minpoint = p;
     }
 
-    block = (move->start.x >> B_SHIFT) + mapx * (move->start.y >> B_SHIFT);
+    block = (move->start.cx >> B_SHIFT) + mapx * (move->start.cy >> B_SHIFT);
     points = blockline[block].points;
     lines = Shape_lines(shape, dir);
     x = -1;
     while ( ( p = *points++) != 65535) {
-	if (linet[p].group && (groups[linet[p].group].hit_mask & move->hit_mask))
+	if (linet[p].group
+	    && (groups[linet[p].group].hit_mask & move->hit_mask))
 	    continue;
-	msx = move->start.x - linet[p].start.x;
-	msy = move->start.y - linet[p].start.y;
+	msx = move->start.cx - linet[p].start.cx;
+	msy = move->start.cy - linet[p].start.cy;
 	if (chx)
 	    msx = -msx;
 	if (chy)
@@ -3772,7 +3729,8 @@ static void Shape_move(const struct move *move, const shipobj *shape, int dir, s
 	    msx = msy;
 	    msy = temp;
 	}
-	if (Lines_check(msx, msy, mdx, mdy, &mindone, lines, chx, chy, chxy, move, &minline, &minheight))
+	if (Lines_check(msx, msy, mdx, mdy, &mindone, lines, chx, chy,
+			chxy, move, &minline, &minheight))
 	    minpoint = p;
     }
 
@@ -3788,13 +3746,14 @@ static void Shape_move(const struct move *move, const shipobj *shape, int dir, s
 	mindone = -mindone;
     if (chy)
 	minheight = -minheight;
-    answer->moved.x = mindone;
-    answer->moved.y = minheight;
+    answer->moved.cx = mindone;
+    answer->moved.cy = minheight;
 
     return;
 }
 
-static int Shape_turn1(const shipobj *shape, int hitmask, int x, int y, int dir, int sign)
+static int Shape_turn1(const shipobj *shape, int hitmask, int x, int y,
+		       int dir, int sign)
 {
     struct move move;
     struct collans answer;
@@ -3804,20 +3763,20 @@ static int Shape_turn1(const shipobj *shape, int hitmask, int x, int y, int dir,
 
     move.hit_mask = hitmask;
     for (i = 0; i < shape->num_points; i++) {
-	move.start.x = x + shape->pts[i][dir].cx;
-	move.start.y = y + shape->pts[i][dir].cy;
-	move.delta.x = x + shape->pts[i][newdir].cx - move.start.x;
-	move.delta.y = y + shape->pts[i][newdir].cy - move.start.y;
-	move.start.x = WRAP_XCLICK(move.start.x);
-	move.start.y = WRAP_YCLICK(move.start.y);
-	while (move.delta.x || move.delta.y) {
+	move.start.cx = x + shape->pts[i][dir].cx;
+	move.start.cy = y + shape->pts[i][dir].cy;
+	move.delta.cx = x + shape->pts[i][newdir].cx - move.start.cx;
+	move.delta.cy = y + shape->pts[i][newdir].cy - move.start.cy;
+	move.start.cx = WRAP_XCLICK(move.start.cx);
+	move.start.cy = WRAP_YCLICK(move.start.cy);
+	while (move.delta.cx || move.delta.cy) {
 	    Move_point(&move, &answer);
 	    if (answer.line != -1)
 		return 0;
-	    move.start.x = WRAP_XCLICK(move.start.x + answer.moved.x);
-	    move.start.y = WRAP_YCLICK(move.start.y + answer.moved.y);
-	    move.delta.x -= answer.moved.x;
-	    move.delta.y -= answer.moved.y;
+	    move.start.cx = WRAP_XCLICK(move.start.cx + answer.moved.cx);
+	    move.start.cy = WRAP_YCLICK(move.start.cy + answer.moved.cy);
+	    move.delta.cx -= answer.moved.cx;
+	    move.delta.cy -= answer.moved.cy;
 	}
     }
 
@@ -3826,8 +3785,8 @@ static int Shape_turn1(const shipobj *shape, int hitmask, int x, int y, int dir,
     while ( (p = *points++) != 65535) {
 	if (linet[p].group && (groups[linet[p].group].hit_mask & hitmask))
 	    continue;
-	xp = CENTER_XCLICK(linet[p].start.x - x);
-	yp = CENTER_YCLICK(linet[p].start.y - y);
+	xp = CENTER_XCLICK(linet[p].start.cx - x);
+	yp = CENTER_YCLICK(linet[p].start.cy - y);
 	xo1 = shape->pts[shape->num_points - 1][dir].cx - xp;
 	yo1 = shape->pts[shape->num_points - 1][dir].cy - yp;
 	xn1 = shape->pts[shape->num_points - 1][newdir].cx - xp;
@@ -3897,18 +3856,18 @@ static int Clear_corner(struct move *move, object *obj, int l1, int l2)
     int l1sx, l2sx, l1sy, l2sy, l1dx, l2dx, l1dy, l2dy;
     int side;
 
-    l1sx = linet[l1].start.x - move->start.x;
-    l1sy = linet[l1].start.y - move->start.y;
+    l1sx = linet[l1].start.cx - move->start.cx;
+    l1sy = linet[l1].start.cy - move->start.cy;
     l1sx = CENTER_XCLICK(l1sx);
     l1sy = CENTER_YCLICK(l1sy);
-    l1dx = linet[l1].delta.x;
-    l1dy = linet[l2].delta.y;
-    l2sx = linet[l2].start.x - move->start.x;
-    l2sy = linet[l2].start.y - move->start.y;
+    l1dx = linet[l1].delta.cx;
+    l1dy = linet[l2].delta.cy;
+    l2sx = linet[l2].start.cx - move->start.cx;
+    l2sy = linet[l2].start.cy - move->start.cy;
     l2sx = CENTER_XCLICK(l2sx);
     l2sy = CENTER_YCLICK(l2sy);
-    l2dx = linet[l2].delta.x;
-    l2dy = linet[l2].delta.y;
+    l2dx = linet[l2].delta.cx;
+    l2dy = linet[l2].delta.cy;
 
     for (;;) {
 	if (SIDE(obj->vel.x, obj->vel.y, l1) < 0) {
@@ -3923,11 +3882,11 @@ static int Clear_corner(struct move *move, object *obj, int l1, int l2)
 	break;
     }
 
-    xm = SIGN(move->delta.x);
-    ym = SIGN(move->delta.y);
+    xm = SIGN(move->delta.cx);
+    ym = SIGN(move->delta.cy);
 
-    s1 = SIDE(move->start.x - l1sx, move->start.y - l1sy, l1) > 0;
-    s2 = SIDE(move->start.x - l2sx, move->start.y - l2sy, l2) > 0;
+    s1 = SIDE(move->start.cx - l1sx, move->start.cy - l1sy, l1) > 0;
+    s2 = SIDE(move->start.cx - l2sx, move->start.cy - l2sy, l2) > 0;
 
 #define TMPFUNC(X, Y) ((side = SIDE((X), (Y), l1)) == 0 || side > 0 != s1 || (side = SIDE((X), (Y), l2)) == 0 || side > 0 != s2)
 
@@ -3935,42 +3894,42 @@ static int Clear_corner(struct move *move, object *obj, int l1, int l2)
 	x = xm;
 	y = 0;
 	for (;;) {
-	    if (TMPFUNC(move->start.x + x, move->start.y + y)) {
+	    if (TMPFUNC(move->start.cx + x, move->start.cy + y)) {
 		y += ym;
-		if (!TMPFUNC(move->start.x + x, move->start.y + y + ym))
+		if (!TMPFUNC(move->start.cx + x, move->start.cy + y + ym))
 		    break;
 		else
 		    x += xm;;
 	    }
 	    else {
-		if (TMPFUNC(move->start.x + x, move->start.y + y + 1) &&
-		    TMPFUNC(move->start.x + x, move->start.y + y - 1))
+		if (TMPFUNC(move->start.cx + x, move->start.cy + y + 1) &&
+		    TMPFUNC(move->start.cx + x, move->start.cy + y - 1))
 		    x += xm;
 		else
 		    break;
 	    }
 	}
-	move->delta.x -= x;
-	move->delta.y -= y;
-	if ((obj->vel.x >= 0) ^ (move->delta.x >= 0)) {
-	    move->delta.x = 0;
-	    move->delta.y = 0;
+	move->delta.cx -= x;
+	move->delta.cy -= y;
+	if ((obj->vel.x >= 0) ^ (move->delta.cx >= 0)) {
+	    move->delta.cx = 0;
+	    move->delta.cy = 0;
 	}
     }
     else {
 	x = 0;
 	y = ym;
 	for (;;) {
-	    if (TMPFUNC(move->start.x + x, move->start.y + y)) {
+	    if (TMPFUNC(move->start.cx + x, move->start.cy + y)) {
 		x += xm;
-		if (!TMPFUNC(move->start.x + x + xm, move->start.y + y))
+		if (!TMPFUNC(move->start.cx + x + xm, move->start.cy + y))
 		    break;
 		else
 		    y += ym;
 	    }
 	    else {
-		if (TMPFUNC(move->start.x + x + 1, move->start.y + y) &&
-		    TMPFUNC(move->start.x + x - 1, move->start.y + y))
+		if (TMPFUNC(move->start.cx + x + 1, move->start.cy + y) &&
+		    TMPFUNC(move->start.cx + x - 1, move->start.cy + y))
 		    y += ym;
 		else
 		    break;
@@ -3979,15 +3938,15 @@ static int Clear_corner(struct move *move, object *obj, int l1, int l2)
 
 #undef TMPFUNC
 
-	move->delta.x -= x;
-	move->delta.y -= y;
-	if ((obj->vel.y >= 0) ^ (move->delta.y >= 0)) {
-	    move->delta.x = 0;
-	    move->delta.y = 0;
+	move->delta.cx -= x;
+	move->delta.cy -= y;
+	if ((obj->vel.y >= 0) ^ (move->delta.cy >= 0)) {
+	    move->delta.cx = 0;
+	    move->delta.cy = 0;
 	}
     }
-    move->start.x = WRAP_XCLICK(move->start.x + x);
-    move->start.y = WRAP_YCLICK(move->start.y + y);
+    move->start.cx = WRAP_XCLICK(move->start.cx + x);
+    move->start.cy = WRAP_YCLICK(move->start.cy + y);
     return 1;
 }
 
@@ -4031,8 +3990,8 @@ int Polys_to_client(unsigned char *ptr)
 	ptr += strlen((char *)ptr) + 1;
 	*ptr++ = bstyles[i].flags;
     }
-    store_short(&ptr, polyc);
-    for (i = 0; i < polyc; i++) {
+    store_short(&ptr, num_polys);
+    for (i = 0; i < num_polys; i++) {
 	*ptr++ = pdata[i].style;
 	j = pdata[i].num_points;
 	store_short(&ptr, pdata[i].num_echanges);
@@ -4107,13 +4066,13 @@ struct templine {
 #define POSMOD(x, y) ((x) >= 0 ? (x) % (y) : (x) % (y) + (y))
 
 
-int is_inside(int x, int y, int hit_mask)
+int is_inside(int cx, int cy, int hit_mask)
 {
     short *ptr;
-    int inside, x1, x2, y1, y2, s;
+    int inside, cx1, cx2, cy1, cy2, s;
     struct inside_block *gblock;
 
-    gblock = &inside_table[(x >> B_SHIFT) + mapx * (y >> B_SHIFT)];
+    gblock = &inside_table[(cx >> B_SHIFT) + mapx * (cy >> B_SHIFT)];
     if (gblock->group == -1)
 	return -1;
     do {
@@ -4130,24 +4089,24 @@ int is_inside(int x, int y, int hit_mask)
 		continue;
 	    }
 	}
-	x &= B_MASK;
-	y &= B_MASK;
+	cx &= B_MASK;
+	cy &= B_MASK;
 	ptr = gblock->y;
 	if (ptr)
-	    while (y > *ptr++)
+	    while (cy > *ptr++)
 		inside++;
 	ptr = gblock->lines;
 	while (*ptr != 32767) {
-	    x1 = *ptr++ - x;
-	    y1 = *ptr++ - y;
-	    x2 = *ptr++ - x;
-	    y2 = *ptr++ - y;
-	    if (y1 < 0) {
-		if (y2 >= 0) {
-		    if (x1 > 0 && x2 >= 0)
+	    cx1 = *ptr++ - cx;
+	    cy1 = *ptr++ - cy;
+	    cx2 = *ptr++ - cx;
+	    cy2 = *ptr++ - cy;
+	    if (cy1 < 0) {
+		if (cy2 >= 0) {
+		    if (cx1 > 0 && cx2 >= 0)
 			inside++;
-		    else if ((x1 >= 0 || x2 >= 0) &&
-			     (s = y1 * (x1 - x2) - x1 * (y1 - y2)) >= 0) {
+		    else if ((cx1 >= 0 || cx2 >= 0) &&
+			     (s = cy1 * (cx1 - cx2) - cx1 * (cy1 - cy2)) >= 0) {
 			if (s == 0)
 			    return gblock->group;
 			else
@@ -4156,16 +4115,16 @@ int is_inside(int x, int y, int hit_mask)
 		}
 	    }
 	    else
-		if (y2 <= 0) {
-		    if (y2 == 0) {
-			if (x2 == 0 || (y1 ==0 && ((x1 <= 0 && x2 >= 0) ||
-						   (x1 >= 0 && x2 <= 0))))
+		if (cy2 <= 0) {
+		    if (cy2 == 0) {
+			if (cx2 == 0 || (cy1 ==0 && ((cx1 <= 0 && cx2 >= 0) ||
+						     (cx1 >= 0 && cx2 <= 0))))
 			    return gblock->group;
 		    }
-		    else if (x1 > 0 && x2 >= 0)
+		    else if (cx1 > 0 && cx2 >= 0)
 			inside++;
-		    else if ((x1 >= 0 || x2 >= 0) &&
-			     (s = y1 * (x1 - x2) - x1 * (y1 - y2)) <= 0) {
+		    else if ((cx1 >= 0 || cx2 >= 0) &&
+			     (s = cy1 * (cx1 - cx2) - cx1 * (cy1 - cy2)) <= 0) {
 			if (s == 0)
 			    return gblock->group;
 			else
@@ -4415,7 +4374,7 @@ static void inside_test(void)
     init_inside();
     for (group = 0; group <= num_groups; group++) {
 	minx = -1;
-	for (poly = 0; poly < polyc; poly++) {
+	for (poly = 0; poly < num_polys; poly++) {
 	    if (pdata[poly].is_decor || pdata[poly].group != group)
 		continue;
 	    num_points = pdata[poly].num_points;
@@ -4542,10 +4501,10 @@ static void Distance_init(void)
 		lineno[(by * mapx + bx) * LINSIZE +i] = 65535;
 	    }
     for (i = 0; i < linec; i++) {
-	bx = linet[i].start.x;
-	by = linet[i].start.y;
-	width = linet[i].delta.x;
-	height = linet[i].delta.y;
+	bx = linet[i].start.cx;
+	by = linet[i].start.cy;
+	width = linet[i].delta.cx;
+	height = linet[i].delta.cy;
 	if (width < 0) {
 	    bx += width;
 	    width = -width;
@@ -4571,19 +4530,22 @@ static void Distance_init(void)
 	height2 = height;
 	by2 = by;
 	for (; width-- > 0; bx = bx == mapx - 1 ? 0 : bx + 1)
-	    for (by = by2, height = height2; height -- > 0; by = by == mapy - 1? 0 : by + 1) {
+	    for (by = by2, height = height2;
+		 height -- > 0;
+		 by = by == mapy - 1? 0 : by + 1) {
 		cx = bx * B_CLICKS + B_CLICKS / 2;
 		cy = by * B_CLICKS + B_CLICKS / 2;
 		base = (by * mapx + bx) * LINSIZE;
-		lsx = CENTER_XCLICK(linet[i].start.x - cx);
+		lsx = CENTER_XCLICK(linet[i].start.cx - cx);
 		if (ABS(lsx) > 32767 + MAX_MOVE + B_CLICKS / 2)
 		    continue;
-		lsy = CENTER_YCLICK(linet[i].start.y - cy);
+		lsy = CENTER_YCLICK(linet[i].start.cy - cy);
 		if (ABS(lsy) > 32767 + MAX_MOVE + B_CLICKS / 2)
 		    continue;
-		ldx = linet[i].delta.x;
-		ldy = linet[i].delta.y;
-		if (MAX(ABS(lsx), ABS(lsy)) > MAX(ABS(lsx + ldx), ABS(lsy + ldy))) {
+		ldx = linet[i].delta.cx;
+		ldy = linet[i].delta.cy;
+		if (MAX(ABS(lsx), ABS(lsy)) > MAX(ABS(lsx + ldx),
+						  ABS(lsy + ldy))) {
 		    lsx += ldx;
 		    ldx = -ldx;
 		    lsy += ldy;
@@ -4694,8 +4656,8 @@ static void Corner_init(void)
     for (i = 0; i < mapx * mapy; i++)
 	temp[i * DISIZE] = 0;
     for (i = 0; i < linec; i++) {
-	bx = linet[i].start.x;
-	by = linet[i].start.y;
+	bx = linet[i].start.cx;
+	by = linet[i].start.cy;
 	width = height = (2 * MAX_MOVE) / B_CLICKS + 7;
 	if (width >= mapx)
 	    width = mapx;
@@ -4710,14 +4672,17 @@ static void Corner_init(void)
 	height2 = height;
 	by2 = by;
 	for (; width-- > 0; bx = bx == mapx - 1 ? 0 : bx + 1)
-	    for (by = by2, height = height2; height -- > 0; by = by == mapy - 1? 0 : by + 1) {
+	    for (by = by2, height = height2;
+		 height -- > 0;
+		 by = by == mapy - 1? 0 : by + 1) {
 		block = bx + mapx * by;
-		dist = blockline[block].distance + MAX_SHAPE_OFFSET + B_CLICKS / 2;
+		dist = blockline[block].distance
+		    + MAX_SHAPE_OFFSET + B_CLICKS / 2;
 		cx = bx * B_CLICKS + B_CLICKS / 2;
 		cy = by * B_CLICKS + B_CLICKS / 2;
-		if (ABS(CENTER_XCLICK(linet[i].start.x - cx)) > dist)
+		if (ABS(CENTER_XCLICK(linet[i].start.cx - cx)) > dist)
 		    continue;
-		if (ABS(CENTER_YCLICK(linet[i].start.y - cy)) > dist)
+		if (ABS(CENTER_YCLICK(linet[i].start.cy - cy)) > dist)
 		    continue;
 		temp[++temp[DISIZE * block] + DISIZE * block] = i;
 		size++;
@@ -4746,7 +4711,7 @@ static void Corner_init(void)
 void Ball_line_init(void)
 {
     int i;
-    static cpos coords[24];
+    static clpos coords[24];
 
     if (!treatBallAsPoint) {
 	ball_wire.num_points = 24;
@@ -4774,7 +4739,7 @@ static void Poly_to_lines(void)
     int *edges;
 
     linec = 0;
-    for (i = 0; i < polyc; i++) {
+    for (i = 0; i < num_polys; i++) {
 	if (pdata[i].is_decor)
 	    continue;
 	group = pdata[i].group;
@@ -4799,15 +4764,16 @@ static void Poly_to_lines(void)
 	    if (!(linec % 2000))
 		linet = ralloc(linet, (linec + 2000) * sizeof(struct bline));
 	    linet[linec].group = group;
-	    linet[linec].start.x = TWRAP_XCLICK(startx + dx);
-	    linet[linec].start.y = TWRAP_YCLICK(starty + dy);
-	    linet[linec].delta.x = *edges;
+	    linet[linec].start.cx = TWRAP_XCLICK(startx + dx);
+	    linet[linec].start.cy = TWRAP_YCLICK(starty + dy);
+	    linet[linec].delta.cx = *edges;
 	    dx += *edges++;
-	    linet[linec++].delta.y = *edges;
+	    linet[linec++].delta.cy = *edges;
 	    dy += *edges++;
 	}
 	if (dx || dy) {
-	    warn("Polygon %d (%d points) doesn't start and end at the same place", i + 1, np);
+	    warn("Polygon %d (%d points) doesn't start and end at the "
+		 "same place", i + 1, np);
 	    exit(1);
 	}
     }
@@ -4831,8 +4797,8 @@ void Walls_init_new(void)
     groups[0].type = FILLED;
 
     for (i = 0; i < linec; i++) {
-	x = linet[i].delta.x;
-	y = linet[i].delta.y;
+	x = linet[i].delta.cx;
+	y = linet[i].delta.cy;
 	l2 = (x*x + y*y);
 	linet[i].c = (x*x - y*y) / l2;
 	linet[i].s = 2*x*y / l2;
@@ -4846,1195 +4812,6 @@ static char msg[MSG_LEN];
 
 
 
-#if 0
-static void Bounce_wall(move_state_t *ms, move_bounce_t bounce)
-{
-    /* This set ->dir too */
-}
-
-/*
- * Move a point through one block and detect
- * wall collisions or bounces within that block.
- * Complications arise when the point starts at
- * the edge of a block.  E.g., if a point is on the edge
- * of a block to which block does it belong to?
- *
- * The caller supplies a set of input parameters and expects
- * the following output:
- *  - the number of pixels moved within this block.  (ms->done)
- *  - the number of pixels that still remain to be traversed. (ms->todo)
- *  - whether a crash happened, in which case no pixels will have been
- *    traversed. (ms->crash)
- *  - some extra optional output parameters depending upon the type
- *    of the crash. (ms->cannon, ms->wormhole, ms->target, ms->treasure)
- *  - whether the point bounced, in which case no pixels will have been
- *    traversed, only a change in direction. (ms->bounce, ms->vel, ms->todo)
- */
-static void Move_segment_431x_unused(move_state_t *ms)
-{
-    int			i;
-    int			block_type;	/* type of block we're going through */
-    int			inside;		/* inside the block or else on edge */
-    int			need_adjust;	/* other param (x or y) needs recalc */
-    unsigned		wall_bounce;	/* are we bouncing? what direction? */
-    ipos		block;		/* block index */
-    ipos		blk2;		/* new block index */
-    ivec		sign;		/* sign (-1 or 1) of direction */
-    clpos		delta;		/* delta position in clicks */
-    clpos		enter;		/* enter block position in clicks */
-    clpos		leave;		/* leave block position in clicks */
-    clpos		offset;		/* offset within block in clicks */
-    const move_info_t	*const mi = ms->mip;	/* alias */
-    int			hole;		/* which wormhole */
-
-    /*
-     * Fill in default return values.
-     */
-    ms->crash = NotACrash;
-    ms->bounce = NotABounce;
-    ms->done.x = 0;
-    ms->done.y = 0;
-
-    enter = ms->pos;
-    if (enter.x < 0 || enter.x >= mp.click_width
-	|| enter.y < 0 || enter.y >= mp.click_height) {
-
-	if (!mi->edge_wrap) {
-	    ms->crash = CrashUniverse;
-	    return;
-	}
-	if (enter.x < 0) {
-	    enter.x += mp.click_width;
-	    if (enter.x < 0) {
-		ms->crash = CrashUniverse;
-		return;
-	    }
-	}
-	else if (enter.x >= mp.click_width) {
-	    enter.x -= mp.click_width;
-	    if (enter.x >= mp.click_width) {
-		ms->crash = CrashUniverse;
-		return;
-	    }
-	}
-	if (enter.y < 0) {
-	    enter.y += mp.click_height;
-	    if (enter.y < 0) {
-		ms->crash = CrashUniverse;
-		return;
-	    }
-	}
-	else if (enter.y >= mp.click_height) {
-	    enter.y -= mp.click_height;
-	    if (enter.y >= mp.click_height) {
-		ms->crash = CrashUniverse;
-		return;
-	    }
-	}
-	ms->pos = enter;
-    }
-
-    sign.x = (ms->vel.x < 0) ? -1 : 1;
-    sign.y = (ms->vel.y < 0) ? -1 : 1;
-    block.x = enter.x / BLOCK_CLICKS;
-    block.y = enter.y / BLOCK_CLICKS;
-    if (walldist[block.x][block.y] > 2) {
-	int maxcl = ((walldist[block.x][block.y] - 2) * BLOCK_CLICKS) >> 1;
-	if (maxcl >= sign.x * ms->todo.x && maxcl >= sign.y * ms->todo.y) {
-	    /* entire movement is possible. */
-	    ms->done.x = ms->todo.x;
-	    ms->done.y = ms->todo.y;
-	}
-	else if (sign.x * ms->todo.x > sign.y * ms->todo.y) {
-	    /* horizontal movement. */
-	    ms->done.x = sign.x * maxcl;
-	    ms->done.y = ms->todo.y * maxcl / (sign.x * ms->todo.x);
-	}
-	else {
-	    /* vertical movement. */
-	    ms->done.x = ms->todo.x * maxcl / (sign.y * ms->todo.y);
-	    ms->done.y = sign.y * maxcl;
-	}
-	ms->todo.x -= ms->done.x;
-	ms->todo.y -= ms->done.y;
-	return;
-    }
-
-    offset.x = enter.x - block.x * BLOCK_CLICKS;
-    offset.y = enter.y - block.y * BLOCK_CLICKS;
-    inside = 1;
-    need_adjust = 0;
-    if (sign.x == -1) {
-	if (offset.x + ms->todo.x < 0) {
-	    leave.x = enter.x - offset.x;
-	    need_adjust = 1;
-	}
-	else {
-	    leave.x = enter.x + ms->todo.x;
-	}
-    }
-    else {
-	if (offset.x + ms->todo.x > BLOCK_CLICKS) {
-	    leave.x = enter.x + BLOCK_CLICKS - offset.x;
-	    need_adjust = 1;
-	}
-	else {
-	    leave.x = enter.x + ms->todo.x;
-	}
-	if (leave.x == mp.click_width && !mi->edge_wrap) {
-	    leave.x--;
-	    need_adjust = 1;
-	}
-    }
-    if (sign.y == -1) {
-	if (offset.y + ms->todo.y < 0) {
-	    leave.y = enter.y - offset.y;
-	    need_adjust = 1;
-	}
-	else {
-	    leave.y = enter.y + ms->todo.y;
-	}
-    }
-    else {
-	if (offset.y + ms->todo.y > BLOCK_CLICKS) {
-	    leave.y = enter.y + BLOCK_CLICKS - offset.y;
-	    need_adjust = 1;
-	}
-	else {
-	    leave.y = enter.y + ms->todo.y;
-	}
-	if (leave.y == mp.click_height && !mi->edge_wrap) {
-	    leave.y--;
-	    need_adjust = 1;
-	}
-    }
-    if (need_adjust && ms->todo.y && ms->todo.x) {
-	double wx = (double)(leave.x - enter.x) / ms->todo.x;
-	double wy = (double)(leave.y - enter.y) / ms->todo.y;
-	if (wx > wy) {
-	    double x = ms->todo.x * wy;
-	    leave.x = enter.x + DOUBLE_TO_INT(x);
-	}
-	else if (wx < wy) {
-	    double y = ms->todo.y * wx;
-	    leave.y = enter.y + DOUBLE_TO_INT(y);
-	}
-    }
-
-    delta.x = leave.x - enter.x;
-    delta.y = leave.y - enter.y;
-
-    block_type = World.block[block.x][block.y];
-
-    /*
-     * We test for several different bouncing directions against the wall.
-     * Sometimes there is more than one bounce possible if the point
-     * starts at the corner of a block.
-     * Therefore we maintain a bit mask for the bouncing possibilities
-     * and later we will determine which bounce is appropriate.
-     */
-    wall_bounce = 0;
-
-    if (!mi->phased) {
-
-    switch (block_type) {
-
-    default:
-	break;
-
-    case WORMHOLE:
-	if (!mi->wormhole_warps) {
-	    break;
-	}
-	hole = World.itemID[block.x][block.y];
-	if (World.wormHoles[hole].type == WORM_OUT) {
-	    break;
-	}
-	if (mi->pl) {
-	    blk2.x = OBJ_X_IN_BLOCKS(mi->pl);
-	    blk2.y = OBJ_Y_IN_BLOCKS(mi->pl);
-	    if (BIT(mi->pl->status, WARPED)) {
-		if (World.block[blk2.x][blk2.y] == WORMHOLE) {
-		    int oldhole = World.itemID[blk2.x][blk2.y];
-		    if (World.wormHoles[oldhole].type == WORM_NORMAL
-			&& mi->pl->wormHoleDest == oldhole) {
-			/*
-			 * Don't warp again if we are still on the
-			 * same wormhole we have just been warped to.
-			 */
-			break;
-		    }
-		}
-		CLR_BIT(mi->pl->status, WARPED);
-	    }
-	    if (blk2.x == block.x && blk2.y == block.y) {
-		ms->wormhole = hole;
-		ms->crash = CrashWormHole;
-		return;
-	    }
-	}
-	else {
-	    /*
-	     * Warp object if this wormhole has ever warped a player.
-	     * Warp the object to the same destination as the
-	     * player has been warped to.
-	     */
-	    int last = World.wormHoles[hole].lastdest;
-	    if (last >= 0
-		&& (World.wormHoles[hole].countdown > 0 || !wormTime)
-		&& last < World.NumWormholes
-		&& World.wormHoles[last].type != WORM_IN
-		&& last != hole
-		&& (OBJ_X_IN_BLOCKS(mi->obj) != block.x
-		 || OBJ_Y_IN_BLOCKS(mi->obj) != block.y) ) {
-		ms->done.x += (World.wormHoles[last].pos.x
-		    - World.wormHoles[hole].pos.x) * BLOCK_CLICKS;
-		ms->done.y += (World.wormHoles[last].pos.y
-		    - World.wormHoles[hole].pos.y) * BLOCK_CLICKS;
-		break;
-	    }
-	}
-	break;
-
-    case CANNON:
-	if (!mi->cannon_crashes) {
-	    break;
-	}
-	if (BIT(mi->obj->status, FROMCANNON)
-	    && !BIT(World.rules->mode, TEAM_PLAY)) {
-	    break;
-	}
-	for (i = 0; ; i++) {
-	    if (World.cannon[i].blk_pos.x == block.x
-		&& World.cannon[i].blk_pos.y == block.y) {
-		break;
-	    }
-	}
-	ms->cannon = i;
-
-	if (BIT(World.rules->mode, TEAM_PLAY)
-	    && (teamImmunity
-		|| BIT(mi->obj->status, FROMCANNON))
-	    && mi->obj->team == World.cannon[i].team) {
-	    break;
-	}
-	{
-	    /*
-	     * Calculate how far the point can travel in the cannon block
-	     * before hitting the cannon.
-	     * To reduce duplicate code we first transform all the
-	     * different cannon types into one by matrix multiplications.
-	     * Later we transform the result back to the real type.
-	     */
-
-	    ivec mx, my, dir;
-	    clpos mirx, miry, start, end, todo, done, diff, a, b;
-	    double d, w;
-
-	    mirx.x = 0;
-	    mirx.y = 0;
-	    miry.x = 0;
-	    miry.y = 0;
-	    switch (World.cannon[i].dir) {
-	    case DIR_UP:
-		mx.x = 1; mx.y = 0;
-		my.x = 0; my.y = 1;
-		break;
-	    case DIR_DOWN:
-		mx.x = 1; mx.y = 0;
-		my.x = 0; my.y = -1;
-		miry.y = BLOCK_CLICKS;
-		break;
-	    case DIR_RIGHT:
-		mx.x = 0; mx.y = 1;
-		my.x = -1; my.y = 0;
-		miry.x = BLOCK_CLICKS;
-		break;
-	    case DIR_LEFT:
-		mx.x = 0; mx.y = -1;
-		my.x = 1; my.y = 0;
-		mirx.y = BLOCK_CLICKS;
-		break;
-	    }
-	    start.x = mirx.x + mx.x * offset.x + miry.x + my.x * offset.y;
-	    start.y = mirx.y + mx.y * offset.x + miry.y + my.y * offset.y;
-	    diff.x  =          mx.x * delta.x           + my.x * delta.y;
-	    diff.y  =          mx.y * delta.x           + my.y * delta.y;
-	    dir.x   =          mx.x * sign.x            + my.x * sign.y;
-	    dir.y   =          mx.y * sign.x            + my.y * sign.y;
-	    todo.x  =          mx.x * ms->todo.x       + my.x * ms->todo.y;
-	    todo.y  =          mx.y * ms->todo.x       + my.y * ms->todo.y;
-
-	    end.x = start.x + diff.x;
-	    end.y = start.y + diff.y;
-
-	    if (start.x <= BLOCK_CLICKS/2) {
-		if (3 * start.y <= 2 * start.x) {
-		    ms->crash = CrashCannon;
-		    return;
-		}
-		if (end.x <= BLOCK_CLICKS/2) {
-		    if (3 * end.y > 2 * end.x) {
-			break;
-		    }
-		}
-	    }
-	    else {
-		if (3 * start.y <= 2 * (BLOCK_CLICKS - start.x)) {
-		    ms->crash = CrashCannon;
-		    return;
-		}
-		if (end.x > BLOCK_CLICKS/2) {
-		    if (3 * end.y > 2 * (BLOCK_CLICKS - end.x)) {
-			break;
-		    }
-		}
-	    }
-
-	    done = diff;
-
-	    /* is direction x-major? */
-	    if (dir.x * diff.x >= dir.y * diff.y) {
-		/* x-major */
-		w = (double) todo.y / todo.x;
-		if (3 * todo.y != 2 * todo.x) {
-		    d = (3 * start.y - 2 * start.x) / (2 - 3 * w);
-		    a.x = DOUBLE_TO_INT(d);
-		    a.y = (int)(a.x * w);
-		    if (dir.x * a.x < dir.x * done.x && dir.x * a.x >= 0) {
-			if (start.y + a.y <= BLOCK_CLICKS/3) {
-			    done = a;
-			    if (!(done.x | done.y)) {
-				ms->crash = CrashCannon;
-				return;
-			    }
-			}
-		    }
-		}
-		if (-3 * todo.y != 2 * todo.x) {
-		    d = (2 * BLOCK_CLICKS - 2 * start.x - 3 * start.y) /
-			(2 + 3 * w);
-		    b.x = DOUBLE_TO_INT(d);
-		    b.y = (int)(b.x * w);
-		    if (dir.x * b.x < dir.x * done.x && dir.x * b.x >= 0) {
-			if (start.y + b.y <= BLOCK_CLICKS/3) {
-			    done = b;
-			    if (!(done.x | done.y)) {
-				ms->crash = CrashCannon;
-				return;
-			    }
-			}
-		    }
-		}
-	    } else {
-		/* y-major */
-		w = (double) todo.x / todo.y;
-		d = (2 * start.x - 3 * start.y) / (3 - 2 * w);
-		a.y = DOUBLE_TO_INT(d);
-		a.x = (int)(a.y * w);
-		if (dir.y * a.y < dir.y * done.y && dir.y * a.y >= 0) {
-		    if (start.y + a.y <= BLOCK_CLICKS/3) {
-			done = a;
-			if (!(done.x | done.y)) {
-			    ms->crash = CrashCannon;
-			    return;
-			}
-		    }
-		}
-		d = (2 * BLOCK_CLICKS - 2 * start.x - 3 * start.y) /
-		    (3 + 2 * w);
-		b.y = DOUBLE_TO_INT(d);
-		b.x = (int)(b.y * w);
-		if (dir.y * b.y < dir.y * done.y && dir.y * b.y >= 0) {
-		    if (start.y + b.y <= BLOCK_CLICKS/3) {
-			done = b;
-			if (!(done.x | done.y)) {
-			    ms->crash = CrashCannon;
-			    return;
-			}
-		    }
-		}
-	    }
-
-	    delta.x = mx.x * done.x + mx.y * done.y;
-	    delta.y = my.x * done.x + my.y * done.y;
-	}
-	break;
-
-    case TREASURE:
-	/* removed */
-	/*FALLTHROUGH*/
-
-    case TARGET:
-	if (block_type == TARGET) {
-	    if (mi->target_crashes) {
-		/*-BA This can be slow for large number of targets.
-		 *     added itemID array for extra speed, (at cost of some memory.)
-		 *
-		 *for (i = 0; ; i++) {
-		 *    if (World.targets[i].pos.x == block.x
-		 *	&& World.targets[i].pos.y == block.y) {
-		 *	break;
-		 *     }
-		 * }
-		 *
-		 * ms->target = i;
-		 */
-		ms->target = i = World.itemID[block.x][block.y];
-
-		if (!targetTeamCollision) {
-		    int team;
-		    if (mi->pl) {
-			team = mi->pl->team;
-		    }
-		    else if (BIT(mi->obj->type, OBJ_BALL)) {
-			if (mi->obj->owner != -1) {
-			    team = Players[GetInd[mi->obj->owner]]->team;
-			} else {
-			    team = TEAM_NOT_SET;
-			}
-		    }
-		    else {
-			team = mi->obj->team;
-		    }
-		    if (team == World.targets[i].team) {
-			break;
-		    }
-		}
-		if (!mi->pl) {
-		    ms->crash = CrashTarget;
-		    return;
-		}
-	    }
-	}
-	/*FALLTHROUGH*/
-
-    case FUEL:
-    case FILLED:
-	if (inside) {
-	    /* Could happen for targets reappearing and in case of bugs. */
-	    ms->crash = CrashWall;
-	    return;
-	}
-	if (offset.x == 0) {
-	    if (ms->vel.x > 0) {
-		wall_bounce |= BounceHorLo;
-	    }
-	}
-	else if (offset.x == BLOCK_CLICKS) {
-	    if (ms->vel.x < 0) {
-		wall_bounce |= BounceHorHi;
-	    }
-	}
-	if (offset.y == 0) {
-	    if (ms->vel.y > 0) {
-		wall_bounce |= BounceVerLo;
-	    }
-	}
-	else if (offset.y == BLOCK_CLICKS) {
-	    if (ms->vel.y < 0) {
-		wall_bounce |= BounceVerHi;
-	    }
-	}
-	if (wall_bounce) {
-	    break;
-	}
-	if (!(ms->todo.x | ms->todo.y)) {
-	    /* no bouncing possible and no movement.  OK. */
-	    break;
-	}
-	if (!ms->todo.x && (offset.x == 0 || offset.x == BLOCK_CLICKS)) {
-	    /* tricky */
-	    break;
-	}
-	if (!ms->todo.y && (offset.y == 0 || offset.y == BLOCK_CLICKS)) {
-	    /* tricky */
-	    break;
-	}
-	/* what happened? we should never reach this */
-	ms->crash = CrashWall;
-	return;
-
-    case REC_LD:
-	/* test for bounces first. */
-	if (offset.x == 0) {
-	    if (ms->vel.x > 0) {
-		wall_bounce |= BounceHorLo;
-	    }
-	    if (offset.y == BLOCK_CLICKS && ms->vel.x + ms->vel.y < 0) {
-		wall_bounce |= BounceLeftDown;
-	    }
-	}
-	if (offset.y == 0) {
-	    if (ms->vel.y > 0) {
-		wall_bounce |= BounceVerLo;
-	    }
-	    if (offset.x == BLOCK_CLICKS && ms->vel.x + ms->vel.y < 0) {
-		wall_bounce |= BounceLeftDown;
-	    }
-	}
-	if (wall_bounce) {
-	    break;
-	}
-	if (offset.x + offset.y < BLOCK_CLICKS) {
-	    ms->crash = CrashWall;
-	    return;
-	}
-	if (offset.x + delta.x + offset.y + delta.y >= BLOCK_CLICKS) {
-	    /* movement is entirely within the space part of the block. */
-	    break;
-	}
-	/*
-	 * Find out where we bounce exactly
-	 * and how far we can move before bouncing.
-	 */
-	if (sign.x * ms->todo.x >= sign.y * ms->todo.y) {
-	    double w = (double) ms->todo.y / ms->todo.x;
-	    delta.x = (int)((BLOCK_CLICKS - offset.x - offset.y) / (1 + w));
-	    delta.y = (int)(delta.x * w);
-	    if (offset.x + delta.x + offset.y + delta.y < BLOCK_CLICKS) {
-		delta.x++;
-		delta.y = (int)(delta.x * w);
-	    }
-	    leave.x = enter.x + delta.x;
-	    leave.y = enter.y + delta.y;
-	    if (!delta.x) {
-		wall_bounce |= BounceLeftDown;
-		break;
-	    }
-	}
-	else {
-	    double w = (double) ms->todo.x / ms->todo.y;
-	    delta.y = (int)((BLOCK_CLICKS - offset.x - offset.y) / (1 + w));
-	    delta.x = (int)(delta.y * w);
-	    if (offset.x + delta.x + offset.y + delta.y < BLOCK_CLICKS) {
-		delta.y++;
-		delta.x = (int)(delta.y * w);
-	    }
-	    leave.x = enter.x + delta.x;
-	    leave.y = enter.y + delta.y;
-	    if (!delta.y) {
-		wall_bounce |= BounceLeftDown;
-		break;
-	    }
-	}
-	break;
-
-    case REC_LU:
-	if (offset.x == 0) {
-	    if (ms->vel.x > 0) {
-		wall_bounce |= BounceHorLo;
-	    }
-	    if (offset.y == 0 && ms->vel.x < ms->vel.y) {
-		wall_bounce |= BounceLeftUp;
-	    }
-	}
-	if (offset.y == BLOCK_CLICKS) {
-	    if (ms->vel.y < 0) {
-		wall_bounce |= BounceVerHi;
-	    }
-	    if (offset.x == BLOCK_CLICKS && ms->vel.x < ms->vel.y) {
-		wall_bounce |= BounceLeftUp;
-	    }
-	}
-	if (wall_bounce) {
-	    break;
-	}
-	if (offset.x < offset.y) {
-	    ms->crash = CrashWall;
-	    return;
-	}
-	if (offset.x + delta.x >= offset.y + delta.y) {
-	    break;
-	}
-	if (sign.x * ms->todo.x >= sign.y * ms->todo.y) {
-	    double w = (double) ms->todo.y / ms->todo.x;
-	    delta.x = (int)((offset.y - offset.x) / (1 - w));
-	    delta.y = (int)(delta.x * w);
-	    if (offset.x + delta.x < offset.y + delta.y) {
-		delta.x++;
-		delta.y = (int)(delta.x * w);
-	    }
-	    leave.x = enter.x + delta.x;
-	    leave.y = enter.y + delta.y;
-	    if (!delta.x) {
-		wall_bounce |= BounceLeftUp;
-		break;
-	    }
-	}
-	else {
-	    double w = (double) ms->todo.x / ms->todo.y;
-	    delta.y = (int)((offset.x - offset.y) / (1 - w));
-	    delta.x = (int)(delta.y * w);
-	    if (offset.x + delta.x < offset.y + delta.y) {
-		delta.y--;
-		delta.x = (int)(delta.y * w);
-	    }
-	    leave.x = enter.x + delta.x;
-	    leave.y = enter.y + delta.y;
-	    if (!delta.y) {
-		wall_bounce |= BounceLeftUp;
-		break;
-	    }
-	}
-	break;
-
-    case REC_RD:
-	if (offset.x == BLOCK_CLICKS) {
-	    if (ms->vel.x < 0) {
-		wall_bounce |= BounceHorHi;
-	    }
-	    if (offset.y == BLOCK_CLICKS && ms->vel.x > ms->vel.y) {
-		wall_bounce |= BounceRightDown;
-	    }
-	}
-	if (offset.y == 0) {
-	    if (ms->vel.y > 0) {
-		wall_bounce |= BounceVerLo;
-	    }
-	    if (offset.x == 0 && ms->vel.x > ms->vel.y) {
-		wall_bounce |= BounceRightDown;
-	    }
-	}
-	if (wall_bounce) {
-	    break;
-	}
-	if (offset.x > offset.y) {
-	    ms->crash = CrashWall;
-	    return;
-	}
-	if (offset.x + delta.x <= offset.y + delta.y) {
-	    break;
-	}
-	if (sign.x * ms->todo.x >= sign.y * ms->todo.y) {
-	    double w = (double) ms->todo.y / ms->todo.x;
-	    delta.x = (int)((offset.y - offset.x) / (1 - w));
-	    delta.y = (int)(delta.x * w);
-	    if (offset.x + delta.x > offset.y + delta.y) {
-		delta.x--;
-		delta.y = (int)(delta.x * w);
-	    }
-	    leave.x = enter.x + delta.x;
-	    leave.y = enter.y + delta.y;
-	    if (!delta.x) {
-		wall_bounce |= BounceRightDown;
-		break;
-	    }
-	}
-	else {
-	    double w = (double) ms->todo.x / ms->todo.y;
-	    delta.y = (int)((offset.x - offset.y) / (1 - w));
-	    delta.x = (int)(delta.y * w);
-	    if (offset.x + delta.x > offset.y + delta.y) {
-		delta.y++;
-		delta.x = (int)(delta.y * w);
-	    }
-	    leave.x = enter.x + delta.x;
-	    leave.y = enter.y + delta.y;
-	    if (!delta.y) {
-		wall_bounce |= BounceRightDown;
-		break;
-	    }
-	}
-	break;
-
-    case REC_RU:
-	if (offset.x == BLOCK_CLICKS) {
-	    if (ms->vel.x < 0) {
-		wall_bounce |= BounceHorHi;
-	    }
-	    if (offset.y == 0 && ms->vel.x + ms->vel.y > 0) {
-		wall_bounce |= BounceRightUp;
-	    }
-	}
-	if (offset.y == BLOCK_CLICKS) {
-	    if (ms->vel.y < 0) {
-		wall_bounce |= BounceVerHi;
-	    }
-	    if (offset.x == 0 && ms->vel.x + ms->vel.y > 0) {
-		wall_bounce |= BounceRightUp;
-	    }
-	}
-	if (wall_bounce) {
-	    break;
-	}
-	if (offset.x + offset.y > BLOCK_CLICKS) {
-	    ms->crash = CrashWall;
-	    return;
-	}
-	if (offset.x + delta.x + offset.y + delta.y <= BLOCK_CLICKS) {
-	    break;
-	}
-	if (sign.x * ms->todo.x >= sign.y * ms->todo.y) {
-	    double w = (double) ms->todo.y / ms->todo.x;
-	    delta.x = (int)((BLOCK_CLICKS - offset.x - offset.y) / (1 + w));
-	    delta.y = (int)(delta.x * w);
-	    if (offset.x + delta.x + offset.y + delta.y > BLOCK_CLICKS) {
-		delta.x--;
-		delta.y = (int)(delta.x * w);
-	    }
-	    leave.x = enter.x + delta.x;
-	    leave.y = enter.y + delta.y;
-	    if (!delta.x) {
-		wall_bounce |= BounceRightUp;
-		break;
-	    }
-	}
-	else {
-	    double w = (double) ms->todo.x / ms->todo.y;
-	    delta.y = (int)((BLOCK_CLICKS - offset.x - offset.y) / (1 + w));
-	    delta.x = (int)(delta.y * w);
-	    if (offset.x + delta.x + offset.y + delta.y > BLOCK_CLICKS) {
-		delta.y--;
-		delta.x = (int)(delta.y * w);
-	    }
-	    leave.x = enter.x + delta.x;
-	    leave.y = enter.y + delta.y;
-	    if (!delta.y) {
-		wall_bounce |= BounceRightUp;
-		break;
-	    }
-	}
-	break;
-    }
-
-    if (wall_bounce) {
-	/*
-	 * Bouncing.  As there may be more than one possible bounce
-	 * test which bounce is not feasible because of adjacent walls.
-	 * If there still is more than one possible then pick one randomly.
-	 * Else if it turns out that none is feasible then we must have
-	 * been trapped inbetween two blocks.  This happened in the early
-	 * stages of this code.
-	 */
-	int count = 0;
-	unsigned bit;
-	unsigned save_wall_bounce = wall_bounce;
-	unsigned block_mask = FILLED_BIT | FUEL_BIT;
-
-	if (!mi->target_crashes) {
-	    block_mask |= TARGET_BIT;
-	}
-	if (!mi->treasure_crashes) {
-	    block_mask |= TREASURE_BIT;
-	}
-	for (bit = 1; bit <= wall_bounce; bit <<= 1) {
-	    if (!(wall_bounce & bit)) {
-		continue;
-	    }
-
-	    CLR_BIT(wall_bounce, bit);
-	    switch (bit) {
-
-	    case BounceHorLo:
-		blk2.x = block.x - 1;
-		if (blk2.x < 0) {
-		    if (!mi->edge_wrap) {
-			continue;
-		    }
-		    blk2.x += World.x;
-		}
-		blk2.y = block.y;
-		if (BIT(1 << World.block[blk2.x][blk2.y],
-			block_mask|REC_RU_BIT|REC_RD_BIT)) {
-		    continue;
-		}
-		break;
-
-	    case BounceHorHi:
-		blk2.x = block.x + 1;
-		if (blk2.x >= World.x) {
-		    if (!mi->edge_wrap) {
-			continue;
-		    }
-		    blk2.x -= World.x;
-		}
-		blk2.y = block.y;
-		if (BIT(1 << World.block[blk2.x][blk2.y],
-			block_mask|REC_LU_BIT|REC_LD_BIT)) {
-		    continue;
-		}
-		break;
-
-	    case BounceVerLo:
-		blk2.x = block.x;
-		blk2.y = block.y - 1;
-		if (blk2.y < 0) {
-		    if (!mi->edge_wrap) {
-			continue;
-		    }
-		    blk2.y += World.y;
-		}
-		if (BIT(1 << World.block[blk2.x][blk2.y],
-			block_mask|REC_RU_BIT|REC_LU_BIT)) {
-		    continue;
-		}
-		break;
-
-	    case BounceVerHi:
-		blk2.x = block.x;
-		blk2.y = block.y + 1;
-		if (blk2.y >= World.y) {
-		    if (!mi->edge_wrap) {
-			continue;
-		    }
-		    blk2.y -= World.y;
-		}
-		if (BIT(1 << World.block[blk2.x][blk2.y],
-			block_mask|REC_RD_BIT|REC_LD_BIT)) {
-		    continue;
-		}
-		break;
-	    }
-
-	    SET_BIT(wall_bounce, bit);
-	    count++;
-	}
-
-	if (!count) {
-	    wall_bounce = save_wall_bounce;
-	    switch (wall_bounce) {
-	    case BounceHorLo|BounceVerLo:
-		wall_bounce = BounceLeftDown;
-		break;
-	    case BounceHorLo|BounceVerHi:
-		wall_bounce = BounceLeftUp;
-		break;
-	    case BounceHorHi|BounceVerLo:
-		wall_bounce = BounceRightDown;
-		break;
-	    case BounceHorHi|BounceVerHi:
-		wall_bounce = BounceRightUp;
-		break;
-	    default:
-		switch (block_type) {
-		case REC_LD:
-		    if ((offset.x == 0) ? (offset.y == BLOCK_CLICKS)
-			: (offset.x == BLOCK_CLICKS && offset.y == 0)
-			&& ms->vel.x + ms->vel.y >= 0) {
-			wall_bounce = 0;
-		    }
-		    break;
-		case REC_LU:
-		    if ((offset.x == 0) ? (offset.y == 0)
-			: (offset.x == BLOCK_CLICKS && offset.y == BLOCK_CLICKS)
-			&& ms->vel.x >= ms->vel.y) {
-			wall_bounce = 0;
-		    }
-		    break;
-		case REC_RD:
-		    if ((offset.x == 0) ? (offset.y == 0)
-			: (offset.x == BLOCK_CLICKS && offset.y == BLOCK_CLICKS)
-			&& ms->vel.x <= ms->vel.y) {
-			wall_bounce = 0;
-		    }
-		    break;
-		case REC_RU:
-		    if ((offset.x == 0) ? (offset.y == BLOCK_CLICKS)
-			: (offset.x == BLOCK_CLICKS && offset.y == 0)
-			&& ms->vel.x + ms->vel.y <= 0) {
-			wall_bounce = 0;
-		    }
-		    break;
-		}
-		if (wall_bounce) {
-		    ms->crash = CrashWall;
-		    return;
-		}
-	    }
-	}
-	else if (count > 1) {
-	    /*
-	     * More than one bounce possible.
-	     * Pick one randomly.
-	     */
-	    count = (int)(rfrac() * count);
-	    for (bit = 1; bit <= wall_bounce; bit <<= 1) {
-		if (wall_bounce & bit) {
-		    if (count == 0) {
-			wall_bounce = bit;
-			break;
-		    } else {
-			count--;
-		    }
-		}
-	    }
-	}
-    }
-
-    } /* phased */
-
-    if (wall_bounce) {
-	Bounce_wall(ms, (move_bounce_t) wall_bounce);
-    }
-    else {
-	ms->done.x += delta.x;
-	ms->done.y += delta.y;
-	ms->todo.x -= delta.x;
-	ms->todo.y -= delta.y;
-    }
-}
-
-
-static void Object_hits_target(move_state_t *ms, long player_cost)
-{
-    target_t		*targ = &World.targets[ms->target];
-    object		*obj = ms->mip->obj;
-    int			j, sc, por,
-			x, y,
-			killer;
-    int			win_score = 0,
-			win_team_members = 0,
-			lose_score = 0,
-			lose_team_members = 0,
-			somebody_flag = 0,
-			targets_remaining = 0,
-			targets_total = 0;
-    DFLOAT 		drainfactor;
-
-    /* a normal shot or a direct mine hit work, cannons don't */
-    /* BD: should shots/mines by cannons of opposing teams work? */
-    /* also players suiciding on target will cause damage */
-    if (!BIT(obj->type, KILLING_SHOTS|OBJ_MINE|OBJ_PULSE|OBJ_PLAYER)) {
-	return;
-    }
-    if (obj->id <= 0) {
-	return;
-    }
-    killer = GetInd[obj->id];
-    if (targ->team == obj->team) {
-	return;
-    }
-
-    switch(obj->type) {
-    case OBJ_SHOT:
-#ifdef DRAINFACTOR
-/* BG: this is bad: one shot causes way too much damage. */
-	drainfactor = VECTOR_LENGTH(obj->vel);
-    	drainfactor = (drainfactor * drainfactor * ABS(obj->mass)) / (ShotsSpeed * ShotsSpeed * ShotsMass);
-#else
-	drainfactor = 1;
-#endif
-	targ->damage += (int)(ED_SHOT_HIT * drainfactor * SHOT_MULT(obj));
-	break;
-    case OBJ_PULSE:
-	targ->damage += (int)(ED_LASER_HIT);
-	break;
-    case OBJ_SMART_SHOT:
-    case OBJ_TORPEDO:
-    case OBJ_HEAT_SHOT:
-	if (!obj->mass) {
-	    /* happens at end of round reset. */
-	    return;
-	}
-	if (BIT(obj->mods.nuclear, NUCLEAR)) {
-	    targ->damage = 0;
-	}
-	else {
-	    targ->damage += (int)(ED_SMART_SHOT_HIT / (obj->mods.mini + 1));
-	}
-	break;
-    case OBJ_MINE:
-	if (!obj->mass) {
-	    /* happens at end of round reset. */
-	    return;
-	}
-	targ->damage -= TARGET_DAMAGE / (obj->mods.mini + 1);
-	break;
-    case OBJ_PLAYER:
-	if (player_cost <= 0 || player_cost > TARGET_DAMAGE / 4)
-	    player_cost = TARGET_DAMAGE / 4;
-	targ->damage -= player_cost;
-	break;
-
-    default:
-	/*???*/
-	break;
-    }
-
-    targ->conn_mask = 0;
-    targ->last_change = frame_loops;
-    if (targ->damage > 0)
-	return;
-
-    targ->update_mask = (unsigned) -1;
-    targ->damage = TARGET_DAMAGE;
-    targ->dead_time = TARGET_DEAD_TIME;
-
-    /*
-     * Destroy target.
-     * Turn it into a space to simplify other calculations.
-     */
-    x = targ->pos.x;
-    y = targ->pos.y;
-    World.block[x][y] = SPACE;
-
-    Make_debris(
-	/* pos.x, pos.y   */ (x+0.5f) * BLOCK_CLICKS, (y+0.5f) * BLOCK_CLICKS,
-	/* vel.x, vel.y   */ 0.0, 0.0,
-	/* owner id       */ -1,
-	/* owner team	  */ targ->team,
-	/* kind           */ OBJ_DEBRIS,
-	/* mass           */ 4.5,
-	/* status         */ GRAVITY,
-	/* color          */ RED,
-	/* radius         */ 6,
-	/* no. of debris  */ 75 + 75 * rfrac(),
-	/* min,max dir    */ 0, RES-1,
-	/* min,max speed  */ 20, 70,
-	/* min,max life   */ 10 * TIME_FACT, 100 * TIME_FACT
-	);
-
-    if (BIT(World.rules->mode, TEAM_PLAY)) {
-	for (j = 0; j < NumPlayers; j++) {
-	    if (IS_TANK_IND(j)
-		|| (BIT(Players[j]->status, PAUSE)
-		    && Players[j]->count <= 0)
-		|| (BIT(Players[j]->status, GAME_OVER)
-		    && Players[j]->mychar == 'W'
-		    && Players[j]->score == 0)) {
-		continue;
-	    }
-	    if (Players[j]->team == targ->team) {
-		lose_score += Players[j]->score;
-		lose_team_members++;
-		if (BIT(Players[j]->status, GAME_OVER) == 0) {
-		    somebody_flag = 1;
-		}
-	    }
-	    else if (Players[j]->team == Players[killer]->team) {
-		win_score += Players[j]->score;
-		win_team_members++;
-	    }
-	}
-    }
-    if (somebody_flag) {
-	for (j = 0; j < World.NumTargets; j++) {
-	    if (World.targets[j].team == targ->team) {
-		targets_total++;
-		if (World.targets[j].dead_time == 0) {
-		    targets_remaining++;
-		}
-	    }
-	}
-    }
-    if (!somebody_flag) {
-	return;
-    }
-
-    sound_play_sensors(x, y, DESTROY_TARGET_SOUND);
-
-    if (targets_remaining > 0) {
-	sc = Rate(Players[killer]->score, CANNON_SCORE)/4;
-	sc = sc * (targets_total - targets_remaining) / (targets_total + 1);
-	if (sc > 0) {
-	    SCORE(killer, sc, targ->pos.x, targ->pos.y, "Target: ");
-	}
-	/*
-	 * If players can't collide with their own targets, we
-	 * assume there are many used as shields.  Don't litter
-	 * the game with the message below.
-	 */
-	if (targetTeamCollision && targets_total < 10) {
-	    sprintf(msg, "%s blew up one of team %d's targets.",
-		    Players[killer]->name, (int) targ->team);
-	    Set_message(msg);
-	}
-	return;
-    }
-
-    sprintf(msg, "%s blew up team %d's %starget.",
-	    Players[killer]->name,
-	    (int) targ->team,
-	    (targets_total > 1) ? "last " : "");
-    Set_message(msg);
-
-    if (targetKillTeam) {
-	Players[killer]->kills++;
-    }
-
-    sc  = Rate(win_score, lose_score);
-    por = (sc*lose_team_members)/win_team_members;
-
-    for (j = 0; j < NumPlayers; j++) {
-	if (IS_TANK_IND(j)
-	    || (BIT(Players[j]->status, PAUSE)
-		&& Players[j]->count <= 0)
-	    || (BIT(Players[j]->status, GAME_OVER)
-		&& Players[j]->mychar == 'W'
-		&& Players[j]->score == 0)) {
-	    continue;
-	}
-	if (Players[j]->team == targ->team) {
-	    if (targetKillTeam
-		&& targets_remaining == 0
-		&& !BIT(Players[j]->status, KILLED|PAUSE|GAME_OVER))
-		SET_BIT(Players[j]->status, KILLED);
-	    SCORE(j, -sc, targ->pos.x, targ->pos.y,
-		  "Target: ");
-	}
-	else if (Players[j]->team == Players[killer]->team &&
-		 (Players[j]->team != TEAM_NOT_SET || j == killer)) {
-	    SCORE(j, por, targ->pos.x, targ->pos.y,
-		  "Target: ");
-	}
-    }
-}
-
-
-static void Object_crash(move_state_t *ms)
-{
-    object		*obj = ms->mip->obj;
-
-    switch (ms->crash) {
-
-    case CrashWormHole:
-    default:
-	break;
-
-    case CrashTreasure:
-	/*
-	 * Ball type has already been handled.
-	 */
-	if (obj->type == OBJ_BALL) {
-	    break;
-	}
-	obj->life = 0;
-	break;
-
-    case CrashTarget:
-	obj->life = 0;
-	Object_hits_target(ms, -1);
-	break;
-
-    case CrashWall:
-	obj->life = 0;
-	break;
-
-    case CrashUniverse:
-	obj->life = 0;
-	break;
-
-    case CrashCannon:
-	obj->life = 0;
-	if (BIT(obj->type, OBJ_ITEM)) {
-	    Cannon_add_item(ms->cannon, obj->info, obj->count);
-	} else {
-	    if (World.cannon[ms->cannon].item[ITEM_ARMOR] > 0)
-		World.cannon[ms->cannon].item[ITEM_ARMOR]--;
-	    else
-		Cannon_dies(ms);
-	}
-	break;
-
-    case CrashUnknown:
-	obj->life = 0;
-	break;
-    }
-}
-#endif
-
-
 static void Move_ball_new(object *obj)
 {
     /*object		*obj = Obj[ind];*/
@@ -6043,14 +4820,16 @@ static void Move_ball_new(object *obj)
     struct collans ans;
     int owner;
 
-    move.delta.x = FLOAT_TO_CLICK(obj->vel.x * timeStep2);
-    move.delta.y = FLOAT_TO_CLICK(obj->vel.y * timeStep2);
-    obj->extmove.x = move.delta.x;
-    obj->extmove.y = move.delta.y;
+    move.delta.cx = FLOAT_TO_CLICK(obj->vel.x * timeStep2);
+    move.delta.cy = FLOAT_TO_CLICK(obj->vel.y * timeStep2);
+    obj->extmove.cx = move.delta.cx;
+    obj->extmove.cy = move.delta.cy;
 
-    if (obj->id != -1 && BIT(Players[GetInd[obj->id]]->used, HAS_PHASING_DEVICE)) {
-	int x = obj->pos.cx + move.delta.x;
-	int y = obj->pos.cy + move.delta.y;
+    if (obj->id != -1
+	&& BIT(Players[GetInd[obj->id]]->used, HAS_PHASING_DEVICE)) {
+
+	int x = obj->pos.cx + move.delta.cx;
+	int y = obj->pos.cy + move.delta.cy;
 	while (x >= World.cwidth)
 	    x -= World.cwidth;
 	while (x < 0)
@@ -6070,14 +4849,14 @@ static void Move_ball_new(object *obj)
 	move.hit_mask = BALL_BIT | NOTEAM_BIT;
     else
 	move.hit_mask = BALL_BIT | 1 << Players[GetInd[owner]]->team;
-    move.start.x = obj->pos.cx;
-    move.start.y = obj->pos.cy;
-    while (move.delta.x || move.delta.y) {
+    move.start.cx = obj->pos.cx;
+    move.start.cy = obj->pos.cy;
+    while (move.delta.cx || move.delta.cy) {
 	Shape_move(&move, &ball_wire, 0, &ans);
-	move.start.x = WRAP_XCLICK(move.start.x + ans.moved.x);
-	move.start.y = WRAP_YCLICK(move.start.y + ans.moved.y);
-	move.delta.x -= ans.moved.x;
-	move.delta.y -= ans.moved.y;
+	move.start.cx = WRAP_XCLICK(move.start.cx + ans.moved.cx);
+	move.start.cy = WRAP_YCLICK(move.start.cy + ans.moved.cy);
+	move.delta.cx -= ans.moved.cx;
+	move.delta.cy -= ans.moved.cy;
 	if (ans.line != -1) {
 	    if (!Shape_away(&move, &ball_wire, 0, ans.line, &line, &point)) {
 		if (SIDE(obj->vel.x, obj->vel.y, ans.line) < 0) {
@@ -6092,8 +4871,8 @@ static void Move_ball_new(object *obj)
 		    /* This case could be handled better,
 		       I'll write the code for that if this
 		       happens too often. */
-		    move.delta.x = 0;
-		    move.delta.y = 0;
+		    move.delta.cx = 0;
+		    move.delta.cy = 0;
 		    obj->vel.x = 0;
 		    obj->vel.y = 0;
 		}
@@ -6103,11 +4882,45 @@ static void Move_ball_new(object *obj)
 		    break;
 	}
     }
-    Object_position_set_clicks(obj, move.start.x, move.start.y);
+    Object_position_set_clicks(obj, move.start.cx, move.start.cy);
     /* kps hack */
     Cell_add_object(obj);
     /* kps hack */
     return;
+}
+
+/* hack */
+char *typename(int type)
+{
+    if (type & OBJ_PLAYER)
+	return "OBJ_PLAYER";
+    if (type & OBJ_DEBRIS)
+	return "OBJ_DEBRIS";
+    if (type & OBJ_SPARK)
+	return "OBJ_SPARK";
+    if (type & OBJ_BALL)
+	return "OBJ_BALL";
+    if (type & OBJ_SHOT)
+	return "OBJ_SHOT";
+    if (type & OBJ_SMART_SHOT)
+	return "OBJ_SMART_SHOT";
+    if (type & OBJ_MINE)
+	return "OBJ_MINE";
+    if (type & OBJ_TORPEDO)
+	return "OBJ_TORPEDO";
+    if (type & OBJ_HEAT_SHOT)
+	return "OBJ_HEAT_SHOT";
+    if (type & OBJ_PULSE)
+	return "OBJ_PULSE";
+    if (type & OBJ_ITEM)
+	return "OBJ_ITEM";
+    if (type & OBJ_WRECKAGE)
+	return "OBJ_WRECKAGE";
+    if (type & OBJ_ASTEROID)
+	return "OBJ_ASTEROID";
+    if (type & OBJ_CANNON_SHOT)
+	return "OBJ_CANNON_SHOT";
+    return "unknown type";
 }
 
 /* kps- collision.c has a move_object call in ng */
@@ -6149,25 +4962,27 @@ void Move_object_new(object *obj)
     else
 	move.hit_mask |= 1 << team;
 
-    move.start.x = obj->pos.cx;
-    move.start.y = obj->pos.cy;
-    move.delta.x = FLOAT_TO_CLICK(obj->vel.x * timeStep2);
-    move.delta.y = FLOAT_TO_CLICK(obj->vel.y * timeStep2);
-    obj->extmove.x = move.delta.x;
-    obj->extmove.y = move.delta.y;
-    while (move.delta.x || move.delta.y) {
+    move.start.cx = obj->pos.cx;
+    move.start.cy = obj->pos.cy;
+    move.delta.cx = FLOAT_TO_CLICK(obj->vel.x * timeStep2);
+    move.delta.cy = FLOAT_TO_CLICK(obj->vel.y * timeStep2);
+    obj->extmove.cx = move.delta.cx;
+    obj->extmove.cy = move.delta.cy;
+    while (move.delta.cx || move.delta.cy) {
 	if (!trycount--) {
-	    sprintf(msg, "COULDN'T MOVE OBJECT!!!! Type = %d, x = %d, y = %d. Object was DELETED. [*DEBUG*]", obj->type, move.start.x, move.start.y);
+	    sprintf(msg, "COULDN'T MOVE OBJECT!!!! Type = %s, x = %d, y = %d. "
+		    "Object was DELETED. [*DEBUG*]",
+		    typename(obj->type), move.start.cx, move.start.cy);
 	    warn(msg);
-	    Set_message(msg);
+	    /*Set_message(msg);*/
 	    obj->life = 0;
 	    return;
 	}
 	Move_point(&move, &ans);
-	move.delta.x -= ans.moved.x;
-	move.delta.y -= ans.moved.y;
-	move.start.x = WRAP_XCLICK(move.start.x + ans.moved.x);
-	move.start.y = WRAP_YCLICK(move.start.y + ans.moved.y);
+	move.delta.cx -= ans.moved.cx;
+	move.delta.cy -= ans.moved.cy;
+	move.start.cx = WRAP_XCLICK(move.start.cx + ans.moved.cx);
+	move.start.cy = WRAP_YCLICK(move.start.cy + ans.moved.cy);
 	if (ans.line != -1) {
 	    if ( (t = Away(&move, ans.line)) != -1) {
 		if (!Clear_corner(&move, obj, ans.line, t))
@@ -6179,7 +4994,7 @@ void Move_object_new(object *obj)
 	    }
 	}
     }
-    Object_position_set_clicks(obj, move.start.x, move.start.y);
+    Object_position_set_clicks(obj, move.start.cx, move.start.cy);
     /* kps hack */
     Cell_add_object(obj);
     /* kps hack */
@@ -6198,13 +5013,13 @@ static void Move_player_new(int ind)
 
     if (BIT(pl->status, PLAYING|PAUSE|GAME_OVER|KILLED) != PLAYING) {
 	if (!BIT(pl->status, KILLED|PAUSE)) {
-	    pos.x = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x * timeStep2);
-	    pos.y = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y * timeStep2);
-	    pos.x = WRAP_XCLICK(pos.x);
-	    pos.y = WRAP_YCLICK(pos.y);
-	    if (pos.x != pl->pos.cx || pos.y != pl->pos.cy) {
+	    pos.cx = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x * timeStep2);
+	    pos.cy = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y * timeStep2);
+	    pos.cx = WRAP_XCLICK(pos.cx);
+	    pos.cy = WRAP_YCLICK(pos.cy);
+	    if (pos.cx != pl->pos.cx || pos.cy != pl->pos.cy) {
 		Player_position_remember(pl);
-		Player_position_set_clicks(pl, pos.x, pos.y);
+		Player_position_set_clicks(pl, pos.cx, pos.cy);
 	    }
 	}
 	pl->velocity = VECTOR_LENGTH(pl->vel);
@@ -6219,16 +5034,16 @@ static void Move_player_new(int ind)
 
     pl->collmode = 1;
 
-    move.delta.x = FLOAT_TO_CLICK(pl->vel.x * timeStep2);
-    move.delta.y = FLOAT_TO_CLICK(pl->vel.y * timeStep2);
+    move.delta.cx = FLOAT_TO_CLICK(pl->vel.x * timeStep2);
+    move.delta.cy = FLOAT_TO_CLICK(pl->vel.y * timeStep2);
 #if 0
-    pl->extmove.x = move.delta.x;
-    pl->extmove.y = move.delta.y;
+    pl->extmove.cx = move.delta.cx;
+    pl->extmove.cy = move.delta.cy;
 #endif
 
     if (BIT(pl->used, HAS_PHASING_DEVICE)) {
-	int x = pl->pos.cx + move.delta.x;
-	int y = pl->pos.cy + move.delta.y;
+	int x = pl->pos.cx + move.delta.cx;
+	int y = pl->pos.cy + move.delta.cy;
 	while (x >= World.cwidth)
 	    x -= World.cwidth;
 	while (x < 0)
@@ -6244,16 +5059,17 @@ static void Move_player_new(int ind)
 	    move.hit_mask = NONBALL_BIT | 1 << pl->team;
 	else
 	    move.hit_mask = NONBALL_BIT | NOTEAM_BIT;
-	move.start.x = pl->pos.cx;
-	move.start.y = pl->pos.cy;
-	while (move.delta.x || move.delta.y) {
+	move.start.cx = pl->pos.cx;
+	move.start.cy = pl->pos.cy;
+	while (move.delta.cx || move.delta.cy) {
 	    Shape_move(&move, pl->ship, pl->dir, &ans);
-	    move.start.x = WRAP_XCLICK(move.start.x + ans.moved.x);
-	    move.start.y = WRAP_YCLICK(move.start.y + ans.moved.y);
-	    move.delta.x -= ans.moved.x;
-	    move.delta.y -= ans.moved.y;
+	    move.start.cx = WRAP_XCLICK(move.start.cx + ans.moved.cx);
+	    move.start.cy = WRAP_YCLICK(move.start.cy + ans.moved.cy);
+	    move.delta.cx -= ans.moved.cx;
+	    move.delta.cy -= ans.moved.cy;
 	    if (ans.line != -1) {
-		if (!Shape_away(&move, pl->ship, pl->dir, ans.line, &line, &point)) {
+		if (!Shape_away(&move, pl->ship, pl->dir,
+				ans.line, &line, &point)) {
 		    if (SIDE(pl->vel.x, pl->vel.y, ans.line) < 0)
 			Bounce_player(pl, &move, ans.line, ans.point);
 		    else if (SIDE(pl->vel.x, pl->vel.y, line) < 0)
@@ -6262,8 +5078,8 @@ static void Move_player_new(int ind)
 			/* This case could be handled better,
 			   I'll write the code for that if this
 			   happens too often. */
-			move.delta.x = 0;
-			move.delta.y = 0;
+			move.delta.cx = 0;
+			move.delta.cy = 0;
 			pl->vel.x = 0;
 			pl->vel.y = 0;
 		    }
@@ -6272,13 +5088,13 @@ static void Move_player_new(int ind)
 		    Bounce_player(pl, &move, ans.line, ans.point);
 	    }
 	}
-	Player_position_set_clicks(pl, move.start.x, move.start.y);
+	Player_position_set_clicks(pl, move.start.cx, move.start.cy);
     }
     pl->velocity = VECTOR_LENGTH(pl->vel);
     /* !@# Better than ignoring collisions after wall touch for players,
      * but might cause some erroneous hits */
-    pl->extmove.x = CENTER_XCLICK(pl->pos.cx - pl->prevpos.x);
-    pl->extmove.y = CENTER_YCLICK(pl->pos.cy - pl->prevpos.y);
+    pl->extmove.cx = CENTER_XCLICK(pl->pos.cx - pl->prevpos.cx);
+    pl->extmove.cy = CENTER_YCLICK(pl->pos.cy - pl->prevpos.cy);
     return;
 }
 

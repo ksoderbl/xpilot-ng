@@ -1,4 +1,4 @@
-/* $Id: shipshape.c,v 5.4 2001/05/25 02:47:49 dik Exp $
+/* $Id$
  *
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *

@@ -117,11 +117,11 @@
 typedef int click_t;
 
 typedef struct {
-    click_t		x, y;
+    click_t		cx, cy;
 } clpos;
 
 typedef struct {
-    click_t		x, y;
+    click_t		cx, cy;
 } clvec;
 
 #endif

@@ -155,7 +155,7 @@ int main(int argc, char **argv)
     plock_server(pLockServer);           /* Lock the server into memory */
     Make_table();			/* Make trigonometric tables */
     Compute_gravity();
-    Find_base_direction(); /* kps - ng does not want this */
+    Xpmap_find_base_direction(); /* kps - ng does not want this */
 
     Walls_init();
 
@@ -231,8 +231,8 @@ int main(int argc, char **argv)
     serverTime = time(NULL);
 
 #ifndef SILENT
-    xpprintf("%s Server runs at %d frames per second (FPSMultiplier = %.2f)\n",
-	     showtime(), framesPerSecond, FPSMultiplier);
+    xpprintf("%s Server runs at %d frames per second\n",
+	     showtime(), framesPerSecond);
 #endif
 
     if (timerResolution > 0) {
@@ -874,6 +874,7 @@ extern char option_version[];
 extern char parser_version[];
 extern char play_version[];
 extern char player_version[];
+extern char polygon_version[];
 extern char portability_version[];
 extern char robot_version[];
 extern char robotdef_version[];
@@ -925,6 +926,7 @@ static void Check_server_versions(void)
 	{ "parser", parser_version },
 	{ "play", play_version },
 	{ "player", player_version },
+	{ "polygon", polygon_version },
 	{ "portability", portability_version },
 	{ "robot", robot_version },
 	{ "robotdef", robotdef_version },

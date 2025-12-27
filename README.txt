@@ -1,4 +1,4 @@
-This is the README file for XPilot 4.5.4X-rc8.
+This is the README file for XPilot 4.5.4X-rc9.
 
 Copyright © 1991-2003 by Bjørn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska & Uoti Urpala.
 

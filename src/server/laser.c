@@ -59,7 +59,7 @@ char laser_version[] = VERSION;
  */
 typedef struct victim {
     int			ind;		/* player index */
-    cpos		pos;		/* current player position */
+    clpos		pos;		/* current player position */
     DFLOAT		prev_dist;	/* distance at previous sample */
 } victim_t;
 
@@ -210,7 +210,7 @@ static void Laser_pulse_hits_player(
     }
 
     vicpl = Players[victim->ind];
-    vicpl->forceVisible++;
+    vicpl->forceVisible += TIME_FACT;
     if (BIT(vicpl->have, HAS_MIRROR)
 	&& (rfrac() * (2 * vicpl->item[ITEM_MIRROR])) >= 1) {
 	pulse->pos.cx = cx - tcos(pulse->dir) * 0.5 * PULSE_SAMPLE_DISTANCE;
@@ -253,13 +253,13 @@ static void Laser_pulse_hits_player(
 	    CLR_BIT(vicpl->used,
 		    HAS_SHIELD|HAS_LASER|OBJ_SHOT);
 	    CLR_BIT(vicpl->status, THRUSTING);
-	    vicpl->stunned += 5;
+	    vicpl->stunned += 5 * TIME_FACT;
 	}
     } else if (BIT(pulse->mods.laser, BLIND)) {
-	vicpl->damaged += (FPS + 6);
-	vicpl->forceVisible += (FPS + 6);
+	vicpl->damaged += (12 + 6) * TIME_FACT;
+	vicpl->forceVisible += (12 + 6) * TIME_FACT;
 	if (pl)
-	    Record_shove(vicpl, pl, frame_loops + FPS + 6);
+	    Record_shove(vicpl, pl, frame_loops + 12 + 6);
     } else {
 	Add_fuel(&(vicpl->fuel), (long)ED_LASER_HIT);
 	if (!BIT(vicpl->used, HAS_SHIELD)
@@ -766,7 +766,7 @@ static void LaserCollision(void)
 					  vic->extmove.y - obj->extmove.y,
 					  SHIP_SZ * CLICK, obj->wall_time))
 			continue;
-		vic->forceVisible++;
+		vic->forceVisible += TIME_FACT;
 		pulse->len = PULSE_LENGTH - 1;
 #if 0
 		/* Mirrors don't work at the moment. */
@@ -806,11 +806,11 @@ static void LaserCollision(void)
 			CLR_BIT(vic->used,
 				OBJ_SHIELD|OBJ_LASER|OBJ_SHOT);
 			CLR_BIT(vic->status, THRUSTING);
-			vic->stunned += 5;
+			vic->stunned += 5 * TIME_FACT;
 		    }
 		} else if (BIT(pulse->mods.laser, BLIND)) {
-		    vic->damaged += (12 + 6);
-		    vic->forceVisible += (12 + 6);
+		    vic->damaged += (12 + 6) * TIME_FACT;
+		    vic->forceVisible += (12 + 6) * TIME_FACT;
 		    if (pl)
 			Record_shove(vic, pl, frame_loops + 12 + 6);
 		} else {

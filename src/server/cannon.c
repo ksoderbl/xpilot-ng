@@ -153,7 +153,7 @@ void Cannon_throw_items(int ind)
    items. */
 void Cannon_init(int ind)
 {
-    cannon_t	*c = World.cannon + ind;
+    cannon_t	*c = &World.cannon[ind];
     int		i;
 
     c->last_change = frame_loops;
@@ -276,13 +276,13 @@ static void Cannon_defend(int ind, int defense)
 
     switch (defense) {
     case CD_EM_SHIELD:
-	c->emergency_shield_left += 4 * FPS;
+      c->emergency_shield_left += 4 * 12 * TIME_FACT;
 	SET_BIT(c->used, HAS_EMERGENCY_SHIELD);
 	c->item[ITEM_EMERGENCY_SHIELD]--;
 	IFSOUND( sound = EMERGENCY_SHIELD_ON_SOUND );
 	break;
     case CD_PHASING:
-	c->phasing_left += 4 * FPS;
+	c->phasing_left += 4 * 12 * TIME_FACT;
 	SET_BIT(c->used, HAS_PHASING_DEVICE);
 	c->tractor_count = 0;
 	c->item[ITEM_PHASING]--;
@@ -360,7 +360,7 @@ static void Cannon_aim(int ind, int weapon, int *target, int *dir)
 	break;
     case CW_LASER:
 	speed = CLICK_TO_PIXEL(PULSE_SPEED);
-	range = (int)(PULSE_LIFE(CANNON_PULSES) * speed);
+	range = (int)((PULSE_LIFE(CANNON_PULSES) / TIME_FACT) * speed);
 	break;
     case CW_ECM:
 	/* smarter cannons wait a little longer before firing an ECM */
@@ -408,7 +408,7 @@ static void Cannon_aim(int ind, int weapon, int *target, int *dir)
 	if (BIT(pl->status, PLAYING|GAME_OVER|PAUSE|KILLED) != PLAYING
 	    || (BIT(World.rules->mode, TEAM_PLAY)
 		&& pl->team == c->team)
-	    || (!pl->forceVisible
+	    || ((pl->forceVisible <= 0)
 		&& BIT(pl->used, HAS_CLOAKING_DEVICE)
 		&& (int)(rfrac() * (pl->item[ITEM_CLOAK] + 1))
 		   > (int)(rfrac() * (c->item[ITEM_SENSOR] + 1)))
@@ -595,7 +595,9 @@ static void Cannon_fire(int ind, int weapon, int target, int dir)
 	/* smarter cannons use tractors more often and also push/pull longer */
 	c->tractor_is_pressor = (rfrac() * (cannonSmartness + 1) >= 1);
 	c->tractor_target = pl->id;
-	c->tractor_count = 11 + (int)(rfrac() * ((3 * cannonSmartness) + 1));
+	c->tractor_count =
+	    (11 * TIME_FACT
+	     + (int)(TIME_FACT * rfrac() * ((3 * cannonSmartness) + 1)));
 	IFSOUND(sound = -1);
 	break;
     case CW_TRANSPORTER:

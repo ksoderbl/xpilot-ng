@@ -72,8 +72,6 @@ extern int		RadarHeight;
 /*
  * Globals.
  */
-deathhack_t deatharray[10];
-int deadcount = 0;
 bool roundend = false;
 int killratio_kills = 0;
 int killratio_deaths = 0;
@@ -230,6 +228,12 @@ void Paint_frame(void)
 	loopsSlow++;
 	time_counter = 0.0;
     }
+
+    /*
+     * Estimate suitable number of frames to do the base warning.
+     * kps - maybe add baseWarningTime option.
+     */
+    baseWarningFrames = 3 * FPS;
 
     /*
      * Switch between two different window titles.
@@ -609,6 +613,7 @@ void Paint_score_entry(int entry_num,
 	|| other->mychar == 'P'
 	|| other->mychar == 'W')
 	&& !mono) {
+#if 0 /* kps - what is this ??? */
 	/*if (BIT(hackedInstruments, BASE_WARNING))*/
 	{
 	    int i;
@@ -619,7 +624,7 @@ void Paint_score_entry(int entry_num,
 		}
 	    }
 	}
-
+#endif
 	if (!fullColor) {
 	    /* START team zero pausing */
 	    if (BIT(hackedInstruments, TREAT_ZERO_SPECIAL)

@@ -321,18 +321,18 @@ static void PlayerCollision(void)
 		if (BIT(Players[j]->used, HAS_PHASING_DEVICE))
 		    continue;
 		if (is_polygon_map || !useOldCode) {
-		    if (!in_range_acd(pl->prevpos.x - Players[j]->prevpos.x,
-				      pl->prevpos.y - Players[j]->prevpos.y,
-				      pl->extmove.x - Players[j]->extmove.x,
-				      pl->extmove.y - Players[j]->extmove.y,
+		    if (!in_range_acd(pl->prevpos.cx - Players[j]->prevpos.cx,
+				      pl->prevpos.cy - Players[j]->prevpos.cy,
+				      pl->extmove.cx - Players[j]->extmove.cx,
+				      pl->extmove.cy - Players[j]->extmove.cy,
 				      (2*SHIP_SZ-6) * CLICK)) {
  			continue;
 		    }
 		} else {
-		    if (!in_range_acd_old(pl->prevpos.x, pl->prevpos.y,
+		    if (!in_range_acd_old(pl->prevpos.cx, pl->prevpos.cy,
 					  pl->pos.cx, pl->pos.cy, 
-					  Players[j]->prevpos.x,
-					  Players[j]->prevpos.y, 
+					  Players[j]->prevpos.cx,
+					  Players[j]->prevpos.cy, 
 					  Players[j]->pos.cx,
 					  Players[j]->pos.cy, 
 					  PIXEL_TO_CLICK(2*SHIP_SZ-6))) {
@@ -373,8 +373,8 @@ static void PlayerCollision(void)
 			Add_fuel(&(Players[j]->fuel), (long)ED_PL_CRASH);
 			Item_damage(j, destroyItemInCollisionProb);
 		    }
-		    pl->forceVisible = 20;
-		    Players[j]->forceVisible = 20;
+		    pl->forceVisible = 20 * TIME_FACT;
+		    Players[j]->forceVisible = 20 * TIME_FACT;
 		    Obj_repel((object *)pl, (object *)Players[j],
 			      PIXEL_TO_CLICK(2*SHIP_SZ));
 		}
@@ -653,9 +653,9 @@ int CountDefensiveItems(player *pl)
 	    pl->item[ITEM_EMERGENCY_SHIELD] + pl->fuel.num_tanks +
 	    pl->item[ITEM_DEFLECTOR] + pl->item[ITEM_HYPERJUMP] +
 	    pl->item[ITEM_PHASING] + pl->item[ITEM_MIRROR];
-    if (pl->emergency_shield_left) 
+    if (pl->emergency_shield_left > 0)
  	count++;
-    if (pl->phasing_left)
+    if (pl->phasing_left > 0)
 	count++;
     return count;
 }
@@ -717,17 +717,17 @@ static void PlayerObjectCollision(int ind)
 				      range * CLICK);
 		break;
 	    case 1:
-		hit = in_range_acd(pl->prevpos.x - obj->prevpos.x,
-				   pl->prevpos.y - obj->prevpos.y,
-				   pl->extmove.x - obj->extmove.x,
-				   pl->extmove.y - obj->extmove.y,
+		hit = in_range_acd(pl->prevpos.cx - obj->prevpos.cx,
+				   pl->prevpos.cy - obj->prevpos.cy,
+				   pl->extmove.cx - obj->extmove.cx,
+				   pl->extmove.cy - obj->extmove.cy,
 				   range * CLICK);
 		break;
 	    case 2:
-		hit = in_range_partial(pl->prevpos.x - obj->prevpos.x,
-				       pl->prevpos.y - obj->prevpos.y,
-				       pl->extmove.x - obj->extmove.x,
-				       pl->extmove.y - obj->extmove.y,
+		hit = in_range_partial(pl->prevpos.cx - obj->prevpos.cx,
+				       pl->prevpos.cy - obj->prevpos.cy,
+				       pl->extmove.cx - obj->extmove.cx,
+				       pl->extmove.cy - obj->extmove.cy,
 				       range * CLICK, obj->wall_time);
 		break;
 	    case 3:
@@ -745,9 +745,9 @@ static void PlayerObjectCollision(int ind)
 	    }
 
 	    range = SHIP_SZ + obj->pl_range;
-	    if (!in_range_acd_old(pl->prevpos.x, pl->prevpos.y,
+	    if (!in_range_acd_old(pl->prevpos.cx, pl->prevpos.cy,
 				  pl->pos.cx, pl->pos.cy,
-				  obj->prevpos.x, obj->prevpos.y,
+				  obj->prevpos.cx, obj->prevpos.cy,
 				  obj->pos.cx, obj->pos.cy,
 				  range * CLICK)) {
 		continue;
@@ -820,17 +820,17 @@ static void PlayerObjectCollision(int ind)
 					  radius * CLICK);
 		    break;
 		case 1:
-		    hit = in_range_acd(pl->prevpos.x - obj->prevpos.x,
-				       pl->prevpos.y - obj->prevpos.y,
-				       pl->extmove.x - obj->extmove.x,
-				       pl->extmove.y - obj->extmove.y,
+		    hit = in_range_acd(pl->prevpos.cx - obj->prevpos.cx,
+				       pl->prevpos.cy - obj->prevpos.cy,
+				       pl->extmove.cx - obj->extmove.cx,
+				       pl->extmove.cy - obj->extmove.cy,
 				       radius * CLICK);
 		    break;
 		case 2:
-		    hit = in_range_partial(pl->prevpos.x - obj->prevpos.x,
-					   pl->prevpos.y - obj->prevpos.y,
-					   pl->extmove.x - obj->extmove.x,
-					   pl->extmove.y - obj->extmove.y,
+		    hit = in_range_partial(pl->prevpos.cx - obj->prevpos.cx,
+					   pl->prevpos.cy - obj->prevpos.cy,
+					   pl->extmove.cx - obj->extmove.cx,
+					   pl->extmove.cy - obj->extmove.cy,
 					   radius * CLICK, obj->wall_time);
 		    break;
 		default:
@@ -838,9 +838,9 @@ static void PlayerObjectCollision(int ind)
 		    continue;
 		}
 	    } else {
-		hit = in_range_acd_old(pl->prevpos.x, pl->prevpos.y,
+		hit = in_range_acd_old(pl->prevpos.cx, pl->prevpos.cy,
 				       pl->pos.cx, pl->pos.cy,
-				       obj->prevpos.x, obj->prevpos.y,
+				       obj->prevpos.cx, obj->prevpos.cy,
 				       obj->pos.cx, obj->pos.cy,
 				       range * CLICK);
 
@@ -1399,7 +1399,7 @@ static void Player_collides_with_killing_shot(int ind, object *obj)
 	    if (BIT(pl->used, (HAS_SHIELD|HAS_EMERGENCY_SHIELD))
 		!= (HAS_SHIELD|HAS_EMERGENCY_SHIELD))
 		Add_fuel(&(pl->fuel), drain);
-	    pl->forceVisible += 2;
+	    pl->forceVisible += 2 * TIME_FACT;
 	    Set_message(msg);
 	    break;
 
@@ -1420,7 +1420,7 @@ static void Player_collides_with_killing_shot(int ind, object *obj)
 		drain = (long)(ED_SHOT_HIT * drainfactor * SHOT_MULT(obj));
 		Add_fuel(&(pl->fuel), drain);
 	    }
-	    pl->forceVisible = (int)(pl->forceVisible + SHOT_MULT(obj));
+	    pl->forceVisible += (int)(SHOT_MULT(obj) * TIME_FACT);
 	    break;
 
 	default:
@@ -1635,9 +1635,9 @@ static void AsteroidCollision(void)
 		continue;
 
 	    radius = ast->pl_radius + obj->pl_radius;
-	    if (!in_range_acd_old(ast->prevpos.x, ast->prevpos.y,
+	    if (!in_range_acd_old(ast->prevpos.cx, ast->prevpos.cy,
 				  ast->pos.cx, ast->pos.cy,
-				  obj->prevpos.x, obj->prevpos.y,
+				  obj->prevpos.cx, obj->prevpos.cy,
 				  obj->pos.cx, obj->pos.cy,
 				  radius * CLICK)) {
 		continue;
@@ -1806,9 +1806,9 @@ static void BallCollision(void)
 		continue;
 	    }
 
-	    if (!in_range_acd_old(ball->prevpos.x, ball->prevpos.y,
+	    if (!in_range_acd_old(ball->prevpos.cx, ball->prevpos.cy,
 				  ball->pos.cx, ball->pos.cy,
-				  obj->prevpos.x, obj->prevpos.y,
+				  obj->prevpos.cx, obj->prevpos.cy,
 				  obj->pos.cx, obj->pos.cy,
 				  (ball->pl_radius + obj->pl_radius)*CLICK)) {
 		continue;
@@ -1908,11 +1908,12 @@ static void MineCollision(void)
 	    if (obj->life <= 0)
 		continue;
 
-	    if (!in_range_acd_old(mine->prevpos.x, mine->prevpos.y,
+	    if (!in_range_acd_old(mine->prevpos.cx, mine->prevpos.cy,
 				  mine->pos.cx, mine->pos.cy,
-				  obj->prevpos.x, obj->prevpos.y,
+				  obj->prevpos.cx, obj->prevpos.cy,
 				  obj->pos.cx, obj->pos.cy,
-				  mineShotDetonateDistance + obj->pl_radius)) {
+				  PIXEL_TO_CLICK(mineShotDetonateDistance
+						 + obj->pl_radius))) {
 		continue;
 	    }
 

@@ -209,7 +209,7 @@ void Go_home(int ind)
     if (playerStartsShielded != 0) {
 	SET_BIT(pl->used, HAS_SHIELD);
 	if (playerShielding == 0) {
-	    pl->shield_time = 2 * 12 * TIME_FACT;
+	    pl->shield_time = SHIELD_TIME;
 	    SET_BIT(pl->have, HAS_SHIELD);
 	}
 	if (BIT(pl->have, HAS_DEFLECTOR)) {
@@ -431,6 +431,7 @@ int Init_player(int ind, shipobj *ship)
     pl->forceVisible	= 0;
     Compute_sensor_range(pl);
     pl->shot_time	= 0;
+    pl->laser_time	= 0;
     pl->color		= WHITE;
     pl->score		= 0;
     pl->prev_score	= 0;

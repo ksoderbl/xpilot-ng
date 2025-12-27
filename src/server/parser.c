@@ -484,7 +484,7 @@ bool Parser(int argc, char **argv)
 
     if (!is_polygon_map) {
 	xpprintf("Converting blocks to polygons...\n");
-	Blocks_to_polygons();
+	Xpmap_blocks_to_polygons();
 	xpprintf("Done creating polygons.\n");
 	/* force treatBallAsPoint on */
 	treatBallAsPoint = true;

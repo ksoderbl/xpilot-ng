@@ -52,7 +52,8 @@ typedef struct {
     char	host[STR80];
 } server;
 
-
+/* determine if a block is one of SPACE_BLOCKS */
+#define EMPTY_SPACE(s)	BIT(1U << (s), SPACE_BLOCKS)
 
 /*
  * Global data.
@@ -100,6 +101,7 @@ extern int		ShotsMax, ShotsLife;
 extern bool		ShotsGravity;
 extern bool		shotHitFuelDrainUsesKineticEnergy;
 extern int		fireRepeatRate;
+extern int		laserRepeatRate;
 extern long		DEF_BITS, KILL_BITS, DEF_HAVE, DEF_USED, USED_KILL;
 extern int		GetInd[];
 extern int		ShutdownServer, ShutdownDelay;
@@ -363,7 +365,8 @@ extern int		playerPasswordsFileSizeLimit;
 
 /* kps hack */
 extern bool		useOldCode;
- 
+extern bool		polygonMode;
+
 #endif /* SERVER */
 
 #endif /* GLOBAL_H */

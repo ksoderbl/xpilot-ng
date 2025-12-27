@@ -212,6 +212,8 @@ static int		num_targets = 0;
 score_object_t		score_objects[MAX_SCORE_OBJECTS];
 int			score_object = 0;
 
+int		num_playing_teams = 0;
+
 #ifndef  _WINDOWS
 /* provide cut&paste and message history */
 extern	selection_t	selection;
@@ -948,6 +950,7 @@ static int Map_init(void)
 	    bases[num_bases].id = -1;
 	    bases[num_bases].team = type % 10;
 	    bases[num_bases].type = type - (type % 10);
+	    bases[num_bases].deathtime = -10000; /* kps hack */
 	    num_bases++;
 	    Setup->map_data[i] = type - (type % 10);
 	    break;
@@ -1429,7 +1432,7 @@ void Client_score_table(void)
 	}
     if (BIT(Setup->mode, TEAM_PLAY|TIMING) == TEAM_PLAY) {
 	int pos = num_others + 1;
-	int num_playing_teams = 0;
+	num_playing_teams = 0;
 	for (i = 0; i < MAX_TEAMS; i++) {
 	    if (team[i].playing) {
 		for (j = 0; j < num_playing_teams; j++) {
