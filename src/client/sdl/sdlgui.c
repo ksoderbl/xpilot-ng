@@ -149,11 +149,13 @@ int GL_Y(int y) {
 /* remove this later maybe? to tedious for me to edit them all away now */
 void Segment_add(Uint32 color, int x_1, int y_1, int x_2, int y_2)
 {
+    if (smoothLines) glEnable(GL_LINE_SMOOTH);
     set_alphacolor(color);
     glBegin( GL_LINE_LOOP );
     	glVertex2i(x_1,y_1);
 	glVertex2i(x_2,y_2);
     glEnd();
+    if (smoothLines) glDisable(GL_LINE_SMOOTH);
 }
 
 void Circle(Uint32 color,
@@ -741,11 +743,13 @@ void Gui_paint_item_object(int type, int x, int y)
     int sz = 16;
     Image_paint(IMG_ALL_ITEMS, x - 8, y - 4, type, whiteRGBA);
     set_alphacolor(blueRGBA);
+    if (smoothLines) glEnable(GL_LINE_SMOOTH);
     glBegin(GL_LINE_LOOP);
     glVertex2i(x + sz, y + sz);
     glVertex2i(x, y - sz);
     glVertex2i(x - sz, y + sz);
     glEnd();
+    if (smoothLines) glDisable(GL_LINE_SMOOTH);
 }
 
 void Gui_paint_ball(int x, int y, int style)
@@ -763,11 +767,12 @@ void Gui_paint_ball_connector(int x_1, int y_1, int x_2, int y_2)
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE);
     set_alphacolor(connColorRGBA);
+    if (smoothLines) glEnable(GL_LINE_SMOOTH);
     glBegin(GL_LINES);
     glVertex2i(x_1, y_1);
     glVertex2i(x_2, y_2);
     glEnd();
-    /*glDisable(GL_BLEND);*/
+    if (smoothLines) glDisable(GL_LINE_SMOOTH);
 }
 
 void Gui_paint_mine(int x, int y, int teammine, char *name)
@@ -907,14 +912,13 @@ void Gui_paint_lasers_begin(void)
 {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glEnable(GL_LINE_SMOOTH);
+    if (smoothLines) glEnable(GL_LINE_SMOOTH);
 }
 
 void Gui_paint_lasers_end(void)
 {
     glDisable(GL_BLEND);
-    glDisable(GL_LINE_SMOOTH);
-
+    if (smoothLines) glDisable(GL_LINE_SMOOTH);
 }
 
 void Gui_paint_laser(int color, int x_1, int y_1, int len, int dir)
@@ -996,10 +1000,12 @@ void Gui_paint_refuel(int x_0, int y_0, int x_1, int y_1)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE);
     glLineStipple(stipple, 0xAAAA);
     glEnable(GL_LINE_STIPPLE);
+    if (smoothLines) glEnable(GL_LINE_SMOOTH);
     glBegin(GL_LINES);
     glVertex2i(x_0, y_0);
     glVertex2i(x_1, y_1);
     glEnd();
+    if (smoothLines) glDisable(GL_LINE_SMOOTH);
     glDisable(GL_LINE_STIPPLE);
 }
 
@@ -1010,10 +1016,12 @@ void Gui_paint_connector(int x_0, int y_0, int x_1, int y_1, int tractor)
     set_alphacolor(connColorRGBA);
     glLineStipple(tractor ? 2 : 4, 0xAAAA);
     glEnable(GL_LINE_STIPPLE);
+    if (smoothLines) glEnable(GL_LINE_SMOOTH);
     glBegin(GL_LINES);
     glVertex2i(x_0, y_0);
     glVertex2i(x_1, y_1);
     glEnd();
+    if (smoothLines) glDisable(GL_LINE_SMOOTH);
     glDisable(GL_LINE_STIPPLE);
     /*glDisable(GL_BLEND);*/
 }
@@ -1550,7 +1558,7 @@ void Paint_HUD(void)
     if (ptr_move_fact != 0.0
 	&& selfVisible
 	&& (selfVel.x != 0 || selfVel.y != 0))
-	Segment_add(hudColorRGBA,
+    	Segment_add(hudColorRGBA,
 		    draw_width / 2,
 		    draw_height / 2,
 		    (int)(draw_width / 2 - ptr_move_fact * selfVel.x),
@@ -1580,24 +1588,22 @@ void Paint_HUD(void)
 		  * hudRadarScale / hudRadarMapScale),
 	    hudRadarDotSize);
 
-	if (instruments.showMapRadar)
-	    Paint_hudradar(hudRadarMapScale*scale,
-    	    	    	   (active_view_width / 2)*scale,
-			   (active_view_height / 2)*scale,
-			   SHIP_SZ);
+	Paint_hudradar(hudRadarMapScale*scale,
+		       (active_view_width / 2)*scale,
+		       (active_view_height / 2)*scale,
+		       SHIP_SZ);
     }
 
 
     glDisable(GL_BLEND);
     /* message scan hack by mara*/
-    if (instruments.useBallMessageScan) {
-	if (ball_shout && msgScanBallColorRGBA)
-	    Circle(msgScanBallColorRGBA, draw_width / 2,
-		    draw_height / 2, 8*scale,0);
-	if (need_cover && msgScanCoverColorRGBA)
-	    Circle(msgScanCoverColorRGBA, draw_width / 2,
-		    draw_height / 2, 6*scale,0);
-    }
+    if (ball_shout && msgScanBallColorRGBA)
+	Circle(msgScanBallColorRGBA, draw_width / 2,
+	       draw_height / 2, 8*scale,0);
+    if (need_cover && msgScanCoverColorRGBA)
+	Circle(msgScanCoverColorRGBA, draw_width / 2,
+	       draw_height / 2, 6*scale,0);
+
     glEnable(GL_BLEND);
 
     /*
@@ -1808,7 +1814,6 @@ void Paint_messages(void)
 {
     static int old_maxMessages = 0;
     static message_t **msgs[2];
-    static bool revscroll = false;
     static GLWidget *msg_list[2] = {NULL,NULL};
     static bool showMessages = true;
 
@@ -1824,12 +1829,7 @@ void Paint_messages(void)
     
     msg_list[0] = ((WrapperWidget *)(MainWidget->wid_info))->chat_msgs;
     msg_list[1] = ((WrapperWidget *)(MainWidget->wid_info))->game_msgs;
-    
-    if ( revscroll != instruments.showReverseScroll ) {
-    	ListWidget_SetScrollorder(msg_list[0],instruments.showReverseScroll);
-    	ListWidget_SetScrollorder(msg_list[1],!instruments.showReverseScroll);
-	revscroll = instruments.showReverseScroll;
-    }
+
     if ( showMessages != instruments.showMessages ) {
     	if (!instruments.showMessages)
 	    DelGLWidgetListItem( &(MainWidget->children), ((WrapperWidget *)(MainWidget->wid_info))->game_msgs );
@@ -1904,6 +1904,18 @@ void Paint_messages(void)
 		}
 	    }
 	}
+
+	/* kps ugly hack */
+	if (newbie && msg->txt) {
+	    const char *help = "[*Newbie help*]";
+	    size_t sz = strlen(msg->txt);
+	    size_t hsz = strlen(help);
+
+	    if (sz > hsz
+		&& !strcmp(help, &msg->txt[sz - hsz]))
+		msg_color = &whiteRGBA;
+	}
+
 	
 	if (tmp2) LabelWidget_SetColor(tmp2, msg_color, &nullRGBA);
     }
@@ -2034,6 +2046,7 @@ static xp_option_t sdlgui_options[] = {
 	NULL,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"Use antialized smooth lines.\n")
+
 };
 
 void Store_sdlgui_options(void)

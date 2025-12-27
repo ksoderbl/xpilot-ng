@@ -61,7 +61,7 @@ char colors_version[] = VERSION;
 #define XP_COLOR14		"#DFDFDF"
 #define XP_COLOR15		"#202020"
 
-char		color_names[MAX_COLORS][MAX_COLOR_LEN];
+static char		color_names[MAX_COLORS][MAX_COLOR_LEN];
 static const char	*color_defaults[MAX_COLORS] = {
     XP_COLOR0,  XP_COLOR1,  XP_COLOR2,  XP_COLOR3,
     XP_COLOR4,  XP_COLOR5,  XP_COLOR6,  XP_COLOR7,
@@ -347,12 +347,17 @@ static int Parse_colors(Colormap cmap)
      * Get the color definitions.
      */
     for (i = 0; i < maxColors; i++) {
-	if (color_names[i][0] != '\0') {
-	    if (XParseColor(dpy, cmap, color_names[i], &colors[i]))
+	if (strlen(color_names[i]) > 0) {
+	    char cname[MAX_COLOR_LEN], *tmp;
+
+	    strlcpy(cname, color_names[i], sizeof(cname));
+	    tmp = strtok(cname, " \t\r\n");
+
+	    if (tmp && XParseColor(dpy, cmap, tmp, &colors[i]))
 		continue;
 	    warn("Can't parse color %d \"%s\".", i, color_names[i]);
 	}
-	if (def[i] != NULL && def[i][0] != '\0') {
+	if (def[i] != NULL && strlen(def[i]) > 0) {
 	    if (XParseColor(dpy, cmap, def[i], &colors[i]))
 		continue;
 	    warn("Can't parse default color %d \"%s\".", i, def[i]);
@@ -1070,29 +1075,13 @@ static bool Set_maxColors (xp_option_t *opt, int val)
     return true;
 }
 
-static bool Set_color (xp_option_t *opt, const char *val)
+static bool Set_color(xp_option_t *opt, const char *val)
 {
     char *buf = Option_get_private_data(opt);
 
-    /*warn("Set_color: name = %s, val = %s, buf = %p", opt->name, val, buf);*/
-
+    /*warn("Set_color: name=%s, val=\"%s\", buf=%p", opt->name, val, buf);*/
+    assert(val != NULL);
     strlcpy(buf, val, MAX_COLOR_LEN);
-
-    /* kps - HACK */
-    {
-	char *s, *semicolon;
-	/* this should be done in the option.c code */
-	semicolon = strchr(buf, ';');
-	if (semicolon)
-	    *semicolon = '\0';
-
-	/* XParseColor doesn't want spaces after the color spec */
-	s = buf;
-	while (*s && !isspace(*s))
-	    s++;
-	*s = '\0';
-    }
-    /* kps - HACK */
 
     return true;
 }
@@ -1108,7 +1097,8 @@ static xp_option_t color_options[] = {
 	&maxColors,
 	Set_maxColors,
 	XP_OPTFLAG_DEFAULT,
-	"The number of colors to use.  Valid values are 4, 8 and 16.\n"),
+	"The number of colors to use.\n"
+	"Use value 16. Other values are not actively supported.\n"),
 
     /* 16 user definable color values */
     XP_STRING_OPTION(

@@ -8,7 +8,7 @@
  *      Bert Gijsbers        <bert@xpilot.org>
  *      Dick Balaska         <dick@xpilot.org>
  *
- * Copyright (C) 2003 Kristian Söderblom <kps@users.sourceforge.net>
+ * Copyright (C) 2003-2004 Kristian Söderblom <kps@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -47,7 +47,8 @@ static void print_ignorelist(void)
 
     for (i = 0; i < num_others; i++) {
 	if (Others[i].ignorelevel == 1) {
-	    if (strlen(buffer) + strlen(Others[i].nick_name) + 17 > MAX_CHARS) {
+	    if (strlen(buffer) + strlen(Others[i].nick_name) + 17
+		> MAX_CHARS) {
 		strcat(buffer, "[*Client reply*]");
 		Add_message(buffer);
 		buffer[0] = '\0';
@@ -75,17 +76,17 @@ static void print_ignorelist(void)
 	strcat(buffer, "[*Client reply*]");
 	Add_message(buffer);
     } else
-	Add_message("Ignorelist is empty [*Client reply*]");
+	Add_message("Ignorelist is empty. [*Client reply*]");
 }
 
-static void print_help(char *arg)
+static void print_help(const char *arg)
 {
     int i;
     char message[MAX_CHARS] = "";
 
-    Add_message(arg);
+    /*Add_message(arg);*/
 
-    if (arg[0] == '\0') {
+    if (arg == NULL) {
 	for (i = 0; i < NELEM(c_commands); i += 2) {
 	    strcat(message, c_commands[i]);
 	    strcat(message, " ");
@@ -145,7 +146,7 @@ static void print_help(char *arg)
     }
 }
 
-static void ignorePlayer(char *name, int level)
+static void ignorePlayer(const char *name, int level)
 {
     other_t *other = Other_by_name(name, true);
     char buf[64 + MAX_NAME_LEN];
@@ -153,7 +154,8 @@ static void ignorePlayer(char *name, int level)
     if (other != NULL) {
 	if (level == 1) {
 	    snprintf(buf, sizeof(buf),
-		     "Ignoring %s (textmask). [*Client reply*]", other->nick_name);
+		     "Ignoring %s (textmask). [*Client reply*]",
+		     other->nick_name);
 	    Add_message(buf);
 	} else {
 	    snprintf(buf, sizeof(buf),
@@ -165,7 +167,7 @@ static void ignorePlayer(char *name, int level)
     }
 }
 
-static void unignorePlayer(char *name)
+static void unignorePlayer(const char *name)
 {
     other_t *other = Other_by_name(name, true);
     char buf[64 + MAX_NAME_LEN];
@@ -178,23 +180,21 @@ static void unignorePlayer(char *name)
     }
 }
 
-void executeCommand(char *talk_str)
+void executeCommand(const char *talk_str)
 {
-    unsigned i;
-    char command[MAX_CHARS];
-    char argument[MAX_CHARS] = "";
-    int command_num;
+    int i, command_num;
+    char str[MAX_CHARS];
+    char *command, *argument = NULL;
 
-    strlcpy(command, &talk_str[1], MAX_CHARS - 1);	/* removes '\' */
-    for (i = 0; i < strlen(command); i++) {
-	if (command[i] == ' ')
-	    break;
+    assert(talk_str);
+    if (strlen(talk_str) == 0) {
+	Add_message("No clientcommand specified, try the \\help command. "
+		    "[*Client reply*]");
+	return;
     }
 
-    command[i] = '\0';
-
-    if (i + 2 < strlen(talk_str))
-	strcpy(argument, &talk_str[i + 2]);
+    strlcpy(str, talk_str, MAX_CHARS);
+    command = strtok(str, " ");
 
     for (i = 0; i < NELEM(c_commands); i++) {
 	if (!strcmp(command, c_commands[i]))
@@ -206,20 +206,26 @@ void executeCommand(char *talk_str)
 	return;
     }
 
+    /* argument can contains spaces, that's why we have "" and not " " */
+    argument = strtok(NULL, "");
+
     command_num = i;
     switch (command_num) {
     case 0:			/* ignore */
     case 1:			/* i */
     case 2:			/* ignore! */
     case 3:			/* i! */
-	if (argument[0] == '\0')	/* empty */
+	if (!argument)	/* empty */
 	    print_ignorelist();
 	else
-	    ignorePlayer(argument, (int) (command_num / 2 + 1));
+	    ignorePlayer(argument, (int)(command_num / 2 + 1) /*stupid hack*/);
 	break;
     case 4:			/* unignore */
     case 5:			/* u */
-	unignorePlayer(argument);
+	if (!argument)
+	    print_help(command);
+	else
+	    unignorePlayer(argument);
 	break;
     case 6:			/* help */
     case 7:			/* h */
@@ -227,11 +233,17 @@ void executeCommand(char *talk_str)
 	break;
     case 8:			/* set */
     case 9:			/* s */
-	Set_command(argument);
+	if (!argument)
+	    print_help(command);
+	else
+	    Set_command(argument);
 	break;
     case 10:			/* get */
     case 11:			/* g */
-	Get_command(argument);
+	if (!argument)
+	    print_help(command);
+	else
+	    Get_command(argument);
 	break;
     case 12:			/* quit */
     case 13:			/* q */

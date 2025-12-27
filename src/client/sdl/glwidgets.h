@@ -299,11 +299,13 @@ GLWidget *Init_DoubleChooserWidget( const char *name, double *value, double minv
 /*****************************/
 #define COLORCHOOSERWIDGET 9
 typedef struct {
+    GLWidget	    *mod;
     GLWidget	    *name;
     Uint32  	    *value;
     GLWidget	    *button;
     Uint32     	    *fgcolor;
     Uint32     	    *bgcolor;
+    bool    	    expanded;
     void    	    (*callback)(void *tmp, const char *value);
     void    	    *data;
 } ColorChooserWidget;
@@ -319,7 +321,6 @@ GLWidget *Init_ColorChooserWidget( const char *name, Uint32 *value, Uint32 *fgco
 /*************************/
 #define COLORMODWIDGET 10
 typedef struct {
-    GLWidget	    *name;
     Uint32  	    *value;
     int  	    red;
     int  	    green;
@@ -335,7 +336,7 @@ typedef struct {
     void    	    *data;
 } ColorModWidget;
 
-GLWidget *Init_ColorModWidget( const char *name, Uint32 *value, Uint32 *fgcolor, Uint32 *bgcolor,
+GLWidget *Init_ColorModWidget( Uint32 *value, Uint32 *fgcolor, Uint32 *bgcolor,
     	    	    	    	    void (*callback)(void *tmp, const char *value), void *data );
 /***********************/
 /* End: ColorModWidget */
@@ -434,6 +435,7 @@ typedef struct {
 } WrapperWidget;
 
 GLWidget *Init_MainWidget( font_data *font );
+void MainWidget_ShowMenu( GLWidget *widget, bool show );
 /*******************/
 /* End: MainWidget */
 /*******************/
@@ -443,6 +445,7 @@ GLWidget *Init_MainWidget( font_data *font );
 /**************************/
 #define CONFMENUWIDGET 16
 typedef struct {
+    bool	showconf;
     GLWidget	*scrollpane;
     GLWidget	*ql;
     GLWidget	*qb;

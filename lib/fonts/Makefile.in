@@ -159,9 +159,8 @@ target_vendor = @target_vendor@
 xpilotfontdir = $(pkgdatadir)/fonts
 xpilotfont_DATA = \
 	ConsoleFont.bmp \
-	Test.ttf \
 	VeraMoBd.ttf \
-	defaultfont.bmp
+	FreeSansBoldOblique.ttf
 
 EXTRA_DIST = $(xpilotfont_DATA)
 all: all-am

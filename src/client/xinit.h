@@ -51,12 +51,19 @@ extern bool		texturedObjects;
 extern bool		fullColor;
 extern bool		colorSwitch;
 extern bool		multibuffer;
-extern char		color_names[MAX_COLORS][MAX_COLOR_LEN];
 extern int		button_form;
 extern unsigned		top_width, top_height;
 extern unsigned		players_width, players_height;
 extern bool		ignoreWindowManager;
 extern bool		quitting;
+
+/* XPilot Mouse settings */
+extern bool mouseAccelInClient;
+extern int new_acc_num, new_acc_denom, new_threshold;
+extern Cursor	pointerControlCursor;
+/* For restoring the mouse back to normal */
+extern bool pre_exists;
+extern int pre_acc_num, pre_acc_denom, pre_threshold;
 
 /*
  * xdefault.c
@@ -105,7 +112,6 @@ extern void Scale_dashes(void);
 #ifdef _WINDOWS
 extern int Credits_callback(int, void *, const char **);
 #endif
-extern int Startup_server_motd(void);
 
 #endif
 

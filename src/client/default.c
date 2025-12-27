@@ -31,10 +31,6 @@ char default_version[] = VERSION;
 
 static double	hudScale;	/* Scale for HUD drawing */
 
-/*
- * kps TODO:
- * make sure this does not exit if nickname is set using \set command.
- */
 static bool Set_nickName(xp_option_t *opt, const char *value)
 {
     UNUSED_PARAM(opt);
@@ -52,7 +48,7 @@ static bool Set_nickName(xp_option_t *opt, const char *value)
     if (connectParam.nick_name[0] < 'A' || connectParam.nick_name[0] > 'Z') {
 	warn("Your player name \"%s\" should start with an uppercase letter.",
 	     connectParam.nick_name);
-	exit(1);
+	connectParam.nick_name[0] = 'X';
     }
 
     if (Check_nick_name(connectParam.nick_name) == NAME_ERROR) {
@@ -428,14 +424,6 @@ static bool Set_showSlidingRadar(xp_option_t *opt, bool val)
     return true;
 }
 
-static bool Set_showReverseScroll(xp_option_t *opt, bool val)
-{
-    UNUSED_PARAM(opt);
-    instruments.showReverseScroll = val;
-    Talk_reverse_cut();
-    return true;
-}
-
 static bool Set_showOutlineWorld(xp_option_t *opt, bool val)
 {
     UNUSED_PARAM(opt);
@@ -489,6 +477,16 @@ static bool Set_showDecor(xp_option_t *opt, bool val)
     return true;
 }
 
+void defaultCleanup(void)
+{
+    XFREE(keydefs);
+    XFREE(texturePath);
+    XFREE(shipShape);
+
+#ifdef SOUND
+    audioCleanup();
+#endif /* SOUND */
+}
 
 xp_option_t default_options[] = {
 
@@ -503,32 +501,32 @@ xp_option_t default_options[] = {
     XP_NOARG_OPTION(
 	"help",
 	&xpArgs.help,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
 	"Display this help message.\n"),
 
     XP_NOARG_OPTION(
 	"version",
 	&xpArgs.version,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
 	"Show the source code version.\n"),
 
     XP_NOARG_OPTION(
 	"join",
 	&xpArgs.auto_connect,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
 	"Join the game immediately, no questions asked.\n"),
 
     XP_NOARG_OPTION(
 	"text",
 	&xpArgs.text,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
 	"Use the simple text interface to contact a server\n"
 	"instead of the graphical user interface.\n"),
 
     XP_NOARG_OPTION(
 	"list",
 	&xpArgs.list_servers,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
 	"List all servers running on the local network.\n"),
 
     XP_STRING_OPTION(
@@ -537,7 +535,7 @@ xp_option_t default_options[] = {
 	xpArgs.shutdown_reason,
 	sizeof xpArgs.shutdown_reason,
 	NULL, NULL, NULL,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
 	"Shutdown the server with a message.\n"
 	"The message used is the first argument to this option.\n"),
 
@@ -546,7 +544,7 @@ xp_option_t default_options[] = {
 	"",
 	NULL, 0,
 	Set_nickName, NULL, Get_nickName,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
 	"Set the nickname.\n"),
 
     XP_STRING_OPTION(
@@ -554,7 +552,7 @@ xp_option_t default_options[] = {
 	"",
 	NULL, 0,
 	Set_userName, NULL, Get_userName,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
 	"Set the username.\n"),
 
     XP_STRING_OPTION(
@@ -562,7 +560,7 @@ xp_option_t default_options[] = {
 	"",
 	NULL, 0,
 	Set_hostName, NULL, Get_hostName,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
 	"Set the hostname.\n"),
 
     XP_INT_OPTION(
@@ -572,7 +570,7 @@ xp_option_t default_options[] = {
 	TEAM_NOT_SET,
 	&connectParam.team,
 	Set_team,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
 	"Set the team to join.\n"),
 
     XP_INT_OPTION(
@@ -582,7 +580,7 @@ xp_option_t default_options[] = {
 	65535,
 	&connectParam.contact_port,
 	NULL,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
 	"Set the port number of the server.\n"
 	"Almost all servers use the default port, which is the recommended\n"
 	"policy.  You can find out about which port is used by a server by\n"
@@ -595,7 +593,7 @@ xp_option_t default_options[] = {
 	65535,
 	&clientPortStart,
 	NULL,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
 	"Use UDP ports clientPortStart - clientPortEnd (for firewalls).\n"
 	/* TODO: describe what value 0 means */),
 
@@ -606,7 +604,7 @@ xp_option_t default_options[] = {
 	65535,
 	&clientPortEnd,
 	NULL,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
 	"Use UDP ports clientPortStart - clientPortEnd (for firewalls).\n"),
 
 
@@ -624,7 +622,7 @@ xp_option_t default_options[] = {
 
     XP_DOUBLE_OPTION(
 	"turnSpeed",
-	10.0,
+	16.0,
 	MIN_PLAYER_TURNSPEED,
 	MAX_PLAYER_TURNSPEED,
 	&turnspeed,
@@ -649,7 +647,7 @@ xp_option_t default_options[] = {
 
     XP_DOUBLE_OPTION(
 	"altPower",
-	35.0,
+	55.0,
 	MIN_PLAYER_POWER,
 	MAX_PLAYER_POWER,
 	&power_s,
@@ -660,7 +658,7 @@ xp_option_t default_options[] = {
 
     XP_DOUBLE_OPTION(
 	"altTurnSpeed",
-	25.0,
+	16.0,
 	MIN_PLAYER_TURNSPEED,
 	MAX_PLAYER_TURNSPEED,
 	&turnspeed_s,
@@ -783,13 +781,6 @@ xp_option_t default_options[] = {
 
 
     /* instruments */
-    XP_BOOL_OPTION(
-	"mapRadar",
-	true,
-	&instruments.showMapRadar,
-	NULL,
-	XP_OPTFLAG_CONFIG_DEFAULT,
-	"Paint radar dots' positions on the map.\n"),
 
     XP_BOOL_OPTION(
 	"slidingRadar",
@@ -824,15 +815,6 @@ xp_option_t default_options[] = {
 	NULL,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"Should the ship shapes hack be displayed or not.\n"),
-
-    XP_BOOL_OPTION(
-	"ballMsgScan",
-	true,
-	&instruments.useBallMessageScan,
-	NULL,
-	XP_OPTFLAG_CONFIG_DEFAULT,
-	"Scan messages for BALL, SAFE, COVER and POP and paint\n"
-	"warning circles inside ship.\n"),
 
     XP_BOOL_OPTION(
 	"showLivesByShip",
@@ -970,7 +952,7 @@ xp_option_t default_options[] = {
 
     XP_INT_OPTION(
 	"sparkSize",
-	1,
+	2,
 	MIN_SPARK_SIZE,
 	MAX_SPARK_SIZE,
 	&spark_size,
@@ -1010,20 +992,6 @@ xp_option_t default_options[] = {
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"How many seconds score objects remain visible on the map.\n"),
 
-
-    /* mouse stuff */
-    XP_BOOL_OPTION(
-	"pointerControl",
-	false,
-	&initialPointerControl,
-	NULL,
-	XP_OPTFLAG_DEFAULT,
-	"Enable mouse control.  This allows ship direction control by\n"
-	"moving the mouse to the left for an anti-clockwise turn and\n"
-	"moving the mouse to the right for a clockwise turn.\n"
-	"Also see the pointerButton options for use of the mouse buttons.\n"),
-
-
     /* message stuff */
     XP_INT_OPTION(
 	"charsPerSecond",
@@ -1044,14 +1012,6 @@ xp_option_t default_options[] = {
 	NULL,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"The maximum number of messages to display at the same time.\n"),
-
-    XP_BOOL_OPTION(
-	"reverseScroll",
-	false,
-	&instruments.showReverseScroll,
-	Set_showReverseScroll,
-	XP_OPTFLAG_CONFIG_DEFAULT,
-	"Reverse scroll direction of messages.\n"),
 
     XP_INT_OPTION(
 	"messagesToStdout",
@@ -1103,14 +1063,6 @@ xp_option_t default_options[] = {
 	Set_autoShield,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"Are shields lowered automatically for weapon fire?\n"),
-
-    XP_BOOL_OPTION(
-	"autoServerMotdPopup",
-	false,
-	&autoServerMotdPopup,
-	NULL,
-	XP_OPTFLAG_DEFAULT,
-	"Automatically popup the MOTD of the server on startup.\n"),
 
     XP_DOUBLE_OPTION(
 	"fuelNotify",
@@ -1172,6 +1124,7 @@ xp_option_t default_options[] = {
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"The number of decimals to use when displaying scores.\n"),
 
+#if 0
     /* kps - remove option later */
     XP_INT_OPTION(
 	"receiveWindowSize",
@@ -1182,6 +1135,7 @@ xp_option_t default_options[] = {
 	NULL,
 	XP_OPTFLAG_DEFAULT,
 	"Too complicated.  Keep it on 3.\n"),
+#endif
 
     /* eye candy stuff */
     XP_BOOL_OPTION(
@@ -1265,7 +1219,7 @@ xp_option_t default_options[] = {
 	CONF_TEXTUREDIR,
 	NULL, 0,
 	Set_texturePath, NULL, Get_texturePath,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
 	"Search path for texture files.\n"
 	"This is a list of one or more directories separated by colons.\n"),
 

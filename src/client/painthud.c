@@ -1,15 +1,14 @@
 /*
  * XPilotNG, an XPilot-like multiplayer space war game.
  *
- * Copyright (C) 1991-2001 by
+ * Copyright (C) 1991-2004 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
  *      Bert Gijsbers        <bert@xpilot.org>
  *      Dick Balaska         <dick@xpilot.org>
- *
- * Copyright (C) TODO      Erik Andersson
- * Copyright (C) 2003-2004 Kristian Söderblom <kps@users.sourceforge.net>
+ *      Erik Andersson       <maximan@users.sourceforge.net>
+ *      Kristian Söderblom   <kps@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -558,22 +557,19 @@ void Paint_HUD(void)
 	    / hudRadarMapScale,
 	    hudRadarDotSize);
 
-	if (instruments.showMapRadar)
-	    Paint_hudradar(hudRadarMapScale,
-			   (double)active_view_width / 2,
-			   (double)active_view_height / 2,
-			   SHIP_SZ);
+	Paint_hudradar(hudRadarMapScale,
+		       (double)active_view_width / 2,
+		       (double)active_view_height / 2,
+		       SHIP_SZ);
     }
 
     /* message scan hack by mara*/
-    if (instruments.useBallMessageScan) {
-	if (ball_shout && msgScanBallColor)
-	    Arc_add(msgScanBallColor, ext_view_width / 2 - 5,
-		    ext_view_height / 2 - 5, 10, 10, 0, 64 * 360);
-	if (need_cover && msgScanCoverColor)
-	    Arc_add(msgScanCoverColor, ext_view_width / 2 - 4,
-		    ext_view_height / 2 - 4, 8, 8, 0, 64 * 360);
-    }
+    if (ball_shout && msgScanBallColor)
+	Arc_add(msgScanBallColor, ext_view_width / 2 - 5,
+		ext_view_height / 2 - 5, 10, 10, 0, 64 * 360);
+    if (need_cover && msgScanCoverColor)
+	Arc_add(msgScanCoverColor, ext_view_width / 2 - 4,
+		ext_view_height / 2 - 4, 8, 8, 0, 64 * 360);
 
     /*
      * Display the HUD
@@ -760,9 +756,7 @@ void Paint_messages(void)
 	last_msg_index--; /* make it an index */
     }
 
-    for (i = (instruments.showReverseScroll ? 2 * maxMessages - 1 : 0);
-	 (instruments.showReverseScroll ? i >= 0 : i < 2 * maxMessages);
-	 i += (instruments.showReverseScroll ? -1 : 1)) {
+    for (i = 0; i < 2 * maxMessages; i++) {
 	if (i < maxMessages)
 	    msg = TalkMsg[i];
 	else
@@ -813,6 +807,17 @@ void Paint_messages(void)
 	    }
 	}
 
+	/* kps ugly hack */
+	if (newbie && msg->txt) {
+	    const char *help = "[*Newbie help*]";
+	    size_t sz = strlen(msg->txt);
+	    size_t hsz = strlen(help);
+
+	    if (sz > hsz
+		&& !strcmp(help, &msg->txt[sz - hsz]))
+		msg_color = WHITE;
+	}
+
 	if (msg_color == 0)
 	    continue;
 
@@ -836,8 +841,8 @@ void Paint_messages(void)
 	 */
 	if (selectionAndHistory && selection.draw.state == SEL_EMPHASIZED
 	    && i < maxMessages
-	    && TALK_MSG_SCREENPOS(last_msg_index,i) >= selection.draw.y1
-	    && TALK_MSG_SCREENPOS(last_msg_index,i) <= selection.draw.y2) {
+	    && i >= selection.draw.y1
+	    && i <= selection.draw.y2) {
 
 	    /*
 	     * three strings (ptr), where they begin (xoff) and their
@@ -857,15 +862,13 @@ void Paint_messages(void)
 	    char	*ptr3 = NULL;
 	    int		xoff3 = 0, l3 = 0;
 
-	    if (TALK_MSG_SCREENPOS(last_msg_index,i) > selection.draw.y1
-		 && TALK_MSG_SCREENPOS(last_msg_index,i) < selection.draw.y2) {
+	    if (i > selection.draw.y1 && i < selection.draw.y2) {
 		    /* all emphasized on this line */
 		    /*xxxxxxxxx*/
 		ptr2 = msg->txt;
 		l2 = len;
 		xoff2 = 0;
-	    } else if (TALK_MSG_SCREENPOS(last_msg_index,i)
-		       == selection.draw.y1) {
+	    } else if (i == selection.draw.y1) {
 		    /* first/only line */
 		    /*___xxx[___]*/
 		ptr = msg->txt;
@@ -881,8 +884,7 @@ void Paint_messages(void)
 		    xoff2 = XTextWidth(messageFont, msg->txt,
 				       selection.draw.x1);
 
-		    if (TALK_MSG_SCREENPOS(last_msg_index,i)
-			< selection.draw.y2) {
+		    if (i < selection.draw.y2) {
 			    /* first line */
 			    /*___xxxxxx*/
 			    /*     ^   */

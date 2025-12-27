@@ -68,10 +68,7 @@ typedef struct {
     bool showFilledDecor;
     bool showTexturedDecor;
     bool showMessages;
-    bool showMapRadar;
     bool showSlidingRadar;
-    bool showReverseScroll;
-    bool useBallMessageScan;
     bool useClientRanker;
     bool useAMPMFormatClock;
 } instruments_t;
@@ -568,8 +565,6 @@ extern int	baseWarningType;	/* Which type of base warning you prefer */
 extern byte	lose_item;		/* flag and index to drop item */
 extern int	lose_item_active;	/* one of the lose keys is pressed */
 
-extern bool	autoServerMotdPopup;
-
 #ifdef SOUND
 extern char 	sounds[PATH_MAX];	/* audio mappings */
 extern char 	audioServer[PATH_MAX];	/* audio server */
@@ -655,7 +650,7 @@ extern bool played_this_round;
 /*
  * somewhere
  */
-char *Program_name(void);
+const char *Program_name(void);
 
 /*
  * event.c
@@ -688,6 +683,7 @@ void Free_msgs(void);
 int Alloc_history(void);
 void Free_selectionAndHistory(void);
 void Add_message(const char *message);
+void Add_newbie_message(const char *message);
 void Add_pending_messages(void);
 void Add_roundend_messages(other_t **order);
 void Print_messages_to_stdout(void);
@@ -708,7 +704,7 @@ int Check_pos_by_index(int ind, int *xp, int *yp);
 int Check_index_by_pos(int x, int y);
 homebase_t *Homebase_by_id(int id);
 other_t *Other_by_id(int id);
-other_t *Other_by_name(char *name, bool show_error_msg);
+other_t *Other_by_name(const char *name, bool show_error_msg);
 shipshape_t *Ship_by_id(int id);
 int Handle_leave(int id);
 int Handle_player(int id, int team, int mychar,
@@ -832,6 +828,7 @@ extern void Store_key_options(void);
  * join.c
  */
 extern int Join(Connect_param_t *conpar);
+extern void xpilotShutdown(void);
 
 /*
  * mapdata.c

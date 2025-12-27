@@ -46,7 +46,7 @@ typedef struct {
  */
 setup_t			*Setup = NULL;
 display_t               server_display;
-int			receive_window_size;
+int			receive_window_size = 3;
 long			last_loops;
 bool                    packetMeasurement;
 #ifdef _WINDOWS
@@ -2454,7 +2454,7 @@ int Net_talk(char *str)
 {
     strlcpy(talk_str, str, sizeof talk_str);
     if (talk_str[0] == '\\')	/* it's a clientcommand! */
-	executeCommand(talk_str);
+	executeCommand(talk_str + 1);
     else {
 	talk_pending = ++talk_sequence_num;
 	talk_last_send = last_loops - TALK_RETRY;

@@ -48,7 +48,7 @@ static void printfile(const char *filename)
     fclose(fp);
 }
 
-char *Program_name(void)
+const char *Program_name(void)
 {
     return "xpilot-ng-x11";
 }
@@ -68,11 +68,9 @@ int main(int argc, char *argv[])
 	   "  " TITLE " comes with ABSOLUTELY NO WARRANTY; "
 	      "for details see the\n"
 	   "  provided COPYING file.\n\n");
-    if (strcmp(Conf_localguru(), "xpilot@xpilot.org")
-	&& strcmp(Conf_localguru(), "xpilot@cs.uit.no")) {
+    if (strcmp(Conf_localguru(), PACKAGE_BUGREPORT))
 	printf("  %s is responsible for the local installation.\n\n",
 	       Conf_localguru());
-    }
 
     Conf_print();
 

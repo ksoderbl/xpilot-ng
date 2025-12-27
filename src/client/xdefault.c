@@ -39,6 +39,14 @@ int pre_acc_denom, new_acc_denom = 1;
 int pre_threshold, new_threshold = 0; 
 bool mouseAccelInClient = false;
 
+char	gameFontName[FONT_LEN];	/* The fonts used in the game */
+char	messageFontName[FONT_LEN];
+char	scoreListFontName[FONT_LEN];
+char	buttonFontName[FONT_LEN];
+char	textFontName[FONT_LEN];
+char	talkFontName[FONT_LEN];
+char	motdFontName[FONT_LEN];
+
 #ifdef DEVELOPMENT
 static bool testxsync = false;
 static bool testxdebug = false;
@@ -55,8 +63,8 @@ static bool testxcolors = false;
  */
 #define GAME_FONT	"-*-fixed-bold-*-*--13-*-*-*-c-*-iso8859-1"
 /*"-*-times-*-*-*--18-*-*-*-*-*-iso8859-1"*/
-#define MESSAGE_FONT	"-*-fixed-medium-r-*--13-*-*-*-c-*-iso8859-1"
-/*"-*-times-*-*-*--14-*-*-*-*-*-iso8859-1"*/
+#define MESSAGE_FONT	"-*-times-*-*-*--14-*-*-*-*-*-iso8859-1"
+/* "-*-fixed-medium-r-*--13-*-*-*-c-*-iso8859-1" */
 #define SCORE_LIST_FONT	"-*-fixed-bold-*-*--13-*-*-*-c-*-iso8859-1"
 #define BUTTON_FONT	"-*-fixed-bold-*-*--13-*-*-*-c-*-iso8859-1"
 /*"-*-*-bold-o-*--14-*-*-*-*-*-iso8859-1"*/
@@ -70,7 +78,7 @@ static bool testxcolors = false;
 static char displayName[MAX_DISP_LEN];
 static char keyboardName[MAX_DISP_LEN];
 
-
+/* kps - this is quite useless currently */
 static bool Set_geometry(xp_option_t *opt, const char *value)
 {
     UNUSED_PARAM(opt);
@@ -83,8 +91,10 @@ static bool Set_geometry(xp_option_t *opt, const char *value)
 
 static const char *Get_geometry(xp_option_t *opt)
 {
+    static char buf[20]; /* should be enough */
     UNUSED_PARAM(opt);
-    return geometry;
+    snprintf(buf, sizeof(buf), "%dx%d", top_width, top_height);
+    return buf;
 }
 
 static bool Set_texturedObjects(xp_option_t *opt, bool val);
@@ -136,62 +146,90 @@ static bool Set_texturedObjects(xp_option_t *opt, bool val)
     return true;
 }
 
-bool Set_acc(xp_option_t *opt, int value)
+static bool Set_mouseAccelNum(xp_option_t *opt, int value)
 {
-  if (value < 0) {
-    new_acc_num = 0;
-    return false;
-  } else {
-    new_acc_num = value;
-    if (dpy) {
+    UNUSED_PARAM(opt);
+
+    if (value < 0) {
+	new_acc_num = 0;
+	return false;
+    } else {
+	new_acc_num = value;
+	if (dpy) {
 #ifndef _WINDOWS
-      if (mouseAccelInClient) {
-	XChangePointerControl(dpy, True, True, value,
-			      new_acc_denom, new_threshold);
-      }
+	    if (mouseAccelInClient) {
+		XChangePointerControl(dpy, True, True, value,
+				      new_acc_denom, new_threshold);
+	    }
 #endif
+	}
+	return true;
     }
-    return true;
-  }
   
 }
 
-bool Set_accdenom(xp_option_t *opt, int value)
+static bool Set_mouseAccelDenom(xp_option_t *opt, int value)
 {
-  if (value < 0) {
-    new_acc_denom = 1;
-    return false;
-  } else {
-    new_acc_denom = value;
-    if (dpy) {
+    UNUSED_PARAM(opt);
+
+    if (value < 0) {
+	new_acc_denom = 1;
+	return false;
+    } else {
+	new_acc_denom = value;
+	if (dpy) {
 #ifndef _WINDOWS
-      if (mouseAccelInClient) {
-	XChangePointerControl(dpy, True, True, new_acc_num,
-			      value, new_threshold);
-      }
+	    if (mouseAccelInClient) {
+		XChangePointerControl(dpy, True, True, new_acc_num,
+				      value, new_threshold);
+	    }
 #endif
-    }
-    return true;
-  }  
+	}
+	return true;
+    }  
 }     
 
-bool Set_accthresh(xp_option_t *opt, int value)
+static bool Set_mouseAccelThresh(xp_option_t *opt, int value)
 {
-  if (value < 0) {
-    new_threshold = 0;
-    return false;
-  } else {    
-    new_threshold = value;
-    if (dpy) {
+    UNUSED_PARAM(opt);
+
+    if (value < 0) {
+	new_threshold = 0;
+	return false;
+    } else {    
+	new_threshold = value;
+	if (dpy) {
 #ifndef _WINDOWS
-      if (mouseAccelInClient) {
-	XChangePointerControl(dpy, True, True, new_acc_num,
-			      new_acc_denom, value);
-      }
+	    if (mouseAccelInClient) {
+		XChangePointerControl(dpy, True, True, new_acc_num,
+				      new_acc_denom, value);
+	    }
 #endif
+	}
+	return true;
     }
+}
+
+static bool Set_fontName(xp_option_t *opt, const char *val)
+{
+    char *buf = Option_get_private_data(opt);
+    char *tmpval, *fontname;
+
+    assert(val != NULL);
+
+    /* remove whitespace from font specification */
+    tmpval = xp_safe_strdup(val);
+    
+    fontname = strtok(tmpval, " \t\r\n");
+    if (!fontname) {
+	xp_free(tmpval);
+	return false;
+    }
+
+    strlcpy(buf, fontname, FONT_LEN);
+    xp_free(tmpval);
+
     return true;
-  }
 }
 
 xp_option_t xdefault_options[] = {
@@ -231,7 +269,7 @@ xp_option_t xdefault_options[] = {
 	displayName,
 	sizeof displayName,
 	NULL, NULL, NULL,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
 	"Set the X display.\n"),
 
     XP_STRING_OPTION(
@@ -240,7 +278,7 @@ xp_option_t xdefault_options[] = {
 	keyboardName,
 	sizeof keyboardName,
 	NULL, NULL, NULL,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
 	"Set the X keyboard input if you want keyboard input from\n"
 	"another display.  The default is to use the keyboard input from\n"
 	"the X display.\n"),
@@ -251,7 +289,7 @@ xp_option_t xdefault_options[] = {
 	visualName,
 	sizeof visualName,
 	NULL, NULL, NULL,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
 	"Specify which visual to use for allocating colors.\n"
 	"To get a listing of all possible visuals on your dislay\n"
 	"set the argument for this option to list.\n"),
@@ -261,7 +299,7 @@ xp_option_t xdefault_options[] = {
 	true,
 	&colorSwitch,
 	NULL,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
 	"Use color buffering or not.\n"
 	"Usually color buffering is faster, especially on 8-bit\n"
 	"PseudoColor displays.\n"),
@@ -301,7 +339,7 @@ xp_option_t xdefault_options[] = {
 	GAME_FONT,
 	gameFontName,
 	sizeof gameFontName,
-	NULL, NULL, NULL,
+	Set_fontName, gameFontName, NULL,
 	XP_OPTFLAG_DEFAULT,
 	"The font used on the HUD and for most other text.\n"),
 
@@ -310,7 +348,7 @@ xp_option_t xdefault_options[] = {
 	SCORE_LIST_FONT,
 	scoreListFontName,
 	sizeof scoreListFontName,
-	NULL, NULL, NULL,
+	Set_fontName, scoreListFontName, NULL,
 	XP_OPTFLAG_DEFAULT,
 	"The font used on the score list.\n"
 	"This must be a non-proportional font.\n"),
@@ -320,7 +358,7 @@ xp_option_t xdefault_options[] = {
 	BUTTON_FONT,
 	buttonFontName,
 	sizeof buttonFontName,
-	NULL, NULL, NULL,
+	Set_fontName, buttonFontName, NULL,
 	XP_OPTFLAG_DEFAULT,
 	"The font used on all buttons.\n"),
 
@@ -329,7 +367,7 @@ xp_option_t xdefault_options[] = {
 	TEXT_FONT,
 	textFontName,
 	sizeof textFontName,
-	NULL, NULL, NULL,
+	Set_fontName, textFontName, NULL,
 	XP_OPTFLAG_DEFAULT,
 	"The font used in the help and about windows.\n"),
 
@@ -338,7 +376,7 @@ xp_option_t xdefault_options[] = {
 	TALK_FONT,
 	talkFontName,
 	sizeof talkFontName,
-	NULL, NULL, NULL,
+	Set_fontName, talkFontName, NULL,
 	XP_OPTFLAG_DEFAULT,
 	"The font used in the talk window.\n"),
 
@@ -347,7 +385,7 @@ xp_option_t xdefault_options[] = {
 	MOTD_FONT,
 	motdFontName,
 	sizeof motdFontName,
-	NULL, NULL, NULL,
+	Set_fontName, motdFontName, NULL,
 	XP_OPTFLAG_DEFAULT,
 	"The font used in the MOTD window and key list window.\n"
 	"This must be a non-proportional font.\n"),
@@ -357,7 +395,7 @@ xp_option_t xdefault_options[] = {
 	MESSAGE_FONT,
 	messageFontName,
 	sizeof messageFontName,
-	NULL, NULL, NULL,
+	Set_fontName, messageFontName, NULL,
 	XP_OPTFLAG_DEFAULT,
 	"The font used for drawing messages.\n"),
 
@@ -372,7 +410,7 @@ xp_option_t xdefault_options[] = {
     
     XP_BOOL_OPTION(
         "mouseAccelInClient",
-	false,
+	true,
 	&mouseAccelInClient,
 	NULL,
 	XP_OPTFLAG_CONFIG_DEFAULT,
@@ -384,7 +422,7 @@ xp_option_t xdefault_options[] = {
 	0,
 	10,
 	&new_acc_num,
-	Set_acc,
+	Set_mouseAccelNum,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"Fine tune the mouse acceleration\n"),
 
@@ -394,7 +432,7 @@ xp_option_t xdefault_options[] = {
 	1,
 	10,
 	&new_acc_denom,
-	Set_accdenom,
+	Set_mouseAccelDenom,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"Set the mouse acceleration denominator\n"),
 
@@ -404,7 +442,7 @@ xp_option_t xdefault_options[] = {
 	0,
 	10,
 	&new_threshold,
-	Set_accthresh,
+	Set_mouseAccelThresh,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"Set the mouse acceleration threshold\n"),
 
@@ -414,25 +452,25 @@ xp_option_t xdefault_options[] = {
     XP_NOARG_OPTION(
         "testxsync",
 	&testxsync,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
         "Test XSynchronize() ?\n"),
 
     XP_NOARG_OPTION(
         "testxdebug",
 	&testxdebug,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
         "Test X_error_handler() ?\n"),
 
     XP_NOARG_OPTION(
         "testxafter",
 	&testxafter,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
         "Test XAfterFunction ?\n"),
 
     XP_NOARG_OPTION(
         "testxcolors",
 	&testxcolors,
-	XP_OPTFLAG_DEFAULT,
+	XP_OPTFLAG_NO_SAVE,
         "Do Colors_debug() ?\n"),
 #endif
 

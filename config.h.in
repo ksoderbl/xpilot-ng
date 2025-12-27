@@ -247,12 +247,6 @@
 /* Define to 1 if you have the `vprintf' function. */
 #undef HAVE_VPRINTF
 
-/* Define to 1 if you have the <X11/extensions/multibuf.h> header file. */
-#undef HAVE_X11_EXTENSIONS_MULTIBUF_H
-
-/* Define to 1 if you have the <X11/extensions/Xdbe.h> header file. */
-#undef HAVE_X11_EXTENSIONS_XDBE_H
-
 /* Define to 1 if you have the <X11/keysym.h> header file. */
 #undef HAVE_X11_KEYSYM_H
 

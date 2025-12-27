@@ -210,12 +210,34 @@ static bool Key_press_select_lose_item(void)
     return true;
 }
 
-
 bool Key_press(keys_t key)
 {
+    static bool thrusthelp = false;
+
     Key_check_talk_macro(key);
 
     switch (key) {
+    case KEY_THRUST:
+	if (newbie && !thrusthelp && !pointerControl) {
+	    xp_option_t *opt = Find_option("keyPointerControl");
+	    char msg[MSG_LEN];
+	    const char *val;
+
+	    if (!opt)
+		break;
+	    val = Option_value_to_string(opt);
+	    if (strlen(val) == 0)
+		break;
+
+	    snprintf(msg, sizeof(msg),
+		     "Steering with mouse is superior. "
+		     "Enable with one of: %s.", val);
+
+	    Add_newbie_message(msg);
+	    thrusthelp = true;
+	}
+	break;
+
     case KEY_ID_MODE:
 	return (Key_press_id_mode());
 
@@ -273,6 +295,28 @@ bool Key_press(keys_t key)
 	return Key_press_show_messages();
 
     case KEY_POINTER_CONTROL:
+	if (newbie) {
+    	    xp_option_t *opt = Find_option("keyPointerControl");
+	    char msg[MSG_LEN];
+	    const char *val;
+
+	    if (!opt)
+	    	break;
+	    val = Option_value_to_string(opt);
+	    if (strlen(val) == 0)
+	    	break;
+
+	    if(!pointerControl)
+		snprintf(msg, sizeof(msg),
+			 "Mouse steering enabled. "
+			 "Key(s) to disable it: %s.", val);
+	    else
+		snprintf(msg, sizeof(msg),
+			 "Mouse steering disabled. "
+			 "Key(s) to disable it: %s.", val);
+
+    	    Add_newbie_message(msg);
+	}
 	return Key_press_pointer_control();
 
     case KEY_TOGGLE_RECORD:
@@ -556,25 +600,25 @@ xp_option_t key_options[] = {
 
     XP_KEY_OPTION(
 	"keyTurnLeft",
-	"a",
+	"a Left",
 	KEY_TURN_LEFT,
 	"Turn left (anti-clockwise).\n"),
 
     XP_KEY_OPTION(
 	"keyTurnRight",
-	"s",
+	"s Right",
 	KEY_TURN_RIGHT,
 	"Turn right (clockwise).\n"),
 
     XP_KEY_OPTION(
 	"keyThrust",
-	"Shift_R Shift_L",
+	"Shift_L Up", /* Shift_R was here also */
 	KEY_THRUST,
 	"Thrust.\n"),
 
     XP_KEY_OPTION(
 	"keyShield",
-	"space Caps_Lock",
+	"Caps_Lock Down", /* was Caps_lock space */
 	KEY_SHIELD,
 	"Raise or toggle the shield.\n"),
 
@@ -629,25 +673,25 @@ xp_option_t key_options[] = {
 
     XP_KEY_OPTION(
 	"keyLockClose",
-	"Up",		/* Select removed */
+	"",		/* Select and Up removed */
 	KEY_LOCK_CLOSE,
 	"Lock on closest player.\n"),
 
     XP_KEY_OPTION(
 	"keyLockNextClose",
-	"Down",
+	"",		/* Down removed */
 	KEY_LOCK_NEXT_CLOSE,
 	"Lock on next closest player.\n"),
 
     XP_KEY_OPTION(
 	"keyLockNext",
-	"Next Right",
+	"Next",		/* a.k.a. Page Down */
 	KEY_LOCK_NEXT,
 	"Lock on next player.\n"),
 
     XP_KEY_OPTION(
 	"keyLockPrev",
-	"Prior Left",
+	"Prior",	/* a.k.a. Page Up */
 	KEY_LOCK_PREV,
 	"Lock on previous player.\n"),
 
@@ -696,7 +740,7 @@ xp_option_t key_options[] = {
 
     XP_KEY_OPTION(
 	"keySwapSettings",
-	"Escape",
+	"", /* was Escape */
 	KEY_SWAP_SETTINGS,
 	"Swap control settings.\n"
 	"These are the power, turn speed and turn resistance settings.\n"),
@@ -716,13 +760,13 @@ xp_option_t key_options[] = {
 
     XP_KEY_OPTION(
 	"keyConnector",
-	"f Control_L",
+	"f Control_L Control_R",
 	KEY_CONNECTOR,
 	"Connect to a ball.\n"),
 
     XP_KEY_OPTION(
 	"keyDropBall",
-	"d",
+	"d Shift_R",
 	KEY_DROP_BALL,
 	"Drop a ball.\n"),
 
@@ -962,7 +1006,7 @@ xp_option_t key_options[] = {
 
     XP_KEY_OPTION(
         "keyToggleRadarScore",
-        "",
+        "F11",
         KEY_TOGGLE_RADAR_SCORE,
         "Toggles the radar and score windows on and off.\n"),
 
@@ -1016,7 +1060,7 @@ xp_option_t key_options[] = {
 
     XP_KEY_OPTION(
 	"keyPointerControl",
-	"KP_Enter",
+	"space KP_Enter",
 	KEY_POINTER_CONTROL,
 	"Toggle pointer control.\n"),
 
@@ -1082,7 +1126,7 @@ xp_option_t key_options[] = {
 
     XP_KEY_OPTION(
 	"keySendMsg11",
-	"", /* F11 is keyToggleFullScreen now */
+	"Escape", /* F11 is keyToggleFullScreen now */
 	KEY_MSG_11,
 	"Sends the talkmessage stored in msg11.\n"),
 

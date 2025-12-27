@@ -45,8 +45,27 @@ int videoFlags;
 SDL_Surface  *MainSDLSurface = NULL;
 
 font_data gamefont;
-font_data messagefont;
 font_data mapfont;
+int gameFontSize;
+int mapFontSize;
+char *gamefontname;
+
+/* ugly kps hack */
+bool file_exists(const char *path) 
+{ 
+  FILE *fp;
+
+  if (!path) {
+    return false; 
+  } else {
+    fp = fopen(path ? path : "", "r");
+    if (fp) { 
+      fclose(fp); 
+      return true;
+    }
+    return false; 
+  }
+}
 
 int Init_playing_windows(void)
 {
@@ -73,15 +92,10 @@ int Init_playing_windows(void)
 
 int Init_window(void)
 {
-    char defaultfont[] = CONF_FONTDIR "defaultfont.bmp"; /* TODO make bmp fonts work */
-    char testfont[] = CONF_FONTDIR "Test.ttf";
-    int gamefontsize = 12;
-    int messagefontsize = 16;
-    int mapfontsize = 12;
     int value;
-    /*char testfont[] = "/doze/windows/fonts/trebuc.ttf";*/
-
-
+    char defaultfontname[] = CONF_FONTDIR "FreeSansBoldOblique.ttf";
+    bool gf_exists = true,df_exists = true,gf_init = false, mf_init = false;
+    
     if (TTF_Init()) {
     	error("SDL_ttf initialization failed: %s", SDL_GetError());
     	return -1;
@@ -109,7 +123,7 @@ int Init_window(void)
 #ifndef _WINDOWS
     videoFlags |= SDL_RESIZABLE;       /* Enable window resizing        */
 #else
-	videoFlags |= SDL_FULLSCREEN;
+    videoFlags |= SDL_FULLSCREEN;
 #endif
 
     /** This checks to see if surfaces can be stored in memory */
@@ -152,22 +166,58 @@ int Init_window(void)
 
     /* Set title for window */
     SDL_WM_SetCaption(TITLE, NULL);
+    
+    /* this prevents a freetype crash if you pass non existant fonts */
+    if (!file_exists(gamefontname)) {
+    	error("cannot find your game font '%s'.\n" \
+            "Please check that it exists!",gamefontname);
+    	xpprintf("Reverting to defaultfont '%s'\n",defaultfontname);
+    	gf_exists = false;
+    }
+    if (!file_exists(defaultfontname)) {
+    	error("cannot find the default font! '%s'" ,defaultfontname);
+	df_exists = false;
+    }
+    
+    if (!gf_exists && !df_exists) {
+    	error("Failed to find any font files!\n" \
+	    	"Probably you forgot to run 'make install',use '-TTFont <font.ttf>' argument" \
+		" until you do");
+	return -1;
+    }
+      
+    if (gf_exists) {
+    	if (fontinit(&gamefont,gamefontname,gameFontSize)) {
+    	    error("Font initialization failed with %s", gamefontname);
+	} else gf_init = true;
+    }
+    if (!gf_init && df_exists) {
+    	if (fontinit(&gamefont,defaultfontname,gameFontSize)) {
+    	    error("Default font initialization failed with %s", defaultfontname);
+    	} else gf_init = true;
+    }
+    
+    if (!gf_init) {
+    	error("Failed to initialize any game font! (quitting)");
+	return -1;
+    }
+    
+    if (gf_exists) {
+    	if (fontinit(&mapfont,gamefontname,mapFontSize)) {
+    	    error("Font initialization failed with %s", gamefontname);
+	} else mf_init = true;
+    }
+    if (!mf_init && df_exists) {
+    	if (fontinit(&mapfont,defaultfontname,mapFontSize)) {
+    	    error("Default font initialization failed with %s", defaultfontname);
+    	} else mf_init = true;
+    }
 
-    if (fontinit(&gamefont,testfont,gamefontsize)) {
-    	error("fontinit failed with %s, reverting to default font %s",testfont,defaultfont);
-	if (fontinit(&gamefont,defaultfont,gamefontsize))
-	    error("Default font failed! gamefont not available!");
+    if (!mf_init) {
+    	error("Failed to initialize any map font! (quitting)");
+	return -1;
     }
-    if (fontinit(&messagefont,testfont,messagefontsize)) {
-    	error("fontinit failed with %s, reverting to default font %s",testfont,defaultfont);
-	if (fontinit(&gamefont,defaultfont,messagefontsize))
-	    error("Default font failed! messagefont not available!");
-    }
-    if (fontinit(&mapfont,testfont,mapfontsize)) {
-    	error("fontinit failed with %s, reverting to default font %s",testfont,defaultfont);
-	if (fontinit(&mapfont,defaultfont,mapfontsize))
-	    error("Default font failed! messagefont not available!");
-    }
+
     return 0;
 }
 
@@ -177,7 +227,7 @@ void Quit(void)
     Gui_cleanup();
     Console_cleanup();
     fontclean(&gamefont);
-    fontclean(&messagefont);
+    fontclean(&mapfont);
     TTF_Quit();
     SDL_Quit();
 }
@@ -204,8 +254,24 @@ static bool Set_geometry(xp_option_t *opt, const char *s)
 static const char* Get_geometry(xp_option_t *opt)
 {
     static char buf[20]; /* should be enough */
-    sprintf(buf, "%dx%d", draw_width, draw_height);
+    snprintf(buf, 20, "%dx%d", draw_width, draw_height);
     return buf;
+}
+
+static bool Set_fontName(xp_option_t *opt, const char *value)
+{
+    UNUSED_PARAM(opt);
+    if (gamefontname)
+	xp_free(gamefontname);
+    gamefontname = xp_safe_strdup(value);
+
+    return true;
+}
+
+static const char *Get_fontName(xp_option_t *opt)
+{
+    UNUSED_PARAM(opt);
+    return gamefontname;
 }
 
 static xp_option_t sdlinit_options[] = {
@@ -216,7 +282,31 @@ static xp_option_t sdlinit_options[] = {
 	0,
 	Set_geometry, NULL, Get_geometry,
 	XP_OPTFLAG_DEFAULT,
-	"Set the initial window geometry.\n")
+	"Set the initial window geometry.\n"),
+    
+     XP_INT_OPTION(
+        "gameFontSize",
+	16, 12, 32,
+	&gameFontSize,
+	NULL,
+	XP_OPTFLAG_DEFAULT,
+	"Height of font used for game strings.\n"),
+
+    XP_INT_OPTION(
+        "mapFontSize",
+	16, 12, 64,
+	&mapFontSize,
+	NULL,
+	XP_OPTFLAG_DEFAULT,
+	"Height of font used for strings painted on the map.\n"),
+
+    XP_STRING_OPTION(
+	"TTFont",
+	CONF_FONTDIR "FreeSansBoldOblique.ttf",
+	NULL, 0,
+	Set_fontName, NULL, Get_fontName,
+	XP_OPTFLAG_DEFAULT,
+	"Set the font to use.\n")
 };
 
 void Store_sdlinit_options(void)
