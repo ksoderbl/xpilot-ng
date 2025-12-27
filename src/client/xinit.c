@@ -110,6 +110,8 @@ extern int		RadarHeight;
 int			ButtonHeight;
 Atom			ProtocolAtom, KillAtom;
 int			buttonColor, windowColor, borderColor;
+int			scoreColor, scoreSelfColor, scoreInactiveColor;
+int			scoreInactiveSelfColor, scoreZeroColor;
 int			quitting = false;
 int			top_width, top_height, top_x, top_y, top_posmask;
 int			draw_width, draw_height;
@@ -488,7 +490,7 @@ int Init_top(void)
 	hrColor2 = BLUE;
     }
     if (hrSize >= SHIP_SZ || hrSize <= 0) {
-	hrSize = 2;
+	hrSize = 6;
     }
     if (hrScale >= 4.0 || hrScale <= 0.5) {
 	hrScale = 1.5;
@@ -496,12 +498,34 @@ int Init_top(void)
     if (hrLimit > 5.0 || hrLimit < 0.0) {
 	hrLimit = 0.05;
     }
+    if (hudSize >= 6 * MIN_HUD_SIZE || hudSize < MIN_HUD_SIZE) {
+	hudSize = MIN_HUD_SIZE;
+    }
+    if (shipShapesHackColor >= maxColors || shipShapesHackColor < 0) {
+	shipShapesHackColor = 0;
+    }
+    if (dirPtrColor >= maxColors || dirPtrColor < 0) {
+	dirPtrColor = 0;
+    }
     if (msgScanBallColor >= maxColors || msgScanBallColor < 0) {
 	msgScanBallColor = RED;
     }
     if (msgScanCoverColor >= maxColors || msgScanCoverColor < 0) {
 	msgScanCoverColor = BLUE;
     }
+    if (selfLWColor >= maxColors || selfLWColor <= 0) {
+	selfLWColor = RED;
+    }
+    if (enemyLWColor >= maxColors || enemyLWColor <= 0) {
+	enemyLWColor = RED;
+    }
+    if (teamLWColor >= maxColors || teamLWColor <= 0) {
+	teamLWColor = 4;
+    }
+    if (teamShotColor >= maxColors || teamShotColor < 0) {
+	teamShotColor = BLUE;
+    }
+
     if (nameColor >= maxColors || nameColor <= 0) {
 	nameColor = BLUE;
     }
@@ -520,7 +544,27 @@ int Init_top(void)
     if (borderColor >= maxColors || borderColor < 0) {
 	borderColor = WHITE;
     }
-
+    if (scoreColor >= maxColors || scoreColor < 0) {
+	scoreColor = WHITE;
+    }
+    if (scoreSelfColor >= maxColors || scoreSelfColor < 0) {
+	scoreSelfColor = RED;
+    }
+    if (scoreInactiveColor >= maxColors || scoreInactiveColor < 0) {
+	scoreInactiveColor = 12;
+    }
+    if (scoreInactiveSelfColor >= maxColors || scoreInactiveSelfColor < 0) {
+	scoreInactiveSelfColor = 12;
+    }
+    if (scoreZeroColor >= maxColors || scoreZeroColor < 0) {
+	scoreZeroColor = 4;
+    }
+    if (scoreObjectTimer >= 121 || scoreObjectTimer < 0) {
+	scoreObjectTimer = 24;
+    }
+    if (baseWarningType > 2 || baseWarningType < 0) {
+	baseWarningType = 1;
+    }
     if (wallColor >= maxColors || wallColor <= 0) {
 	wallColor = BLUE;
     }

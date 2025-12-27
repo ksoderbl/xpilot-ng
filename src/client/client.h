@@ -79,14 +79,14 @@
 #define SHOW_SSH		(1L << 1)
 #define SHOW_SHIP_SHAPES	(1L << 2)
 #define SHOW_MY_SHIP_SHAPE	(1L << 3)
-/*#define SHOW_HR		(1L << 4)*/
+
 #define SHOW_BASE_NAME		(1L << 5)
 #define BALL_MSG_SCAN		(1L << 6)
 #define CLIENT_RANKER		(1L << 7)
-#define BASE_WARNING		(1L << 8)
-#define SELF_LIFE_WARNING	(1L << 9)
-#define ENEMY_LIFE_WARNING	(1L << 10)
-#define TEAM_LIFE_WARNING	(1L << 11)
+/*#define BASE_WARNING		(1L << 8)
+  #define SELF_LIFE_WARNING	(1L << 9)
+  #define ENEMY_LIFE_WARNING	(1L << 10)
+  #define TEAM_LIFE_WARNING	(1L << 11) - always active */
 #define MAP_RADAR		(1L << 12)
 #define SHOW_LIVES_BY_SHIP	(1L << 13)
 #define TREAT_ZERO_SPECIAL	(1L << 14)
@@ -150,6 +150,7 @@ typedef struct {
     char	real[MAX_CHARS];
     char	host[MAX_CHARS];
     char	id_string[MAX_CHARS];
+    short	ignorelevel;
 } other_t;
 
 typedef struct {
@@ -210,7 +211,7 @@ typedef struct {
 
 
 
-#define SCORE_OBJECT_COUNT	100
+/*#define SCORE_OBJECT_COUNT	100*/
 typedef struct {
     DFLOAT	score;
     int		x,

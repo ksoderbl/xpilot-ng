@@ -28,11 +28,11 @@
 #define MAX_VISUAL_NAME	12
 
 #define MIN_TOP_WIDTH	(640 + 2)
-#define MAX_TOP_WIDTH	(1280 + 2)
-#define DEF_TOP_WIDTH	(1024 + 2)
+#define MAX_TOP_WIDTH	(1920 + 2)
+#define DEF_TOP_WIDTH	(1280 + 2)
 #define MIN_TOP_HEIGHT	480
-#define MAX_TOP_HEIGHT	1024
-#define DEF_TOP_HEIGHT	768
+#define MAX_TOP_HEIGHT	1440
+#define DEF_TOP_HEIGHT	1024
 
 #define MAX_POINTER_BUTTONS	5
 #define MAX_BUTTON_DEFS		3
@@ -40,6 +40,8 @@
 
 extern Atom		ProtocolAtom, KillAtom;
 extern int		buttonColor, windowColor, borderColor;
+extern int		scoreColor, scoreSelfColor, scoreInactiveColor;
+extern int		scoreInactiveSelfColor, scoreZeroColor;
 extern int		ButtonHeight;
 extern char		visualName[MAX_VISUAL_NAME];
 extern Visual		*visual;

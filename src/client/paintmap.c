@@ -107,7 +107,8 @@ void Paint_vbase(void)
 	    Gui_paint_base(vbase_ptr[i].x, vbase_ptr[i].y, id, team,
 			   vbase_ptr[i].type);
 	    for (j = 0; j < 10; j++) {
-		if (deatharray[j].id == id &&
+		if (baseWarningType == 1 &&
+		    deatharray[j].id == id &&
 		    deatharray[j].deathtime > loops - 3 * FPS)
 		    Gui_paint_appearing(vbase_ptr[i].x + BLOCK_SZ / 2,
 					vbase_ptr[i].y + BLOCK_SZ / 2, id,

@@ -40,7 +40,6 @@ void tuner_plock(void)
     pLockServer = (plock_server(pLockServer) == 1) ? true : false;
 }
 
-#if 0
 void tuner_shotsmax(void)
 {
     int i;
@@ -49,7 +48,6 @@ void tuner_shotsmax(void)
 	Players[i]->shot_max = ShotsMax;
     }
 }
-#endif
 
 void tuner_shipmass(void)
 {
@@ -120,7 +118,7 @@ void tuner_playershielding(void)
 	CLR_BIT(DEF_HAVE, HAS_SHIELD);
 
 	for (i = 0; i < NumPlayers; i++) {
-	    Players[i]->shield_time = 2 * 12 * TIME_FACT;
+	    Players[i]->shield_time = 2 * FPS;
 	    /* 2 seconds to get to safety */
 	}
     }

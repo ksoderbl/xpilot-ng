@@ -46,7 +46,6 @@
 #include "netserver.h"
 #include "error.h"
 #include "commonproto.h"
-#include "click.h"
 
 char shot_version[] = VERSION;
 
@@ -141,11 +140,11 @@ void Place_general_mine(int ind, unsigned short team, long status,
     }
 
     if (pl && BIT(pl->status, KILLED)) {
-	life = (int)(rfrac() * 12 * TIME_FACT);
+	life = (int)(rfrac() * FPS);
     } else if (BIT(status, FROMCANNON)) {
 	life = CANNON_SHOT_LIFE;
     } else {
-	life = (mineLife ? mineLife * TIME_FACT: MINE_LIFETIME);
+	life = (mineLife ? mineLife : MINE_LIFETIME);
     }
 
     if (!BIT(mods.warhead, CLUSTER))
@@ -442,7 +441,7 @@ void Fire_main_shot(int ind, int type, int dir)
     DFLOAT x,
 	  y;
 
-    if (pl->shots >= ShotsMax || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
+    if (pl->shots >= pl->shot_max || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
 	return;
 
     x = pl->pos.x + pl->ship->m_gun[pl->dir].x;
@@ -455,7 +454,7 @@ void Fire_shot(int ind, int type, int dir)
 {
     player *pl = Players[ind];
 
-    if (pl->shots >= ShotsMax || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
+    if (pl->shots >= pl->shot_max || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
 	return;
 
     Fire_general_shot(ind, pl->team, 0, pl->pos.x, pl->pos.y,
@@ -468,7 +467,7 @@ void Fire_left_shot(int ind, int type, int dir, int gun)
     DFLOAT x,
 	  y;
 
-    if (pl->shots >= ShotsMax || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
+    if (pl->shots >= pl->shot_max || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
 	return;
 
     x = pl->pos.x + pl->ship->l_gun[gun][pl->dir].x;
@@ -484,7 +483,7 @@ void Fire_right_shot(int ind, int type, int dir, int gun)
     DFLOAT x,
 	  y;
 
-    if (pl->shots >= ShotsMax || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
+    if (pl->shots >= pl->shot_max || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
 	return;
 
     x = pl->pos.x + pl->ship->r_gun[gun][pl->dir].x;
@@ -500,7 +499,7 @@ void Fire_left_rshot(int ind, int type, int dir, int gun)
     DFLOAT x,
 	  y;
 
-    if (pl->shots >= ShotsMax || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
+    if (pl->shots >= pl->shot_max || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
 	return;
 
     x = pl->pos.x + pl->ship->l_rgun[gun][pl->dir].x;
@@ -516,7 +515,7 @@ void Fire_right_rshot(int ind, int type, int dir, int gun)
     DFLOAT x,
 	  y;
 
-    if (pl->shots >= ShotsMax || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
+    if (pl->shots >= pl->shot_max || BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
 	return;
 
     x = pl->pos.x + pl->ship->r_rgun[gun][pl->dir].x;
@@ -560,9 +559,6 @@ void Fire_general_shot(int ind, unsigned short team, bool cannon,
 
     if (NumObjs >= MAX_TOTAL_SHOTS)
 	return;
-    
-    if (pl)
-	Rank_fire_shot(pl);
 
     if (!BIT(mods.warhead, CLUSTER))
 	mods.velocity = 0;
@@ -653,9 +649,9 @@ void Fire_general_shot(int ind, unsigned short team, bool cannon,
 	}
 
 	if (pl && BIT(pl->status, KILLED)) {
-	    life = (int)(rfrac() * 12 * TIME_FACT);
+	    life = (int)(rfrac() * FPS);
 	} else if (!cannon) {
-	    life = (missileLife ? missileLife * TIME_FACT : MISSILE_LIFETIME);
+	    life = (missileLife ? missileLife : MISSILE_LIFETIME);
 	}
 
 	switch (type) {
@@ -1078,10 +1074,10 @@ void Fire_normal_shots(int ind)
     player		*pl = Players[ind];
     int			i, shot_angle;
 
-    if (frame_time < pl->shot_time + fireRepeatRate) {
+    if (frame_loops < pl->shot_time + fireRepeatRate) {
 	return;
     }
-    pl->shot_time = frame_time;
+    pl->shot_time = frame_loops;
 
     shot_angle = MODS_SPREAD_MAX - pl->mods.spread;
 
@@ -1206,7 +1202,7 @@ void Delete_shot(int ind)
 		/* min,max debris */ 10, 20,
 		/* min,max dir    */ 0, RES-1,
 		/* min,max speed  */ 10, 50,
-		/* min,max life   */ 10 * TIME_FACT, 54 * TIME_FACT
+		/* min,max life   */ 10, 2*(FPS+15)
 		);
 
 	}
@@ -1338,23 +1334,23 @@ void Delete_shot(int ind)
 	switch (shot->info) {
 
 	case ITEM_MISSILE:
-	    if (shot->life <= 0 && shot->color != WHITE) {
+	    if (shot->life == 0 && shot->color != WHITE) {
 		shot->color = WHITE;
-		shot->life  = 12 * WARN_TIME;
+		shot->life  = FPS * WARN_TIME;
 		return;
 	    }
-	    if (shot->life <= 0 && rfrac() < rogueHeatProb) {
+	    if (shot->life == 0 && rfrac() < rogueHeatProb) {
 		addHeat = 1;
 	    }
 	    break;
 
 	case ITEM_MINE:
-	    if (shot->life <= 0 && shot->color != WHITE) {
+	    if (!shot->life && shot->color != WHITE) {
 		shot->color = WHITE;
-		shot->life  = 12 * WARN_TIME;
+		shot->life  = FPS * WARN_TIME;
 		return;
 	    }
-	    if (shot->life <= 0 && rfrac() < rogueMineProb) {
+	    if (shot->life == 0 && rfrac() < rogueMineProb) {
 		addMine = 1;
 	    }
 	    break;
@@ -1607,13 +1603,13 @@ void Move_ball(int ind)
 
     /* compute accelleration for player, assume t = 1 */
     accell = (force + pl_damping + ball_damping) / pl->mass;
-    pl->vel.x += D.x * accell * framespeed2;
-    pl->vel.y += D.y * accell * framespeed2;
+    pl->vel.x += D.x * accell;
+    pl->vel.y += D.y * accell;
 
     /* compute accelleration for ball, assume t = 1 */
     accell = (force + ball_damping + pl_damping) / ball->mass;
-    ball->vel.x += -D.x * accell * framespeed2;
-    ball->vel.y += -D.y * accell * framespeed2;
+    ball->vel.x += -D.x * accell;
+    ball->vel.y += -D.y * accell;
 
 #endif	/* ORIGINAL_BALL */
 }

@@ -220,8 +220,6 @@ static void Parser_dump_config(char *progname)
     xpprintf("# LIBDIR = %s\n", Conf_libdir());
     xpprintf("# DEFAULTS_FILE_NAME = %s\n", Conf_defaults_file_name());
     xpprintf("# PASSWORD_FILE_NAME = %s\n", Conf_password_file_name());
-    xpprintf("# PLAYER_PASSWORDS_FILE_NAME = %s\n",
-	     Conf_player_passwords_file_name());
     xpprintf("# MAPDIR = %s\n", Conf_mapdir());
     xpprintf("# DEFAULT_MAP = %s\n", Conf_default_map());
     xpprintf("# SERVERMOTDFILE = %s\n", Conf_servermotdfile());
@@ -420,18 +418,15 @@ bool Parser(int argc, char **argv)
 	}
     }
 
-#if 0 /* kps - disabled for ng */
     /*
      * Read local defaults file
      */
-    /* Wouldn't work now */
     if ((fname = Option_get_value("defaultsFileName", NULL)) != NULL) {
 	parseDefaultsFile(fname);
     }
     else {
 	parseDefaultsFile(Conf_defaults_file_name());
     }
-#endif
 
     /*
      * Read local password file
@@ -449,27 +444,23 @@ bool Parser(int argc, char **argv)
      * If "mapFileName" is defined and it is not equal to "wild"
      * then read it's contents from file.  Else read a default map.
      */
-    /*if (!(fname = Option_get_value("mapData", NULL))) {*/
-    if ((fname = Option_get_value("mapFileName", NULL)) != NULL) {
-	if (strcasecmp(fname, "wild") && !parseMapFile(fname)) {
-	    xpprintf("Unable to read %s, trying to open %s\n",
-		     fname, Conf_default_map());
+    if (!(fname = Option_get_value("mapData", NULL))) {
+	if ((fname = Option_get_value("mapFileName", NULL)) != NULL) {
+	    if (strcasecmp(fname, "wild") && !parseMapFile(fname)) {
+		xpprintf("Unable to read %s, trying to open %s\n",
+			fname, Conf_default_map());
+		if (!parseMapFile(Conf_default_map())) {
+		    xpprintf("Unable to read %s\n", Conf_default_map());
+		}
+	    }
+	} else {
+	    xpprintf("Map not specified, trying to open %s\n",
+		     Conf_default_map());
 	    if (!parseMapFile(Conf_default_map())) {
 		xpprintf("Unable to read %s\n", Conf_default_map());
-		warn("Unable to read any map. Exiting.");
-		exit(1);
 	    }
 	}
-    } else {
-	xpprintf("Map not specified, trying to open %s\n",
-		 Conf_default_map());
-	if (!parseMapFile(Conf_default_map())) {
-	    xpprintf("Unable to read %s\n", Conf_default_map());
-	    warn("Unable to read any map. Exiting.");
-	    exit(1);
-	}
     }
-	/*}*/
 
     /*
      * Parse the options database and `internalise' it.
@@ -478,31 +469,14 @@ bool Parser(int argc, char **argv)
 
     Options_free();
 
-#if 0 /* kps - ng wants this */
-    return (TRUE);
-#else
     /*
      * Construct the World structure from the options.
      */
     status = Grok_map();
 
     return status;
-#endif
 }
 
-
-void cmdhack(void)
-{
-    /* kps - no idea how to implement this for 4.5.4 - check option.c though */
-    /* addOption is Option_set_value in 4.5.4 */
-#if 0
-    int j;
-    for (j = 0; j < NELEM(options); j++)
-	addOption(options[j].name, options[j].defaultValue, 0, &options[j],
-		  OPT_DEFAULT);
-#endif
-}
- 
 
 /*
  * Modify an option during the game.

@@ -25,6 +25,10 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#ifndef LOCALGURU
+#define LOCALGURU "xpilot@xpilot.org"
+#endif
+
 #ifdef MOD2
 #error "MOD2 already defined - config.h should be included before const.h"
 #endif

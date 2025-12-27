@@ -61,7 +61,6 @@ static int Send_motd(int ind);
 
 int Get_motd(char *buf, int offset, int maxlen, int *size_ptr);
 int Setup_net_server(void);
-void Conn_change_nick(int ind, const char *nick);
 void Destroy_connection(int ind, const char *reason);
 int Check_connection(char *real, char *nick, char *dpy, char *addr);
 int Setup_connection(char *real, char *nick, char *dpy, int team,
@@ -106,8 +105,8 @@ int Send_audio(int ind, int type, int vol);
 int Send_item(int ind, int x, int y, int type);
 int Send_paused(int ind, int x, int y, int count);
 int Send_ecm(int ind, int x, int y, int size);
-int Send_ship(int ind, int x, int y, int id, int dir, int shield, int cloak,
-	      int eshield, int phased, int deflector);
+int Send_ship(int ind, int x, int y, int id, int dir, int shield, int cloak, int eshield, 
+			  int phased, int deflector);
 int Send_refuel(int ind, int x0, int y0, int x1, int y1);
 int Send_connector(int ind, int x0, int y0, int x1, int y1, int tractor);
 int Send_laser(int ind, int color, int x, int y, int len, int dir);

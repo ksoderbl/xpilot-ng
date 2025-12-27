@@ -95,7 +95,6 @@ typedef struct {
 
 extern time_t		gameOverTime;
 long			frame_loops = 1;
-unsigned long		frame_time = TIME_FACT;
 static long		last_frame_shuffle;
 static shuffle_t	*object_shuffle_ptr;
 static int		num_object_shuffle;
@@ -486,9 +485,10 @@ static int Frame_status(int conn, int ind)
 			pl->emergency_thrust_max);
     if (BIT(pl->used, HAS_EMERGENCY_SHIELD))
 	Send_shieldtime(conn,
-			pl->emergency_shield_left, EMERGENCY_SHIELD_TIME);
+			pl->emergency_shield_left,
+			pl->emergency_shield_max);
     if (BIT(pl->status, SELF_DESTRUCT) && pl->count > 0) {
-	Send_destruct(conn, pl->count >> TIME_BITS);
+	Send_destruct(conn, pl->count);
     }
     if (BIT(pl->used, HAS_PHASING_DEVICE))
 	Send_phasingtime(conn,
@@ -778,15 +778,15 @@ static void Frame_shots(int conn, int ind)
 	    if (debris_colors >= 3) {
 		if (debris_colors > 4) {
 		    if (color == BLUE) {
-			color = (shot->life >> (TIME_BITS + 1));
+			color = (shot->life >> 1);
 		    } else {
-			color = (shot->life >> (TIME_BITS + 2));
+			color = (shot->life >> 2);
 		    }
 		} else {
 		    if (color == BLUE) {
-			color = (shot->life >> (TIME_BITS + 2));
+			color = (shot->life >> 2);
 		    } else {
-			color = (shot->life >> (TIME_BITS + 3));
+			color = (shot->life >> 3);
 		    }
 		}
 		if (color >= debris_colors) {
@@ -1019,7 +1019,7 @@ static void Frame_ships(int conn, int ind)
 	    Send_paused(conn,
 			pl_i->pos.x,
 			pl_i->pos.y,
-			pl_i->count >> TIME_BITS);
+			pl_i->count);
 	    continue;
 	}
 
@@ -1248,14 +1248,8 @@ void Frame_update(void)
     static time_t	oldTimeLeft;
     static bool		game_over_called = false;
 
-    frame_loops++;
-    frame_time += framespeed;
-    if (frame_time > ULONG_MAX - TIME_FACT) {
-	/* This is likely to cause visible problems, but */
-	/* probably nothing fatal. Might happen after a ~month. */
+    if (++frame_loops >= LONG_MAX)	/* Used for misc. timing purposes */
 	frame_loops = 1;
-	frame_time = 0;
-    }
 
     Frame_shuffle();
 
@@ -1301,11 +1295,10 @@ void Frame_update(void)
 	/*
 	* Reduce frame rate to player's own rate.
 	*/
-	if (pl->player_fps < FPS) {
-	    int divisor = (FPS - 1) / pl->player_fps + 1;
-	    /* Even combined with above pause check gives at least every
-	     * (4 * divisor)th frame. */
-	    if (frame_loops % divisor) {
+	if (pl->player_count > 0) {
+	    pl->player_round++;
+	    if (pl->player_round >= pl->player_count) {
+		pl->player_round = 0;
 		continue;
 	    }
 	}

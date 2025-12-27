@@ -91,7 +91,9 @@ extern int killratio_kills;
 extern int killratio_deaths;
 extern int killratio_totalkills;
 extern int killratio_totaldeaths;
-
+extern homebase_t *bases;
+extern int num_bases;
+ 
 
 extern char	dashes[NUM_DASHES];
 extern char	cdashes[NUM_CDASHES];
@@ -158,15 +160,20 @@ extern int	hrSize;			/* size for hudradar-hack drawing */
 extern DFLOAT	hrScale;		/* scale for hudradar-hack drawing */
 extern DFLOAT	hrLimit;		/* limit for hudradar-hack drawing */
 extern int	hudSize;		/* size for hud-drawing */
+extern int	dirPtrColor;		/* Color index for dirptr-hack drawing */
+extern int	shipShapesHackColor;	/* Color index for shipshapes-hack drawing */
 extern int	msgScanBallColor;	/* Color index for ball msg scan */
 extern int	msgScanCoverColor;	/* Color index for cover msg scan */
 extern int	selfLWColor;		/* Color index for selfLifeWarning */
 extern int	enemyLWColor;		/* Color index for enemyLifeWarning */
 extern int	teamLWColor;		/* Color index for teamLifeWarning */
 extern int	nameColor;		/* Color index for name drawing */
+extern int	teamShotColor;		/* Color index for harmless shot drawing */
 extern int	ballColor;		/* Color index for ball drawing */
 extern int	connColor;		/* Color index for connector drawing */
 extern int	hudLockColor;           /* Color index for lock on HUD drawing */
+extern int	scoreObjectTimer;	/* how long score objects are flashed */
+extern int	baseWarningType;	/* Which type of base warning you prefer */
 extern int	wallColor;		/* Color index for wall drawing */
 extern int	wallRadarColor;		/* Color index for walls on radar */
 extern int	targetRadarColor;	/* Color index for targets on radar */

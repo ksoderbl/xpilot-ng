@@ -2,7 +2,7 @@
 # $Xorg: imake.c,v 1.6 2001/02/09 02:03:15 xorgcvs Exp $
 
 # ----------------------------------------------------------------------
-# Makefile generated from "Imake.tmpl" and </tmp/IIf.tYRIhu>
+# Makefile generated from "Imake.tmpl" and </tmp/IIf.etOEVR>
 # $Xorg: Imake.tmpl,v 1.4 2000/08/17 19:41:46 cpqbld Exp $
 #
 #
@@ -903,8 +903,8 @@ CTAGOPTIONS =
       VERSION_MINOR = 5
  VERSION_PATCHLEVEL = 4
     VERSION_WINDOWS = 13
-     VERSION_STATUS = X
-        RELEASEDATE = Dec 9, 2002
+     VERSION_STATUS = X-rc2
+        RELEASEDATE = Jan 2, 2003
 
       AUTHORS = Bjørn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska & Uoti Urpala
 COPYRIGHTDATE = 1991-2002
@@ -916,7 +916,7 @@ COPYRIGHTDATE = 1991-2002
        MANEXT = 6
 
      LOCALGURU = xpilot@xpilot.org
-CONTACTADDRESS = xpilot@xpilot.org
+CONTACTADDRESS = ksoderbl@cc.hut.fi
 
 MSUB = $(TOP)/contrib/msub/msub
 MSUBSRC = $(TOP)/contrib/msub
@@ -942,10 +942,10 @@ INCLUDES = $(AUDIOINC) -I$(COMMON) -I../../lib/ $(ZLIBINC)
 LOCAL_LDFLAGS = $(ZLIBD)
 
 # keep this variable consistent with its counterpart in ../Makefile.std
-SRCS = 	about.c bitmaps.c 	caudio.c client.c colors.c configure.c 	datagram.c dbuff.c default.c 	gfx2d.c gfx3d.c guimap.c guiobjects.c 	join.c mapdata.c netclient.c 	paint.c paintdata.c painthud.c paintmap.c 	paintobjects.c paintradar.c query.c record.c sim.c 	syslimit.c talk.c talkmacros.c textinterface.c texture.c 	usleep.c welcome.c widget.c xeventhandlers.c 	xevent.c xinit.c xpilot.c xpmread.c 	$(AUDIOSRC)
+SRCS = 	about.c bitmaps.c 	caudio.c client.c colors.c configure.c 	datagram.c dbuff.c default.c 	gfx2d.c gfx3d.c guimap.c guiobjects.c 	ignore.c join.c mapdata.c netclient.c 	paint.c paintdata.c painthud.c paintmap.c 	paintobjects.c paintradar.c query.c record.c sim.c 	syslimit.c talk.c talkmacros.c textinterface.c texture.c 	usleep.c welcome.c widget.c xeventhandlers.c 	xevent.c xinit.c xpilot.c xpmread.c 	$(AUDIOSRC)
 
 # keep this variable consistent with its counterpart in ../Makefile.std
-OBJS = 	about.o bitmaps.o 	caudio.o client.o colors.o configure.o 	datagram.o dbuff.o default.o 	gfx2d.o gfx3d.o guimap.o guiobjects.o 	join.o mapdata.o netclient.o 	paint.o paintdata.o painthud.o paintmap.o 	paintobjects.o paintradar.o query.o record.o sim.o 	syslimit.o talk.o talkmacros.o textinterface.o texture.o 	usleep.o welcome.o widget.o xeventhandlers.o 	xevent.o xinit.o xpilot.o xpmread.o 	$(AUDIOOBJ)
+OBJS = 	about.o bitmaps.o 	caudio.o client.o colors.o configure.o 	datagram.o dbuff.o default.o 	gfx2d.o gfx3d.o guimap.o guiobjects.o 	ignore.o join.o mapdata.o netclient.o 	paint.o paintdata.o painthud.o paintmap.o 	paintobjects.o paintradar.o query.o record.o sim.o 	syslimit.o talk.o talkmacros.o textinterface.o texture.o 	usleep.o welcome.o widget.o xeventhandlers.o 	xevent.o xinit.o xpilot.o xpmread.o 	$(AUDIOOBJ)
 
 DEPLIBS = $(COMMON)libxpcommon.a $(DEPXLIB)
 
@@ -1437,6 +1437,26 @@ guiobjects.o: guiobjects.c /usr/include/stdlib.h \
  paintmacros.h record.h xinit.h protoclient.h ../common/portability.h \
  bitmaps.h gfx2d.h ../common/wreckshape.h ../common/astershape.h \
  guiobjects.h ../common/pack.h ../common/commonproto.h
+ignore.o: ignore.c /usr/include/stdlib.h /usr/include/features.h \
+ /usr/include/sys/cdefs.h /usr/include/gnu/stubs.h \
+ /usr/lib/gcc-lib/i386-linux/2.95.4/include/stddef.h \
+ /usr/include/bits/waitflags.h /usr/include/bits/waitstatus.h \
+ /usr/include/endian.h /usr/include/bits/endian.h \
+ /usr/include/sys/types.h /usr/include/bits/types.h \
+ /usr/include/time.h /usr/include/sys/select.h \
+ /usr/include/bits/select.h /usr/include/bits/sigset.h \
+ /usr/include/bits/time.h /usr/include/sys/sysmacros.h \
+ /usr/include/alloca.h /usr/include/string.h /usr/include/ctype.h \
+ client.h ../common/draw.h ../common/types.h ../common/const.h \
+ /usr/lib/gcc-lib/i386-linux/2.95.4/include/limits.h \
+ /usr/lib/gcc-lib/i386-linux/2.95.4/include/syslimits.h \
+ /usr/include/limits.h /usr/include/bits/posix1_lim.h \
+ /usr/include/bits/local_lim.h /usr/include/linux/limits.h \
+ /usr/include/bits/posix2_lim.h /usr/include/bits/xopen_lim.h \
+ /usr/include/bits/stdio_lim.h /usr/include/bits/wordsize.h \
+ /usr/include/math.h /usr/include/bits/huge_val.h \
+ /usr/include/bits/mathdef.h /usr/include/bits/mathcalls.h \
+ ../common/item.h ignore.h ../common/commonproto.h
 join.o: join.c /usr/include/stdlib.h /usr/include/features.h \
  /usr/include/sys/cdefs.h /usr/include/gnu/stubs.h \
  /usr/lib/gcc-lib/i386-linux/2.95.4/include/stddef.h \
@@ -1551,7 +1571,7 @@ netclient.o: netclient.c /usr/include/stdio.h /usr/include/features.h \
  ../common/bit.h paint.h client.h ../common/draw.h ../common/item.h \
  paintdata.h xinit.h ../common/pack.h protoclient.h \
  ../common/portability.h talk.h bitmaps.h gfx2d.h \
- ../common/commonproto.h
+ ../common/commonproto.h ignore.h
 paint.o: paint.c /usr/include/stdlib.h /usr/include/features.h \
  /usr/include/sys/cdefs.h /usr/include/gnu/stubs.h \
  /usr/lib/gcc-lib/i386-linux/2.95.4/include/stddef.h \
@@ -1623,7 +1643,8 @@ paintdata.o: paintdata.c /usr/include/stdlib.h /usr/include/features.h \
  ../common/setup.h ../common/rules.h paint.h paintdata.h record.h \
  xinit.h protoclient.h dbuff.h \
  /usr/X11R6/include/X11/extensions/Xdbe.h \
- /usr/X11R6/include/X11/extensions/Xdbeproto.h ../common/commonproto.h
+ /usr/X11R6/include/X11/extensions/Xdbeproto.h ../common/commonproto.h \
+ ignore.h
 painthud.o: painthud.c /usr/include/stdlib.h /usr/include/features.h \
  /usr/include/sys/cdefs.h /usr/include/gnu/stubs.h \
  /usr/lib/gcc-lib/i386-linux/2.95.4/include/stddef.h \

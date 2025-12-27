@@ -51,7 +51,6 @@ void SCORE(int ind, DFLOAT points, int x, int y, const char *msg)
 
     if (BIT(World.rules->mode, TEAM_PLAY)) {
 	if (!teamShareScore) {
-	    /*pl->score += points;*/
 	    Rank_add_score(pl, points);
 	}
 	TEAM_SCORE(pl->team, points);
@@ -59,7 +58,6 @@ void SCORE(int ind, DFLOAT points, int x, int y, const char *msg)
 	if (pl->alliance != ALLIANCE_NOT_SET && teamShareScore) {
 	    Alliance_score(pl->alliance, points);
 	} else {
-	    /*pl->score += points;*/
 	    Rank_add_score(pl, points);
 	}
     }
@@ -81,7 +79,6 @@ void TEAM_SCORE(int team, DFLOAT points)
 	DFLOAT share = World.teams[team].score / World.teams[team].NumMembers;
 	for (i = 0; i < NumPlayers; i++) {
 	    if (Players[i]->team == team) {
-		/*Players[i]->score = share;*/
 		Rank_set_score(Players[i], share);
 	    }
 	}
@@ -98,7 +95,7 @@ void Alliance_score(int id, DFLOAT points)
 
     for (i = 0; i < NumPlayers; i++) {
 	if (Players[i]->alliance == id) {
-	    Players[i]->score += share;
+	    Rank_add_score(Players[i], share);
 	}
     }
 }

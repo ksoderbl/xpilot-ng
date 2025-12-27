@@ -4,7 +4,7 @@
 .\"
 .TH XP-REPLAY 6 "Requires X11"
 .ds )H GNU Public License 2.0 applies
-.ds ]W XPilot 4.5.4X: Dec 9, 2002
+.ds ]W XPilot 4.5.4X-rc2: Jan 2, 2003
 .if n .ad l	\" If nroff formatter, adjust left margin only
 .if t .ad b	\" If troff formatter, adjust both margins
 
@@ -216,7 +216,7 @@ package, which is Copyright (C) 1989, 1991 by Jef Poskanzer.
 
 .SH BUG REPORTS
 
-Bugs can be mailed to \fBxpilot@xpilot.org\fP.
+Bugs can be mailed to \fBksoderbl@cc.hut.fi\fP.
 
 
 .SH SEE ALSO

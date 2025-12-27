@@ -338,9 +338,23 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
 
     if (!blockBitmaps) {
 	const int BORDER = 4;		/* in pixels */
-	int size;
+	int size, i;
 	other_t *other;
 	char s[3];
+
+	/* Mara's flashy basewarning */
+	if (baseWarningType == 2) {
+	    for (i = 0; i < 10; i++) {
+		if (deatharray[i].id == id &&
+		    deatharray[i].deathtime > loops - 3 * FPS) {
+		    if ((loops % 2) == 1) {
+			baseColor = WHITE;
+			/*Paint_baseInfoOnHudRadar(x,y); */
+		    } else
+			baseColor = RED;
+		}
+	    }
+	}
 
 	SET_FG(colors[baseColor].pixel);
 
@@ -370,8 +384,8 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
 	    error("Bad base dir.");
 	    return;
 	}
-	/* only draw base teams if ship naming is on, SKS 25/05/94 */
-	if (!BIT(instruments, SHOW_SHIP_NAME))
+	/* only draw base teams if base naming is on, Mara 01/12/14  */
+	if (!BIT(hackedInstruments, SHOW_BASE_NAME))
 	    return;
 
 	/* operate in pixels from here out */
@@ -463,8 +477,8 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
 	    error("Bad base dir.");
 	    return;
 	}
-	/* only draw base teams if ship naming is on, SKS 25/05/94 */
-	if (!BIT(instruments, SHOW_SHIP_NAME))
+	/* only draw base teams if base naming is on, Mara 01/12/14  */
+	if (!BIT(hackedInstruments, SHOW_BASE_NAME))
 	    return;
 
 	/* operate in pixels from here out */

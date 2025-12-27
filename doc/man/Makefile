@@ -900,8 +900,8 @@ CTAGOPTIONS =
       VERSION_MINOR = 5
  VERSION_PATCHLEVEL = 4
     VERSION_WINDOWS = 13
-     VERSION_STATUS = X
-        RELEASEDATE = Dec 9, 2002
+     VERSION_STATUS = X-rc2
+        RELEASEDATE = Jan 2, 2003
 
       AUTHORS = Bjørn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska & Uoti Urpala
 COPYRIGHTDATE = 1991-2002
@@ -913,7 +913,7 @@ COPYRIGHTDATE = 1991-2002
        MANEXT = 6
 
      LOCALGURU = xpilot@xpilot.org
-CONTACTADDRESS = xpilot@xpilot.org
+CONTACTADDRESS = ksoderbl@cc.hut.fi
 
 MSUB = $(TOP)/contrib/msub/msub
 MSUBSRC = $(TOP)/contrib/msub

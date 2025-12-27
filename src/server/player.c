@@ -193,13 +193,12 @@ void Go_home(int ind)
     pl->turnacc = pl->turnvel = 0.0;
     memset(pl->last_keyv, 0, sizeof(pl->last_keyv));
     memset(pl->prev_keyv, 0, sizeof(pl->prev_keyv));
-    Emergency_shield(ind, 0);
     Player_used_kill(ind);
 
     if (playerStartsShielded != 0) {
 	SET_BIT(pl->used, HAS_SHIELD);
 	if (playerShielding == 0) {
-	    pl->shield_time = 2 * 12 * TIME_FACT;
+	    pl->shield_time = 2 * FPS;
 	    SET_BIT(pl->have, HAS_SHIELD);
 	}
 	if (BIT(pl->have, HAS_DEFLECTOR)) {
@@ -414,6 +413,7 @@ int Init_player(int ind, shipobj *ship)
     pl->missile_rack	= 0;
     pl->forceVisible	= 0;
     Compute_sensor_range(pl);
+    pl->shot_max	= ShotsMax;
     pl->shot_time	= 0;
     pl->color		= WHITE;
     pl->score		= 0;
@@ -423,7 +423,6 @@ int Init_player(int ind, shipobj *ship)
     pl->fs		= 0;
     pl->repair_target	= 0;
     pl->name[0]		= '\0';
-    pl->auth_nick[0]	= '\0';
     pl->num_pulses	= 0;
     pl->emergency_thrust_left = 0;
     pl->emergency_thrust_max = 0;
@@ -459,7 +458,9 @@ int Init_player(int ind, shipobj *ship)
     pl->prev_life	= pl->life;
     pl->ball 		= NULL;
 
-    pl->player_fps = 50;	/* Client should send a value after startup */
+    pl->player_fps	= FPS;
+    pl->player_round	= 0;
+    pl->player_count	= 0;
 
     pl->kills		= 0;
     pl->deaths		= 0;
@@ -987,26 +988,11 @@ void Team_game_over(int winning_team, const char *reason)
 	}
     }
 
-    /* kps */
-    {
-	player		*pl;
-	int		i;
-
-	for (i = 0; i < NumPlayers; i++) {
-	    pl = Players[i];
-	    if (IS_HUMAN_IND(i) && !BIT(pl->status, PAUSE))
-		Rank_add_round(pl);
-	}
-    }
-
     Reset_all_players();
 
     Count_rounds();
 
     free(best_players);
-    Rank_web_scores();
-    /* Relies on values initialized in web_scores */
-    Rank_show_standings();
 }
 
 void Individual_game_over(int winner)
@@ -1742,12 +1728,6 @@ void Delete_player(int ind)
     NumPlayers--;
     if (IS_TANK_PTR(pl)) {
 	NumPseudoPlayers--;
-    } else {
-	Rank_save_score(pl);
-	if (NumPlayers == NumPseudoPlayers) {
-	    Rank_web_scores();
-	    Rank_save_data();
-	}
     }
 
     if (pl->team != TEAM_NOT_SET && !IS_TANK_PTR(pl)) {
@@ -1854,13 +1834,7 @@ void Detach_ball(int ind, int obj)
 
 void Kill_player(int ind)
 {
-    /* Don't create an explosion if the player is being transported back
-     * to home base after being killed. */
-    if (BIT(Players[ind]->status, PLAYING)) {
-	Explode_fighter(ind);
-	Rank_death(Players[ind]);
-    }
-
+    Explode_fighter(ind);
     Player_death_reset(ind);
 }
 
@@ -1895,6 +1869,7 @@ void Player_death_reset(int ind)
     }
 
     pl->forceVisible	= 0;
+    pl->shot_max	= ShotsMax;
     pl->count		= MAX(RECOVERY_DELAY, pl->count);
     pl->ecmcount	= 0;
     pl->emergency_thrust_left = 0;

@@ -72,7 +72,6 @@
 #include "portability.h"
 #include "server.h"
 #include "commonproto.h"
-#include "srecord.h"
 
 char server_version[] = VERSION;
 
@@ -84,13 +83,10 @@ char xpilots_versionid[] = "@(#)$" TITLE " $";
  * Global variables
  */
 int			NumPlayers = 0;
-int			NumObservers = 0;
-int			NumOperators = 0;
-int			observerStart;
 int			NumAlliances = 0;
 player			**Players;
 int			GetInd_1;
-int			GetInd[NUM_IDS+1+MAX_OBSERVERS];
+int			GetInd[NUM_IDS+1];
 server_t		Server;
 char			*serverAddr;
 int			ShutdownServer = -1;
@@ -98,7 +94,6 @@ int			ShutdownDelay = 1000;
 char			ShutdownReason[MAX_CHARS];
 int 			framesPerSecond = 18;
 long			main_loops = 0;		/* needed in events.c */
-int			roundCounter = 1;
 
 #ifdef LOG
 static bool		Log = true;
@@ -139,30 +134,26 @@ int main(int argc, char **argv)
     init_error(argv[0]);
     Check_server_versions();
 
-    /* Removed seeding random number generator because of server recordings. */
-    /*seedMT((unsigned)time((time_t *)0) * Get_process_id());*/
+    seedMT((unsigned)time((time_t *)0) * Get_process_id());
 
     if (Parser(argc, argv) == FALSE) {
 	exit(1);
     }
 
-    Init_recording();
     plock_server(pLockServer);           /* Lock the server into memory */
     Make_table();			/* Make trigonometric tables */
     Compute_gravity();
-    Find_base_direction(); /* kps - remove in ng */
+    Find_base_direction();
     Walls_init();
 
     /* Allocate memory for players, shots and messages */
-    Alloc_players(World.NumBases + MAX_PSEUDO_PLAYERS + MAX_OBSERVERS);
-    observerStart = World.NumBases + MAX_PSEUDO_PLAYERS;
+    Alloc_players(World.NumBases + MAX_PSEUDO_PLAYERS);
     Alloc_shots(MAX_TOTAL_SHOTS);
     Alloc_cells();
 
     Move_init();
 
     Robot_init();
-    Rank_init_saved_scores();
 
     Treasure_init();
 
@@ -173,12 +164,8 @@ int main(int argc, char **argv)
 	addr = sock_get_addr_by_name(serverHost);
 	if (addr == NULL) {
 	    errno = 0;
-	    error("Failed name lookup on serverHost: %s", serverHost);
-#ifndef _WINDOWS
-	    exit(1);
-#else
+	    error("Failed name lookup on: %s", serverHost);
 	    return 1;
-#endif
 	}
 	serverAddr = xp_strdup(addr);
 	strlcpy(Server.host, serverHost, sizeof(Server.host));
@@ -188,7 +175,6 @@ int main(int argc, char **argv)
 				 searchDomainForXPilot != 0));
     }
 
-    /* kps - ng wants Get_login_name(Server.name, sizeof Server.name); */
     Get_login_name(Server.owner, sizeof Server.owner);
 
     /*
@@ -197,11 +183,9 @@ int main(int argc, char **argv)
     Log_game("START");
 
     if (!Contact_init())
-	return(FALSE);
+		return(FALSE);
 
     Meta_init();
-
-    Timing_setup();
 
     if (Setup_net_server() == -1) {
 	End_game();
@@ -224,9 +208,9 @@ int main(int argc, char **argv)
      */
     serverTime = time(NULL);
 
-    /*#ifndef SILENT kps */
+#ifndef SILENT
     xpprintf("%s Server runs at %d frames per second\n", showtime(), framesPerSecond);
-    /*#endif*/
+#endif
 
     if (timerResolution > 0) {
 	timer_tick_rate = timerResolution;
@@ -306,29 +290,7 @@ void Main_loop(void)
 	}
     }
 
-    playback = record = 0;
     Queue_loop();
-    playback = rplayback;
-    record = rrecord;
-
-    if (playback && (*playback_ei == main_loops)) {
-	char *a, *b, *c, *d, *e;
-	int i, j;
-	a = playback_es;
-	while (*playback_es++);
-	b = playback_es;
-	while (*playback_es++);
-	c = playback_es;
-	while (*playback_es++);
-	d = playback_es;
-	while (*playback_es++);
-	e = playback_es;
-	while (*playback_es++);
-	playback_ei++;
-	i = *playback_ei++;
-	j = *playback_ei++;
-	Setup_connection(a, b, c, i, d, e, j);
-    }
 }
 
 
@@ -340,8 +302,6 @@ int End_game(void)
     player		*pl;
     char		msg[MSG_LEN];
 
-    record = rrecord;
-    playback = rplayback;	/* Could be called from signal handler */
     if (ShutdownServer == 0) {
 	errno = 0;
 	error("Shutting down...");
@@ -359,26 +319,10 @@ int End_game(void)
 	}
     }
 
-    record = playback = 0;
-    while (NumObservers > 0) {
-	pl = Players[observerStart + NumObservers - 1];
-	Destroy_connection(pl->conn, msg);
-    }
-    record = rrecord;
-    playback = rplayback;
-
-    if (recordMode != 0) {
-	recordMode = 0;
-	Init_recording();
-    }
-
     /* Tell meta server that we are gone. */
     Meta_gone();
 
     Contact_cleanup();
-
-    Rank_web_scores();
-    Rank_save_data();
 
     Free_players();
     Free_shots();
@@ -543,8 +487,7 @@ void Server_info(char *str, unsigned max_size)
 	    "MAX SPEED........: %d fps\n"
 	    "WORLD (%3dx%3d)..: %s\n"
 	    "      AUTHOR.....: %s\n"
-	    "PLAYERS (%2d/%2d)..:\n\n"
-	    "EXPERIMENTAL SERVER, see http://xpilot.sourceforge.net/\n\n",
+	    "PLAYERS (%2d/%2d)..:\n",
 	    server_version,
 	    (game_lock && ShutdownServer == -1) ? "locked" :
 	    (!game_lock && ShutdownServer != -1) ? "shutting down" :
@@ -651,7 +594,7 @@ static void Handle_signal(int sig_no)
 	break;
 
     default:
-	error("Caught unknown signal: %d", sig_no);
+	error("Caught unkown signal: %d", sig_no);
 	End_game();
 	break;
     }
@@ -828,7 +771,6 @@ void Server_log_admin_message(int ind, const char *str)
  * compiled for the same version.  Too often bugs have been reported
  * for incorrectly compiled programs.
  */
-extern char auth_version[];
 extern char asteroid_version[];
 extern char cannon_version[];
 extern char cell_version[];
@@ -877,7 +819,6 @@ static void Check_server_versions(void)
 	char		filename[16];
 	char		*versionstr;
     } file_versions[] = {
-	{ "auth", auth_version },
 	{ "asteroid", asteroid_version },
 	{ "cannon", cannon_version },
 	{ "cell", cell_version },

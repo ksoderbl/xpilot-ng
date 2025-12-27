@@ -54,7 +54,7 @@ int		sound_player_init(player *);
 void		sound_player_onoff(player *pl, int onoff);
 void		sound_play_player(player *, int);
 void		sound_play_all(int);
-void		sound_play_sensors(int, int, int);
+void		sound_play_sensors(DFLOAT, DFLOAT, int);
 void		sound_play_queued(player * pl);
 void		sound_close(player * pl);
 

@@ -2,7 +2,7 @@
 # $Xorg: imake.c,v 1.6 2001/02/09 02:03:15 xorgcvs Exp $
 
 # ----------------------------------------------------------------------
-# Makefile generated from "Imake.tmpl" and </tmp/IIf.IxcuvE>
+# Makefile generated from "Imake.tmpl" and </tmp/IIf.Vwde8Z>
 # $Xorg: Imake.tmpl,v 1.4 2000/08/17 19:41:46 cpqbld Exp $
 #
 #
@@ -903,8 +903,8 @@ CTAGOPTIONS =
       VERSION_MINOR = 5
  VERSION_PATCHLEVEL = 4
     VERSION_WINDOWS = 13
-     VERSION_STATUS = X
-        RELEASEDATE = Dec 9, 2002
+     VERSION_STATUS = X-rc2
+        RELEASEDATE = Jan 2, 2003
 
       AUTHORS = Bjørn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska & Uoti Urpala
 COPYRIGHTDATE = 1991-2002
@@ -916,7 +916,7 @@ COPYRIGHTDATE = 1991-2002
        MANEXT = 6
 
      LOCALGURU = xpilot@xpilot.org
-CONTACTADDRESS = xpilot@xpilot.org
+CONTACTADDRESS = ksoderbl@cc.hut.fi
 
 MSUB = $(TOP)/contrib/msub/msub
 MSUBSRC = $(TOP)/contrib/msub
@@ -1262,8 +1262,7 @@ command.o: command.c /usr/include/stdlib.h /usr/include/features.h \
  /usr/include/bits/mathcalls.h ../common/types.h global.h object.h \
  ../common/keys.h ../common/bit.h ../common/draw.h ../common/item.h \
  click.h map.h ../common/rules.h ../common/list.h proto.h \
- ../common/error.h netserver.h ../common/commonproto.h score.h \
- srecord.h auth.h ../common/checknames.h
+ ../common/error.h netserver.h ../common/commonproto.h score.h
 contact.o: contact.c /usr/include/stdlib.h /usr/include/features.h \
  /usr/include/sys/cdefs.h /usr/include/gnu/stubs.h \
  /usr/lib/gcc-lib/i386-linux/2.95.4/include/stddef.h \
@@ -1580,10 +1579,9 @@ netserver.o: netserver.c /usr/include/stdlib.h /usr/include/features.h \
  ../common/types.h global.h object.h ../common/keys.h ../common/bit.h \
  ../common/draw.h ../common/item.h click.h map.h ../common/rules.h \
  ../common/list.h proto.h ../common/pack.h ../common/socklib.h sched.h \
- srecord.h recwrap.h ../common/net.h ../common/error.h netserver.h \
- ../common/packet.h ../common/setup.h connection.h saudio.h \
- ../common/checknames.h server.h ../common/commonproto.h asteroid.h \
- score.h auth.h
+ ../common/net.h ../common/error.h netserver.h ../common/packet.h \
+ ../common/setup.h connection.h saudio.h ../common/checknames.h \
+ server.h ../common/commonproto.h asteroid.h score.h
 object.o: object.c /usr/include/stdlib.h /usr/include/features.h \
  /usr/include/sys/cdefs.h /usr/include/gnu/stubs.h \
  /usr/lib/gcc-lib/i386-linux/2.95.4/include/stddef.h \
@@ -1969,7 +1967,7 @@ sched.o: sched.c /usr/include/stdlib.h /usr/include/features.h \
  /usr/include/bits/mathdef.h /usr/include/bits/mathcalls.h \
  ../common/types.h ../common/error.h sched.h global.h object.h \
  ../common/keys.h ../common/bit.h ../common/draw.h ../common/item.h \
- click.h map.h ../common/rules.h ../common/list.h srecord.h \
+ click.h map.h ../common/rules.h ../common/list.h \
  ../common/portability.h
 score.o: score.c /usr/include/stdlib.h /usr/include/features.h \
  /usr/include/sys/cdefs.h /usr/include/gnu/stubs.h \
@@ -2037,7 +2035,7 @@ server.o: server.c /usr/include/stdlib.h /usr/include/features.h \
  ../common/bit.h ../common/draw.h ../common/item.h click.h map.h \
  ../common/rules.h ../common/list.h proto.h ../common/socklib.h \
  sched.h netserver.h ../common/error.h ../common/portability.h \
- server.h ../common/commonproto.h srecord.h
+ server.h ../common/commonproto.h
 ship.o: ship.c /usr/include/stdlib.h /usr/include/features.h \
  /usr/include/sys/cdefs.h /usr/include/gnu/stubs.h \
  /usr/lib/gcc-lib/i386-linux/2.95.4/include/stddef.h \

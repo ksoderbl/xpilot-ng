@@ -103,7 +103,11 @@
  * 4.F.1.0: Send_player(): Additional %c (is 1 when we tell a player about himself).
  * 4.F.1.1: XXX - kps
  */
+#ifdef SERVER
+#define	MAGIC		0x4501F4ED
+#else
 #define	MAGIC		0x4F11F4ED
+#endif
 
 #define MAGIC2VERSION(M)	(((M) >> 16) & 0xFFFF)
 #define VERSION2MAGIC(V)	((((V) & 0xFFFF) << 16) | (MAGIC & 0xFFFF))
@@ -112,13 +116,21 @@
 /*
  * Which client versions can join this server.
  */
+#define MIN_CLIENT_VERSION	0x3103
+#define MAX_CLIENT_VERSION	MY_VERSION
+
+#if 0 /* when the server supports poly stuff, use this */
+/*
+ * Which client versions can join this server.
+ */
 #define MIN_CLIENT_VERSION	0x4F09
 #define MAX_CLIENT_VERSION	MY_VERSION
+#endif
 
 /*
  * Which server versions can this client join.
  */
-#define MIN_SERVER_VERSION	0x4F09
+#define MIN_SERVER_VERSION	0x3103
 #define MAX_SERVER_VERSION	MY_VERSION
 
 /*

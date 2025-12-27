@@ -52,23 +52,17 @@
 
 char update_version[] = VERSION;
 
-#if 0 /* !@# Will turn gravity back on later */
+
 #define update_object_speed(o_)						\
     if (BIT((o_)->status, GRAVITY)) {					\
-	(o_)->vel.x += ((o_)->acc.x					\
-    + World.gravity[(o_)->pos.bx][(o_)->pos.by].x) * framespeed2;	\
-	(o_)->vel.y += ((o_)->acc.y					\
-    + World.gravity[(o_)->pos.bx][(o_)->pos.by].y) * framespeed2;	\
+	(o_)->vel.x += (o_)->acc.x					\
+		    + World.gravity[(o_)->pos.bx][(o_)->pos.by].x;	\
+	(o_)->vel.y += (o_)->acc.y					\
+		    + World.gravity[(o_)->pos.bx][(o_)->pos.by].y;	\
     } else {								\
-	(o_)->vel.x += (o_)->acc.x * framespeed2;			\
-	(o_)->vel.y += (o_)->acc.y * framespeed2;			\
+	(o_)->vel.x += (o_)->acc.x;					\
+	(o_)->vel.y += (o_)->acc.y;					\
     }
-#else
-#define update_object_speed(o_)	{					\
-	(o_)->vel.x += (o_)->acc.x * framespeed2;			\
-	(o_)->vel.y += (o_)->acc.y * framespeed2;			\
-     }
-#endif
 
 int	round_delay = 0;	/* delay until start of next round */
 int	round_delay_send = 0;	/* number of frames to send round_delay */
@@ -113,7 +107,6 @@ static void Transport_to_home(int ind)
 	t = T - t;
 	m = (4 * t) / (T * T - 2 * t * t);
     }
-    m *= framespeed;
     pl->vel.x = dx * m;
     pl->vel.y = dy * m;
 }
@@ -124,7 +117,7 @@ static void Transport_to_home(int ind)
 void Phasing (int ind, int on)
 {
     player	*pl = Players[ind];
-    const int	phasing_time = 4 * 12;
+    const int	phasing_time = 4 * FPS;
 
     if (on) {
 	if (pl->phasing_left <= 0) {
@@ -139,7 +132,7 @@ void Phasing (int ind, int on)
 	    pl->ball = NULL;
 	CLR_BIT(pl->used, HAS_TRACTOR_BEAM);
 	CLR_BIT(pl->status, GRAVITY);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PHASING_ON_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, PHASING_ON_SOUND);
     } else {
 	CLR_BIT(pl->used, HAS_PHASING_DEVICE);
 	if (pl->phasing_left <= 0) {
@@ -147,7 +140,7 @@ void Phasing (int ind, int on)
 		CLR_BIT(pl->have, HAS_PHASING_DEVICE);
 	}
 	SET_BIT(pl->status, GRAVITY);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PHASING_OFF_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, PHASING_OFF_SOUND);
     }
 }
 
@@ -229,7 +222,7 @@ void Deflector(int ind, int on)
 void Emergency_thrust (int ind, int on)
 {
     player	*pl = Players[ind];
-    const int	emergency_thrust_time = 4 * 12;
+    const int	emergency_thrust_time = 4 * FPS;
 
     if (on) {
 	if (pl->emergency_thrust_left <= 0) {
@@ -239,12 +232,12 @@ void Emergency_thrust (int ind, int on)
 	}
 	if (!BIT(pl->used, HAS_EMERGENCY_THRUST)) {
 	    SET_BIT(pl->used, HAS_EMERGENCY_THRUST);
-	    sound_play_sensors(pl->pos.cx, pl->pos.cy, EMERGENCY_THRUST_ON_SOUND);
+	    sound_play_sensors(pl->pos.x, pl->pos.y, EMERGENCY_THRUST_ON_SOUND);
 	}
     } else {
 	if (BIT(pl->used, HAS_EMERGENCY_THRUST)) {
 	    CLR_BIT(pl->used, HAS_EMERGENCY_THRUST);
-	    sound_play_sensors(pl->pos.cx, pl->pos.cy, EMERGENCY_THRUST_OFF_SOUND);
+	    sound_play_sensors(pl->pos.x, pl->pos.y, EMERGENCY_THRUST_OFF_SOUND);
 	}
 	if (pl->emergency_thrust_left <= 0) {
 	    if (pl->item[ITEM_EMERGENCY_THRUST] <= 0)
@@ -259,18 +252,20 @@ void Emergency_thrust (int ind, int on)
 void Emergency_shield (int ind, int on)
 {
     player	*pl = Players[ind];
+    const int	emergency_shield_time = 4 * FPS;	/* 8 -> 4 */
 
     if (on) {
 	if (BIT(pl->have, HAS_EMERGENCY_SHIELD)) {
 	    if (pl->emergency_shield_left <= 0) {
-		pl->emergency_shield_left = EMERGENCY_SHIELD_TIME;
+		pl->emergency_shield_left = emergency_shield_time;
+		pl->emergency_shield_max = emergency_shield_time;
 		pl->item[ITEM_EMERGENCY_SHIELD]--;
 	    }
 	    if (cloakedShield || !BIT(pl->used, HAS_CLOAKING_DEVICE)) {
 		SET_BIT(pl->have, HAS_SHIELD);
 		if (!BIT(pl->used, HAS_EMERGENCY_SHIELD)) {
 		    SET_BIT(pl->used, HAS_EMERGENCY_SHIELD);
-		    sound_play_sensors(pl->pos.cx, pl->pos.cy,
+		    sound_play_sensors(pl->pos.x, pl->pos.y,
 				       EMERGENCY_SHIELD_ON_SOUND);
 		}
 	    }
@@ -286,7 +281,7 @@ void Emergency_shield (int ind, int on)
 	}
 	if (BIT(pl->used, HAS_EMERGENCY_SHIELD)) {
 	    CLR_BIT(pl->used, HAS_EMERGENCY_SHIELD);
-	    sound_play_sensors(pl->pos.cx, pl->pos.cy,
+	    sound_play_sensors(pl->pos.x, pl->pos.y,
 			       EMERGENCY_SHIELD_OFF_SOUND);
 	}
     }
@@ -310,14 +305,14 @@ void Autopilot (int ind, int on)
 	pl->power = (MIN_PLAYER_POWER+MAX_PLAYER_POWER)/2.0;
 	pl->turnspeed = (MIN_PLAYER_TURNSPEED+MAX_PLAYER_TURNSPEED)/2.0;
 	pl->turnresistance = 0.2;
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, AUTOPILOT_ON_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, AUTOPILOT_ON_SOUND);
     } else {
 	pl->power = pl->auto_power_s;
 	pl->turnacc = 0.0;
 	pl->turnspeed = pl->auto_turnspeed_s;
 	pl->turnresistance = pl->auto_turnresistance_s;
 	CLR_BIT(pl->used, HAS_AUTOPILOT);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, AUTOPILOT_OFF_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, AUTOPILOT_OFF_SOUND);
     }
 }
 
@@ -530,7 +525,7 @@ void Update_objects(void)
      * Let the fuel stations regenerate some fuel.
      */
     if (NumPlayers > 0) {
-	DFLOAT fuel = (NumPlayers * framespeed * STATION_REGENERATION);
+	int fuel = (int)(NumPlayers * STATION_REGENERATION);
 	int frames_per_update = MAX_STATION_FUEL / (fuel * BLOCK_SZ);
 	for (i=0; i<World.NumFuels; i++) {
 	    if (World.fuel[i].fuel == MAX_STATION_FUEL) {
@@ -647,7 +642,7 @@ void Update_objects(void)
 		/* this gives the cannon an item about once every minute */
 		if (World.items[item].cannonprob > 0
 		    && cannonItemProbMult > 0
-		    && (int)(rfrac() * (60 * 12))
+		    && (int)(rfrac() * (60 * FPS))
 			< (cannonItemProbMult * World.items[item].cannonprob)) {
 		    Cannon_add_item(i, item, (item == ITEM_FUEL ?
 					ENERGY_PACK_FUEL >> FUEL_SCALE_BITS
@@ -756,38 +751,39 @@ void Update_objects(void)
 	if (pl->damaged > 0)
 	    pl->damaged--;
 
-	if (pl->count >= 0) {
-	    pl->count -= framespeed;
-
-	    if (pl->count > 0) {
-		if (!BIT(pl->status, PLAYING)) {
-		    Transport_to_home(i);
-		    Move_player(i);
-		    continue;
-		}
-	    } else {
-		pl->count = -1;
-		if (!BIT(pl->status, PLAYING)) {
-		    SET_BIT(pl->status, PLAYING);
-		    Go_home(i);
-		}
-		if (BIT(pl->status, SELF_DESTRUCT)) {
-		    if (selfDestructScoreMult != 0) {
-			DFLOAT sc = Rate(0, pl->score) * selfDestructScoreMult;
-			SCORE(GetInd[pl->id], -sc,
-			      OBJ_X_IN_BLOCKS(pl),
-			      OBJ_Y_IN_BLOCKS(pl),
-			      "Self-Destruct");
-		    }
-		    SET_BIT(pl->status, KILLED);
-		    sprintf(msg, "%s has committed suicide.", pl->name);
-		    Set_message(msg);
-		    Throw_items(i);
-		    Kill_player(i);
-		    updateScores = true;
-		}
+	if (pl->count > 0) {
+	    pl->count--;
+	    if (!BIT(pl->status, PLAYING)) {
+		Transport_to_home(i);
+		Move_player(i);
+		continue;
 	    }
 	}
+
+	if (pl->count == 0) {
+	    pl->count = -1;
+
+	    if (!BIT(pl->status, PLAYING)) {
+		SET_BIT(pl->status, PLAYING);
+		Go_home(i);
+	    }
+	    if (BIT(pl->status, SELF_DESTRUCT)) {
+		if (selfDestructScoreMult != 0) {
+		    DFLOAT sc = Rate(0, pl->score) * selfDestructScoreMult;
+		    SCORE(GetInd[pl->id], -sc,
+			  OBJ_X_IN_BLOCKS(pl),
+			  OBJ_Y_IN_BLOCKS(pl),
+			  "Self-Destruct");
+		}
+		SET_BIT(pl->status, KILLED);
+		sprintf(msg, "%s has committed suicide.", pl->name);
+		Set_message(msg);
+		Throw_items(i);
+		Kill_player(i);
+		updateScores = true;
+	    }
+	}
+
 
 	if (BIT(pl->status, PLAYING|GAME_OVER|PAUSE) != PLAYING)
 	    continue;
@@ -802,8 +798,7 @@ void Update_objects(void)
 	}
 
 	if (pl->shield_time > 0) {
-	    if ((pl->shield_time -= framespeed) <= 0) {
-		pl->shield_time = 0;
+	    if (--pl->shield_time == 0) {
 		if (!BIT(pl->used, HAS_EMERGENCY_SHIELD)) {
 		    CLR_BIT(pl->used, HAS_SHIELD);
 		}
@@ -918,20 +913,18 @@ void Update_objects(void)
 	Turn_player(i);
 
 
-	/* Compute energy drainage
-	 * Since the amount per frame could get too small to be represented
-	 * accurately as an integer, FPSMultiplier makes this happen less
-	 * often (in terms of frames) rather than smaller amount each time. */
-	if (frame_loops % FPSMultiplier == 0) {
-	    if (BIT(pl->used, HAS_SHIELD))
-		Add_fuel(&(pl->fuel), (long)ED_SHIELD);
+	/*
+	 * Compute energy drainage
+	 */
+	if (BIT(pl->used, HAS_SHIELD))
+	    Add_fuel(&(pl->fuel), (long)ED_SHIELD);
 
-	    if (BIT(pl->used, HAS_PHASING_DEVICE))
-		Add_fuel(&(pl->fuel), (long)ED_PHASING_DEVICE);
-	    
-	    if (BIT(pl->used, HAS_CLOAKING_DEVICE))
-		Add_fuel(&(pl->fuel), (long)ED_CLOAKING_DEVICE);
-	}
+	if (BIT(pl->used, HAS_PHASING_DEVICE))
+	    Add_fuel(&(pl->fuel), (long)ED_PHASING_DEVICE);
+
+	if (BIT(pl->used, HAS_CLOAKING_DEVICE))
+	    Add_fuel(&(pl->fuel), (long)ED_CLOAKING_DEVICE);
+
 #define UPDATE_RATE 100
 
 	for (j = 0; j < NumPlayers; j++) {
@@ -968,11 +961,11 @@ void Update_objects(void)
 		int ct = pl->fuel.current;
 
 		do {
-		    if (World.fuel[pl->fs].fuel > REFUEL_RATE * framespeed) {
-			World.fuel[pl->fs].fuel -= REFUEL_RATE * framespeed;
+		    if (World.fuel[pl->fs].fuel > REFUEL_RATE) {
+			World.fuel[pl->fs].fuel -= REFUEL_RATE;
 			World.fuel[pl->fs].conn_mask = 0;
 			World.fuel[pl->fs].last_change = frame_loops;
-			Add_fuel(&(pl->fuel), REFUEL_RATE * framespeed);
+			Add_fuel(&(pl->fuel), REFUEL_RATE);
 		    } else {
 			Add_fuel(&(pl->fuel), World.fuel[pl->fs].fuel);
 			World.fuel[pl->fs].fuel = 0;
@@ -1005,12 +998,11 @@ void Update_objects(void)
 		int ct = pl->fuel.current;
 
 		do {
-		    if (pl->fuel.tank[pl->fuel.current] >
-			REFUEL_RATE * framespeed) {
+		    if (pl->fuel.tank[pl->fuel.current] > REFUEL_RATE) {
 			targ->damage += TARGET_FUEL_REPAIR_PER_FRAME;
 			targ->conn_mask = 0;
 			targ->last_change = frame_loops;
-			Add_fuel(&(pl->fuel), -REFUEL_RATE * framespeed);
+			Add_fuel(&(pl->fuel), -REFUEL_RATE);
 			if (targ->damage > TARGET_DAMAGE) {
 			    targ->damage = TARGET_DAMAGE;
 			    break;
@@ -1031,7 +1023,7 @@ void Update_objects(void)
 	    CLR_BIT(pl->used, HAS_SHIELD|HAS_CLOAKING_DEVICE|HAS_DEFLECTOR);
 	    CLR_BIT(pl->status, THRUSTING);
 	}
-	if (pl->fuel.sum > (pl->fuel.max - REFUEL_RATE * framespeed))
+	if (pl->fuel.sum > (pl->fuel.max-REFUEL_RATE))
 	    CLR_BIT(pl->used, HAS_REFUEL);
 
 	/*
@@ -1051,9 +1043,7 @@ void Update_objects(void)
 	    }
 	    pl->acc.x = power * tcos(pl->dir) / inert;
 	    pl->acc.y = power * tsin(pl->dir) / inert;
-	    /* Decrement fuel */
-	    if (frame_loops % FPSMultiplier == 0)
-		Add_fuel(&(pl->fuel), (long)(-f * FUEL_SCALE_FACT));
+	    Add_fuel(&(pl->fuel), (long)(-f * FUEL_SCALE_FACT)); /* Decrement fuel */
 	} else {
 	    pl->acc.x = pl->acc.y = 0.0;
 	}
@@ -1165,7 +1155,7 @@ void Update_objects(void)
 				       (int)(w.y/BLOCK_SZ));
 		}
 		j = -2;
-		sound_play_sensors(pl->pos.cx, pl->pos.cy, HYPERJUMP_SOUND);
+		sound_play_sensors(pl->pos.x, pl->pos.y, HYPERJUMP_SOUND);
 	    }
 
 	    /*
@@ -1220,7 +1210,7 @@ void Update_objects(void)
 	    CLR_BIT(pl->status, WARPING);
 	    SET_BIT(pl->status, WARPED);
 
-	    sound_play_sensors(pl->pos.cx, pl->pos.cy, WORM_HOLE_SOUND);
+	    sound_play_sensors(pl->pos.x, pl->pos.y, WORM_HOLE_SOUND);
 	}
 
 	if (!BIT(pl->status, PAUSE)) {
@@ -1322,7 +1312,7 @@ void Update_objects(void)
      * Kill shots that ought to be dead.
      */
     for (i = NumObjs - 1; i >= 0; i--)
-	if ((Obj[i]->life -= framespeed) <= 0)
+	if (--(Obj[i]->life) <= 0)
 	    Delete_shot(i);
 
     /*

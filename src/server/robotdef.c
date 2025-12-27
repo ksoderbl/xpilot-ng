@@ -1563,13 +1563,11 @@ static int Rank_item_value(int ind, long itemtype)
 	return ROBOT_IGNORE_ITEM;		/* never useful for robots */
     if (pl->item[itemtype] >= World.items[itemtype].limit)
 	return ROBOT_IGNORE_ITEM;		/* already full */
-#if 0
     if ((IsDefensiveItem(itemtype)
 	 && CountDefensiveItems(pl) >= maxDefensiveItems)
 	|| (IsOffensiveItem(itemtype)
 	 && CountOffensiveItems(pl) >= maxOffensiveItems))
 	return ROBOT_IGNORE_ITEM;
-#endif
     if (itemtype == ITEM_FUEL) {
 	if (pl->fuel.sum >= pl->fuel.max * 0.90) {
 	    return ROBOT_IGNORE_ITEM;		/* already (almost) full */

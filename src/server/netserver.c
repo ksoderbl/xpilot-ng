@@ -132,9 +132,7 @@
 #include "types.h"
 #include "socklib.h"
 #include "sched.h"
-/*#include "net.h"*/
-#include "srecord.h"
-#include "recwrap.h"
+#include "net.h"
 #include "error.h"
 #define NETSERVER_C
 #include "netserver.h"
@@ -148,8 +146,6 @@
 #include "commonproto.h"
 #include "asteroid.h"
 #include "score.h"
-#include "click.h"
-#include "auth.h"
 
 char netserver_version[] = VERSION;
 
@@ -647,28 +643,7 @@ int Setup_connection(char *real, char *nick, char *dpy, int team,
     sock_t		sock;
     connection_t	*connp;
 
-    if (rrecord) {
-      	*playback_ei++ = main_loops;
-	strcpy(playback_es, real);
-	while (*playback_es++);
-	strcpy(playback_es, nick);
-	while (*playback_es++);
-	strcpy(playback_es, dpy);
-	while (*playback_es++);
-	*playback_ei++ = team;
-	strcpy(playback_es, addr);
-	while (*playback_es++);
-	strcpy(playback_es, host);
-	while (*playback_es++);
-	*playback_ei++ = version;
-    }
-
     for (i = 0; i < max_connections; i++) {
-	if (playback) {
-	    if (i >= World.NumBases)
-		break;
-	} else if (rplayback && i < World.NumBases)
-	    continue;
 	connp = &Conn[i];
 	if (connp->state == CONN_FREE) {
 	    if (free_conn_index == max_connections) {
@@ -1035,7 +1010,6 @@ static int Handle_login(int ind, char *errmsg, int errsize)
 	strlcpy(errmsg, "Init_player failed: no free ID", errsize);
 	return -1;
     }
-    /* kps - password stuff goes here */
     pl = Players[NumPlayers];
     strlcpy(pl->name, connp->nick, MAX_CHARS);
     strlcpy(pl->realname, connp->real, MAX_CHARS);
@@ -1224,8 +1198,6 @@ static int Handle_login(int ind, char *errmsg, int errsize)
 			     "race" : "round"));
 	Set_message(msg);
     }
-
-    Rank_get_saved_score(pl);
 
     return 0;
 }
@@ -3228,9 +3200,17 @@ static int Receive_fps_request(int ind)
     }
     if (connp->id != NO_ID) {
 	pl = Players[GetInd[connp->id]];
-	if (fps == 0)
-	    fps = 1;
 	pl->player_fps = fps;
+	if (fps > FPS) pl->player_fps = FPS;
+	if (fps < (FPS / 2)) pl->player_fps = (FPS+1) / 2;
+	if (fps == 0) pl->player_fps = FPS;
+	if ((fps == 20) && ignore20MaxFPS) pl->player_fps = FPS;
+	n = FPS - pl->player_fps;
+	if (n <= 0) {
+	    pl->player_count = 0;
+	} else {
+	    pl->player_count = FPS / n;
+	}
     }
 
     return 1;

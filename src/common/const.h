@@ -25,8 +25,8 @@
 #ifndef CONST_H
 #define CONST_H
 
-#include <limits.h>
 #ifndef _WINDOWS
+#include <limits.h>
 #include <math.h>
 #endif
 
@@ -35,8 +35,8 @@
 #endif
 
 /*
- * FLT_MAX and RAND_MAX is ANSI C standard, but some systems (BSD) use
- * MAXFLOAT and INT_MAX instead.
+ * FLT_MAX is ANSI C standard, but some systems (BSD) use
+ * MAXFLOAT instead.
  */
 #ifndef	FLT_MAX
 #   if defined(__sgi) || defined(__FreeBSD__)
@@ -113,20 +113,15 @@ extern DFLOAT		tbl_cos[];
 #  define MOD2(x, m)		( (x) & ((m) - 1) )
 #endif	/* MOD2 */
 
+/* Do NOT change these! */
 #define OLD_MAX_CHECKS		26
-#define MAX_OBSERVERS		8
-/* Do NOT change this! */
 #define MAX_TEAMS		10
-
 
 
 #define EXPIRED_MINE_ID		4096   /* assume no player has this id */
 
 #define MAX_CHARS		80
 #define MSG_LEN			256
-
-#define MIN_PASS_LEN		5
-#define MAX_PASS_LEN		16     /* kps - changed from 8 */
 
 #define NUM_MODBANKS		4
 
@@ -138,30 +133,23 @@ extern DFLOAT		tbl_cos[];
 #define MAX_PLAYER_TURNRESISTANCE	1.0
 #define MIN_PLAYER_TURNRESISTANCE	0.0
 
-/*#define TIME_BITS		6
-  #define TIME_FACT 		(1 << TIME_BITS)
-  #define RECOVERY_DELAY		(12*3*TIME_FACT)*/
-
 #define FUEL_SCALE_BITS         8
 #define FUEL_SCALE_FACT         (1<<FUEL_SCALE_BITS)
 #define FUEL_MASS(f)            ((f)*0.005/FUEL_SCALE_FACT)
 #define MAX_STATION_FUEL	(500<<FUEL_SCALE_BITS)
-/* changed the default to max to avoid sending lots of fuel ACKs */
-#define START_STATION_FUEL	MAX_STATION_FUEL
-#define STATION_REGENERATION	(0.06*FUEL_SCALE_FACT/TIME_FACT)
+#define START_STATION_FUEL	(20<<FUEL_SCALE_BITS)
+#define STATION_REGENERATION	(0.06*FUEL_SCALE_FACT)
 #define MAX_PLAYER_FUEL		(2600<<FUEL_SCALE_BITS)
 #define MIN_PLAYER_FUEL		(350<<FUEL_SCALE_BITS)
-#define REFUEL_RATE		((5<<FUEL_SCALE_BITS)/TIME_FACT)
-#define ENERGY_PACK_FUEL	((500+(randomMT()&511))<<FUEL_SCALE_BITS)
+#define REFUEL_RATE		(5<<FUEL_SCALE_BITS)
+#define ENERGY_PACK_FUEL        ((500+(randomMT()&511))<<FUEL_SCALE_BITS)
 #define FUEL_NOTIFY		(3*12)
 
-#define TARGET_DEAD_TIME	(12 * 60)
 #define TARGET_DAMAGE		(250<<FUEL_SCALE_BITS)
-#define TARGET_FUEL_REPAIR_PER_FRAME (TARGET_DAMAGE / (12*10 /** TIME_FACT*/))
-#define TARGET_REPAIR_PER_FRAME	(TARGET_DAMAGE / (12 * 600 /** TIME_FACT*/))
+#define TARGET_FUEL_REPAIR_PER_FRAME (TARGET_DAMAGE / (FPS * 10))
+#define TARGET_REPAIR_PER_FRAME	(TARGET_DAMAGE / (FPS * 600))
 #define TARGET_UPDATE_DELAY	(TARGET_DAMAGE / (TARGET_REPAIR_PER_FRAME \
-				    * BLOCK_SZ /** TIME_FACT*/))
-
+				    * BLOCK_SZ))
 
 /*
  * Size (pixels) of radius for legal HIT!
@@ -173,7 +161,6 @@ extern DFLOAT		tbl_cos[];
 #define VISIBILITY_DISTANCE	1000.0
 
 #define BALL_RADIUS		10
-#define BALL_STRING_LENGTH	(120 * CLICK)
 
 #define MISSILE_LEN		15
 

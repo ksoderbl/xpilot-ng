@@ -62,6 +62,7 @@ char talkmacros_version[] = VERSION;
 static char	final_str[MAX_CHARS];
 
 extern int	eyesId;		/* Player we get frame updates for */
+extern other_t	*eyes;		/* Player we get frame updates for */
 extern short	snooping;	/* Are we snooping on someone else? */
 
 /* exported (to xevent.c) */

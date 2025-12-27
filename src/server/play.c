@@ -116,22 +116,18 @@ int Punish_team(int ind, int t_destroyed, int t_target)
 	if (Players[i]->team == td->team) {
 	    SCORE(i, -sc, tt->pos.x, tt->pos.y,
 		  "Treasure: ");
-	    Rank_lost_ball(Players[i]);
 	    if (treasureKillTeam)
 		SET_BIT(Players[i]->status, KILLED);
 	}
 	else if (Players[i]->team == tt->team &&
 		 (Players[i]->team != TEAM_NOT_SET || i == ind)) {
-	    if (i == ind && lose_team_members > 0)
-		Rank_cashed_ball(Players[i]);
-	    Rank_won_ball(Players[i]);
 	    SCORE(i, (i == ind ? 3*por : 2*por), tt->pos.x, tt->pos.y,
 		  "Treasure: ");
 	}
     }
 
     if (treasureKillTeam) {
-	Rank_kill(Players[ind]);
+	Players[ind]->kills++;
     }
 
     updateScores = true;
@@ -176,6 +172,18 @@ void Make_debris(
     }
     if (max_life < min_life)
 	max_life = min_life;
+    if (ShotsLife >= FPS) {
+	if (min_life > ShotsLife) {
+	    min_life = ShotsLife;
+	    max_life = ShotsLife;
+	} else if (max_life > ShotsLife) {
+	    max_life = ShotsLife;
+	}
+    }
+    if (min_speed * max_life > World.hypotenuse)
+	min_speed = World.hypotenuse / max_life;
+    if (max_speed * min_life > World.hypotenuse)
+	max_speed = World.hypotenuse / min_life;
     if (max_speed < min_speed)
 	max_speed = min_speed;
 

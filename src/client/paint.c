@@ -574,25 +574,50 @@ void Paint_score_entry(int entry_num,
 	|| other->mychar == 'P'
 	|| other->mychar == 'W')
 	&& !mono) {
-
+#if 0 /* do we need this ? */
+	if (BIT(hackedInstruments, BASE_WARNING)) {
+	    int i;
+	    /*if (deadcount>0) { */
+	    for (i = 0; i < 10; i++) {
+		if (deatharray[i].id == other->id) {
+		    deatharray[i].id = -1;
+		}
+	    }
+	}
+#endif
 	if (!fullColor) {
-	    XSetForeground(dpy, scoreListGC, colors[BLACK].pixel);
+	    /* START team zero pausing */
+	    if (BIT(hackedInstruments, TREAT_ZERO_SPECIAL)
+		&& other->team == 0)
+		XSetForeground(dpy, scoreListGC,
+			       colors[scoreZeroColor].pixel);
+	    /* e94_msu eKthHacks */
+	    else if (other->id == self->id)
+		XSetForeground(dpy, scoreListGC,
+			       colors[scoreInactiveSelfColor].pixel);
+	    else
+		XSetForeground(dpy, scoreListGC,
+			       colors[scoreInactiveColor].pixel);
 	} else { 
-	    /*
-	    ** hm, this grey color is pretty, but am i guaranteed that there is 
-	    ** 16 standard colors just because blockBitmaps = true?
-	    */
-	    XSetForeground(dpy, scoreListGC, colors[12].pixel);
+	    XSetForeground(dpy, scoreListGC, colors[scoreInactiveColor].pixel);
 	}	
 	XDrawString(dpy, players, scoreListGC,
 		    SCORE_BORDER, thisLine,
 		    label, strlen(label));
     } else {
-	ShadowDrawString(dpy, players, scoreListGC,
-			 SCORE_BORDER, thisLine,
-			 label,
-			 colors[WHITE].pixel,
-			 colors[BLACK].pixel);
+	/* e94_msu eKthHacks */
+	if (!mono &&
+	    other->id == self->id)
+	    ShadowDrawString(dpy, players, scoreListGC, SCORE_BORDER,
+			     thisLine, label,
+			     colors[scoreSelfColor].pixel,
+			     colors[BLACK].pixel);
+	else
+	    ShadowDrawString(dpy, players, scoreListGC,
+			     SCORE_BORDER, thisLine,
+			     label,
+			     colors[scoreColor].pixel,
+			     colors[BLACK].pixel);
     }
 
     /*

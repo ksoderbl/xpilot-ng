@@ -233,20 +233,14 @@ void Pause_player(int ind, int onoff)
     int			i;
 
     if (onoff != 0 && !BIT(pl->status, PAUSE)) { /* Turn pause mode on */
-	pl->count = PAUSE_DELAY;
-	if (pl->team != TEAM_NOT_SET)
-	    World.teams[pl->team].SwapperId = -1;
+	pl->count = 10*FPS;
 	pl->updateVisibility = 1;
 	CLR_BIT(pl->status, SELF_DESTRUCT|PLAYING);
 	SET_BIT(pl->status, PAUSE);
 	pl->mychar = 'P';
 	updateScores = true;
-	/* kps - maybe change this to something like Rank_pause() */
-	if (pl->scorenode != NULL)
-	    strcpy(pl->scorenode->logout, "paused");
 	if (BIT(pl->have, HAS_BALL))
 	    Detach_ball(ind, -1);
-	Player_lock_closest(ind, 0);
     }
     else if (onoff == 0 && BIT(pl->status, PAUSE)) { /* Turn pause mode off */
 	if (pl->count <= 0) {
@@ -791,7 +785,7 @@ int Handle_keyboard(int ind)
 	    case KEY_SELF_DESTRUCT:
 		TOGGLE_BIT(pl->status, SELF_DESTRUCT);
 		if (BIT(pl->status, SELF_DESTRUCT))
-		    pl->count = SELF_DESTRUCT_DELAY;
+		    pl->count = 150;
 		break;
 
 	    case KEY_PAUSE:
@@ -849,7 +843,7 @@ int Handle_keyboard(int ind)
 			/*
 			 * Turn hover pause on, together with shields.
 			 */
-			pl->count = HOVERPAUSE_DELAY;
+			pl->count = 5*FPS;
 			CLR_BIT(pl->status, SELF_DESTRUCT);
 			SET_BIT(pl->status, HOVERPAUSE);
 
@@ -1061,7 +1055,7 @@ int Handle_keyboard(int ind)
 		     * shields and firing in order to prevent macros
 		     * and hacked clients.
 		     */
-		    pl->shot_time = frame_time;
+		    pl->shot_time = frame_loops;
 		}
 		break;
 

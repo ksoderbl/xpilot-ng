@@ -60,8 +60,7 @@ void Thrust(int ind)
     const int		min_dir = (int)(pl->dir + RES/2 - RES*0.2 - 1);
     const int		max_dir = (int)(pl->dir + RES/2 + RES*0.2 + 1);
     const DFLOAT	max_speed = 1 + (pl->power * 0.14);
-    const int		max_life = 3 * TIME_FACT + (int)(pl->power * 0.35
-							 * TIME_FACT);
+    const int		max_life = 3 + (int)(pl->power * 0.35);
     static int		keep_rand;
     int			this_rand = (((keep_rand >>= 2)
 					? (keep_rand)
@@ -69,8 +68,7 @@ void Thrust(int ind)
     int			tot_sparks = (int)((pl->power * 0.15) + this_rand + 1);
     DFLOAT		x = pl->pos.x + pl->ship->engine[pl->dir].x;
     DFLOAT		y = pl->pos.y + pl->ship->engine[pl->dir].y;
-    DFLOAT		alt_sparks;
-    int			afterburners;
+    int			afterburners, alt_sparks;
 
     sound_play_sensors(pl->pos.x, pl->pos.y, THRUST_SOUND);
 
@@ -339,14 +337,14 @@ void Update_tanks(pl_fuel_t *ft)
 	    if (!fuel) {
 		if (t
 		    && t != ft->current
-		    && *f >= low_level + REFUEL_RATE * framespeed
-		    && *(f-1) <= TANK_CAP(t-1) - REFUEL_RATE * framespeed) {
+		    && *f >= low_level + REFUEL_RATE
+		    && *(f-1) <= TANK_CAP(t-1) - REFUEL_RATE) {
 
-		    *f -= REFUEL_RATE * framespeed;
-		    fuel = REFUEL_RATE * framespeed;
+		    *f -= REFUEL_RATE;
+		    fuel = REFUEL_RATE;
 		} else if (t && *f < low_level) {
-		    *f += REFUEL_RATE * framespeed;
-		    fuel = -REFUEL_RATE * framespeed;
+		    *f += REFUEL_RATE;
+		    fuel = -REFUEL_RATE;
 		}
 	    }
 	    if (fuel && t == 0) {
@@ -449,7 +447,7 @@ void Tank_handle_detach(player *pl)
     dummy->score	= pl->score - tankScoreDecrement;
     updateScores	= true;
 
-    /* Fuel is the one from chosen tank */
+    /* Fuel is the one from choosen tank */
     dummy->fuel.sum     =
     dummy->fuel.tank[0] = pl->fuel.tank[ct];
     dummy->fuel.max     = TANK_CAP(ct);
@@ -487,7 +485,7 @@ void Tank_handle_detach(player *pl)
     dummy->have = DEF_HAVE;
     dummy->used = (DEF_USED & ~USED_KILL & pl->have) | HAS_SHIELD;
     if (playerShielding == 0) {
-	dummy->shield_time = 30 * 12 * TIME_FACT;
+	dummy->shield_time = 30 * FPS;
 	dummy->have |= HAS_SHIELD;
     }
 
@@ -510,12 +508,6 @@ void Tank_handle_detach(player *pl)
 		       dummy->score, dummy->life,
 		       dummy->mychar, dummy->alliance);
 	}
-    }
-    for (i = 0; i < NumObservers - 1; i++) {
-	Send_player(Players[i + observerStart]->conn, dummy->id);
-	Send_score(Players[i + observerStart]->conn, dummy->id,
-		   dummy->score, dummy->life,
-		   dummy->mychar, dummy->alliance);
     }
 }
 
@@ -554,7 +546,17 @@ void Make_wreckage(
     }
     if (max_life < min_life)
 	max_life = min_life;
+    if (ShotsLife >= FPS) {
+	if (min_life > ShotsLife) {
+	    min_life = ShotsLife;
+	    max_life = ShotsLife;
+	}
+    }
 
+    if (min_speed * max_life > World.hypotenuse)
+	min_speed = World.hypotenuse / max_life;
+    if (max_speed * min_life > World.hypotenuse)
+	max_speed = World.hypotenuse / min_life;
     if (max_speed < min_speed)
 	max_speed = min_speed;
 

@@ -288,10 +288,6 @@ void Move_init(void)
     mp.click_width = PIXEL_TO_CLICK(World.width);
     mp.click_height = PIXEL_TO_CLICK(World.height);
 
-    /* kps hack - this is for dodgers */
-    maxShieldedWallBounceAngle = 180;
-    maxUnshieldedWallBounceAngle = 180;
-
     LIMIT(maxObjectWallBounceSpeed, 0, World.hypotenuse);
     LIMIT(maxShieldedWallBounceSpeed, 0, World.hypotenuse);
     LIMIT(maxUnshieldedWallBounceSpeed, 0, World.hypotenuse);
@@ -1012,7 +1008,6 @@ void Move_segment(move_state_t *ms)
 		    sprintf(msg, " < %s (team %d) has replaced the treasure >",
 			    pl->name, pl->team);
 		    Set_message(msg);
-		    Rank_saved_ball(pl);
 		    break;
 		}
 		if (ball->owner == NO_ID) {
@@ -1027,7 +1022,7 @@ void Move_segment(move_state_t *ms)
 		     * The team should be punished.
 		     */
 		    sprintf(msg," < The ball was loose for %ld frames >",
-			    (LONG_MAX - ball->life) / framespeed);
+			    LONG_MAX - ball->life);
 		    Set_message(msg);
 		    if (captureTheFlag
 			&& !World.treasures[ms->treasure].have
@@ -1801,7 +1796,7 @@ static void Object_hits_target(move_state_t *ms, long player_cost)
     Set_message(msg);
 
     if (targetKillTeam) {
-	Rank_kill(Players[killer]);
+	Players[killer]->kills++;
     }
 
     sc  = Rate(win_score, lose_score);
@@ -2051,38 +2046,38 @@ static void Player_crash(move_state_t *ms, int pt, bool turning)
     case CrashWall:
 	howfmt = "%s crashed%s against a wall";
 	hudmsg = "[Wall]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_WALL_SOUND);
 	break;
 
     case CrashWallSpeed:
 	howfmt = "%s smashed%s against a wall";
 	hudmsg = "[Wall]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_WALL_SOUND);
 	break;
 
     case CrashWallNoFuel:
 	howfmt = "%s smacked%s against a wall";
 	hudmsg = "[Wall]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_WALL_SOUND);
 	break;
 
     case CrashWallAngle:
 	howfmt = "%s was trashed%s against a wall";
 	hudmsg = "[Wall]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_WALL_SOUND);
 	break;
 
     case CrashTarget:
 	howfmt = "%s smashed%s against a target";
 	hudmsg = "[Target]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_WALL_SOUND);
 	Object_hits_target(ms, -1);
 	break;
 
     case CrashTreasure:
 	howfmt = "%s smashed%s against a treasure";
 	hudmsg = "[Treasure]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_WALL_SOUND);
 	break;
 
     case CrashCannon:
@@ -2090,7 +2085,7 @@ static void Player_crash(move_state_t *ms, int pt, bool turning)
 	    != (HAS_SHIELD|HAS_EMERGENCY_SHIELD)) {
 	    howfmt = "%s smashed%s against a cannon";
 	    hudmsg = "[Cannon]";
-	    sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_CANNON_SOUND);
+	    sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_CANNON_SOUND);
 	}
 	if (!BIT(World.cannon[ms->cannon].used, HAS_EMERGENCY_SHIELD)) {
 	    Cannon_dies(ms);
@@ -2100,13 +2095,13 @@ static void Player_crash(move_state_t *ms, int pt, bool turning)
     case CrashUniverse:
 	howfmt = "%s left the known universe%s";
 	hudmsg = "[Universe]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_WALL_SOUND);
 	break;
 
     case CrashUnknown:
 	howfmt = "%s slammed%s into a programming error";
 	hudmsg = "[Bug]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_WALL_SOUND);
 	break;
     }
 
@@ -2182,7 +2177,7 @@ static void Player_crash(move_state_t *ms, int pt, bool turning)
 		      OBJ_Y_IN_BLOCKS(pl),
 		      pl->name);
 		if (i >= num_pushers - 1) {
-		    Rank_kill(pusher);
+		    pusher->kills++;
 		}
 
 	    }
@@ -2268,8 +2263,8 @@ void Move_player(int ind)
     cor_res = MOD2(coriolis * RES / 360, RES);
     oldvx = pl->vel.x;
     oldvy = pl->vel.y;
-    pl->vel.x = fric * (oldvx * tcos(cor_res) + oldvy * tsin(cor_res));
-    pl->vel.y = fric * (oldvy * tcos(cor_res) - oldvx * tsin(cor_res));
+    pl->vel.x = (1.0f - fric) * (oldvx * tcos(cor_res) + oldvy * tsin(cor_res));
+    pl->vel.y = (1.0f - fric) * (oldvy * tcos(cor_res) - oldvx * tsin(cor_res));
 
     Player_position_remember(pl);
 
@@ -2535,7 +2530,7 @@ void Move_player(int ind)
 			/* min,max speed  */ 20, 20 + (intensity>>2),
 			/* min,max life   */ 10, 10 + (intensity>>1)
 			);
-		    sound_play_sensors(pl->pos.cx, pl->pos.cy,
+		    sound_play_sensors(pl->pos.x, pl->pos.y,
 				       PLAYER_BOUNCED_SOUND);
 		    if (ms[worst].target >= 0) {
 			cost <<= FUEL_SCALE_BITS;

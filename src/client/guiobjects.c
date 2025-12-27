@@ -87,6 +87,8 @@ int teamLWColor;
 int nameColor;
 int ballColor;
 int connColor;
+int teamShotColor;
+int shipShapesHackColor;
 
 void Gui_paint_ball(int x, int y)
 {
@@ -299,6 +301,10 @@ static void Gui_paint_nastyshot(int color, int x, int y, int size)
 
 void Gui_paint_fastshot(int color, int x, int y)
 {
+    /* this is for those pesky invisible shots */
+    if (color == 0)
+	return;
+
     if (!blockBitmaps) {
         int z = shot_size/2;
 
@@ -322,7 +328,7 @@ void Gui_paint_fastshot(int color, int x, int y)
 void Gui_paint_teamshot(int color, int x, int y)
 {
     if (!blockBitmaps) {
-	Gui_paint_nastyshot(color, x, y, shot_size/2);
+	Gui_paint_nastyshot(teamShotColor, x, y, shot_size/2);
     }
     else {
 	int s_size = (teamshot_size > 8) ? 8 : shot_size ;
@@ -572,14 +578,33 @@ static void Gui_paint_ship_name(int x , int y, other_t *other)
 {
     FIND_NAME_WIDTH(other);
     SET_FG(colors[nameColor].pixel);
-    rd.drawString(dpy, p_draw, gc,
-		WINSCALE(X(x)) - other->name_width / 2,
-		WINSCALE(Y(y) + 16) + gameFont->ascent,
-		other->id_string, other->name_len);
-    Erase_rectangle(WINSCALE(X(x)) - other->name_width / 2 - 1,
-		    WINSCALE(Y(y) + 16) + gameFont->ascent
-		     - gameFont->ascent, other->name_width + 4,
-		    gameFont->ascent + gameFont->descent + 5);
+    if (BIT(instruments, SHOW_SHIP_NAME)) {
+	rd.drawString(dpy, p_draw, gc,
+		      WINSCALE(X(x)) - other->name_width / 2,
+		      WINSCALE(Y(y) + 16) + gameFont->ascent,
+		      other->id_string, other->name_len);
+	Erase_rectangle(WINSCALE(X(x)) - other->name_width / 2 - 1,
+			WINSCALE(Y(y) + 16) + gameFont->ascent
+			- gameFont->ascent, other->name_width + 4,
+			gameFont->ascent + gameFont->descent + 5);
+    }
+    if (BIT(hackedInstruments, SHOW_LIVES_BY_SHIP)
+	&& BIT(Setup->mode, LIMITED_LIVES)) {
+	char keff[4] = "";
+
+	sprintf(keff, "%03d", other->life);
+	if (other->life < 1) {
+	    SET_FG(colors[WHITE].pixel);
+	}
+	rd.drawString(dpy, p_draw, gc,
+		      WINSCALE(X(x) + SHIP_SZ),
+		      WINSCALE(Y(y) - SHIP_SZ) + gameFont->ascent,
+		      &keff[2], 1);
+	Erase_rectangle(WINSCALE(X(x)) + SHIP_SZ - 1,
+			WINSCALE(Y(y) + SHIP_SZ),
+			SHIP_SZ + 4,
+			gameFont->ascent + gameFont->descent + 5);
+    }
 }
 
 
@@ -611,6 +636,7 @@ static int Gui_calculate_ship_color(int id, other_t *other)
 {
     int ship_color = WHITE;
 
+#if 0 /* Mara - let's not! it's ugly */
     if (useErase){
 	/*
 	 * Outline the locked ship in a different color,
@@ -620,6 +646,7 @@ static int Gui_calculate_ship_color(int id, other_t *other)
 	    ship_color = RED;
 	}
     }
+#endif
 
 #ifndef NO_BLUE_TEAM
     if (BIT(Setup->mode, TEAM_PLAY)
@@ -905,6 +932,19 @@ void Gui_paint_ship(int x, int y, int dir, int id, int cloak, int phased,
     if (cloak == 0 && phased == 0) {
 	if (!blockBitmaps || !blockBitmapShips) {
 	    Gui_paint_ship_uncloaked(id, points, ship_color, cnt);
+	    /* shipshapeshack - Mara */
+	    if (shipShapesHackColor >= 1) {
+		Segment_add(shipShapesHackColor,
+			    (X(x + SHIP_SZ * tcos(dir))),
+			    (Y(y + SHIP_SZ * tsin(dir))),
+			    (X(x + (SHIP_SZ + 12) * tcos(dir))),
+			    (Y(y + (SHIP_SZ + 12) * tsin(dir))));
+		Arc_add(shipShapesHackColor,
+			X(x - SHIP_SZ), Y(y + SHIP_SZ),
+			2 * SHIP_SZ - 1, 2 * SHIP_SZ - 1,
+			0, 64 * 360);
+	    };
+	    /* shipshapeshack - Mara */
 	}
 	else {
 	    if (ship_color == BLUE)

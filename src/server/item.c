@@ -366,7 +366,7 @@ void Make_item(int px, int py,
     obj->acc.x =
     obj->acc.y = 0.0;
     obj->mass = 10.0;
-    obj->life = 1500 * TIME_FACT + (int)(rfrac() * 512 * TIME_FACT);
+    obj->life = 1500 + (int)(rfrac() * 512);
     obj->count = num_per_pack;
     obj->pl_range = ITEM_SIZE/2;
     obj->pl_radius = ITEM_SIZE/2;
@@ -459,7 +459,7 @@ void Detonate_items(int ind)
 	if (rfrac() < detonateItemOnKillProb) {
 	    int	type;
 
-	    if (pl->shots >= ShotsMax)
+	    if (pl->shots >= pl->shot_max)
 		break;
 
 	    /*
@@ -1072,8 +1072,8 @@ void Fire_general_ecm(int ind, unsigned short team, DFLOAT x, DFLOAT y)
 		mine->life = 0;
 		break;
 	    }
-	    mine->count = ((int)(8*(1-range)) + 2) * 12;
-	    if (!BIT(mine->status, CONFUSED)
+	    mine->count = ((int)(8*(1-range)) + 2) * FPS;
+	    if (   !BIT(mine->status, CONFUSED)
 		&& (closest_mine == NULL || range < closest_mine_range)) {
 		closest_mine = mine;
 		closest_mine_range = range;

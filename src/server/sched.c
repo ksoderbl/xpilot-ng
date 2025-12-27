@@ -60,7 +60,6 @@
 #include "types.h"
 #include "sched.h"
 #include "global.h"
-#include "srecord.h"
 
 #include "portability.h"
 
@@ -128,22 +127,22 @@ void allow_timer(void)
 
 /*
  * Catch SIGALRM.
+ * Simple timer ticker.
+ */
+static void catch_timer_ticks(int signum)
+{
+    timer_ticks++;
+}
+
+
+/*
+ * Catch SIGALRM.
  * Use timerResolution to increment timer_ticks.
  */
-static void catch_timer(int signum)
+static void catch_timer_counts(int signum)
 {
     static unsigned int		timer_count = 0;
-#ifdef OS2DEBUG
-    static int counter = 0;
 
-    /*  Should get one dot per second for 14 FPS  */
-    if( (++counter) > 13 )
-    {
-	counter = 0;
-    	printf( "." );
-	fflush( stdout );
-    }
-#endif
     timer_count += FPS;
     if (timer_count >= (unsigned)timerResolution) {
 	timer_count -= timerResolution;
@@ -261,7 +260,9 @@ static void setup_timer(void)
     /*
      * Install a signal handler for the alarm signal.
      */
-    act.sa_handler = catch_timer;
+    act.sa_handler = (timerResolution > 0)
+		    ? (catch_timer_counts)
+		    : (catch_timer_ticks);
     act.sa_flags = 0;
     sigemptyset(&act.sa_mask);
     sigaddset(&act.sa_mask, SIGALRM);
@@ -489,9 +490,8 @@ struct io_handler {
 };
 
 static struct io_handler	input_handlers[NUM_SELECT_FD];
-static struct io_handler	record_handlers[NUM_SELECT_FD];
 static fd_set			input_mask;
-/*static*/ int			max_fd, min_fd;
+static int			max_fd, min_fd;
 static int			input_inited = false;
 
 static void io_dummy(int fd, void *arg)
@@ -502,13 +502,6 @@ static void io_dummy(int fd, void *arg)
 void install_input(void (*func)(int, void *), int fd, void *arg)
 {
     int i;
-    static struct io_handler *handlers;
-
-    if (playback) {
-	handlers = record_handlers;
-	fd += min_fd;
-    } else
-	handlers = input_handlers;
 
     if (input_inited == false) {
 	input_inited = true;
@@ -525,18 +518,18 @@ void install_input(void (*func)(int, void *), int fd, void *arg)
 	    input_handlers[i].arg = 0;
 	}
     }
-    IFWINDOWS(xpprintf("install_input: fd %d min_fd=%d\n", fd, min_fd));
-    if (!playback && (fd < min_fd || fd >= min_fd + NUM_SELECT_FD)) {
+	/* IFWINDOWS(xpprintf("install_input: fd %d min_fd=%d\n", fd, min_fd);) */
+    if (fd < min_fd || fd >= min_fd + NUM_SELECT_FD) {
 	error("install illegal input handler fd %d (%d)", fd, min_fd);
 	ServerExit();
     }
-    if (!playback && FD_ISSET(fd, &input_mask)) {
+    if (FD_ISSET(fd, &input_mask)) {
 	error("input handler %d busy", fd);
 	ServerExit();
     }
-    handlers[fd - min_fd].fd = fd;
-    handlers[fd - min_fd].func = func;
-    handlers[fd - min_fd].arg = arg;
+    input_handlers[fd - min_fd].fd = fd;
+    input_handlers[fd - min_fd].func = func;
+    input_handlers[fd - min_fd].arg = arg;
     FD_SET(fd, &input_mask);
     if (fd > max_fd) {
 	max_fd = fd;
@@ -545,31 +538,25 @@ void install_input(void (*func)(int, void *), int fd, void *arg)
 
 void remove_input(int fd)
 {
-    if (!playback) {
-	if (fd < min_fd || fd >= min_fd + NUM_SELECT_FD) {
-	    error("remove illegal input handler fd %d (%d)", fd, min_fd);
-	    ServerExit();
-	}
-	if (FD_ISSET(fd, &input_mask)) {
-	    input_handlers[fd - min_fd].fd = -1;
-	    input_handlers[fd - min_fd].func = io_dummy;
-	    input_handlers[fd - min_fd].arg = 0;
-	    FD_CLR((FDTYPE)fd, &input_mask);
-	    if (fd == max_fd) {
-		int i = fd;
-		max_fd = -1;
-		while (--i >= min_fd) {
-		    if (FD_ISSET(i, &input_mask)) {
-			max_fd = i;
-			break;
-		    }
+    if (fd < min_fd || fd >= min_fd + NUM_SELECT_FD) {
+	error("remove illegal input handler fd %d (%d)", fd, min_fd);
+	ServerExit();
+    }
+    if (FD_ISSET(fd, &input_mask)) {
+	input_handlers[fd - min_fd].fd = -1;
+	input_handlers[fd - min_fd].func = io_dummy;
+	input_handlers[fd - min_fd].arg = 0;
+	FD_CLR((FDTYPE)fd, &input_mask);
+	if (fd == max_fd) {
+	    int i = fd;
+	    max_fd = -1;
+	    while (--i >= min_fd) {
+		if (FD_ISSET(i, &input_mask)) {
+		    max_fd = i;
+		    break;
 		}
 	    }
 	}
-    } else {
-	record_handlers[fd].fd = -1;
-	record_handlers[fd].func = io_dummy;
-	record_handlers[fd].arg = 0;
     }
 }
 
@@ -602,15 +589,10 @@ static void sched_select_error(void)
  * I/O + timer dispatcher.
  * Windows pumps this one time 
  */
-
-unsigned long skip_to = 0;
-
 void sched(void)
 {
     int			i, n, io_todo = 3;
     struct timeval	tv, *tvp = &tv;
-
-    playback = rplayback;
 
 #ifndef _WINDOWS
     if (sched_running) {
@@ -645,25 +627,10 @@ void sched(void)
 
 #endif
 
-	if (main_loops < skip_to && timers_used >= timer_ticks)
-	    timer_ticks++;
 	if (io_todo == 0 && timers_used < timer_ticks) {
 	    io_todo = 1 + (timer_ticks - timers_used);
 	    tvp = &tv;
-	    if (playback) {
-		while (*playback_sched) {
-		    if (*playback_sched == 127) {
-			playback_sched++;
-			Get_recording_data();
-		    } else {
-			struct io_handler *ioh;
-			ioh = &record_handlers[*playback_sched++ - 1];
-			(*(ioh->func)) (ioh->fd, ioh->arg);
-		    }
-		}
-		playback_sched++;
-	    } else if (record)
-		*playback_sched++ = 0;
+
 #ifndef _WINDOWS
 	    if (timer_handler) {
 		(*timer_handler)();
@@ -682,7 +649,6 @@ void sched(void)
 	else {
 	    fd_set readmask;
 	    readmask = input_mask;
-	    Handle_recording_buffers();
 	    n = select(max_fd + 1, &readmask, 0, 0, tvp);
 	    if (n <= 0) {
 		if (n == -1 && errno != EINTR) {
@@ -694,21 +660,8 @@ void sched(void)
 		for (i = max_fd; i >= min_fd; i--) {
 		    if (FD_ISSET(i, &readmask)) {
 			struct io_handler *ioh;
-
-			record = playback = 0;
-			if (rrecord && (i - min_fd > 0)) {
-			    if (i - min_fd + 1 > 126) {	/* 127 reserved */
-				warn("recording: this shouldn't happen");
-				exit(1);
-			    }
-			    *playback_sched++ = i - min_fd + 1;
-			    record = 1;
-			}
-
 			ioh = &input_handlers[i - min_fd];
 			(*(ioh->func))(ioh->fd, ioh->arg);
-			record = rrecord;
-			playback = rplayback;
 			if (--n == 0) {
 			    break;
 			}

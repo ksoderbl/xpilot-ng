@@ -453,7 +453,15 @@ typedef struct {
 } shove_t;
 
 struct robot_data;
+
+/* IMPORTANT
+ *
+ * This is the player structure, the first part MUST be similar to object_t,
+ * this makes it possible to use the same basic operations on both of them
+ * (mainly used in update.c).
+ */
 typedef struct player player;
+
 typedef struct ScoreNode {
     char nick[MAX_CHARS];
     char real[MAX_CHARS];
@@ -473,12 +481,6 @@ typedef struct ScoreNode {
     player *pl;
 } ScoreNode;
 
-/* IMPORTANT
- *
- * This is the player structure, the first part MUST be similar to object_t,
- * this makes it possible to use the same basic operations on both of them
- * (mainly used in update.c).
- */
 struct player {
 
     OBJECT_BASE
@@ -535,6 +537,7 @@ struct player {
     DFLOAT	auto_turnresistance_s;	/* when autopilot turned off */
     modifiers	modbank[NUM_MODBANKS];	/* useful modifier settings */
     bool	tractor_is_pressor;	/* on if tractor is pressor */
+    int		shot_max;		/* Maximum number of shots active */
     long	shot_time;		/* Time of last shot fired by player */
     int		repair_target;		/* Repairing this target */
     int		fs;			/* Connected to fuel station fs */
@@ -606,18 +609,18 @@ struct player {
     void	*audio;			/* audio private data */
 
     int		player_fps;		/* FPS that this player can do */
+    int		player_round;		/* Divisor for player FPS calculation */
+    int		player_count;		/* Player's current frame count */
 
     int		isowner;		/* If player started this server. */
-    int		isoperator;		/* Player has operator privileges. */
-    int		rectype;		/* normal, saved or spectator */
+    int		isoperator;		/* If player has operator privileges. */
     ScoreNode	*scorenode;
-    char	auth_nick[MAX_CHARS];	/* Original nick (/auth command) */
-
 #ifdef __cplusplus
 		player() {}
 #endif
 };
 
 #endif
+
 
 

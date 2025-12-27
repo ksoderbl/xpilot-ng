@@ -48,7 +48,7 @@
 #    ifdef _WINDOWS
 #         define DEFAULT_MAP		"default.xp"
 #    else
-#         define DEFAULT_MAP		"globe.xp"
+#         define DEFAULT_MAP		"marahacked_teamcup2001.xp"
 #    endif
 #endif
 

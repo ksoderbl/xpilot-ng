@@ -235,10 +235,10 @@ option options[] = {
     {
 	"geometry",
 	NULL,
-	"",
+	"1024x768",
 	KEY_DUMMY,
 	"Set the window size and position in standard X geometry format.\n"
-	"The maximum allowed window size is 1282x1024.\n"
+	"The maximum allowed window size is 1922x1440.\n"
     },
     {
 	"ignoreWindowManager",
@@ -382,6 +382,7 @@ option options[] = {
 	KEY_DUMMY,
 	"Paint radar dots' position on the map \n"
     },
+
     {
 	"showShipShapes",
 	NULL,
@@ -405,6 +406,20 @@ option options[] = {
 	KEY_DUMMY,
 	"Scan messages for BALL,SAFE,COVER,POP and paint \n"
 	"warning circles inside ship.\n"
+    },
+    {
+	"showLivesByShip",
+	NULL,
+	"No",
+	KEY_DUMMY,
+	"Paint remaining lives next to ships \n"
+    },
+    {
+	"treatZeroSpecial",
+	NULL,
+	"Yes",
+	KEY_DUMMY,
+	"Do special tricks for team zero pausing in scorelist. \n"
     },
     {
 	"fuelNotify",
@@ -749,7 +764,14 @@ option options[] = {
 	"2",
 	KEY_DUMMY,
 	"The size of team shots in pixels.\n"
-	"Note that team shots are drawn in blue.\n"
+	"Note that team shots are drawn in teamShotColor.\n"
+    },
+    {
+	"teamShotColor",
+	NULL,
+	"2",
+	KEY_DUMMY,
+	"Which color number to use for drawing harmless shots.\n"
     },
     {
 	"showNastyShots",
@@ -813,6 +835,13 @@ option options[] = {
 	"Yes",
 	KEY_DUMMY,
 	"Should all ships have the name of the player drawn below them.\n"
+    },
+    {
+	"showBaseName",
+	NULL,
+	"Yes",
+	KEY_DUMMY,
+	"Should all bases have the name of the player drawn below them.\n"
     },
     {
 	"showMineName",
@@ -1062,26 +1091,28 @@ option options[] = {
 	KEY_DUMMY,
 	"Which color number to use for drawing the HUD.\n"
     },
-     {
-	 "hrColor1",
-	 NULL,
-	 "3",
-	 KEY_DUMMY,
-	 "Which color number to use for drawing the hudradar hack.\n"
-     },
+    {
+	"hrColor1",
+	NULL,
+	"3",
+	KEY_DUMMY,
+	"Which color number to use for drawing hudradar dots\n"
+	"that represent enemy ships.\n"
+    },
     {
 	"hrColor2",
 	NULL,
-	"4",
+	"2",
 	KEY_DUMMY,
-	"Which color number to use for drawing the hudradar hack.\n"
+	"Which color number to use for drawing hudradar dots\n"
+	"that represent friendly ships.\n"
     },
     {
 	"hrSize",
 	NULL,
 	"6",
 	KEY_DUMMY,
-	"Which size to use for drawing the hudradar hack dots.\n"
+	"Which size to use for drawing the hudradar dots.\n"
     },
     {
 	"hrScale",
@@ -1105,6 +1136,22 @@ option options[] = {
 	"90",
 	KEY_DUMMY,
 	"Which size to use for drawing the hud.\n"
+    },
+    {
+	"dirPtrColor",
+	NULL,
+	"0",
+	KEY_DUMMY,
+	"Which color number to use for drawing the direction pointer hack.\n"
+	"Old name: dpColor\n"
+    },
+    {
+	"shipShapesHackColor",
+	NULL,
+	"0",
+	KEY_DUMMY,
+	"Which color number to use for drawing the shipshapes hack.\n"
+	"Old name: sshColor\n"
     },
     {
 	"hudLockColor",
@@ -1146,7 +1193,7 @@ option options[] = {
     {
 	"teamLWColor",
 	NULL,
-	"2",
+	"4",
 	KEY_DUMMY,
 	"Which color to use to paint teammate ships in when on last life.\n"
     },
@@ -1191,6 +1238,58 @@ option options[] = {
 	"1",
 	KEY_DUMMY,
 	"Which color number to use for drawing borders.\n"
+    },
+    {
+	"scoreColor",
+	NULL,
+	"1",
+	KEY_DUMMY,
+	"Which color number to use for drawing Score entries.\n"
+    },
+    {
+	"scoreSelfColor",
+	NULL,
+	"3",
+	KEY_DUMMY,
+	"Which color number to use for drawing your own score.\n"
+    },
+    {
+	"scoreInactiveColor",
+	NULL,
+	"12",
+	KEY_DUMMY,
+	"Which color number to use for drawing inactive players's scores.\n"
+    },
+    {
+	"scoreInactiveSelfColor",
+	NULL,
+	"12",
+	KEY_DUMMY,
+	"Which color number to use for drawing your score when inactive.\n"
+    },
+    {
+	"scoreZeroColor",
+	NULL,
+	"4",
+	KEY_DUMMY,
+	"Which color number to use for drawing team zero scores (when special).\n"
+    },
+    {
+	"scoreObjectTimer",
+	NULL,
+	"24",
+	KEY_DUMMY,
+	"How many frames score objects remain visible on the map.\n"
+    },
+    {
+	"baseWarningType",
+	NULL,
+	"1",
+	KEY_DUMMY,
+	"Which type of base warning you prefer.\n"
+	"A value of 0 disables base warning.\n"
+	"A value of 1 draws a red box on a base when someone has died.\n"
+	"A value of 2 makes the base name flash when someone has died.\n"
     },
     {
 	"wallColor",
@@ -1864,7 +1963,7 @@ option options[] = {
     {
 	"pointerButton3",
 	NULL,
-	"keyShield",
+	"keyDropBall",
 	KEY_DUMMY,
 	"The key to activate when pressing the third mouse button.\n"
     },
@@ -2890,6 +2989,7 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
     LIMIT(shot_size, MIN_SHOT_SIZE, MAX_SHOT_SIZE);
     Get_int_resource(rDB, "teamShotSize", &teamshot_size);
     LIMIT(teamshot_size, MIN_TEAMSHOT_SIZE, MAX_TEAMSHOT_SIZE);
+    Get_int_resource(rDB, "teamShotColor", &teamShotColor);
     Get_bool_resource(rDB, "showNastyShots", &showNastyShots);
     Get_bool_resource(rDB, "titleFlip", &titleFlip);
     /*
@@ -2945,6 +3045,8 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
     Get_float_resource(rDB, "hrScale", &hrScale);
     Get_float_resource(rDB, "hrLimit", &hrLimit);
     Get_int_resource(rDB, "hudSize", &hudSize);
+    Get_int_resource(rDB, "dirPtrColor", &dirPtrColor);
+    Get_int_resource(rDB, "shipShapesHackColor", &shipShapesHackColor);
     Get_int_resource(rDB, "hudLockColor", &hudLockColor);
     Get_int_resource(rDB, "msgScanBallColor", &msgScanBallColor);
     Get_int_resource(rDB, "msgScanCoverColor", &msgScanCoverColor);
@@ -2957,6 +3059,14 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
     Get_int_resource(rDB, "windowColor", &windowColor);
     Get_int_resource(rDB, "buttonColor", &buttonColor);
     Get_int_resource(rDB, "borderColor", &borderColor);
+    Get_int_resource(rDB, "scoreColor", &scoreColor);
+    Get_int_resource(rDB, "scoreSelfColor", &scoreSelfColor);
+    Get_int_resource(rDB, "scoreInactiveColor", &scoreInactiveColor);
+    Get_int_resource(rDB, "scoreInactiveSelfColor",
+		     &scoreInactiveSelfColor);
+    Get_int_resource(rDB, "scoreZeroColor", &scoreZeroColor);
+    Get_int_resource(rDB, "scoreObjectTimer", &scoreObjectTimer);
+    Get_int_resource(rDB, "baseWarningType", &baseWarningType);
     Get_int_resource(rDB, "wallColor", &wallColor);
     Get_int_resource(rDB, "wallRadarColor", &wallRadarColor);
     Get_int_resource(rDB, "decorColor", &decorColor);
@@ -2970,6 +3080,7 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
     hackedInstruments = 0;
 
     Get_bit_resource(rDB, "showShipName", &instruments, SHOW_SHIP_NAME);
+    Get_bit_resource(rDB, "showBaseName", &hackedInstruments, SHOW_BASE_NAME);
     Get_bit_resource(rDB, "showMineName", &instruments, SHOW_MINE_NAME);
     Get_bit_resource(rDB, "showMessages", &instruments, SHOW_MESSAGES);
     Get_bit_resource(rDB, "showHUD", &instruments, SHOW_HUD_INSTRUMENTS);
@@ -2979,6 +3090,10 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
     Get_bit_resource(rDB, "showShipShapes", &hackedInstruments, SHOW_SHIP_SHAPES);
     Get_bit_resource(rDB, "showMyShipShape", &hackedInstruments, SHOW_MY_SHIP_SHAPE);
     Get_bit_resource(rDB, "ballMsgScan", &hackedInstruments, BALL_MSG_SCAN);
+    Get_bit_resource(rDB, "showLivesByShip", &hackedInstruments,
+		     SHOW_LIVES_BY_SHIP);
+    Get_bit_resource(rDB, "treatZeroSpecial", &hackedInstruments,
+		     TREAT_ZERO_SPECIAL);
     Get_bit_resource(rDB, "verticalHUDLine", &instruments, SHOW_HUD_VERTICAL);
     Get_bit_resource(rDB, "horizontalHUDLine", &instruments, SHOW_HUD_HORIZONTAL);
     Get_bit_resource(rDB, "fuelMeter", &instruments, SHOW_FUEL_METER);

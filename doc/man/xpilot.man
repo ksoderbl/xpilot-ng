@@ -4,7 +4,7 @@
 .\"
 .TH XPILOT 6 "Requires UDP and X11"
 .ds )H GNU Public License 2.0 applies
-.ds ]W XPilot 4.5.4X: Dec 9, 2002
+.ds ]W XPilot 4.5.4X-rc2: Jan 2, 2003
 .if n .ad l	\" If nroff formatter, adjust left margin only
 .if t .ad b	\" If troff formatter, adjust both margins
 
@@ -1567,7 +1567,7 @@ and Dick Balaska <dick@xpilot.org> from BuckoSoft.COM.
 .SH BUG REPORTS
 
 The product is seemingly stable, so bug reports are highly
-appreciated.  Send email to \fBxpilot@xpilot.org\fP and we will
+appreciated.  Send email to \fBksoderbl@cc.hut.fi\fP and we will
 see what we can do.  We merely ask that you remember to include
 the following information:
 .IP
@@ -1579,7 +1579,7 @@ the following information:
 .TP
 \(bu Which Xresources you're using.
 .TP
-\(bu The full version of xpilot, i.e., 4.5.4X
+\(bu The full version of xpilot, i.e., 4.5.4X-rc2
 .TP
 \(bu What the bug looks like (symptoms)
 .TP

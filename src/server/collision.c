@@ -322,7 +322,7 @@ static void PlayerCollision(void)
 		    || PSEUDO_TEAM(i, j)) {
 		    continue;
 		}
-		sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_PLAYER_SOUND);
+		sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_PLAYER_SOUND);
 		if (BIT(World.rules->mode, BOUNCE_WITH_PLAYER)) {
 		    if (BIT(pl->used, (HAS_SHIELD|HAS_EMERGENCY_SHIELD)) !=
 			(HAS_SHIELD|HAS_EMERGENCY_SHIELD)) {
@@ -402,10 +402,10 @@ static void PlayerCollision(void)
 			sprintf(msg, "%s ran over %s.",
 				pl->name, Players[j]->name);
 			Set_message(msg);
-			sound_play_sensors(Players[j]->pos.cx,
-					   Players[j]->pos.cy,
+			sound_play_sensors(Players[j]->pos.x,
+					   Players[j]->pos.y,
 					   PLAYER_RAN_OVER_PLAYER_SOUND);
-			Rank_kill(pl);
+			pl->kills++;
 			if (IS_TANK_IND(i)) {
 			    sc = Rate(Players[i_tank_owner]->score,
 						 Players[j]->score)
@@ -430,9 +430,9 @@ static void PlayerCollision(void)
 			sprintf(msg, "%s ran over %s.",
 				Players[j]->name, pl->name);
 			Set_message(msg);
-			sound_play_sensors(pl->pos.cx, pl->pos.cy,
+			sound_play_sensors(pl->pos.x, pl->pos.y,
 					   PLAYER_RAN_OVER_PLAYER_SOUND);
-			Rank_kill(Players[j]);
+			Players[j]->kills++;
 			if (IS_TANK_IND(j)) {
 			    sc = Rate(Players[j_tank_owner]->score, pl->score)
 				   * tankKillScoreMult;
@@ -489,7 +489,7 @@ static void PlayerCollision(void)
 		    World.treasures[ball->treasure].have = false;
 		    SET_BIT(pl->have, HAS_BALL);
 		    pl->ball = NULL;
-		    sound_play_sensors(pl->pos.cx, pl->pos.cy,
+		    sound_play_sensors(pl->pos.x, pl->pos.y,
 				       CONNECT_BALL_SOUND);
 		}
 	    }
@@ -819,7 +819,7 @@ static void Player_collides_with_ball(int ind, object *obj, int radius)
 		  OBJ_Y_IN_BLOCKS(pl),
 		  Players[killer]->name);
 	} else {
-	    Rank_kill(Players[killer]);
+	    Players[killer]->kills++;
 	    sc = Rate(Players[killer]->score, pl->score)
 		       * ballKillScoreMult;
 	    Score_players(killer, sc, pl->name,
@@ -837,7 +837,7 @@ static void Player_collides_with_item(int ind, object *obj)
     player	*pl = Players[ind];
     int		old_have;
     enum Item	item_index;
-#if 0 /* removed in ng */
+
     if (IsOffensiveItem((enum Item) obj->info)) {
 	int off_items = CountOffensiveItems(pl);
 	if (off_items >= maxOffensiveItems) {
@@ -862,82 +862,82 @@ static void Player_collides_with_item(int ind, object *obj)
 	    obj->count = maxDefensiveItems - def_items;
 	}
     }
-#endif
+
     item_index = (enum Item) obj->info;
 
     switch (item_index) {
     case ITEM_WIDEANGLE:
 	pl->item[item_index] += obj->count;
 	LIMIT(pl->item[item_index], 0, World.items[item_index].limit);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy,
+	sound_play_sensors(pl->pos.x, pl->pos.y,
 			   WIDEANGLE_SHOT_PICKUP_SOUND);
 	break;
     case ITEM_ECM:
 	pl->item[item_index] += obj->count;
 	LIMIT(pl->item[item_index], 0, World.items[item_index].limit);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, ECM_PICKUP_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, ECM_PICKUP_SOUND);
 	break;
     case ITEM_ARMOR:
 	pl->item[item_index]++;
 	LIMIT(pl->item[item_index], 0, World.items[item_index].limit);
 	if (pl->item[item_index] > 0)
 	    SET_BIT(pl->have, HAS_ARMOR);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy,
+	sound_play_sensors(pl->pos.x, pl->pos.y,
 			   ARMOR_PICKUP_SOUND);
 	break;
     case ITEM_TRANSPORTER:
 	pl->item[item_index] += obj->count;
 	LIMIT(pl->item[item_index], 0, World.items[item_index].limit);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, TRANSPORTER_PICKUP_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, TRANSPORTER_PICKUP_SOUND);
 	break;
     case ITEM_MIRROR:
 	pl->item[ITEM_MIRROR] += obj->count;
 	LIMIT(pl->item[item_index], 0, World.items[item_index].limit);
 	if (pl->item[item_index] > 0)
 	    SET_BIT(pl->have, HAS_MIRROR);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, MIRROR_PICKUP_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, MIRROR_PICKUP_SOUND);
 	break;
     case ITEM_DEFLECTOR:
 	pl->item[ITEM_DEFLECTOR] += obj->count;
 	LIMIT(pl->item[item_index], 0, World.items[item_index].limit);
 	if (pl->item[item_index] > 0)
 	    SET_BIT(pl->have, HAS_DEFLECTOR);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, DEFLECTOR_PICKUP_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, DEFLECTOR_PICKUP_SOUND);
 	break;
     case ITEM_HYPERJUMP:
 	pl->item[item_index] += obj->count;
 	LIMIT(pl->item[item_index], 0, World.items[item_index].limit);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, HYPERJUMP_PICKUP_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, HYPERJUMP_PICKUP_SOUND);
 	break;
     case ITEM_PHASING:
 	pl->item[item_index] += obj->count;
 	LIMIT(pl->item[item_index], 0, World.items[item_index].limit);
 	if (pl->item[item_index] > 0)
 	    SET_BIT(pl->have, HAS_PHASING_DEVICE);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PHASING_DEVICE_PICKUP_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, PHASING_DEVICE_PICKUP_SOUND);
 	break;
     case ITEM_SENSOR:
 	pl->item[item_index] += obj->count;
 	LIMIT(pl->item[item_index], 0, World.items[item_index].limit);
 	pl->updateVisibility = 1;
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, SENSOR_PACK_PICKUP_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, SENSOR_PACK_PICKUP_SOUND);
 	break;
     case ITEM_AFTERBURNER:
 	pl->item[item_index] += obj->count;
 	LIMIT(pl->item[item_index], 0, World.items[item_index].limit);
 	if (pl->item[item_index] > 0)
 	    SET_BIT(pl->have, HAS_AFTERBURNER);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, AFTERBURNER_PICKUP_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, AFTERBURNER_PICKUP_SOUND);
 	break;
     case ITEM_REARSHOT:
 	pl->item[item_index] += obj->count;
 	LIMIT(pl->item[item_index], 0, World.items[item_index].limit);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, BACK_SHOT_PICKUP_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, BACK_SHOT_PICKUP_SOUND);
 	break;
     case ITEM_MISSILE:
 	pl->item[item_index] += obj->count;
 	LIMIT(pl->item[item_index], 0, World.items[item_index].limit);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, ROCKET_PACK_PICKUP_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, ROCKET_PACK_PICKUP_SOUND);
 	break;
     case ITEM_CLOAK:
 	pl->item[item_index] += obj->count;
@@ -945,28 +945,28 @@ static void Player_collides_with_item(int ind, object *obj)
 	if (pl->item[item_index] > 0)
 	    SET_BIT(pl->have, HAS_CLOAKING_DEVICE);
 	pl->updateVisibility = 1;
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, CLOAKING_DEVICE_PICKUP_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, CLOAKING_DEVICE_PICKUP_SOUND);
 	break;
     case ITEM_FUEL:
 	Add_fuel(&(pl->fuel), ENERGY_PACK_FUEL);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, ENERGY_PACK_PICKUP_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, ENERGY_PACK_PICKUP_SOUND);
 	break;
     case ITEM_MINE:
 	pl->item[item_index] += obj->count;
 	LIMIT(pl->item[item_index], 0, World.items[item_index].limit);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, MINE_PACK_PICKUP_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, MINE_PACK_PICKUP_SOUND);
 	break;
     case ITEM_LASER:
 	pl->item[item_index] += obj->count;
 	LIMIT(pl->item[item_index], 0, World.items[item_index].limit);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, LASER_PICKUP_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, LASER_PICKUP_SOUND);
 	break;
     case ITEM_EMERGENCY_THRUST:
 	pl->item[item_index] += obj->count;
 	LIMIT(pl->item[item_index], 0, World.items[item_index].limit);
 	if (pl->item[item_index] > 0)
 	    SET_BIT(pl->have, HAS_EMERGENCY_THRUST);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy,
+	sound_play_sensors(pl->pos.x, pl->pos.y,
 			   EMERGENCY_THRUST_PICKUP_SOUND);
 	break;
     case ITEM_EMERGENCY_SHIELD:
@@ -975,7 +975,7 @@ static void Player_collides_with_item(int ind, object *obj)
 	LIMIT(pl->item[item_index], 0, World.items[item_index].limit);
 	if (pl->item[item_index] > 0)
 	    SET_BIT(pl->have, HAS_EMERGENCY_SHIELD);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy,
+	sound_play_sensors(pl->pos.x, pl->pos.y,
 			   EMERGENCY_SHIELD_PICKUP_SOUND);
 	/*
 	 * New feature since 3.2.7:
@@ -993,7 +993,7 @@ static void Player_collides_with_item(int ind, object *obj)
 	LIMIT(pl->item[item_index], 0, World.items[item_index].limit);
 	if (pl->item[item_index] > 0)
 	    SET_BIT(pl->have, HAS_TRACTOR_BEAM);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy,
+	sound_play_sensors(pl->pos.x, pl->pos.y,
 			   TRACTOR_BEAM_PICKUP_SOUND);
 	break;
     case ITEM_AUTOPILOT:
@@ -1001,7 +1001,7 @@ static void Player_collides_with_item(int ind, object *obj)
 	LIMIT(pl->item[item_index], 0, World.items[item_index].limit);
 	if (pl->item[item_index] > 0)
 	    SET_BIT(pl->have, HAS_AUTOPILOT);
-	sound_play_sensors(pl->pos.cx, pl->pos.cy,
+	sound_play_sensors(pl->pos.x, pl->pos.y,
 			   AUTOPILOT_PICKUP_SOUND);
 	break;
 
@@ -1011,7 +1011,7 @@ static void Player_collides_with_item(int ind, object *obj)
 	} else {
 	    Add_fuel(&(pl->fuel), TANK_FUEL(MAX_TANKS));
 	}
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, TANK_PICKUP_SOUND);
+	sound_play_sensors(pl->pos.x, pl->pos.y, TANK_PICKUP_SOUND);
 	break;
     case NUM_ITEMS:
 	/* impossible */
@@ -1029,7 +1029,7 @@ static void Player_collides_with_mine(int ind, object *obj)
     int		killer;
     mineobject	*mine = MINE_PTR(obj);
 
-    sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_MINE_SOUND);
+    sound_play_sensors(pl->pos.x, pl->pos.y, PLAYER_HIT_MINE_SOUND);
     killer = -1;
     if (mine->id == NO_ID && mine->owner == NO_ID) {
 	sprintf(msg, "%s hit %s.",
@@ -1121,7 +1121,7 @@ static void Player_collides_with_debris(int ind, object *obj)
 		  OBJ_Y_IN_BLOCKS(pl),
 		  (killer == -1) ? "[Explosion]" : pl->name);
 	} else {
-	    Rank_kill(Players[killer]);
+	    Players[killer]->kills++;
 	    sc = Rate(Players[killer]->score, pl->score)
 		       * explosionKillScoreMult;
 	    Score_players(killer, sc, pl->name,
@@ -1220,15 +1220,15 @@ static void Player_collides_with_killing_shot(int ind, object *obj)
 	    && (int)(rfrac() >= 0.25f))) {
 	switch (obj->type) {
 	case OBJ_TORPEDO:
-	    sound_play_sensors(pl->pos.cx, pl->pos.cy,
+	    sound_play_sensors(pl->pos.x, pl->pos.y,
 			       PLAYER_EAT_TORPEDO_SHOT_SOUND);
 	    break;
 	case OBJ_HEAT_SHOT:
-	    sound_play_sensors(pl->pos.cx, pl->pos.cy,
+	    sound_play_sensors(pl->pos.x, pl->pos.y,
 			       PLAYER_EAT_HEAT_SHOT_SOUND);
 	    break;
 	case OBJ_SMART_SHOT:
-	    sound_play_sensors(pl->pos.cx, pl->pos.cy,
+	    sound_play_sensors(pl->pos.x, pl->pos.y,
 			       PLAYER_EAT_SMART_SHOT_SOUND);
 	    break;
 	}
@@ -1257,7 +1257,7 @@ static void Player_collides_with_killing_shot(int ind, object *obj)
 
 	case OBJ_SHOT:
 	case OBJ_CANNON_SHOT:
-	    sound_play_sensors(pl->pos.cx, pl->pos.cy,
+	    sound_play_sensors(pl->pos.x, pl->pos.y,
 			       PLAYER_EAT_SHOT_SOUND);
 	    if (BIT(pl->used, (HAS_SHIELD|HAS_EMERGENCY_SHIELD))
 		!= (HAS_SHIELD|HAS_EMERGENCY_SHIELD)) {
@@ -1294,7 +1294,7 @@ static void Player_collides_with_killing_shot(int ind, object *obj)
 	case OBJ_SHOT:
 	case OBJ_CANNON_SHOT:
 	    if (BIT(obj->status, FROMCANNON)) {
-		sound_play_sensors(pl->pos.cx, pl->pos.cy,
+		sound_play_sensors(pl->pos.x, pl->pos.y,
 				   PLAYER_HIT_CANNONFIRE_SOUND);
 		sprintf(msg, "%s was hit by cannonfire.", pl->name);
 		sc = Rate(CANNON_SCORE, pl->score)/4;
@@ -1309,12 +1309,12 @@ static void Player_collides_with_killing_shot(int ind, object *obj)
 				      obj->mods, 1),
 			Players[killer=GetInd[obj->id]]->name);
 		if (killer == ind) {
-		    sound_play_sensors(pl->pos.cx, pl->pos.cy,
+		    sound_play_sensors(pl->pos.x, pl->pos.y,
 				       PLAYER_SHOT_THEMSELF_SOUND);
 		    strcat(msg, "  How strange!");
 		    sc = Rate(0, pl->score) * selfKillScoreMult;
 		} else {
-		    Rank_kill(Players[killer]);
+		    Players[killer]->kills++;
 		    sc = Rate(Players[killer]->score, pl->score);
 		}
 	    }
@@ -1552,7 +1552,7 @@ static void AsteroidCollision(void)
 		    ast->life += ASTEROID_FUEL_HIT(damage, WIRE_PTR(ast)->size);
 		}
 		if (sound) {
-		    sound_play_sensors(ast->pos.cx, ast->pos.cy,
+		    sound_play_sensors(ast->pos.x, ast->pos.y,
 				       ASTEROID_HIT_SOUND);    
 		}
 		if (ast->life < 0) {

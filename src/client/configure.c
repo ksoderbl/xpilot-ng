@@ -115,6 +115,8 @@ static int Config_create_mapRadar(int widget_desc, int *height);
 static int Config_create_showShipShapes(int widget_desc, int *height);
 static int Config_create_showMyShipShape(int widget_desc, int *height);
 static int Config_create_ballMsgScan(int widget_desc, int *height);
+static int Config_create_showLivesByShip(int widget_desc, int *height);
+static int Config_create_treatZeroSpecial(int widget_desc, int *height);
 static int Config_create_horizontalHUDLine(int widget_desc, int *height);
 static int Config_create_verticalHUDLine(int widget_desc, int *height);
 static int Config_create_speedFactHUD(int widget_desc, int *height);
@@ -141,6 +143,7 @@ static int Config_create_autoShield(int widget_desc, int *height);
 static int Config_create_sparkProb(int widget_desc, int *height);
 static int Config_create_shotSize(int widget_desc, int *height);
 static int Config_create_teamShotSize(int widget_desc, int *height);
+static int Config_create_teamShotColor(int widget_desc, int *height);
 static int Config_create_showNastyShots(int widget_desc, int *height);
 static int Config_create_hudColor(int widget_desc, int *height);
 static int Config_create_hrColor1(int widget_desc, int *height);
@@ -150,6 +153,8 @@ static int Config_create_hrScale(int widget_desc, int *height);
 static int Config_create_hrLimit(int widget_desc, int *height);
 static int Config_create_hudSize(int widget_desc, int *height);
 static int Config_create_hudLockColor(int widget_desc, int *height);
+static int Config_create_dirPtrColor(int widget_desc, int *height);
+static int Config_create_shipShapesHackColor(int widget_desc, int *height);
 static int Config_create_msgScanBallColor(int widget_desc, int *height);
 static int Config_create_msgScanCoverColor(int widget_desc, int *height);
 static int Config_create_selfLWColor(int widget_desc, int *height);
@@ -161,6 +166,13 @@ static int Config_create_connColor(int widget_desc, int *height);
 static int Config_create_windowColor(int widget_desc, int *height);
 static int Config_create_buttonColor(int widget_desc, int *height);
 static int Config_create_borderColor(int widget_desc, int *height);
+static int Config_create_scoreColor(int widget_desc, int *height);
+static int Config_create_scoreSelfColor(int widget_desc, int *height);
+static int Config_create_scoreInactiveColor(int widget_desc, int *height);
+static int Config_create_scoreInactiveSelfColor(int widget_desc, int *height);
+static int Config_create_scoreZeroColor(int widget_desc, int *height);
+static int Config_create_scoreObjectTimer(int widget_desc, int *height);
+static int Config_create_baseWarningType(int widget_desc, int *height);
 static int Config_create_wallColor(int widget_desc, int *height);
 static int Config_create_decorColor(int widget_desc, int *height);
 static int Config_create_showDecor(int widget_desc, int *height);
@@ -177,6 +189,7 @@ static int Config_create_oldMessagesColor(int widget_desc, int *height);
 static int Config_create_maxVolume(int widget_desc, int *height);
 #endif
 static int Config_create_showShipName(int widget_desc, int *height);
+static int Config_create_showBaseName(int widget_desc, int *height);
 static int Config_create_showMineName(int widget_desc, int *height);
 static int Config_create_fuelMeter(int widget_desc, int *height);
 static int Config_create_powerMeter(int widget_desc, int *height);
@@ -273,6 +286,8 @@ static int		(*config_creator[])(int widget_desc, int *height) = {
     Config_create_showShipShapes,
     Config_create_showMyShipShape,
     Config_create_ballMsgScan,
+    Config_create_showLivesByShip,
+    Config_create_treatZeroSpecial,
     Config_create_horizontalHUDLine,
     Config_create_verticalHUDLine,
     Config_create_speedFactHUD,
@@ -301,6 +316,7 @@ static int		(*config_creator[])(int widget_desc, int *height) = {
     Config_create_showNastyShots,
     Config_create_shotSize,
     Config_create_teamShotSize,
+    Config_create_teamShotColor,
     Config_create_hudColor,
     Config_create_hrColor1,
     Config_create_hrColor2,
@@ -309,6 +325,8 @@ static int		(*config_creator[])(int widget_desc, int *height) = {
     Config_create_hrLimit,
     Config_create_hudSize,
     Config_create_hudLockColor,
+    Config_create_dirPtrColor,
+    Config_create_shipShapesHackColor,
     Config_create_msgScanBallColor,
     Config_create_msgScanCoverColor,
     Config_create_selfLWColor,
@@ -320,6 +338,13 @@ static int		(*config_creator[])(int widget_desc, int *height) = {
     Config_create_windowColor,
     Config_create_buttonColor,
     Config_create_borderColor,
+    Config_create_scoreColor,
+    Config_create_scoreSelfColor,
+    Config_create_scoreInactiveColor,
+    Config_create_scoreInactiveSelfColor,
+    Config_create_scoreZeroColor,
+    Config_create_scoreObjectTimer,
+    Config_create_baseWarningType,
     Config_create_wallColor,
     Config_create_decorColor,
     Config_create_showDecor,
@@ -332,6 +357,7 @@ static int		(*config_creator[])(int widget_desc, int *height) = {
     Config_create_maxVolume,
 #endif
     Config_create_showShipName,
+    Config_create_showBaseName,
     Config_create_showMineName,
     Config_create_fuelMeter,
     Config_create_powerMeter,
@@ -816,6 +842,24 @@ static int Config_create_ballMsgScan(int widget_desc, int *height)
 			      (void *) BALL_MSG_SCAN);
 }
 
+static int Config_create_showLivesByShip(int widget_desc, int *height)
+{
+    return Config_create_bool(widget_desc, height, "showLivesByShip",
+			      BIT(hackedInstruments, SHOW_LIVES_BY_SHIP)
+			      ? true : false,
+			      Config_update_hackedInstruments,
+			      (void *) SHOW_LIVES_BY_SHIP);
+}
+
+static int Config_create_treatZeroSpecial(int widget_desc, int *height)
+{
+    return Config_create_bool(widget_desc, height, "treatZeroSpecial",
+			      BIT(hackedInstruments, TREAT_ZERO_SPECIAL)
+			      ? true : false,
+			      Config_update_hackedInstruments,
+			      (void *) TREAT_ZERO_SPECIAL);
+}
+
 static int Config_create_horizontalHUDLine(int widget_desc, int *height)
 {
     return Config_create_bool(widget_desc, height, "horizontalHUDLine",
@@ -1028,6 +1072,13 @@ static int Config_create_teamShotSize(int widget_desc, int *height)
 			   NULL, NULL);
 }
 
+static int Config_create_teamShotColor(int widget_desc, int *height)
+{
+    return Config_create_int(widget_desc, height,
+			     "teamShotColor", &teamShotColor,
+			     0, maxColors - 1, NULL, NULL);
+}
+
 static int Config_create_showNastyShots(int widget_desc, int *height)
 {
     return Config_create_bool(widget_desc, height, "nastyShots",
@@ -1086,16 +1137,32 @@ static int Config_create_hudSize(int widget_desc, int *height)
 {
     return Config_create_int(widget_desc, height,
 			     "hudSize", &hudSize,
-			     90, 500,
+			     MIN_HUD_SIZE, 6 * MIN_HUD_SIZE,
 			     NULL, NULL);
 }
 
 static int Config_create_hudLockColor(int widget_desc, int *height)
 {
     return Config_create_int(widget_desc, height,
-			   "hudLockColor", &hudLockColor,
-			   0, maxColors - 1,
-			   NULL, NULL);
+			     "hudLockColor", &hudLockColor,
+			     0, maxColors - 1,
+			     NULL, NULL);
+}
+
+static int Config_create_dirPtrColor(int widget_desc, int *height)
+{
+    return Config_create_int(widget_desc, height,
+			     "dirPtrColor", &dirPtrColor,
+			     0, maxColors - 1,
+			     NULL, NULL);
+}
+
+static int Config_create_shipShapesHackColor(int widget_desc, int *height)
+{
+    return Config_create_int(widget_desc, height,
+			     "shipeShapesHackColor", &shipShapesHackColor,
+			     0, maxColors - 1,
+			     NULL, NULL);
 }
 
 static int Config_create_msgScanBallColor(int widget_desc, int *height)
@@ -1118,7 +1185,7 @@ static int Config_create_selfLWColor(int widget_desc, int *height)
 {
     return Config_create_int(widget_desc, height,
 			     "selfLWColor", &selfLWColor,
-			     0, maxColors - 1,
+			     1, maxColors - 1,
 			     NULL, NULL);
 }
 
@@ -1126,7 +1193,7 @@ static int Config_create_enemyLWColor(int widget_desc, int *height)
 {
     return Config_create_int(widget_desc, height,
 			     "enemyLWColor", &enemyLWColor,
-			     0, maxColors - 1,
+			     1, maxColors - 1,
 			     NULL, NULL);
 }
 
@@ -1134,7 +1201,7 @@ static int Config_create_teamLWColor(int widget_desc, int *height)
 {
     return Config_create_int(widget_desc, height,
 			     "teamLWColor", &teamLWColor,
-			     0, maxColors - 1,
+			     1, maxColors - 1,
 			     NULL, NULL);
 }
 
@@ -1182,6 +1249,57 @@ static int Config_create_borderColor(int widget_desc, int *height)
     return Config_create_int(widget_desc, height,
 			     "borderColor", &borderColor,
 			     0, maxColors - 1,
+			     NULL, NULL);
+}
+
+static int Config_create_scoreColor(int widget_desc, int *height)
+{
+    return Config_create_int(widget_desc, height,
+			     "scoreColor", &scoreColor,
+			     0, maxColors - 1, NULL, NULL);
+}
+
+static int Config_create_scoreSelfColor(int widget_desc, int *height)
+{
+    return Config_create_int(widget_desc, height,
+			     "scoreSelfColor", &scoreSelfColor,
+			     0, maxColors - 1, NULL, NULL);
+}
+
+static int Config_create_scoreInactiveColor(int widget_desc, int *height)
+{
+    return Config_create_int(widget_desc, height,
+			     "scoreInactiveColor", &scoreInactiveColor,
+			     0, maxColors - 1, NULL, NULL);
+}
+
+static int Config_create_scoreInactiveSelfColor(int widget_desc,
+						int *height)
+{
+    return Config_create_int(widget_desc, height,
+			     "scoreInactiveSelfColor",
+			     &scoreInactiveSelfColor, 0, maxColors - 1,
+			     NULL, NULL);
+}
+
+static int Config_create_scoreZeroColor(int widget_desc, int *height)
+{
+    return Config_create_int(widget_desc, height,
+			     "scoreZeroColor", &scoreZeroColor,
+			     0, maxColors - 1, NULL, NULL);
+}
+
+static int Config_create_scoreObjectTimer(int widget_desc, int *height)
+{
+    return Config_create_int(widget_desc, height,
+			     "scoreObjectTimer", &scoreObjectTimer, 0, 120,
+			     NULL, NULL);
+}
+
+static int Config_create_baseWarningType(int widget_desc, int *height)
+{
+    return Config_create_int(widget_desc, height,
+			     "baseWarningType", &baseWarningType, 0, 2,
 			     NULL, NULL);
 }
 
@@ -1260,6 +1378,15 @@ static int Config_create_showShipName(int widget_desc, int *height)
 				  ? true : false,
 			      Config_update_instruments,
 			      (void *) SHOW_SHIP_NAME);
+}
+
+static int Config_create_showBaseName(int widget_desc, int *height)
+{
+    return Config_create_bool(widget_desc, height, "showBaseName",
+			      BIT(hackedInstruments, SHOW_BASE_NAME)
+			          ? true : false,
+			      Config_update_hackedInstruments,
+			      (void *) SHOW_BASE_NAME);
 }
 
 static int Config_create_showMineName(int widget_desc, int *height)
@@ -1848,6 +1975,8 @@ static int Config_save(int widget_desc, void *button_str, const char **strptr)
     Config_save_float(fp, "fuelWarning", (DFLOAT)fuelLevel2);
     Config_save_float(fp, "fuelCritical", (DFLOAT)fuelLevel1);
     Config_save_bool(fp, "showShipName", BIT(instruments, SHOW_SHIP_NAME));
+    Config_save_bool(fp, "showBaseName", BIT(hackedInstruments,
+					     SHOW_BASE_NAME));
     Config_save_bool(fp, "showMineName", BIT(instruments, SHOW_MINE_NAME));
     Config_save_bool(fp, "showMessages", BIT(instruments, SHOW_MESSAGES));
     Config_save_int(fp, "maxMessages", maxMessages);
@@ -1858,6 +1987,10 @@ static int Config_save(int widget_desc, void *button_str, const char **strptr)
     Config_save_bool(fp, "showHUD", BIT(instruments, SHOW_HUD_INSTRUMENTS));
     Config_save_bool(fp, "showHUDRadar", BIT(instruments, SHOW_HUD_RADAR));
     Config_save_bool(fp, "mapRadar", BIT(hackedInstruments, MAP_RADAR));
+    Config_save_bool(fp, "showLivesByShip",
+		     BIT(hackedInstruments, SHOW_LIVES_BY_SHIP));
+    Config_save_bool(fp, "treatZeroSpecial",
+		     BIT(hackedInstruments, TREAT_ZERO_SPECIAL));
     Config_save_bool(fp, "showShipShapes", BIT(hackedInstruments, SHOW_SHIP_SHAPES));
     Config_save_bool(fp, "showMyShipShape", BIT(hackedInstruments, SHOW_MY_SHIP_SHAPE));
     Config_save_bool(fp, "ballMsgScan", BIT(hackedInstruments, BALL_MSG_SCAN));
@@ -1888,6 +2021,7 @@ static int Config_save(int widget_desc, void *button_str, const char **strptr)
     Config_save_float(fp, "sparkProb", spark_prob);
     Config_save_int(fp, "shotSize", shot_size);
     Config_save_int(fp, "teamShotSize", teamshot_size);
+    Config_save_int(fp, "teamShotColor", teamShotColor);
     Config_save_bool(fp, "showNastyShots", showNastyShots);
     Config_save_int(fp, "maxColors", maxColors);
     Config_save_int(fp, "hudColor", hudColor);
@@ -1898,6 +2032,8 @@ static int Config_save(int widget_desc, void *button_str, const char **strptr)
     Config_save_float(fp, "hrLimit", hrLimit);
     Config_save_int(fp, "hudSize", hudSize);
     Config_save_int(fp, "hudLockColor", hudLockColor);
+    Config_save_int(fp, "dirPtrColor", dirPtrColor);
+    Config_save_int(fp, "shipShapesHackColor", shipShapesHackColor);
     Config_save_int(fp, "msgScanBallColor", msgScanBallColor);
     Config_save_int(fp, "msgScanCoverColor", msgScanCoverColor);
     Config_save_int(fp, "selfLWColor", selfLWColor);
@@ -1909,6 +2045,13 @@ static int Config_save(int widget_desc, void *button_str, const char **strptr)
     Config_save_int(fp, "windowColor", windowColor);
     Config_save_int(fp, "buttonColor", buttonColor);
     Config_save_int(fp, "borderColor", borderColor);
+    Config_save_int(fp, "scoreColor", scoreColor);
+    Config_save_int(fp, "scoreSelfColor", scoreSelfColor);
+    Config_save_int(fp, "scoreInactiveColor", scoreInactiveColor);
+    Config_save_int(fp, "scoreInactiveSelfColor", scoreInactiveSelfColor);
+    Config_save_int(fp, "scoreZeroColor", scoreZeroColor);
+    Config_save_int(fp, "scoreObjectTimer", scoreObjectTimer);
+    Config_save_int(fp, "baseWarningType", baseWarningType);
     Config_save_int(fp, "wallColor", wallColor);
     Config_save_int(fp, "decorColor", decorColor);
     Config_save_bool(fp, "showDecor", BIT(instruments, SHOW_DECOR));

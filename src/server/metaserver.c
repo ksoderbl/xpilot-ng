@@ -86,7 +86,6 @@ static char	msg[MSG_LEN];
 
 extern int	NumPlayers, NumRobots, NumPseudoPlayers, NumQueuedPlayers;
 extern int	login_in_progress;
-extern int	game_lock;
 extern time_t	serverTime;
 
 void Meta_send(char *mesg, int len)
@@ -98,11 +97,9 @@ void Meta_send(char *mesg, int len)
     }
 
     for (i = 0; i < NELEM(meta_servers); i++) {
-	if (sock_send_dest(&contactSocket, meta_servers[i].addr, META_PORT,
-			   mesg, len) != len) {
+	if (sock_send_dest(&contactSocket, meta_servers[i].addr, META_PORT, mesg, len) != len) {
 	    sock_get_error(&contactSocket);
-	    sock_send_dest(&contactSocket, meta_servers[i].addr, META_PORT,
-			   mesg, len);
+	    sock_send_dest(&contactSocket, meta_servers[i].addr, META_PORT, mesg, len);
 	}
     }
 }

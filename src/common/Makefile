@@ -2,7 +2,7 @@
 # $Xorg: imake.c,v 1.6 2001/02/09 02:03:15 xorgcvs Exp $
 
 # ----------------------------------------------------------------------
-# Makefile generated from "Imake.tmpl" and </tmp/IIf.dwd5be>
+# Makefile generated from "Imake.tmpl" and </tmp/IIf.9ObMPr>
 # $Xorg: Imake.tmpl,v 1.4 2000/08/17 19:41:46 cpqbld Exp $
 #
 #
@@ -902,8 +902,8 @@ CTAGOPTIONS =
       VERSION_MINOR = 5
  VERSION_PATCHLEVEL = 4
     VERSION_WINDOWS = 13
-     VERSION_STATUS = X
-        RELEASEDATE = Dec 9, 2002
+     VERSION_STATUS = X-rc2
+        RELEASEDATE = Jan 2, 2003
 
       AUTHORS = Bjørn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska & Uoti Urpala
 COPYRIGHTDATE = 1991-2002
@@ -915,7 +915,7 @@ COPYRIGHTDATE = 1991-2002
        MANEXT = 6
 
      LOCALGURU = xpilot@xpilot.org
-CONTACTADDRESS = xpilot@xpilot.org
+CONTACTADDRESS = ksoderbl@cc.hut.fi
 
 MSUB = $(TOP)/contrib/msub/msub
 MSUBSRC = $(TOP)/contrib/msub

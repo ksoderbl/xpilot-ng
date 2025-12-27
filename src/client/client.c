@@ -1012,6 +1012,9 @@ other_t *Other_by_name(char *name)
 {
     int i;
 
+    if (name == NULL)
+	return NULL;
+
     for (i = 0; i < num_others; i++) {
 	if (!strcmp(name, Others[i].name))
 	    return &Others[i];
@@ -1130,6 +1133,7 @@ int Handle_player(int id, int player_team, int mychar, char *player_name,
     strlcpy(other->host, host_name, sizeof(other->host));
     scoresChanged = 1;
     other->ship = Convert_shape_str(shape);
+    other->ignorelevel = 0;
     Calculate_shield_radius(other->ship);
 
     return 0;
@@ -1300,7 +1304,7 @@ void Client_score_table(void)
 			*team_order[MAX_TEAMS];
     other_t		*other,
 			**order;
-    int			i, j, k, best = -1;
+    int			i, j, k, best = -1, entrynum = 0;
     DFLOAT		ratio, best_ratio = -1e7;
     static char		hackbuf[MSG_LEN];
     static char		hackbuf2[MSG_LEN];
@@ -1404,11 +1408,35 @@ void Client_score_table(void)
     if (BIT(Setup->mode, TIMING)) {
 	best = order[0] - Others;
     }
+#if 1
     for (i = 0; i < num_others; i++) {
 	other = order[i];
 	j = other - Others;
 	Paint_score_entry(i, other, (j == best) ? true : false);
     }
+#else /* doesn't work now ? */
+    for (i = 0; i < num_others; i++) {
+	other = order[i];
+	j = other - Others;
+	if (!BIT(hackedInstruments, TREAT_ZERO_SPECIAL)
+	    || other->team != 0) {
+	    Paint_score_entry(entrynum, other, (j == best) ? true : false);
+	    ++entrynum;
+	}
+    }
+    if (BIT(hackedInstruments, TREAT_ZERO_SPECIAL)) {
+	for (i = 0; i < num_others; i++) {
+	    other = order[i];
+	    j = other - Others;
+	    if (other->team == 0) {
+		Paint_score_entry(entrynum, other,
+				  (j == best) ? true : false);
+		++entrynum;
+	    }
+	}
+	Paint_score_entry(i, other, (j == best) ? true : false);
+    }
+#endif
     if (BIT(Setup->mode, TEAM_PLAY|TIMING) == TEAM_PLAY) {
 	int pos = num_others + 1;
 	int num_playing_teams = 0;
@@ -1447,7 +1475,8 @@ void Client_score_table(void)
 	    }
 	    tmp.score = team_order[i]->score;
 	    tmp.life = team_order[i]->life;
-	    Paint_score_entry(pos++, &tmp, false);
+	    if (tmp.team != 0)
+		Paint_score_entry(pos++, &tmp, false);
 	}
     }
 
@@ -1470,9 +1499,10 @@ void Client_score_table(void)
 	 */
 	for (i = 0; i < num_others; i++) {
 	    other = order[i];
-	    /*other = &Others[i];*/
-	    /*if ( !( BIT(hackedInstruments, TREAT_ZERO_SPECIAL)
-	      && (other->team == 0) ) ) {*/
+	    if (other->team == 0
+		&& BIT(hackedInstruments, TREAT_ZERO_SPECIAL))
+		continue;
+
 	    if (showScoreDecimals > 0 && version >= 0x4500) {
 		sprintf(hackbuf2, "%s: %.*f  ", other->name,
 			showScoreDecimals, other->score);
@@ -1490,7 +1520,6 @@ void Client_score_table(void)
 		}
 		s += sprintf(s,"%s",hackbuf2);
 	    }
-	    /*}*/
 	}
 	Add_message(hackbuf);
     }
@@ -1498,7 +1527,7 @@ void Client_score_table(void)
 
     free(order);
 
-    IFWINDOWS( MarkPlayersForRedraw(); )
+    IFWINDOWS( MarkPlayersForRedraw() );
 
     scoresChanged = 0;
 }

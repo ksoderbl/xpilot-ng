@@ -77,6 +77,7 @@
 #include "talk.h"
 #include "bitmaps.h"
 #include "commonproto.h"
+#include "ignore.h"
 
 #ifdef	SOUND
 # include "audio.h"
@@ -3043,8 +3044,12 @@ int Receive_talk_ack(void)
 int Net_talk(char *str)
 {
     strlcpy(talk_str, str, sizeof talk_str);
-    talk_pending = ++talk_sequence_num;
-    talk_last_send = last_loops - TALK_RETRY;
+    if (talk_str[0] == '\\') {	/* it's a clientcommand! */
+	executeCommand(talk_str);
+    } else {
+	talk_pending = ++talk_sequence_num;
+	talk_last_send = last_loops - TALK_RETRY;
+    }
     return 0;
 }
 

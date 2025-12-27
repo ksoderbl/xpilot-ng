@@ -206,7 +206,6 @@ typedef struct {
     int		TreasuresLeft;		/* Number of treasures left */
     DFLOAT	score;
     DFLOAT	prev_score;
-    int		SwapperId;		/* Player swapping to this full team - kps ?*/
 } team_t;
 
 typedef struct {

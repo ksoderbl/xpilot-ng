@@ -79,11 +79,19 @@ DFLOAT	hrLimit;		/* Hudradar dots are not drawn if closer to
 				   range */
 int	hudSize;		/* Size for HUD drawing */
 int	hudLockColor;		/* Color index for lock on HUD drawing */
+int	dirPtrColor;		/* Color index for dirptr drawing */
 int	msgScanBallColor;	/* Color index for ball message scan drawing */
 int	msgScanCoverColor;	/* Color index for ball message scan drawing */
 int	messagesColor;		/* Color index for messages */
 int	oldMessagesColor;	/* Color index for old messages */
+int	scoreObjectTimer;	/* How long to flash score objects */
+int	baseWarningType;	/* Which type of base warning you prefer */
+
+radar_t	*old_radar_ptr;
+int	old_num_radar, old_max_radar;
+
 DFLOAT	charsPerTick = 0.0;	/* Output speed of messages */
+
 static const int meterColor1 = RED;  /* Color index for meter drawing */
 static const int meterColor2 = BLUE; /* Color index for meter border drawing */
 static const int meterWidth = 60;
@@ -91,8 +99,8 @@ static const int meterHeight = 10;
 
 deathhack_t deatharray[10];
 int deathpos;
-bool ball_shout = 0;
-bool need_cover = 0;
+bool ball_shout = false;
+bool need_cover = false;
 
 message_t	*TalkMsg[MAX_MSGS], *GameMsg[MAX_MSGS];
 /* store incoming messages while a cut is pending */
@@ -213,7 +221,7 @@ void Paint_score_objects(void)
 		}
 	    }
 	    sobj->count++;
-	    if (sobj->count > SCORE_OBJECT_COUNT) {
+	    if (sobj->count > scoreObjectTimer) {
 		sobj->count = 0;
 		sobj->hud_msg_len = 0;
 	    }
@@ -278,12 +286,6 @@ static void Paint_lock(int hud_pos_x, int hud_pos_y)
     const int	BORDER = 2;
     int		x, y;
     other_t	*target;
-#if 0
-    int		i, dir = 96;
-    int		hudShipColor = hudColor;
-    shipobj	*ship;
-    XPoint	points[64];
-#endif
     static int	warningCount;
     char	str[50];
     static int	mapdiag = 0;
@@ -309,30 +311,6 @@ static void Paint_lock(int hud_pos_x, int hud_pos_y)
 			- gameFont->descent - gameFont->ascent ,
 		    target->name_width + 2,
 		    gameFont->ascent + gameFont->descent);
-
-#if 0
-    /* Only show the mini-ship for the locked player if it will be big enough
-     * to even tell what the heck it is!  I choose the arbitrary size of
-     * 10 pixels wide, which in practice is a scaleFactor <= 1.5.
-     */
-    if (scaleFactor <= 1.5) {
-	ship = Ship_by_id(lock_id);
-	for (i = 0; i < ship->num_points; i++) {
-	    points[i].x = WINSCALE((int)(hud_pos_x + ship->pts[i][dir].x / 2 + 60));
-	    points[i].y = WINSCALE((int)(hud_pos_y + ship->pts[i][dir].y / 2 - 80));
-	}
-	points[i++] = points[0];
-	SET_FG(colors[hudShipColor].pixel);
-	if (useErase){
-	    rd.drawLines(dpy, p_draw, gc, points, i, 0);
-	    Erase_points(0, points, i);
-	} else {
-	    rd.fillPolygon(dpy, p_draw, gc,
-		   points, i,
-		   Complex, CoordModeOrigin);
-	}
-    }
-#endif
 
     /* lives left is a better info than distance in team games MM */
     if (BIT(Setup->mode, LIMITED_LIVES)) {
@@ -467,6 +445,16 @@ void Paint_HUD(void)
 		    (int)(ext_view_height / 2 + ptr_move_fact*vel.y));
     }
 
+    if (dirPtrColor >= 1) {
+	Segment_add(dirPtrColor,
+		    (int) (ext_view_width / 2 +
+			   (100 - 15) * tcos(heading)),
+		    (int) (ext_view_height / 2 -
+			   (100 - 15) * tsin(heading)),
+		    (int) (ext_view_width / 2 + 100 * tcos(heading)),
+		    (int) (ext_view_height / 2 - 100 * tsin(heading)));
+    }
+
     hrMapScale = (DFLOAT) Setup->width / (DFLOAT) 256;
     if (BIT(instruments, SHOW_HUD_RADAR))
 	Paint_hudradar(
@@ -511,39 +499,47 @@ void Paint_HUD(void)
 
     if (BIT(instruments, SHOW_HUD_HORIZONTAL)) {
 	rd.drawLine(dpy, p_draw, gc,
-		  WINSCALE(hud_pos_x-hudSize), WINSCALE(hud_pos_y-hudSize+HUD_OFFSET),
-		  WINSCALE(hud_pos_x+hudSize), WINSCALE(hud_pos_y-hudSize+HUD_OFFSET));
+		    WINSCALE(hud_pos_x - hudSize),
+		    WINSCALE(hud_pos_y - hudSize + HUD_OFFSET),
+		    WINSCALE(hud_pos_x + hudSize),
+		    WINSCALE(hud_pos_y - hudSize + HUD_OFFSET));
 	Erase_segment(0,
-		WINSCALE(hud_pos_x-hudSize),
-		WINSCALE(hud_pos_y-hudSize+HUD_OFFSET),
-		WINSCALE(hud_pos_x+hudSize),
-		WINSCALE(hud_pos_y-hudSize+HUD_OFFSET));
+		      WINSCALE(hud_pos_x - hudSize),
+		      WINSCALE(hud_pos_y - hudSize + HUD_OFFSET),
+		      WINSCALE(hud_pos_x + hudSize),
+		      WINSCALE(hud_pos_y - hudSize + HUD_OFFSET));
 	rd.drawLine(dpy, p_draw, gc,
-		  WINSCALE(hud_pos_x-hudSize), WINSCALE(hud_pos_y+hudSize-HUD_OFFSET),
-		  WINSCALE(hud_pos_x+hudSize), WINSCALE(hud_pos_y+hudSize-HUD_OFFSET));
+		    WINSCALE(hud_pos_x - hudSize),
+		    WINSCALE(hud_pos_y + hudSize - HUD_OFFSET),
+		    WINSCALE(hud_pos_x + hudSize),
+		    WINSCALE(hud_pos_y + hudSize - HUD_OFFSET));
 	Erase_segment(0,
-		WINSCALE(hud_pos_x-hudSize),
-		WINSCALE(hud_pos_y+hudSize-HUD_OFFSET),
-		WINSCALE(hud_pos_x+hudSize),
-		WINSCALE(hud_pos_y+hudSize-HUD_OFFSET));
+		      WINSCALE(hud_pos_x - hudSize),
+		      WINSCALE(hud_pos_y + hudSize - HUD_OFFSET),
+		      WINSCALE(hud_pos_x + hudSize),
+		      WINSCALE(hud_pos_y + hudSize - HUD_OFFSET));
     }
     if (BIT(instruments, SHOW_HUD_VERTICAL)) {
 	rd.drawLine(dpy, p_draw, gc,
-		  WINSCALE(hud_pos_x-hudSize+HUD_OFFSET), WINSCALE(hud_pos_y-hudSize),
-		  WINSCALE(hud_pos_x-hudSize+HUD_OFFSET), WINSCALE(hud_pos_y+hudSize));
+		    WINSCALE(hud_pos_x -hudSize + HUD_OFFSET),
+		    WINSCALE(hud_pos_y -hudSize),
+		    WINSCALE(hud_pos_x -hudSize + HUD_OFFSET),
+		    WINSCALE(hud_pos_y +hudSize));
 	Erase_segment(0,
-		WINSCALE(hud_pos_x-hudSize+HUD_OFFSET),
-		WINSCALE(hud_pos_y-hudSize),
-		WINSCALE(hud_pos_x-hudSize+HUD_OFFSET),
-		WINSCALE(hud_pos_y+hudSize));
+		      WINSCALE(hud_pos_x - hudSize + HUD_OFFSET),
+		      WINSCALE(hud_pos_y - hudSize),
+		      WINSCALE(hud_pos_x - hudSize + HUD_OFFSET),
+		      WINSCALE(hud_pos_y + hudSize));
 	rd.drawLine(dpy, p_draw, gc,
-		  WINSCALE(hud_pos_x+hudSize-HUD_OFFSET), WINSCALE(hud_pos_y-hudSize),
-		  WINSCALE(hud_pos_x+hudSize-HUD_OFFSET), WINSCALE(hud_pos_y+hudSize));
+		    WINSCALE(hud_pos_x + hudSize - HUD_OFFSET),
+		    WINSCALE(hud_pos_y - hudSize),
+		    WINSCALE(hud_pos_x + hudSize - HUD_OFFSET),
+		    WINSCALE(hud_pos_y + hudSize));
 	Erase_segment(0,
-		WINSCALE(hud_pos_x+hudSize-HUD_OFFSET),
-		WINSCALE(hud_pos_y-hudSize),
-		WINSCALE(hud_pos_x+hudSize-HUD_OFFSET),
-		WINSCALE(hud_pos_y+hudSize));
+		      WINSCALE(hud_pos_x + hudSize - HUD_OFFSET),
+		      WINSCALE(hud_pos_y - hudSize),
+		      WINSCALE(hud_pos_x + hudSize - HUD_OFFSET),
+		      WINSCALE(hud_pos_y + hudSize));
     }
     gcv.line_style = LineSolid;
     XChangeGC(dpy, gc, GCLineStyle, &gcv);
@@ -1536,25 +1532,6 @@ void Add_message(char *message)
 		    selection.draw.y2++;
 		}
 	    }
-	}
-    }
-#endif
-
-#ifdef DEVELOPMENT
-    /* Anti-censor hack restores original 4 letter words.
-     * XPilot is not assumed to be a game for children
-     * who are still under parental guidance.
-     */
-    for (i = 0; i < len - 3; i++) {
-	static char censor_text[] = "@&$*";
-	static char rough_text[][5] = { "fuck", "shit", "damn" };
-	static int rough_index = 0;
-	if (msg_set[0]->txt[i] == censor_text[0]
-	    && !strncmp(&msg_set[0]->txt[i], censor_text, 4)) {
-	    if (++rough_index >= 3) {
-		rough_index = 0;
-	    }
-	    memcpy(&msg_set[0]->txt[i], rough_text[rough_index], 4);
 	}
     }
 #endif

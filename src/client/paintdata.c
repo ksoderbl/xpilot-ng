@@ -52,6 +52,7 @@
 #include "protoclient.h"
 #include "dbuff.h"
 #include "commonproto.h"
+#include "ignore.h"
 
 char paintdata_version[] = VERSION;
 
@@ -838,7 +839,50 @@ int Handle_radar(int x, int y, int size)
 
 int Handle_message(char *msg)
 {
-    Add_message(msg);
+    int i;
+    char ignoree[MAX_CHARS];
+    other_t *other;
+
+    if (msg[strlen(msg) - 1] == ']') {
+	for (i = strlen(msg) - 1; i > 0; i--) {
+	    if (msg[i - 1] == ' ' && msg[i] == '[')
+		break;
+	}
+
+	if (i == 0) {		/* Odd, but let it pass */
+	    Add_message(msg);
+	    return 0;
+	}
+
+	strcpy(ignoree, &msg[i + 1]);
+
+	for (i = 0; i < (int) strlen(ignoree); i++) {
+	    if (ignoree[i] == ']')
+		break;
+	}
+	ignoree[i] = '\0';
+
+	other = Other_by_name(ignoree);
+
+	if (other == NULL) {	/* Not in list, probably servermessage */
+	    Add_message(msg);
+	    return 0;
+	}
+
+	if (other->ignorelevel <= 0) {
+	    Add_message(msg);
+	    return 0;
+	}
+
+	if (other->ignorelevel >= 2)
+	    return 0;
+
+	/* ignorelevel must be 1 */
+
+	crippleTalk(msg);
+	Add_message(msg);
+    } else
+	Add_message(msg);
     return 0;
 }
 
