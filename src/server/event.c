@@ -889,7 +889,12 @@ int Handle_keyboard(player *pl)
 		break;
 
 	    case KEY_HYPERJUMP:
-		Do_hyperjump(pl);
+		if (pl->item[ITEM_HYPERJUMP] > 0
+		    && pl->fuel.sum > -ED_HYPERJUMP) {
+		    pl->item[ITEM_HYPERJUMP]--;
+		    Add_fuel(&(pl->fuel), ED_HYPERJUMP);
+		    do_hyperjump(pl);
+		}
 		break;
 
 	    case KEY_PHASING:

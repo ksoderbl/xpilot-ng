@@ -108,7 +108,7 @@
 
 struct fuel {
     clpos	pos;
-    double	fuel;
+    long	fuel;
     unsigned	conn_mask;
     long	last_change;
     int		team;
@@ -124,7 +124,8 @@ struct base {
     clpos	pos;
     int		dir;
     int		ind;
-    int		team;
+    uint16_t	team;
+    uint16_t	pad[1];
 };
 
 struct baseorder {
@@ -140,7 +141,8 @@ struct cannon {
     int		item[NUM_ITEMS];
     player	*tractor_target_pl;
     bool	tractor_is_pressor;
-    int		team;
+    uint16_t	team;
+    uint16_t	pad[1];
     long	used;
     double	dead_time;
     double	damaged;
@@ -187,16 +189,18 @@ struct wormhole {
 struct treasure {
     clpos	pos;
     bool	have;		/* true if this treasure has ball in it */
-    int		team;		/* team of this treasure */
+    uint16_t	team;		/* team of this treasure */
+    uint16_t	pad[1];
     int 	destroyed;	/* how often this treasure destroyed */
     bool	empty;		/* true if this treasure never had a ball */
 };
 
 struct target {
     clpos	pos;
-    int		team;
+    uint16_t	team;
+    uint16_t	pad[1];
     double	dead_time;
-    double	damage;
+    int		damage;
     unsigned	conn_mask;
     unsigned 	update_mask;
     long	last_change;

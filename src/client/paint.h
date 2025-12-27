@@ -24,9 +24,13 @@
 #ifndef PAINT_H
 #define PAINT_H
 
+#include "xpclient.h"
+
 /* constants begin */
 #define MAX_COLORS		16	/* Max. switched colors ever */
 #define MAX_COLOR_LEN		32	/* Max. length of a color name */
+
+#define MAX_MSGS		15	/* Max. messages displayed ever */
 
 #define NUM_DASHES		2
 #define NUM_CDASHES		2
@@ -36,28 +40,119 @@
 #define HUD_OFFSET		20	/* Hud line offset */
 #define FUEL_GAUGE_OFFSET	6
 #define HUD_FUEL_GAUGE_SIZE	(2*(MIN_HUD_SIZE-HUD_OFFSET-FUEL_GAUGE_OFFSET))
+#define FUEL_NOTIFY_TIME	3.0
+#define CONTROL_TIME		8.0
 
 #define WARNING_DISTANCE	(VISIBILITY_DISTANCE*0.8)
+
+#define MSG_LIFE_TIME		120.0	/* Seconds */
+#define MSG_FLASH_TIME		105.0	/* Old messages have life time less
+					   than this */
 
 #define TITLE_DELAY		500	/* Should probably change to seconds */
 /* constants end */
 
 
-/* which index a message actually has (consider reverse scroll) */
-#define TALK_MSG_SCREENPOS(total, pos) \
-    (instruments.showReverseScroll ? (total)-(pos) : (pos))
+/* typedefs begin */
+typedef enum {
+    BmsNone = 0,
+    BmsBall,
+    BmsSafe,
+    BmsCover,
+    BmsPop
+} msg_bms_t;
 
+typedef struct {
+    char		txt[MSG_LEN];
+    short		len;
+    short		pixelLen;
+    double		lifeTime;
+    msg_bms_t		bmsinfo;
+} message_t;
+/* typedefs end */
+
+
+/* which index a message actually has (consider SHOW_REVERSE_SCROLL) */
+#define TALK_MSG_SCREENPOS(_total,_pos) \
+    (BIT(instruments, SHOW_REVERSE_SCROLL)?(_total)-(_pos):(_pos))
+
+/* how to draw a selection */
+#define DRAW_EMPHASIZED		BLUE
 
 /*
  * Global objects.
  */
 
-extern ipos	world;
-extern ipos	realWorld;
+extern bool roundend;
+extern int killratio_kills;
+extern int killratio_deaths;
+extern int killratio_totalkills;
+extern int killratio_totaldeaths;
+extern int ballstats_cashes;
+extern int ballstats_replaces;
+extern int ballstats_teamcashes;
+extern int ballstats_lostballs;
+extern bool played_this_round;
+extern int rounds_played;
 
 extern char	dashes[NUM_DASHES];
 extern char	cdashes[NUM_CDASHES];
 
+/* The fonts used in the game */
+extern XFontStruct* gameFont;
+extern XFontStruct* messageFont;
+extern XFontStruct* scoreListFont;
+extern XFontStruct* buttonFont;
+extern XFontStruct* textFont;
+extern XFontStruct* talkFont;
+extern XFontStruct* motdFont;
+
+/* The name of the fonts used in the game */
+#define FONT_LEN	256
+extern char gameFontName[FONT_LEN];
+extern char messageFontName[FONT_LEN];
+extern char scoreListFontName[FONT_LEN];
+extern char buttonFontName[FONT_LEN];
+extern char textFontName[FONT_LEN];
+extern char talkFontName[FONT_LEN];
+extern char motdFontName[FONT_LEN];
+
+extern Display	*dpy;			/* Display of player (pointer) */
+extern Display	*kdpy;			/* Keyboard display */
+extern short	about_page;		/* Which page is the player on? */
+extern bool	players_exposed;	/* Is score window exposed? */
+extern int	radar_exposures;	/* Is radar window exposed? */
+
+					/* windows has 2 sets of item bitmaps */
+#define	ITEM_HUD	0		/* one color for the HUD */
+#define	ITEM_PLAYFIELD	1		/* and one color for the playfield */
+#ifdef _WINDOWS
+extern Pixmap	itemBitmaps[][2];
+#else
+extern Pixmap	itemBitmaps[];
+#endif
+
+extern GC	gameGC, messageGC, radarGC, buttonGC;
+extern GC	scoreListGC, textGC, talkGC, motdGC;
+extern XGCValues gcv;
+extern Window	topWindow, drawWindow, keyboardWindow;
+extern Window	radarWindow, playersWindow;
+#ifdef _WINDOWS				/* see paint.c for details */
+extern Window	textWindow, msgWindow, buttonWindow;
+#endif
+extern Pixmap	drawPixmap;		/* Drawing area pixmap */
+extern Pixmap	radarPixmap;		/* Radar drawing pixmap */
+extern Pixmap	radarPixmap2;		/* Second radar drawing pixmap */
+extern long	dpl_1[2];		/* Used by radar hack */
+extern long	dpl_2[2];		/* Used by radar hack */
+extern Window	aboutWindow;		/* The About window */
+extern Window	about_close_b;		/* About close button */
+extern Window	about_next_b;		/* About next page button */
+extern Window	about_prev_b;		/* About prev page button */
+extern Window	talkWindow;		/* Talk window */
+extern XColor	colors[MAX_COLORS];	/* Colors */
+extern Colormap	colormap;		/* Private colormap */
+extern int	maxColors;		/* Max. number of colors to use */
 extern int	hudColor;		/* Color index for HUD drawing */
 extern int	hudHLineColor;		/* Color index for horiz. HUD line */
 extern int	hudVLineColor;		/* Color index for vert. HUD line */
@@ -108,6 +203,7 @@ extern int	packetDropMeterColor;	/* Color index for packet drop meter */
 extern int	packetLagMeterColor;	/* Color index for packet lag meter */
 extern int	temporaryMeterColor;	/* Color index for temporary meters */
 extern int	meterBorderColor;	/* Color index for meter borders */
+extern double	scoreObjectTime;	/* how long score objects are flashed */
 extern int	baseWarningType;	/* Which type of base warning you prefer */
 extern int	wallColor;		/* Color index for wall drawing */
 extern int	fuelColor;		/* Color index for fuel box drawing */
@@ -131,34 +227,44 @@ extern int	scoreObjectColor;	/* Color index for map score objects */
 extern bool	gotFocus;		/* Do we have the mouse pointer */
 extern bool	talk_mapped;		/* Is talk window visible */
 extern bool     radar_score_mapped;     /* Is the radar and score window mapped */
-extern unsigned	draw_width, draw_height;
-
 extern short	ext_view_width;		/* Width of extended visible area */
 extern short	ext_view_height;	/* Height of extended visible area */
 extern int	active_view_width;	/* Width of active map area displayed. */
 extern int	active_view_height;	/* Height of active map area displayed. */
 extern int	ext_view_x_offset;	/* Offset of ext_view_width */
 extern int	ext_view_y_offset;	/* Offset of ext_view_height */
+extern u_byte	debris_colors;		/* Number of debris intensities */
 extern double	charsPerTick;		/* Output speed of messages */
 extern bool	markingLights;		/* Marking lights on ships */
 extern bool	titleFlip;		/* Do special titlebar flipping? */
 extern int	shieldDrawMode;		/* How to draw players shield */
+extern char	modBankStr[][MAX_CHARS];/* modifier banks strings */
+extern char	*texturePath;		/* Path list of texture directories */
+extern char	*wallTextureFile;	/* Filename of wall texture */
+extern char	*decorTextureFile;	/* Filename of decor texture */
+extern char	*ballTextureFile;	/* Filename of ball texture */
 
-extern char	sparkColors[MSG_LEN];
-extern int	spark_color[MAX_COLORS];
-extern int	num_spark_colors;
+extern int	(*radarDrawRectanglePtr)/* Function to draw player on radar */
+		(Display *disp, Drawable d, GC gc,
+		 int x, int y, unsigned width, unsigned height);
 
 extern int	maxKeyDefs;
 extern long	loops;
-extern long	loopsSlow;
+extern unsigned long	loopsSlow;
+extern int	clientFPS;
+extern time_t	currentTime;
+extern bool	newSecond;
 extern double	timePerFrame;
+extern int	maxMessages;
+extern int	messagesToStdout;
+extern bool	selectionAndHistory;
 
 extern double	scaleFactor;	/* scale the draw (main playfield) window */
 extern double	scaleFactor_s;
 extern short	scaleArray[];
 extern void	Init_scale_array(void);
 #define	WINSCALE(x)	((x) >= 0 ? scaleArray[(x)] : -scaleArray[-(x)])
-#define	UWINSCALE(x)	((unsigned)(scaleArray[(x)]))
+#define	UWINSCALE(x)	(scaleArray[(x)])
 
 /* macros begin */
 
@@ -174,22 +280,65 @@ extern void	Init_scale_array(void);
  * Prototypes from the paint*.c files.
  */
 
-int Paint_init(void);
-void Paint_cleanup(void);
+void Init_paint(void);
+void Add_message(char *message);
+int Handle_start(long server_loops);
+int Handle_end(long server_loops);
+int Handle_self(int x, int y, int vx, int vy, int newHeading,
+		float newPower, float newTurnspeed, float newTurnresistance,
+		int newLockId, int newLockDist, int newLockBearing,
+		int newNextCheckPoint, int newAutopilotLight,
+		u_byte *newNumItems, int newCurrentTank,
+		int newFuelSum, int newFuelMax, int newPacketSize);
+int Handle_self_items(u_byte *newNumItems);
+int Handle_modifiers(char *m);
+int Handle_damaged(int dam);
+int Handle_destruct(int count);
+int Handle_shutdown(int count, int delay);
+int Handle_thrusttime(int count, int max);
+int Handle_shieldtime(int count, int max);
+int Handle_phasingtime(int count, int max);
+int Handle_rounddelay(int count, int max);
+int Handle_refuel(int x_0, int y_0, int x_1, int y_1);
+int Handle_connector(int x_0, int y_0, int x_1, int y_1, int tractor);
+int Handle_laser(int color, int x, int y, int len, int dir);
+int Handle_missile(int x, int y, int dir, int len);
+int Handle_ball(int x, int y, int id);
+int Handle_ship(int x, int y, int id, int dir, int shield, int cloak,
+		int eshield, int phased, int deflector);
+int Handle_mine(int x, int y, int teammine, int id);
+int Handle_item(int x, int y, int type);
+int Handle_fastshot(int type, u_byte *p, int n);
+int Handle_debris(int type, u_byte *p, int n);
+int Handle_wreckage(int x, int y, int wrecktype, int size, int rotation);
+int Handle_asteroid(int x, int y, int type, int size, int rotation);
+int Handle_wormhole(int x, int y);
+int Handle_ecm(int x, int y, int size);
+int Handle_trans(int x_1, int y_1, int x_2, int y_2);
+int Handle_paused(int x, int y, int count);
+int Handle_appearing(int x, int y, int id, int count);
+int Handle_radar(int x, int y, int size);
+int Handle_vcannon(int x, int y, int type);
+int Handle_vfuel(int x, int y, long fuel);
+int Handle_vbase(int x, int y, int xi, int yi, int type);
+int Handle_vdecor(int x, int y, int xi, int yi, int type);
+int Handle_message(char *msg);
+int Handle_eyes(int id);
+void Paint_item_symbol(int type, Drawable d, GC mygc,
+		       int x, int y, int color);
+void Paint_item(int type, Drawable d, GC mygc, int x, int y);
 void Paint_shots(void);
 void Paint_ships(void);
 void Paint_radar(void);
 void Paint_sliding_radar(void);
 void Paint_world_radar(void);
-void Radar_show_target(int x, int y);
-void Radar_hide_target(int x, int y);
+void Paint_radar_block(int, int, int);
 void Paint_vcannon(void);
 void Paint_vfuel(void);
 void Paint_vbase(void);
 void Paint_vdecor(void);
 void Paint_objects(void);
 void Paint_world(void);
-void Paint_score_table(void);
 void Paint_score_entry(int entry_num, other_t *other, bool is_team);
 void Paint_score_start(void);
 void Paint_score_objects(void);
@@ -197,14 +346,14 @@ void Paint_meters(void);
 void Paint_HUD(void);
 int  Get_message(int *pos, char *message, int req_length, int key);
 void Paint_messages(void);
+void Add_pending_messages(void);
 void Paint_recording(void);
 void Paint_client_fps(void);
 void Paint_frame(void);
+int Handle_time_left(long sec);
 void Game_over_action(u_byte status);
 int Team_color(int);
 int Life_color(other_t *other);
 int Life_color_by_life(int life);
-void Play_beep(void);
-int Check_view_dimensions(void);
 
 #endif

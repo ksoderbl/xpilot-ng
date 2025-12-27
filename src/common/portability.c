@@ -40,7 +40,7 @@ int Get_process_id(void)
 }
 
 
-void Get_login_name(char *buf, size_t size)
+void Get_login_name(char *buf, int size)
 {
 #if defined(_WINDOWS)
     long nsize = size;

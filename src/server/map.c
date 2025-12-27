@@ -547,14 +547,17 @@ bool Grok_map(void)
 	exit(1);
     }
 
-    if (!silent)
-	xpprintf("World....: %s\nBases....: %d\nMapsize..: %dx%d pixels\n"
-		 "Team play: %s\n",
-		 World.name, World.NumBases, World.width, World.height,
-		 BIT(World.rules->mode, TEAM_PLAY) ? "on" : "off");
+#ifndef	SILENT
+    xpprintf("World....: %s\nBases....: %d\nMapsize..: %dx%d pixels\n"
+	     "Team play: %s\n", World.name, World.NumBases, World.width,
+	     World.height, BIT(World.rules->mode, TEAM_PLAY) ? "on" : "off");
+#endif
 
-    if (!is_polygon_map)
+    if (!is_polygon_map) {
+	xpprintf("Converting blocks to polygons...\n");
 	Xpmap_blocks_to_polygons();
+	xpprintf("Done creating polygons.\n");
+    }
 
     return true;
 }

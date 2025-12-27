@@ -53,7 +53,7 @@
  *    xpilot@xpilot.org.
  */
 
-#include "xpclient_x11.h"
+#include "xpclient.h"
 
 char configure_version[] = VERSION;
 
@@ -459,7 +459,7 @@ static void Create_config(void)
     config_float_width = 4 + XTextWidth(buttonFont, "0.22", 4);
 
     config_max = Nelem_config_creator();
-    config_widget_desc = malloc(config_max * sizeof(int));
+    config_widget_desc = (int *) malloc(config_max * sizeof(int));
     if (config_widget_desc == NULL) {
 	error("No memory for config");
 	return;
@@ -476,9 +476,9 @@ static void Create_config(void)
 				     config_x, config_y,
 				     config_width, config_height,
 				     0);
-	    if (config_widget_desc[num] == 0)
+	    if (config_widget_desc[num] == 0) {
 		break;
-
+	    }
 	    height = config_height - config_space - config_button_height;
 	    width = 2 * config_button_space + XTextWidth(buttonFont,
 							  "PREV", 4);
@@ -489,9 +489,9 @@ static void Create_config(void)
 				       width, config_button_height,
 				       0, "PREV", Config_prev,
 				       (void *)(long)num);
-	    if (widget_desc == 0)
+	    if (widget_desc == 0) {
 		break;
-
+	    }
 	    width = 2 * config_button_space + XTextWidth(buttonFont,
 							  "NEXT", 4);
 	    offset = config_width - width - config_space;
@@ -501,9 +501,9 @@ static void Create_config(void)
 				       width, config_button_height,
 				       0, "NEXT", Config_next,
 				       (void *)(long)num);
-	    if (widget_desc == 0)
+	    if (widget_desc == 0) {
 		break;
-
+	    }
 	    width = 2 * config_button_space + XTextWidth(buttonFont,
 							  "CLOSE", 5);
 	    offset = config_space;
@@ -513,34 +513,37 @@ static void Create_config(void)
 				       width, config_button_height,
 				       0, "CLOSE", Config_close,
 				       (void *)(long)num);
-	    if (widget_desc == 0)
+	    if (widget_desc == 0) {
 		break;
-
+	    }
 	    height = config_space;
 	}
 	if ((config_widget_ids[i] =
 	     (*config_creator[i])(config_widget_desc[num], &height)) == 0) {
 	    i--;
 	    full = true;
-	    if (height == config_space)
+	    if (height == config_space) {
 		break;
+	    }
 	    continue;
 	}
     }
     if (i < Nelem_config_creator()) {
 	for (; num >= 0; num--) {
-	    if (config_widget_desc[num] != 0)
+	    if (config_widget_desc[num] != 0) {
 		Widget_destroy(config_widget_desc[num]);
+	    }
 	}
 	config_created = false;
 	config_mapped = false;
     } else {
 	config_max = num + 1;
-	config_widget_desc = realloc(config_widget_desc,
-				     config_max * sizeof(int));
+	config_widget_desc = (int *)realloc(config_widget_desc,
+					    config_max * sizeof(int));
 	config_page = 0;
-	for (i = 0; i < config_max; i++)
+	for (i = 0; i < config_max; i++) {
 	    Widget_map_sub(config_widget_desc[i]);
+	}
 	config_created = true;
 	config_mapped = false;
     }
@@ -653,7 +656,7 @@ static int Config_create_int(int widget_desc, int *height,
 			     0, intw);
     offset += config_arrow_width;
     Widget_create_arrow_right(widget_desc, offset, *height
-			      + (config_entry_height-config_arrow_height) / 2,
+			      + (config_entry_height - config_arrow_height) / 2,
 			      config_arrow_width, config_arrow_height,
 			      0, intw);
     *height += config_entry_height + config_space;
@@ -742,7 +745,7 @@ static int Config_create_float(int widget_desc, int *height,
 			     0, floatw);
     offset += config_arrow_width;
     Widget_create_arrow_right(widget_desc, offset, *height
-			      + (config_entry_height-config_arrow_height) / 2,
+			      + (config_entry_height - config_arrow_height) / 2,
 			      config_arrow_width, config_arrow_height,
 			      0, floatw);
     *height += config_entry_height + config_space;
@@ -803,9 +806,10 @@ static int Config_create_altTurnResistance(int widget_desc, int *height)
 static int Config_create_showMessages(int widget_desc, int *height)
 {
     return Config_create_bool(widget_desc, height, "showMessages",
-			      instruments.showMessages,
-			      Config_update_instruments,
-			      &instruments.showMessages);
+			    BIT(instruments, SHOW_MESSAGES)
+				? true : false,
+			    Config_update_instruments,
+			    (void *) SHOW_MESSAGES);
 }
 
 static int Config_create_maxMessages(int widget_desc, int *height)
@@ -825,9 +829,10 @@ static int Config_create_messagesToStdout(int widget_desc, int *height)
 static int Config_create_reverseScroll(int widget_desc, int *height)
 {
     return Config_create_bool(widget_desc, height, "reverseScroll",
-			      instruments.showReverseScroll,
-			      Config_update_instruments,
-			      &instruments.showReverseScroll);
+			    BIT(instruments, SHOW_REVERSE_SCROLL)
+				? true : false,
+			    Config_update_instruments,
+			    (void *) SHOW_REVERSE_SCROLL);
 }
 
 #define CONFIG_CREATE_COLOR(c) \
@@ -846,49 +851,55 @@ static int Config_create_oldMessagesColor(int widget_desc, int *height)
 static int Config_create_mapRadar(int widget_desc, int *height)
 {
     return Config_create_bool(widget_desc, height,"mapRadar",
-			      instruments.showMapRadar,
+			      BIT(instruments, MAP_RADAR)
+			      ? true : false,
 			      Config_update_instruments,
-			      &instruments.showMapRadar);
+			      (void *) MAP_RADAR);
 }
 
 static int Config_create_clientRanker(int widget_desc, int *height)
 {
     return Config_create_bool(widget_desc, height, "clientRanker",
-			      instruments.useClientRanker,
+			      BIT(instruments, CLIENT_RANKER)
+			      ? true : false,
 			      Config_update_instruments,
-			      &instruments.useClientRanker);
+			      (void *) CLIENT_RANKER);
 }
 
 static int Config_create_showShipShapes(int widget_desc, int *height)
 {
     return Config_create_bool(widget_desc, height,"showShipShapes",
-			      instruments.showShipShapes,
+			      BIT(instruments, SHOW_SHIP_SHAPES)
+			      ? true : false,
 			      Config_update_instruments,
-			      &instruments.showShipShapes);
+			      (void *) SHOW_SHIP_SHAPES);
 }
 
 static int Config_create_showMyShipShape(int widget_desc, int *height)
 {
     return Config_create_bool(widget_desc, height,"showMyShipShape",
-			      instruments.showMyShipShape,
+			      BIT(instruments, SHOW_MY_SHIP_SHAPE)
+			      ? true : false,
 			      Config_update_instruments,
-			      &instruments.showMyShipShape);
+			      (void *) SHOW_MY_SHIP_SHAPE);
 }
 
 static int Config_create_ballMsgScan(int widget_desc, int *height)
 {
     return Config_create_bool(widget_desc, height,"ballMsgScan",
-			      instruments.useBallMessageScan,
+			      BIT(instruments, BALL_MSG_SCAN)
+			          ? true : false,
 			      Config_update_instruments,
-			      &instruments.useBallMessageScan);
+			      (void *) BALL_MSG_SCAN);
 }
 
 static int Config_create_showLivesByShip(int widget_desc, int *height)
 {
     return Config_create_bool(widget_desc, height, "showLivesByShip",
-			      instruments.showLivesByShip,
+			      BIT(instruments, SHOW_LIVES_BY_SHIP)
+			      ? true : false,
 			      Config_update_instruments,
-			      &instruments.showLivesByShip);
+			      (void *) SHOW_LIVES_BY_SHIP);
 }
 
 static int Config_create_speedFactHUD(int widget_desc, int *height)
@@ -907,47 +918,50 @@ static int Config_create_speedFactPTR(int widget_desc, int *height)
 
 static int Config_create_fuelNotify(int widget_desc, int *height)
 {
-    return Config_create_float(widget_desc, height,
-			       "fuelNotify", &fuelLevel3, 0.0, 1000.0,
-			       NULL, NULL);
+    return Config_create_int(widget_desc, height,
+			     "fuelNotify", &fuelLevel3, 0, 1000,
+			     NULL, NULL);
 }
 
 static int Config_create_fuelWarning(int widget_desc, int *height)
 {
-    return Config_create_float(widget_desc, height,
-			       "fuelWarning", &fuelLevel2, 0.0, 1000.0,
-			       NULL, NULL);
+    return Config_create_int(widget_desc, height,
+			     "fuelWarning", &fuelLevel2, 0, 1000,
+			     NULL, NULL);
 }
 
 static int Config_create_fuelCritical(int widget_desc, int *height)
 {
-    return Config_create_float(widget_desc, height,
-			       "fuelCritical", &fuelLevel1, 0.0, 1000.0,
-			       NULL, NULL);
+    return Config_create_int(widget_desc, height,
+			     "fuelCritical", &fuelLevel1, 0, 1000,
+			     NULL, NULL);
 }
 
 static int Config_create_outlineWorld(int widget_desc, int *height)
 {
     return Config_create_bool(widget_desc, height, "outlineWorld",
-			      instruments.showOutlineWorld,
+			      BIT(instruments, SHOW_OUTLINE_WORLD)
+				  ? true : false,
 			      Config_update_instruments,
-			      &instruments.showOutlineWorld);
+			      (void *) SHOW_OUTLINE_WORLD);
 }
 
 static int Config_create_filledWorld(int widget_desc, int *height)
 {
     return Config_create_bool(widget_desc, height, "filledWorld",
-			      instruments.showFilledWorld,
+			      BIT(instruments, SHOW_FILLED_WORLD)
+				  ? true : false,
 			      Config_update_instruments,
-			      &instruments.showFilledWorld);
+			      (void *) SHOW_FILLED_WORLD);
 }
 
 static int Config_create_texturedWalls(int widget_desc, int *height)
 {
     return Config_create_bool(widget_desc, height, "texturedWalls",
-			      instruments.showTexturedWalls,
+			      BIT(instruments, SHOW_TEXTURED_WALLS)
+				  ? true : false,
 			      Config_update_instruments,
-			      &instruments.showTexturedWalls);
+			      (void *) SHOW_TEXTURED_WALLS);
 }
 
 static int Config_create_texturedObjects(int widget_desc, int *height)
@@ -967,12 +981,14 @@ static int Config_create_fullColor(int widget_desc, int *height)
 
 static int Config_create_slidingRadar(int widget_desc, int *height)
 {
-    if (Client_wrap_mode() == 0)
+    if (Client_wrap_mode() == 0) {
 	return 1;
+    }
     return Config_create_bool(widget_desc, height, "slidingRadar",
-			      instruments.showSlidingRadar,
+			      BIT(instruments, SHOW_SLIDING_RADAR)
+				  ? true : false,
 			      Config_update_instruments,
-			      &instruments.showSlidingRadar);
+			      (void *) SHOW_SLIDING_RADAR);
 }
 
 static int Config_create_backgroundPointDist(int widget_desc, int *height)
@@ -985,9 +1001,10 @@ static int Config_create_backgroundPointDist(int widget_desc, int *height)
 static int Config_create_showItems(int widget_desc, int *height)
 {
     return Config_create_bool(widget_desc, height, "showItems",
-			      instruments.showItems,
-			      Config_update_instruments,
-			      &instruments.showItems);
+			    BIT(instruments, SHOW_ITEMS)
+				? true : false,
+			    Config_update_instruments,
+			    (void *) SHOW_ITEMS);
 }
 
 static int Config_create_showItemsTime(int widget_desc, int *height)
@@ -1427,33 +1444,37 @@ static int Config_create_showDecor(int widget_desc, int *height)
 {
     /* kps - remove */
     return Config_create_bool(widget_desc, height, "showDecor",
-			      instruments.showDecor,
+			      BIT(instruments, SHOW_DECOR)
+			      ? true : false,
 			      Config_update_instruments,
-			      &instruments.showDecor);
+			      (void *) SHOW_DECOR);
 }
 
 static int Config_create_outlineDecor(int widget_desc, int *height)
 {
     return Config_create_bool(widget_desc, height, "outlineDecor",
-			      instruments.showOutlineDecor,
+			      BIT(instruments, SHOW_OUTLINE_DECOR)
+				  ? true : false,
 			      Config_update_instruments,
-			      &instruments.showOutlineDecor);
+			      (void *) SHOW_OUTLINE_DECOR);
 }
 
 static int Config_create_filledDecor(int widget_desc, int *height)
 {
     return Config_create_bool(widget_desc, height, "filledDecor",
-			      instruments.showFilledDecor,
+			      BIT(instruments, SHOW_FILLED_DECOR)
+			      ? true : false,
 			      Config_update_instruments,
-			      &instruments.showFilledDecor);
+			      (void *) SHOW_FILLED_DECOR);
 }
 
 static int Config_create_texturedDecor(int widget_desc, int *height)
 {
     return Config_create_bool(widget_desc, height, "texturedDecor",
-			      instruments.showTexturedDecor,
+			      BIT(instruments, SHOW_TEXTURED_DECOR)
+				  ? true : false,
 			      Config_update_instruments,
-			      &instruments.showTexturedDecor);
+			      (void *) SHOW_TEXTURED_DECOR);
 }
 
 #ifdef SOUND
@@ -1475,9 +1496,10 @@ static int Config_create_maxFPS(int widget_desc, int *height)
 static int Config_create_clockAMPM(int widget_desc, int *height)
 {
     return Config_create_bool(widget_desc, height, "clockAMPM",
-			      instruments.useAMPMFormatClock,
+			      BIT(instruments, SHOW_CLOCK_AMPM_FORMAT)
+				  ? true : false,
 			      Config_update_instruments,
-			      &instruments.useAMPMFormatClock);
+			      (void *) SHOW_CLOCK_AMPM_FORMAT);
 }
 
 #ifdef _WINDOWS
@@ -1551,47 +1573,47 @@ static int Config_update_bool(int widget_desc, void *data, bool *val)
     return 0;
 }
 
+
 static int Config_update_instruments(int widget_desc, void *data, bool *val)
 {
-    bool *client_data = (bool *) data;
+    long		old_instruments = instruments;
+    long		bit = (long) data;
+    long		outline_mask = SHOW_OUTLINE_WORLD
+				     | SHOW_FILLED_WORLD
+				     | SHOW_TEXTURED_WALLS;
 
     (void)widget_desc;
-    *client_data = *val;
+    if (*val == false)
+	CLR_BIT(instruments, bit);
+    else
+	SET_BIT(instruments, bit);
 
-    if (data == &instruments.showSlidingRadar)
+    if (bit == SHOW_SLIDING_RADAR)
 	Paint_sliding_radar();
-
-    if (data == &instruments.showDecor) {
+    else if (bit == SHOW_DECOR) {
 	if (oldServer)
 	    Map_dots();
 	Paint_world_radar();
     }
-
-    if (oldServer &&
-	(data == &instruments.showOutlineWorld
-	 || data == &instruments.showFilledWorld
-	 || data == &instruments.showTexturedWalls))
-    {
-	/* don't bother to check if recalculations are really needed. */
-	Map_restore(0, 0, Setup->x, Setup->y);
-	Map_blue(0, 0, Setup->x, Setup->y);
+    
+    if (BIT(bit, outline_mask) && oldServer) {
+	/* only do the map recalculations if really needed. */
+	if (!BIT(old_instruments, outline_mask)
+	     != !BIT(instruments, outline_mask)) {
+	    Map_restore(0, 0, Setup->x, Setup->y);
+	    Map_blue(0, 0, Setup->x, Setup->y);
+	}
     }
-	
-    if (packetDropMeterColor || packetLossMeterColor) {
-	packetMeasurement = true;
+    if (packetDropMeterColor || packetLossMeterColor)
 	Net_init_measurement();
-	if (!packetMeasurement)
-	    packetDropMeterColor = 
-		packetLossMeterColor = 0;
-    }
     if (packetLagMeterColor)
 	Net_init_lag_measurement();
 
-    if (data == &instruments.showReverseScroll) {
+    if (BIT(bit, SHOW_REVERSE_SCROLL)) {
 	/* a callback for `reverseScroll' in the config menu */
 	IFNWINDOWS( Talk_reverse_cut() );
     }
-    
+
     return 0;
 }
 
@@ -1655,7 +1677,7 @@ static int Config_update_sparkProb(int widget_desc, void *data, double *val)
 {
     (void)widget_desc; (void)data; (void)val;
     spark_rand = (int)(spark_prob * MAX_SPARK_RAND + 0.5f);
-    Check_view_dimensions();
+    Send_display();
     return 0;
 }
 
@@ -1746,15 +1768,14 @@ static int Config_update_scaleFactor(int widget_desc, void *data, double *val)
 
 static void Config_save_failed(const char *reason, const char **strptr)
 {
-    if (config_save_confirm_desc != NO_WIDGET)
+    if (config_save_confirm_desc != NO_WIDGET) {
 	Widget_destroy(config_save_confirm_desc);
-
+    }
     config_save_confirm_desc
 	= Widget_create_confirm(reason, Config_save_confirm_callback);
-
-    if (config_save_confirm_desc != NO_WIDGET)
+    if (config_save_confirm_desc != NO_WIDGET) {
 	Widget_raise(config_save_confirm_desc);
-
+    }
     *strptr = "Saving failed...";
 }
 
@@ -1917,12 +1938,14 @@ static void Config_save_keys(FILE *fp)
 	key = keyDefs[i].key;
 
 	/* try and see if we have already saved this key. */
-	if (Config_find_key(key, 0, i, &j) == true)
+	if (Config_find_key(key, 0, i, &j) == true) {
 	    /* yes, saved this one before.  skip it now. */
 	    continue;
+	}
 
-	if ((str = XKeysymToString(ks)) == NULL)
+	if ((str = XKeysymToString(ks)) == NULL) {
 	    continue;
+	}
 
 	if ((res = Get_keyResourceString(key)) != NULL) {
 	    strlcpy(buf, str, sizeof(buf));
@@ -1931,8 +1954,8 @@ static void Config_save_keys(FILE *fp)
 	    while (Config_find_key(key, j + 1, maxKeyDefs, &j) == true) {
 		ks = keyDefs[j].keysym;
 		if ((str = XKeysymToString(ks)) != NULL) {
-		    strlcat(buf, " ", sizeof(buf));
-		    strlcat(buf, str, sizeof(buf));
+		    strcat(buf, " ");
+		    strcat(buf, str);
 		}
 	    }
 	    Config_save_resource(fp, res, buf);
@@ -1947,12 +1970,12 @@ static int Config_save(int widget_desc, void *button_str, const char **strptr)
     FILE		*fp = NULL;
     char		buf[512];
 #ifndef _WINDOWS	/* Windows does no file handling on its own. */
-    char		oldfile[PATH_MAX + 1],
+	char	oldfile[PATH_MAX + 1],
 			newfile[PATH_MAX + 1];
 
     *strptr = "Saving...";
     Widget_draw(widget_desc);
-    XFlush(dpy);
+    Client_flush();
 
     Get_xpilotrc_file(oldfile, sizeof(oldfile));
     if (oldfile[0] == '\0') {
@@ -1960,8 +1983,9 @@ static int Config_save(int widget_desc, void *button_str, const char **strptr)
 	return 1;
     }
     if ((fp = fopen(oldfile, "r")) != NULL) {
-	while (fgets(buf, sizeof buf, fp))
+	while (fgets(buf, sizeof buf, fp)) {
 	    Xpilotrc_add(buf);
+	}
 	fclose(fp);
     }
     sprintf(newfile, "%s.new", oldfile);
@@ -1987,29 +2011,34 @@ static int Config_save(int widget_desc, void *button_str, const char **strptr)
     Config_save_float(fp, "altTurnResistance", turnresistance_s);
     Config_save_float(fp, "speedFactHUD", hud_move_fact);
     Config_save_float(fp, "speedFactPTR", ptr_move_fact);
-    Config_save_float(fp, "fuelNotify", fuelLevel3);
-    Config_save_float(fp, "fuelWarning", fuelLevel2);
-    Config_save_float(fp, "fuelCritical", fuelLevel1);
-    Config_save_bool(fp, "showMessages", instruments.showMessages);
+    Config_save_float(fp, "fuelNotify", (double)fuelLevel3);
+    Config_save_float(fp, "fuelWarning", (double)fuelLevel2);
+    Config_save_float(fp, "fuelCritical", (double)fuelLevel1);
+    Config_save_bool(fp, "showMessages", BIT(instruments, SHOW_MESSAGES));
     Config_save_int(fp, "maxMessages", maxMessages);
     Config_save_int(fp, "messagesToStdout", messagesToStdout);
-    Config_save_bool(fp, "reverseScroll", instruments.showReverseScroll);
-    Config_save_bool(fp, "mapRadar", instruments.showMapRadar);
-    Config_save_bool(fp, "clientRanker", instruments.useClientRanker);
-    Config_save_bool(fp, "showLivesByShip", instruments.showLivesByShip);
-    Config_save_bool(fp, "showShipShapes", instruments.showShipShapes);
-    Config_save_bool(fp, "showMyShipShape", instruments.showMyShipShape);
-    Config_save_bool(fp, "ballMsgScan", instruments.useBallMessageScan);
-    Config_save_bool(fp, "slidingRadar", instruments.showSlidingRadar);
-    Config_save_bool(fp, "showItems", instruments.showItems);
+    Config_save_bool(fp, "reverseScroll", BIT(instruments,
+					      SHOW_REVERSE_SCROLL));
+    Config_save_bool(fp, "mapRadar", BIT(instruments, MAP_RADAR));
+    Config_save_bool(fp, "clientRanker", BIT(instruments, CLIENT_RANKER));
+    Config_save_bool(fp, "showLivesByShip",
+		     BIT(instruments, SHOW_LIVES_BY_SHIP));
+    Config_save_bool(fp, "showShipShapes", BIT(instruments, SHOW_SHIP_SHAPES));
+    Config_save_bool(fp, "showMyShipShape",
+		     BIT(instruments, SHOW_MY_SHIP_SHAPE));
+    Config_save_bool(fp, "ballMsgScan", BIT(instruments, BALL_MSG_SCAN));
+    Config_save_bool(fp, "slidingRadar", BIT(instruments, SHOW_SLIDING_RADAR));
+    Config_save_bool(fp, "showItems", BIT(instruments, SHOW_ITEMS));
     Config_save_float(fp, "showItemsTime", showItemsTime);
     Config_save_int(fp, "showScoreDecimals", showScoreDecimals);
-    Config_save_bool(fp, "outlineWorld", instruments.showOutlineWorld);
-    Config_save_bool(fp, "filledWorld", instruments.showFilledWorld);
-    Config_save_bool(fp, "texturedWalls", instruments.showTexturedWalls);
+    Config_save_bool(fp, "outlineWorld", BIT(instruments, SHOW_OUTLINE_WORLD));
+    Config_save_bool(fp, "filledWorld", BIT(instruments, SHOW_FILLED_WORLD));
+    Config_save_bool(fp, "texturedWalls",
+		     BIT(instruments, SHOW_TEXTURED_WALLS));
     Config_save_bool(fp, "fullColor", fullColor);
     Config_save_bool(fp, "texturedObjects", texturedObjects);
-    Config_save_bool(fp, "clockAMPM", instruments.useAMPMFormatClock);
+    Config_save_bool(fp, "clockAMPM",
+		     BIT(instruments, SHOW_CLOCK_AMPM_FORMAT));
     Config_save_int(fp, "backgroundPointDist", map_point_distance);
     Config_save_int(fp, "backgroundPointSize", map_point_size);
     Config_save_int(fp, "sparkSize", spark_size);
@@ -2023,10 +2052,11 @@ static int Config_save(int widget_desc, void *button_str, const char **strptr)
     Config_save_int(fp, "hudSize", hudSize);
     Config_save_float(fp, "scoreObjectTime", scoreObjectTime);
     Config_save_int(fp, "baseWarningType", baseWarningType);
-    Config_save_bool(fp, "showDecor", instruments.showDecor);
-    Config_save_bool(fp, "outlineDecor", instruments.showOutlineDecor);
-    Config_save_bool(fp, "filledDecor", instruments.showFilledDecor);
-    Config_save_bool(fp, "texturedDecor", instruments.showTexturedDecor);
+    Config_save_bool(fp, "showDecor", BIT(instruments, SHOW_DECOR));
+    Config_save_bool(fp, "outlineDecor", BIT(instruments, SHOW_OUTLINE_DECOR));
+    Config_save_bool(fp, "filledDecor", BIT(instruments, SHOW_FILLED_DECOR));
+    Config_save_bool(fp, "texturedDecor",
+		     BIT(instruments, SHOW_TEXTURED_DECOR));
     Config_save_int(fp, "receiveWindowSize", receive_window_size);
     Config_save_int(fp, "charsPerSecond", charsPerSecond);
     Config_save_bool(fp, "markingLights", markingLights);
@@ -2223,8 +2253,9 @@ void Config_resize(void)
 
     if (config_created == true) {
 	Config_destroy();
-	if (mapped == true)
-	    Config(mapped, CONFIG_NONE);
+	if (mapped == true) {
+	  Config(mapped, CONFIG_NONE /* kps ??? */);
+	}
     }
 }
 

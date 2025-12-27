@@ -44,27 +44,27 @@
 #include "item.h"
 #endif
 
-typedef struct {
-    bool showShipShapes;
-    bool showMyShipShape;
-    bool showLivesByShip;
-    bool showItems;
-    bool showDecor;
-    bool showOutlineWorld;
-    bool showFilledWorld;
-    bool showTexturedWalls;
-    bool showOutlineDecor;
-    bool showFilledDecor;
-    bool showTexturedDecor;
-    bool showShipId;
-    bool showMessages;
-    bool showMapRadar;
-    bool showSlidingRadar;
-    bool showReverseScroll;
-    bool useBallMessageScan;
-    bool useClientRanker;
-    bool useAMPMFormatClock;
-} instruments_t;
+
+#define SHOW_SLIDING_RADAR	(1L << 0)
+#define SHOW_ITEMS		(1L << 1)
+#define SHOW_MESSAGES		(1L << 2)
+#define SHOW_OUTLINE_WORLD	(1L << 3)
+#define SHOW_FILLED_WORLD	(1L << 4)
+#define SHOW_TEXTURED_WALLS	(1L << 5)
+#define SHOW_DECOR		(1L << 6)
+#define SHOW_OUTLINE_DECOR	(1L << 7)
+#define SHOW_FILLED_DECOR	(1L << 8)
+#define SHOW_TEXTURED_DECOR	(1L << 9)
+#define SHOW_CLOCK_AMPM_FORMAT	(1L << 10)
+#define SHOW_REVERSE_SCROLL	(1L << 11)
+#define SHOW_SHIP_ID		(1L << 12)
+#define SHOW_SHIP_SHAPES	(1L << 13)
+#define SHOW_MY_SHIP_SHAPE	(1L << 14)
+#define BALL_MSG_SCAN		(1L << 15)
+#define CLIENT_RANKER		(1L << 16)
+#define MAP_RADAR		(1L << 17)
+#define SHOW_LIVES_BY_SHIP	(1L << 18)
+
 
 #define PACKET_LOSS		0
 #define PACKET_DROP		1
@@ -87,86 +87,21 @@ typedef struct {
 #define MIN_SCALEFACTOR		0.2
 #define MAX_SCALEFACTOR		8.0
 
-#define FUEL_NOTIFY_TIME	3.0
-#define CONTROL_TIME		8.0
-
-#define MAX_MSGS		15	/* Max. messages displayed ever */
-#define MAX_HIST_MSGS		128	/* Max. messages in history */
-
-#define MSG_LIFE_TIME		120.0	/* Seconds */
-#define MSG_FLASH_TIME		105.0	/* Old messages have life time less
-					   than this */
-#define MAX_POINTER_BUTTONS	5
-#define MAX_BUTTON_DEFS		3
-#define NUM_BUTTON_DEFS(i)	(buttonDefs[(i)][MAX_BUTTON_DEFS])
-
-/*
- * Macros to manipulate dynamic arrays.
- */
-
-/*
- * Macro to add one new element of a given type to a dynamic array.
- * T is the type of the element.
- * P is the pointer to the array memory.
- * N is the current number of elements in the array.
- * M is the current size of the array.
- * V is the new element to add.
- * The goal is to keep the number of malloc/realloc calls low
- * while not wasting too much memory because of over-allocation.
- */
-#define STORE(T,P,N,M,V)						\
-    if (N >= M && ((M <= 0)						\
-	? (P = (T *) malloc((M = 1) * sizeof(*P)))			\
-	: (P = (T *) realloc(P, (M += M) * sizeof(*P)))) == NULL) {	\
-	error("No memory");						\
-	exit(1);							\
-    } else								\
-	(P[N++] = V)
-/*
- * Macro to make room in a given dynamic array for new elements.
- * P is the pointer to the array memory.
- * N is the current number of elements in the array.
- * M is the current size of the array.
- * T is the type of the elements.
- * E is the number of new elements to store in the array.
- * The goal is to keep the number of malloc/realloc calls low
- * while not wasting too much memory because of over-allocation.
- */
-#define EXPAND(P,N,M,T,E)						\
-    if ((N) + (E) > (M)) {						\
-	if ((M) <= 0) {							\
-	    M = (E) + 2;						\
-	    P = (T *) malloc((M) * sizeof(T));				\
-	    N = 0;							\
-	} else {							\
-	    M = ((M) << 1) + (E);					\
-	    P = (T *) realloc(P, (M) * sizeof(T));			\
-	}								\
-	if (P == NULL) {						\
-	    error("No memory");						\
-	    N = M = 0;							\
-	    return;	/* ! */						\
-	}								\
+#if 0
+#define FIND_NAME_WIDTH(other)						\
+    if ((other)->name_width == 0) {					\
+	(other)->name_len = strlen((other)->name);			\
+	(other)->name_width = 2 + XTextWidth(gameFont, (other)->name,	\
+					 (other)->name_len);		\
     }
+#endif /* 0 */
 
-#define UNEXPAND(P,N,M)							\
-    if ((N) < ((M) >> 2)) {						\
-	free(P);							\
-	M = 0;								\
-    }									\
-    N = 0;
-
-#ifndef PAINT_FREE
-# define PAINT_FREE	1
-#endif
-#if PAINT_FREE
-# define RELEASE(P, N, M)					\
-do {								\
-	if (!(N)) ; else (free(P), (M) = 0, (N) = 0);		\
-} while (0)
-#else
-# define RELEASE(P, N, M)	((N) = 0)
-#endif
+#define FIND_NAME_WIDTH(other)						\
+    if ((other)->name_width == 0) {					\
+	(other)->name_len = strlen((other)->id_string);			\
+	(other)->name_width = 2 + XTextWidth(gameFont, (other)->id_string,\
+					 (other)->name_len);		\
+    }
 
 
 typedef struct {
@@ -194,7 +129,7 @@ typedef struct {
 
 typedef struct {
     int		pos;		/* Block index */
-    double	fuel;		/* Amount of fuel available */
+    long	fuel;		/* Amount of fuel available */
     irec	bounds;		/* Location on map */
 } fuelstation_t;
 
@@ -204,7 +139,7 @@ typedef struct {
     uint16_t	team;		/* Team this base belongs to */
     irec	bounds;		/* Location on map */
     int		type;		/* orientation */
-    long	appeartime;	/* For base warning */
+    long	deathtime;	/* For base warning */
 } homebase_t;
 
 typedef struct {
@@ -216,13 +151,15 @@ typedef struct {
 typedef struct {
     int		pos;		/* Block index */
     short	dead_time;	/* Frames inactive */
-    double	damage;		/* Damage to target */
+    unsigned short	damage;		/* Damage to target */
 } target_t;
 
 typedef struct {
     int		pos;		/* Block index */
     irec	bounds;		/* Location on map */
 } checkpoint_t;
+
+
 
 typedef struct {
     int width;			/* Line width, -1 means no line */
@@ -247,113 +184,6 @@ typedef struct {
     int style;			/* index to polygon_styles array */
 } xp_polygon_t;
 
-
-/*
- * Types for dynamic game data
- */
-
-typedef struct {
-    short		x0, y0, x1, y1;
-} refuel_t;
-
-typedef struct {
-    short		x0, y0, x1, y1;
-    u_byte		tractor;
-    u_byte		pad[3];
-} connector_t;
-
-typedef struct {
-    unsigned char	color, dir;
-    short		x, y, len;
-} laser_t;
-
-typedef struct {
-    short		x, y, dir;
-    unsigned char	len;
-    u_byte		pad[1];
-} missile_t;
-
-typedef struct {
-    short		x, y, id;
-} ball_t;
-
-typedef struct {
-    short		x, y, id, dir;
-    u_byte		shield, cloak, eshield;
-    u_byte		phased, deflector;
-    u_byte		pad[3];
-} ship_t;
-
-typedef struct {
-    short		x, y, teammine, id;
-} mine_t;
-
-typedef struct {
-    short		x, y, type;
-} itemtype_t;
-
-typedef struct {
-    short		x, y, size;
-} ecm_t;
-
-typedef struct {
-    short		x1, y1, x2, y2;
-} trans_t;
-
-typedef struct {
-    short		x, y, count;
-} paused_t;
-
-typedef struct {
-    short		x, y, id, count;
-} appearing_t;
-
-typedef enum {
-    normal,
-    friend
-} radar_type_t;
-
-typedef struct {
-    short		x, y, size;
-    radar_type_t        type;
-} radar_t;
-
-typedef struct {
-    short		x, y, type;
-} vcannon_t;
-
-typedef struct {
-    short		x, y;
-    double		fuel;
-} vfuel_t;
-
-typedef struct {
-    short		x, y, xi, yi, type;
-} vbase_t;
-
-typedef struct {
-    u_byte		x, y;
-} debris_t;
-
-typedef struct {
-    short		x, y, xi, yi, type;
-} vdecor_t;
-
-typedef struct {
-    short		x, y;
-    u_byte		wrecktype, size, rotation;
-    u_byte		pad[1];
-} wreckage_t;
-
-typedef struct {
-    short		x, y;
-    u_byte		type, size, rotation;
-    u_byte		pad[1];
-} asteroid_t;
-
-typedef struct {
-    short		x, y;
-} wormhole_t;
 
 
 /*#define SCORE_OBJECT_COUNT	100*/
@@ -386,8 +216,8 @@ typedef struct {
     /* a selection in the talk window */
     struct {
         bool    state;	/* current state of the selection */
-        size_t  x1;	/* string indices */
-        size_t  x2;
+        int     x1;	/* string indices */
+        int     x2;
         bool    incl_nl;/* include a `\n'? */
     } talk ;
     /* a selection in the draw window */
@@ -399,50 +229,18 @@ typedef struct {
         int     y2;
     } draw;
     char	*txt;   /* allocated when needed */
-    size_t	txt_size;	/* size of txt buffer */
-    size_t	len;
+    int		txt_size;	/* size of txt buffer */
+    int		len;
     /* when a message `jumps' from talk window to the player messages: */
     bool	keep_emphasizing;
 } selection_t;
 
-/* typedefs begin */
-typedef enum {
-    BmsNone = 0,
-    BmsBall,
-    BmsSafe,
-    BmsCover,
-    BmsPop
-} msg_bms_t;
-
-typedef struct {
-    char		txt[MSG_LEN];
-    size_t		len;
-    /*short		pixelLen;*/
-    double		lifeTime;
-    msg_bms_t		bmsinfo;
-} message_t;
-/* typedefs end */
-
-extern message_t	*TalkMsg[];
-extern message_t	*GameMsg[];
-extern message_t	*TalkMsg_pending[];	/* store incoming messages */
-extern message_t	*GameMsg_pending[];	/* while a cut is pending */
-extern char		*HistoryMsg[];		/* talk window history */
-
-extern int		maxLinesInHistory;	/* lines to save in history */
-extern selection_t	selection;		/* in talk/draw window */
-extern int		maxMessages;
-extern int		messagesToStdout;
-extern bool		selectionAndHistory;
-
-extern char		*talk_fast_msgs[];	/* talk macros */
-
-extern score_object_t	score_objects[MAX_SCORE_OBJECTS];
-extern int		score_object;
 
 extern int      oldServer; /* Compatibility mode for old block-based servers */
-extern ipos	selfPos;
-extern ipos	selfVel;
+extern ipos	FOOpos;
+extern ipos	FOOvel;
+extern ipos	world;
+extern ipos	realWorld;
 extern short	heading;
 extern short	nextCheckPoint;
 extern u_byte	numItems[NUM_ITEMS];
@@ -451,17 +249,11 @@ extern int	numItemsTime[NUM_ITEMS];
 extern double	showItemsTime;
 extern short	autopilotLight;
 extern int	showScoreDecimals;
-extern double   scoreObjectTime;        /* How long to show score objects */
 
 
 extern short	lock_id;		/* Id of player locked onto */
 extern short	lock_dir;		/* Direction of lock */
 extern short	lock_dist;		/* Distance to player locked onto */
-
-extern int	eyesId;		        /* Player we get frame updates for */
-extern other_t	*eyes;        		/* Player we get frame updates for */
-extern bool	snooping;	        /* are we snooping on someone else? */
-extern int	eyeTeam;	        /* Team of player we get updates for */
 
 extern other_t*	self;			/* Player info */
 extern short	selfVisible;		/* Are we alive and playing? */
@@ -491,14 +283,14 @@ extern double	controlTime;		/* Display control for how long? */
 extern u_byte	spark_rand;		/* Sparkling effect */
 extern u_byte	old_spark_rand;		/* previous value of spark_rand */
 
-extern double	fuelSum;		/* Sum of fuel in all tanks */
-extern double	fuelMax;		/* How much fuel can you take? */
+extern long	fuelSum;		/* Sum of fuel in all tanks */
+extern long	fuelMax;		/* How much fuel can you take? */
 extern short	fuelCurrent;		/* Number of currently used tank */
 extern short	numTanks;		/* Number of tanks */
 extern double	fuelTime;		/* Display fuel for how long? */
-extern double	fuelLevel1;		/* Fuel critical level */
-extern double	fuelLevel2;		/* Fuel warning level */
-extern double	fuelLevel3;		/* Fuel notify level */
+extern int	fuelLevel1;		/* Fuel critical level */
+extern int	fuelLevel2;		/* Fuel warning level */
+extern int	fuelLevel3;		/* Fuel notify level */
 
 extern char	*shipShape;		/* Shape of player's ship */
 extern double	power;			/* Force of thrust */
@@ -516,7 +308,8 @@ extern int	charsPerSecond;		/* Message output speed (config) */
 extern double	hud_move_fact;		/* scale the hud-movement (speed) */
 extern double	ptr_move_fact;		/* scale the speed pointer length */
 extern char	mods[MAX_CHARS];	/* Current modifiers in effect */
-extern instruments_t	instruments;	/* Instruments on screen */
+extern long	instruments;		/* Instruments on screen (bitmask) */
+extern long	hackedInstruments;	/* Hacked instruments on screen (bitmask) */
 extern int	packet_size;		/* Current frame update packet size */
 extern int	packet_loss;		/* lost packets per second */
 extern int	packet_drop;		/* dropped packets per second */
@@ -528,6 +321,7 @@ extern bool	showRealName;		/* Show realname instead of nickname */
 extern char	nickname[MAX_CHARS];	/* Nick-name of player */
 extern char	realname[MAX_CHARS];	/* Real name of player */
 extern char	servername[MAX_CHARS];	/* Name of server connecting to */
+extern char	hostname[];		/* Local hostname */
 extern unsigned	version;		/* Version of the server */
 extern bool	scoresChanged;
 extern bool	toggle_shield;		/* Are shields toggled by a press? */
@@ -537,10 +331,7 @@ extern bool	initialPointerControl;	/* Start by using mouse for control? */
 extern bool	pointerControl;		/* current state of mouse ship flying */
 extern int	maxFPS;			/* Client's own FPS */
 extern int 	oldMaxFPS;
-extern int	clientFPS;	        /* How many fps we actually get */
-extern time_t	currentTime;	        /* Current value of time() */
-extern bool	newSecond;              /* True if time() incremented this frame */
-extern char	modBankStr[][MAX_CHARS];/* modifier banks strings */
+extern int 	FPSDivisor;
 
 extern int	clientPortStart;	/* First UDP port for clients */
 extern int	clientPortEnd;		/* Last one (these are for firewalls) */
@@ -548,16 +339,22 @@ extern int	clientPortEnd;		/* Last one (these are for firewalls) */
 extern byte	lose_item;		/* flag and index to drop item */
 extern int	lose_item_active;	/* one of the lose keys is pressed */
 
-
 #ifdef SOUND
 extern char 	sounds[MAX_CHARS];	/* audio mappings */
 extern char 	audioServer[MAX_CHARS];	/* audio server */
 extern int 	maxVolume;		/* maximum volume (in percent) */
 #endif /* SOUND */
 
-/* mapdata accessible to outside world */
+extern int	maxLinesInHistory;	/* number of lines to save in history */
+#define MAX_HIST_MSGS	128		/* maximum */
 
-extern int	        num_playing_teams;
+#ifndef  _WINDOWS
+/* provide cut&paste and message history */
+extern	selection_t	selection;	/* selection in talk or draw window */
+extern	char		*HistoryMsg[MAX_HIST_MSGS];
+#endif
+
+/* mapdata accessible to outside world */
 
 extern fuelstation_t	*fuels;
 extern int		num_fuels;
@@ -572,93 +369,21 @@ extern int		num_edge_styles, max_edge_styles;
 extern polygon_style_t	*polygon_styles;
 extern int		num_polygon_styles, max_polygon_styles;
 
-/* dynamic global game data */
+extern other_t *Others;
+extern int	num_others, max_others;
 
-extern other_t          *Others;
-extern int	        num_others, max_others;
-extern refuel_t		*refuel_ptr;
-extern int		 num_refuel, max_refuel;
-extern connector_t	*connector_ptr;
-extern int		 num_connector, max_connector;
-extern laser_t		*laser_ptr;
-extern int		 num_laser, max_laser;
-extern missile_t	*missile_ptr;
-extern int		 num_missile, max_missile;
-extern ball_t		*ball_ptr;
-extern int		 num_ball, max_ball;
-extern ship_t		*ship_ptr;
-extern int		 num_ship, max_ship;
-extern mine_t		*mine_ptr;
-extern int		 num_mine, max_mine;
-extern itemtype_t	*itemtype_ptr;
-extern int		 num_itemtype, max_itemtype;
-extern ecm_t		*ecm_ptr;
-extern int		 num_ecm, max_ecm;
-extern trans_t		*trans_ptr;
-extern int		 num_trans, max_trans;
-extern paused_t		*paused_ptr;
-extern int		 num_paused, max_paused;
-extern appearing_t	*appearing_ptr;
-extern int		 num_appearing, max_appearing;
-extern radar_t		*radar_ptr;
-extern int		 num_radar, max_radar;
-extern vcannon_t	*vcannon_ptr;
-extern int		 num_vcannon, max_vcannon;
-extern vfuel_t		*vfuel_ptr;
-extern int		 num_vfuel, max_vfuel;
-extern vbase_t		*vbase_ptr;
-extern int		 num_vbase, max_vbase;
-extern debris_t		*debris_ptr[DEBRIS_TYPES];
-extern int		 num_debris[DEBRIS_TYPES],
-			 max_debris[DEBRIS_TYPES];
-extern debris_t		*fastshot_ptr[DEBRIS_TYPES * 2];
-extern int		 num_fastshot[DEBRIS_TYPES * 2],
-			 max_fastshot[DEBRIS_TYPES * 2];
-extern vdecor_t		*vdecor_ptr;
-extern int		 num_vdecor, max_vdecor;
-extern wreckage_t	*wreckage_ptr;
-extern int		 num_wreckage, max_wreckage;
-extern asteroid_t	*asteroid_ptr;
-extern int		 num_asteroids, max_asteroids;
-extern wormhole_t	*wormhole_ptr;
-extern int		 num_wormholes, max_wormholes;
+extern int	num_playing_teams;
 
-extern bool	        ball_shout;
-extern bool	        need_cover;
-extern long		start_loops, end_loops;
-extern long		time_left;
+extern bool	ball_shout;
+extern bool	need_cover;
 
-extern bool roundend;
-extern bool played_this_round;
-
-/* event.c */
-void Pointer_control_set_state(int on);
-int Key_init(void);
-int Key_update(void);
-bool Key_press(keys_t key);
-bool Key_release(keys_t key);
-bool Key_press_pointer_control(void);
-bool Key_press_swap_scalefactor(void);
-bool Key_press_talk(void);
-bool Key_press_toggle_radar_score(void);
-bool Key_press_toggle_record(void);
-void Set_auto_shield(int on);
-void Set_toggle_shield(int on);
-void Talk_set_state(bool on);
-
-int Alloc_msgs(void);
-void Free_msgs(void);
-void Add_message(const char *message);
-void Add_pending_messages(void);
-void Add_roundend_messages(other_t **order);
-void Print_messages_to_stdout(void);
-double Fuel_by_pos(int x, int y);
-int Target_alive(int x, int y, double *damage);
-int Target_by_index(int ind, int *xp, int *yp, int *dead_time, double *damage);
-int Handle_fuel(int ind, double fuel);
+int Fuel_by_pos(int x, int y);
+int Target_alive(int x, int y, int *damage);
+int Target_by_index(int ind, int *xp, int *yp, int *dead_time, int *damage);
+int Handle_fuel(int ind, int fuel);
 int Cannon_dead_time_by_pos(int x, int y, int *dot);
 int Handle_cannon(int ind, int dead_time);
-int Handle_target(int num, int dead_time, double damage);
+int Handle_target(int num, int dead_time, int damage);
 int Base_info_by_pos(int x, int y, int *id, int *team);
 int Handle_base(int id, int ind);
 int Check_pos_by_index(int ind, int *xp, int *yp);
@@ -675,70 +400,25 @@ int Handle_team(int id, int pl_team);
 int Handle_score(int id, double score, int life, int mychar, int alliance);
 int Handle_score_object(double score, int x, int y, char *msg);
 int Handle_team_score(int team, double score);
-int Handle_timing(int id, int check, int round, long loops);
+int Handle_timing(int id, int check, int round);
 int Handle_war(int robot_id, int killer_id);
 int Handle_seek(int programmer_id, int robot_id, int sought_id);
-int Handle_start(long server_loops);
-int Handle_end(long server_loops);
-int Handle_self(int x, int y, int vx, int vy, int newHeading,
-		double newPower, double newTurnspeed, double newTurnresistance,
-		int newLockId, int newLockDist, int newLockBearing,
-		int newNextCheckPoint, int newAutopilotLight,
-		u_byte *newNumItems, int newCurrentTank,
-		double newFuelSum, double newFuelMax, int newPacketSize, 
-		u_byte status);
-int Handle_self_items(u_byte *newNumItems);
-int Handle_modifiers(char *m);
-int Handle_damaged(int dam);
-int Handle_destruct(int count);
-int Handle_shutdown(int count, int delay);
-int Handle_thrusttime(int count, int max);
-int Handle_shieldtime(int count, int max);
-int Handle_phasingtime(int count, int max);
-int Handle_rounddelay(int count, int max);
-int Handle_refuel(int x_0, int y_0, int x_1, int y_1);
-int Handle_connector(int x_0, int y_0, int x_1, int y_1, int tractor);
-int Handle_laser(int color, int x, int y, int len, int dir);
-int Handle_missile(int x, int y, int dir, int len);
-int Handle_ball(int x, int y, int id);
-int Handle_ship(int x, int y, int id, int dir, int shield, int cloak,
-		int eshield, int phased, int deflector);
-int Handle_mine(int x, int y, int teammine, int id);
-int Handle_item(int x, int y, int type);
-int Handle_fastshot(int type, u_byte *p, int n);
-int Handle_debris(int type, u_byte *p, int n);
-int Handle_wreckage(int x, int y, int wrecktype, int size, int rotation);
-int Handle_asteroid(int x, int y, int type, int size, int rotation);
-int Handle_wormhole(int x, int y);
-int Handle_ecm(int x, int y, int size);
-int Handle_trans(int x_1, int y_1, int x_2, int y_2);
-int Handle_paused(int x, int y, int count);
-int Handle_appearing(int x, int y, int id, int count);
-int Handle_radar(int x, int y, int size);
-int Handle_fastradar(int x, int y, int size);
-int Handle_vcannon(int x, int y, int type);
-int Handle_vfuel(int x, int y, double fuel);
-int Handle_vbase(int x, int y, int xi, int yi, int type);
-int Handle_vdecor(int x, int y, int xi, int yi, int type);
-int Handle_message(char *msg);
-int Handle_eyes(int id);
-int Handle_time_left(long sec);
 void Map_dots(void);
 void Map_restore(int startx, int starty, int width, int height);
 void Map_blue(int startx, int starty, int width, int height);
 bool Using_score_decimals(void);
+void Client_score_table(void);
 int Client_init(char *server, unsigned server_version);
 int Client_setup(void);
 void Client_cleanup(void);
 int Client_start(void);
 int Client_fps_request(void);
 int Client_power(void);
+int Client_fd(void);
+int Client_input(int);
+void Client_flush(void);
+void Client_sync(void);
 int Client_wrap_mode(void);
-
-int Init_playing_windows(void);
-void Raise_window(void);
-void Reset_shields(void);
-void Quit(void);
 
 #ifdef _WINDOWS
 void MarkPlayersForRedraw(void);

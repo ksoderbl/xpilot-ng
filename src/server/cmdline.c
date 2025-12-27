@@ -53,13 +53,10 @@ int		robotLeaveRatio;	/* Min ratio for robot to live (0=off)*/
 int		robotTeam;		/* Team for robots */
 bool		restrictRobots;		/* Restrict robots to robotTeam? */
 bool		reserveRobotTeam;	/* Allow only robots in robotTeam? */
-int		robotTicksPerSecond;	/* How often to do robot round tick? */
 int		ShotsMax;		/* Max shots pr. player */
 bool		ShotsGravity;		/* Shots affected by gravity */
 double		fireRepeatRate;		/* Ticks per autorepeat fire (0=off) */
 double		laserRepeatRate = 2;	/* Ticks per laser fire (0=off) */
-bool		Log;			/* Log server start to log file */
-bool		silent;			/* Make server really silent ? */
 bool		RawMode;		/* Let robots live and calculate
 					   frames even if there are n
 					   players logged in */
@@ -75,7 +72,7 @@ char		*mapAuthor;		/* Name of the creator */
 char		*dataURL;		/* URL to client for extra data */
 int		contactPort;		/* Contact port number */
 char		*serverHost;		/* Host name (for multihomed hosts) */
-char		*greeting;		/* Player greeting upon login */
+
 bool		crashWithPlayer;	/* Can players overrun other players? */
 bool		bounceWithPlayer;	/* Can players bounce other players? */
 bool		playerKillings;		/* Can players kill each other? */
@@ -144,10 +141,8 @@ bool		asteroidConcentratorVisible;	/* Are asteroid concentrators visible? */
 int		wormTime;
 char		*defaultsFileName;	/* Name of defaults file... */
 char		*passwordFileName;	/* Name of password file... */
-#if 0
 char		*playerPasswordsFileName;	/* Name of player passwords file... */
 int		playerPasswordsFileSizeLimit;	/* Limit on player passwords file size */
-#endif
 char		*motdFileName;		/* Name of motd file */
 char		*scoreTableFileName;	/* Name of score table file */
 char		*adminMessageFileName;	/* Name of admin message file */
@@ -317,6 +312,7 @@ char		*recordFileName;
 
 bool		polygonMode;		/* Run server in polygon mode even
 					   with block based (.xp) mapfile */
+bool		fastAim;		/* Turn before shooting in frame */
 bool		ignoreMaxFPS;		/* Temporary hack */
 bool		baselessPausing;
 bool		maraTurnqueue;		/* Mara's "turnqueue" hack */
@@ -611,18 +607,6 @@ static option_desc options[] = {
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
-	"robotTicksPerSecond",
-	"robotTicks",
-	"0",
-	&robotTicksPerSecond,
-	valInt,
-	Timing_setup,
-	"How many times per second to call robot round tick?\n"
-	"The value will be limited into the range 1 to server FPS.\n" 
-	"A value of 0 means one tick per frame.\n",
-	OPT_ORIGIN_ANY | OPT_VISIBLE
-    },
-    {
 	"robotRealName",
 	"robotRealName",
 	"robot",
@@ -726,26 +710,6 @@ static option_desc options[] = {
 	valBool,
 	tuner_dummy,
 	"Are bullets afflicted by gravity.\n",
-	OPT_ORIGIN_ANY | OPT_VISIBLE
-    },
-    {
-	"Log",
-	"Log",
-	"false",
-	&Log,
-	valBool,
-	tuner_dummy,
-	"Log major server events to log file?\n",
-	OPT_ORIGIN_ANY | OPT_VISIBLE
-    },
-    {
-	"silent",
-	"silent",
-	"false",
-	&silent,
-	valBool,
-	tuner_dummy,
-	"Is the server really silent?\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
@@ -856,16 +820,6 @@ static option_desc options[] = {
 	tuner_none,
 	"The server's fully qualified domain name (for multihomed hosts).\n",
 	OPT_COMMAND | OPT_DEFAULTS | OPT_VISIBLE
-    },
-    {
-	"greeting",
-	"xpilotGreeting",
-	NULL,
-	&greeting,
-	valString,
-	tuner_dummy,
-	"Short greeting string for players when they login to server.\n",
-	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
 	"mapData",
@@ -1852,9 +1806,9 @@ static option_desc options[] = {
 	Timing_setup,
 	"Rate at which game events happen. Allows using higher\n"
 	"FPS without making the game too fast.\n"
-	"A game speed of X means the game proceeds as fast as on an old\n"
-	"server running at X FPS. A value of 0 means the value of game\n"
-	"speed is the same as that of FPS.\n",
+	"A game speed of X means the game proceeds as fast as on a\n"
+	"version 4.5.4 server running at X FPS.\n"
+	"A value of 0 means the game speed is the same as FPS.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
@@ -3443,7 +3397,6 @@ static option_desc options[] = {
 	"Setting this option to 0 disables the feature.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
-#if 0
     {
 	"playerPasswordsFileName",
 	"playerPasswordsFile",
@@ -3454,8 +3407,6 @@ static option_desc options[] = {
 	"The filename of the player passwords file to read when authenticating.\n",
 	OPT_COMMAND | OPT_DEFAULTS
     },
-#endif
-#if 0
     {
 	"playerPasswordsFileSizeLimit",
 	"playerPasswordsLimit",
@@ -3467,7 +3418,6 @@ static option_desc options[] = {
 	"if players change passwords!).\n",
 	OPT_COMMAND | OPT_DEFAULTS
     },
-#endif
 #if 0
     {
 	"allowPlayerPasswords",
@@ -3572,6 +3522,19 @@ static option_desc options[] = {
 	"Force use of polygon protocol when communicating with clients?\n"
 	"(useful for debugging if you want to see the polygons created\n"
 	"in the blocks to polygons conversion function).\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
+	"fastAim",
+	"fastAim",
+	"true",
+	&fastAim,
+	valBool,
+	tuner_dummy,
+	"When calculating a frame, turn the ship before firing.\n"
+	"This means you can change aim one frame faster.\n"
+	"Added this option to see how much difference changing the order\n"
+	"would make.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
@@ -3824,10 +3787,6 @@ void Timing_setup(void)
 	coriolisCosine = cos(cor_angle / timeStep);
 	coriolisSine = sin(cor_angle / timeStep);
     }
-
-    if (robotTicksPerSecond == 0)
-	robotTicksPerSecond = FPS;
-    LIMIT(robotTicksPerSecond, 1, FPS);
 
     install_timer_tick(NULL, timerResolution ? timerResolution : FPS);
 }

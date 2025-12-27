@@ -123,8 +123,18 @@ extern double		tbl_cos[];
 #define MAX_PLAYER_TURNRESISTANCE	1.0
 #define MIN_PLAYER_TURNRESISTANCE	0.0
 
-#define MAX_STATION_FUEL	500.0
-#define TARGET_DAMAGE		250.0
+#define FUEL_SCALE_BITS         8
+#define FUEL_SCALE_FACT         (1<<FUEL_SCALE_BITS)
+#define MAX_STATION_FUEL	(500<<FUEL_SCALE_BITS)
+#define MAX_PLAYER_FUEL		(2600<<FUEL_SCALE_BITS)
+#define MIN_PLAYER_FUEL		(350<<FUEL_SCALE_BITS)
+#define ENERGY_PACK_FUEL        ((long)((500+(randomMT()&511)) \
+				    <<FUEL_SCALE_BITS))
+
+#define TARGET_DAMAGE		(250<<FUEL_SCALE_BITS)
+#define TARGET_UPDATE_DELAY	(TARGET_DAMAGE / (TARGET_REPAIR_PER_FRAME \
+				    * BLOCK_SZ))
+
 
 /*
  * Size (pixels) of radius for legal HIT!
@@ -143,6 +153,12 @@ extern double		tbl_cos[];
 #define TEAM_NOT_SET_STR	"4095"
 
 #define DEBRIS_TYPES		(8 * 4 * 4)
+
+#ifdef __GNUC__
+#define INLINE	inline
+#else
+#define INLINE
+#endif /* __GNUC__ */
 
 #undef rand
 #define rand()	please dont use rand.

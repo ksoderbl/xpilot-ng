@@ -150,35 +150,13 @@
 #define MAX_PSEUDO_PLAYERS      16
 
 #define MIN_PASS_LEN		5
-#define MAX_PASS_LEN		16
+#define MAX_PASS_LEN		16      /* 8 => 16 by kps */
 
 #define MAX_TOTAL_SHOTS		16384	/* must be <= 65536 */
 #define MAX_TOTAL_PULSES	(5 * 64)
 #define MAX_TOTAL_ECMS		64
 #define MAX_TOTAL_TRANSPORTERS	(2 * 64)
 
-/*
- * Energy drainage
- */
-#define ED_SHOT			(-0.2)
-#define ED_SMART_SHOT		(-30.0)
-#define ED_MINE			(-60.0)
-#define ED_ECM			(-60.0)
-#define ED_TRANSPORTER		(-60.0)
-#define ED_HYPERJUMP		(-60.0)
-#define ED_SHIELD		(-0.20)
-#define ED_PHASING_DEVICE	(-0.40)
-#define ED_CLOAKING_DEVICE	(-0.07)
-#define ED_DEFLECTOR		(-0.15)
-#define ED_SHOT_HIT		(-25.0)
-#define ED_SMART_SHOT_HIT	(-120.0)
-#define ED_PL_CRASH		(-100.0)
-#define ED_BALL_HIT		(-50.0)
-#define ED_LASER		(-10.0)
-#define ED_LASER_HIT		(-100.0)
-
-#define MAX_PLAYER_FUEL		2600.0
-#define ENERGY_PACK_FUEL        (500.0 + rfrac() * 511.0)
 
 #define LG2_MAX_AFTERBURNER     4
 #define ALT_SPARK_MASS_FACT     4.2
@@ -192,14 +170,18 @@
 #define AFTER_BURN_FUEL(f,n)    \
  (((f)*((MAX_AFTERBURNER+1)+(n)*(ALT_FUEL_FACT-1)))/(MAX_AFTERBURNER+1.0))
 
+#define TURN_FUEL(acc)          (0.005*FUEL_SCALE_FACT*ABS(acc))
+#define TURN_SPARKS(tf)         (5+((tf)>>((FUEL_SCALE_BITS)-6)))
+
 #define THRUST_MASS             0.7
+
 #define ARMOR_MASS		(ShipMass / 14)
 
 #define MAX_TANKS               8
 #define TANK_MASS               (ShipMass/10)
 #define TANK_CAP(n)             (!(n)?MAX_PLAYER_FUEL:(MAX_PLAYER_FUEL/3))
 #define TANK_FUEL(n)            ((TANK_CAP(n)*(5+(randomMT()&3)))/32)
-#define TANK_REFILL_LIMIT       (350.0/8.0)
+#define TANK_REFILL_LIMIT       (MIN_PLAYER_FUEL/8)
 #define TANK_THRUST_FACT        0.7
 #define TANK_NOTHRUST_TIME      (HEAT_CLOSE_TIMEOUT/2+2)
 #define TANK_THRUST_TIME        (TANK_NOTHRUST_TIME/2+1)
@@ -277,30 +259,30 @@
 #define TRACTOR_MAX_FORCE(items)  (-40 + (items) * -20)
 #define TRACTOR_PERCENT(dist, maxdist) \
 	(1.0 - (0.5 * (dist) / (maxdist)))
-#define TRACTOR_COST(percent) (-1.5 * (percent))
+#define TRACTOR_COST(percent) (-1.5 * FUEL_SCALE_FACT * (percent))
 #define TRACTOR_FORCE(tr_pr, percent, maxforce) \
 	((percent) * (maxforce) * ((tr_pr) ? -1 : 1))
 
 #define WARN_TIME		(2 * 12)
 #define EMERGENCY_SHIELD_TIME	(4 * 12)
 #define SHIELD_TIME		(2 * 12)
-#define PHASING_TIME		(4 * 12)
-#define EMERGENCY_THRUST_TIME	(4 * 12)
+#define PHASING_TIME		(4*12)
+#define EMERGENCY_THRUST_TIME	(4*12)
 
-#define FUEL_MASS(f)            ((f) * 0.005)
+#define FUEL_MASS(f)            ((f)*0.005/FUEL_SCALE_FACT)
+/* changed the default to max to avoid sending lots of fuel ACKs */
+/*#define START_STATION_FUEL	(20<<FUEL_SCALE_BITS)*/
 #define START_STATION_FUEL	MAX_STATION_FUEL
-#define STATION_REGENERATION	0.06
-#define REFUEL_RATE		5.0
+#define STATION_REGENERATION	(0.06*FUEL_SCALE_FACT)
+#define REFUEL_RATE		(5<<FUEL_SCALE_BITS)
 #define TARGET_FUEL_REPAIR_PER_FRAME (TARGET_DAMAGE / (12 * 10))
-#define TARGET_REPAIR_PER_FRAME	(TARGET_DAMAGE / (12 * 600))
-#define TARGET_UPDATE_DELAY	(TARGET_DAMAGE / (TARGET_REPAIR_PER_FRAME \
-				    * BLOCK_SZ))
 
+#define TARGET_REPAIR_PER_FRAME	(TARGET_DAMAGE / (12 * 600))
 #define ALLIANCE_NOT_SET	(-1)
 
 #define DEBRIS_MASS             4.5
 
-#define ENERGY_RANGE_FACTOR	2.5
+#define ENERGY_RANGE_FACTOR	(2.5/FUEL_SCALE_FACT)
 
 /* Wall code only considers one way of wrapping around the map, and
  * assumes that after moving the length of one line or one unit of object

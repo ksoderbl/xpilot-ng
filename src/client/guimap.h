@@ -25,14 +25,13 @@
 #define GUIMAP_H
 
 void Gui_paint_cannon(int x, int y, int type);
-void Gui_paint_fuel(int x, int y, double fuel);
+void Gui_paint_fuel(int x, int y, int fuel);
 void Gui_paint_base(int x, int y, int id, int team, int type);
 void Gui_paint_decor(int x, int y, int xi, int yi, int type,
 		     bool last, bool more_y);
 
 void Gui_paint_border(int x, int y, int xi, int yi);
-void Gui_paint_visible_border(int x, int y, int xi, int yi);
-void Gui_paint_hudradar_limit(int x, int y, int xi, int yi);
+void Gui_paint_visible_border(int x, int y, int xi, int yi, int color);
 
 void Gui_paint_setup_check(int x, int y, bool isNext);
 void Gui_paint_setup_acwise_grav(int x, int y);
@@ -43,15 +42,14 @@ void Gui_paint_setup_up_grav(int x, int y);
 void Gui_paint_setup_down_grav(int x, int y);
 void Gui_paint_setup_right_grav(int x, int y);
 void Gui_paint_setup_left_grav(int x, int y);
-void Gui_paint_setup_worm(int x, int y);
+void Gui_paint_setup_worm(int x, int y, int wormDrawCount);
 void Gui_paint_setup_item_concentrator(int x, int y);
 void Gui_paint_setup_asteroid_concentrator(int x, int y);
 void Gui_paint_decor_dot(int x, int y, int size);
-void Gui_paint_setup_target(int x, int y, int team, double damage, bool own);
+void Gui_paint_setup_target(int x, int y, int team, int damage, bool own);
 void Gui_paint_setup_treasure(int x, int y, int team, bool own);
 
 void Gui_paint_walls(int x, int y, int type);
-void Gui_paint_filled_slice(int bl, int tl, int tr, int br, int y);
 
 void Gui_paint_polygon(int i, int xoff, int yoff);
 

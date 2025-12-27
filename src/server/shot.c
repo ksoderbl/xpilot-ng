@@ -88,7 +88,9 @@ void Place_general_mine(player *pl, int team, long status,
 {
     char		msg[MSG_LEN];
     int			used;
-    double		life, drain, mass;
+    double		life;
+    long		drain;
+    double		mass;
     int			i, minis;
     vector		mv;
 
@@ -136,10 +138,11 @@ void Place_general_mine(player *pl, int team, long status,
     if (pl) {
 	drain = ED_MINE;
 	if (BIT(mods.warhead, CLUSTER))
-	    drain += CLUSTER_MASS_DRAIN(mass);
+	    drain += (long)(CLUSTER_MASS_DRAIN(mass));
 	if (pl->fuel.sum < -drain) {
-	    sprintf(msg, "You need at least %.1f fuel units to %s %s!",
-		    -drain, (BIT(status, GRAVITY) ? "throw" : "drop"),
+	    sprintf(msg, "You need at least %ld fuel units to %s %s!",
+		    (-drain) >> FUEL_SCALE_BITS,
+		    (BIT(status, GRAVITY) ? "throw" : "drop"),
 		    Describe_shot(OBJ_MINE, status, mods, 0));
 	    Set_player_message (pl, msg);
 	    return;
@@ -161,7 +164,7 @@ void Place_general_mine(player *pl, int team, long status,
 		}
 	    }
 	}
-	Player_add_fuel(pl, drain);
+	Add_fuel(&(pl->fuel), drain);
 	pl->item[ITEM_MINE] -= used;
 
 	if (used > 1) {
@@ -483,8 +486,8 @@ void Fire_general_shot(player *pl, int team, bool cannon,
 			on_this_rack = 0,
 			side = 0,
 			fired = 0;
-    double		drain,
-    			mass = ShotsMass,
+    long		drain;
+    double		mass = ShotsMass,
 			life = ShotsLife,
 			speed = ShotsSpeed,
 			turnspeed = 0,
@@ -522,7 +525,7 @@ void Fire_general_shot(player *pl, int team, bool cannon,
 	if (pl) {
 	    if (pl->fuel.sum < -ED_SHOT)
 		return;
-	    Player_add_fuel(pl, ED_SHOT);
+	    Add_fuel(&(pl->fuel), (long)(ED_SHOT));
 	    sound_play_sensors(pl->pos, FIRE_SHOT_SOUND);
 	    Rank_FireShot(pl);
 	}
@@ -579,7 +582,7 @@ void Fire_general_shot(player *pl, int team, bool cannon,
 	drain = used * ED_SMART_SHOT;
 	if (BIT(mods.warhead, CLUSTER)) {
 	    if (pl)
-		drain += CLUSTER_MASS_DRAIN(mass);
+		drain += (long)(CLUSTER_MASS_DRAIN(mass));
 	}
 
 	if (pl && BIT(pl->status, KILLED))
@@ -636,12 +639,13 @@ void Fire_general_shot(player *pl, int team, bool cannon,
 
 	if (pl) {
 	    if (pl->fuel.sum < -drain) {
-		sprintf(msg, "You need at least %.1f fuel units to fire %s!",
-			-drain, Describe_shot(type, status, mods, 0));
+		sprintf(msg, "You need at least %ld fuel units to fire %s!",
+			(-drain) >> FUEL_SCALE_BITS,
+			Describe_shot(type, status, mods, 0));
 		Set_player_message (pl, msg);
 		return;
 	    }
-	    Player_add_fuel(pl, drain);
+	    Add_fuel(&(pl->fuel), drain);
 	    pl->item[ITEM_MISSILE] -= used;
 
 	    if (used > 1) {
@@ -1075,7 +1079,7 @@ void Delete_shot(int ind)
     object		*shot = Obj[ind];	/* Used when swapping places */
     ballobject		*ball;
     player		*pl;
-    bool		addMine = false, addHeat = false, addBall = false;
+    int			addMine = 0, addHeat = 0, addBall = 0;
     modifiers		mods;
     long		status;
     int			i;
@@ -1117,7 +1121,7 @@ void Delete_shot(int ind)
 	    SET_BIT(ball->status, RECREATE);
 	}
 	if (BIT(ball->status, RECREATE)) {
-	    addBall = true;
+	    addBall = 1;
 	    if (BIT(ball->status, NOEXPLOSION))
 		break;
 	    sound_play_sensors(ball->pos, EXPLODE_BALL_SOUND);
@@ -1138,10 +1142,10 @@ void Delete_shot(int ind)
 		/* status         */ GRAVITY,
 		/* color          */ RED,
 		/* radius         */ 8,
-		/* num debris     */ (int)(10 + 10 * rfrac()),
+		/* num debris     */ 10 + 10 * rfrac(),
 		/* min,max dir    */ 0, RES-1,
-		/* min,max speed  */ 10.0, 50.0,
-		/* min,max life   */ 10.0, 54.0
+		/* min,max speed  */ 10, 50,
+		/* min,max life   */ 10, 54
 		);
 
 	}
@@ -1280,7 +1284,7 @@ void Delete_shot(int ind)
 		    return;
 		}
 		if (rfrac() < rogueHeatProb)
-		    addHeat = true;
+		    addHeat = 1;
 	    }
 	    break;
 
@@ -1293,7 +1297,7 @@ void Delete_shot(int ind)
 		    return;
 		}
 		if (rfrac() < rogueMineProb)
-		    addMine = true;
+		    addMine = 1;
 	    }
 	    break;
 
@@ -1318,7 +1322,7 @@ void Delete_shot(int ind)
 
     Object_free_ind(ind);
 
-    if (addMine || addHeat) {
+    if (addMine | addHeat) {
 	CLEAR_MODS(mods);
 	if (BIT(World.rules->mode, ALLOW_CLUSTERS) && (rfrac() <= 0.333f))
 	    SET_BIT(mods.warhead, CLUSTER);
@@ -1389,7 +1393,7 @@ void Fire_general_laser(player *pl, int team, clpos pos,
 	return;
 
     if (pl) {
-	Player_add_fuel(pl, ED_LASER);
+	Add_fuel(&(pl->fuel), (long)ED_LASER);
 	sound_play_sensors(pos, FIRE_LASER_SOUND);
 	/* kps - hmm ??? */
 	/*life = (int)PULSE_LIFE(pl->item[ITEM_LASER]);*/
@@ -1689,8 +1693,9 @@ void Update_missile(missileobject *shot)
 			pl->pos.cy - shot->pos.cy) / CLICK;
     x_dif += pl->vel.x * (range / shot_speed);
     y_dif += pl->vel.y * (range / shot_speed);
-    theta = Wrap_cfindDir(pl->pos.cx + PIXEL_TO_CLICK(x_dif) - shot->pos.cx,
-			  pl->pos.cy + PIXEL_TO_CLICK(y_dif) - shot->pos.cy);
+    theta = (int)
+	Wrap_cfindDir(pl->pos.cx + PIXEL_TO_CLICK(x_dif) - shot->pos.cx,
+		      pl->pos.cy + PIXEL_TO_CLICK(y_dif) - shot->pos.cy);
 
     {
 	double x, y, vx, vy;
@@ -1793,11 +1798,10 @@ void Update_missile(missileobject *shot)
 
 	if (angle >= 0) {
 	    i = angle&7;
-	    theta = Wrap_findDir(
-		(yi + sur[i].dy) * BLOCK_SZ - (CLICK_TO_PIXEL(shot->pos.cy)
-					       + 2 * shot->vel.y),
-		(xi + sur[i].dx) * BLOCK_SZ - (CLICK_TO_PIXEL(shot->pos.cx)
-					       - 2 * shot->vel.x));
+	    theta = (int)Wrap_findDir((yi + sur[i].dy) * BLOCK_SZ
+			    - (CLICK_TO_PIXEL(shot->pos.cy) + 2 * shot->vel.y),
+			    (xi + sur[i].dx) * BLOCK_SZ
+			    - (CLICK_TO_PIXEL(shot->pos.cx) - 2 * shot->vel.x));
 #ifdef SHOT_EXTRA_SLOWDOWN
 	    if (!foundw && range > (SHOT_LOOK_AH-i) * BLOCK_SZ) {
 		if (shot_speed

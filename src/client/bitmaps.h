@@ -75,7 +75,12 @@
 #define BM_ASTEROIDCONC	43
 
 #define NUM_OBJECT_BITMAPS 44
-#define NUM_BITMAPS	44
+
+#define BM_WALL_TEXTURE  44
+#define BM_DECOR_TEXTURE 45
+#define BM_BALL_TEXTURE  46
+
+#define NUM_BITMAPS	47
 
 #define BMS_UNINITIALIZED 0
 #define BMS_INITIALIZED 1
@@ -87,36 +92,43 @@
 
 #define RADAR_TEXTURE_SIZE 32
 
+
 typedef struct {
     Pixmap		bitmap;
+    unsigned		scale_width, scale_height;    
+
     Pixmap		mask;
     bbox_t		bbox;
 } xp_bitmap_t;
 
-/* xp_pixmap_t holds all data related to one "logical" image.
- * One logical image can consists of several rectangular pixel 
- * arrays (physical images). All physical images share the same 
- * overall dimensions. 
- *
- * Note: if the count is negative it means that the other images
- * are rotated copies of the original image.
- */
+#if 0
 typedef struct {
-    const char		*filename;     /* the file containing the image */
-    int			count;         /* amount of images (see above) */
-    int			state;         /* the state of the image (BMS_*) */
-    unsigned		width, height; /* the (scaled) dimensions */
-    bool		scalable;      /* should this image be scaled */
-    xp_bitmap_t		*bitmaps;      /* platform dependent image data */
-    xp_picture_t	picture;       /* the image data in RGB format */
+    char          *filename;
+    int           count, width, height, state;
+    bool          scalable;
+    xp_bitmap_t   *bitmaps;
+    xp_picture_t  picture;
+} xp_pixmap_t;
+#endif
+
+/* XXX need comment about purpose of this structure. */
+typedef struct {
+    const char		*filename;
+    int			count;
+    unsigned		width, height;
+
+    int			state;
+    bool		scalable;
+    xp_bitmap_t		*bitmaps;
+    xp_picture_t	picture;
 } xp_pixmap_t;
 
 extern xp_pixmap_t *pixmaps;
 extern int num_pixmaps, max_pixmaps;
 extern xp_pixmap_t xp_pixmaps[];
 
-int Bitmaps_init(void);
-void Bitmaps_cleanup(void);
+int Bitmap_add_std_objects (void);
+int Bitmap_add_std_textures (void);
 int Bitmap_add (char *filename, int count, bool scalable);
 int Bitmap_create (Drawable d, int img);
 void Bitmap_update_scale (void);
@@ -124,5 +136,42 @@ void Bitmap_update_scale (void);
 xp_bitmap_t *Bitmap_get (Drawable d, int img, int bmp);
 void Bitmap_paint (Drawable d, int img, int x, int y, int bmp);
 void Bitmap_paint_area (Drawable d, xp_bitmap_t *bit, int x, int y, irec *r);
+
+
+void PaintBitmap(Drawable d, int type, int x, int y, int width, int height,
+		 int number);
+void PaintFuelSlice(Drawable d, int type, int x, int y, int width, int height, 
+		    int image, int size); 
+void PaintMeter(Drawable d, int type, int x, int y, int width, int height, 
+		int size);
+
+int Block_bitmap_images(int type);
+int Block_bitmaps_create(void);
+
+void Block_bitmap_create_begin(Drawable d, 
+			       xp_pixmap_t *xp_pixmap, int image,
+			       int width, int height);
+
+void Block_bitmap_create_end(Drawable d);
+
+void Block_bitmap_set_pixel(xp_pixmap_t *xp_pixmap, int image, int x, int y, 
+			    RGB_COLOR color);
+void Block_bitmap_paint(Drawable d, int type, int x, int y, 
+			int width, int height,
+		 int number);
+
+void Cache_ships(Drawable d);
+
+void Block_bitmap_create(Display* dpy, Drawable d, 
+			 xp_pixmap_t *xp_pixmap, int number,
+			 int width, int height);
+
+void Block_bitmap_paint_fuel_slice(Drawable d, int type, int x, int y, 
+				   int width, int height, 
+				   int image, int size);
+
+void Block_bitmap_paint_meter(Drawable d, int type, int x, int y, 
+			      int width, int height, 
+			      int size);
 
 #endif

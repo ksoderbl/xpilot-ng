@@ -21,7 +21,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include "xpclient_x11.h"
+#include "xpclient.h"
 
 char about_version[] = VERSION;
 
@@ -169,7 +169,7 @@ void Expose_about_window(void)
 			   2*ITEM_SIZE+2*BORDER,
 			   (unsigned)box_end - box_start);
 	    XSetForeground(dpy, textGC, colors[RED].pixel);
-	    Gui_paint_item((u_byte)i, aboutWindow, textGC, 2*BORDER + ITEM_SIZE,
+	    Paint_item((u_byte)i, aboutWindow, textGC, 2*BORDER + ITEM_SIZE,
 		       old_y + ITEM_TRIANGLE_SIZE);
 	    XSetForeground(dpy, textGC, colors[WHITE].pixel);
 
@@ -187,8 +187,7 @@ void Expose_about_window(void)
 		XSetForeground(dpy, textGC, colors[windowColor].pixel);
 		XFillRectangle(dpy, aboutWindow, textGC,
 			       BORDER, box_start,
-			       ABOUT_WINDOW_WIDTH,
-			       (unsigned)box_end - box_start);
+			       ABOUT_WINDOW_WIDTH, box_end - box_start);
 		XSetForeground(dpy, textGC, colors[WHITE].pixel);
 		break;
 	    }
@@ -278,7 +277,7 @@ static void About_create_window(void)
 				buttonWindowHeight = 2*BTN_BORDER
 				    + buttonFont->ascent + buttonFont->descent,
 				windowHeight = ABOUT_WINDOW_HEIGHT;
-    unsigned			textWidth;
+    int				textWidth;
     XSetWindowAttributes	sattr;
     unsigned long		mask;
 
@@ -303,7 +302,7 @@ static void About_create_window(void)
 			DefaultRootWindow(dpy),
 			0, 0,
 			windowWidth, windowHeight,
-			2, (int)dispDepth,
+			2, dispDepth,
 			InputOutput, visual,
 			mask, &sattr);
     XStoreName(dpy, aboutWindow, "XPilot - information");
@@ -313,9 +312,8 @@ static void About_create_window(void)
     textWidth = XTextWidth(buttonFont, "CLOSE", 5);
     about_close_b
 	= XCreateSimpleWindow(dpy, aboutWindow,
-			      BORDER,
-			      (int)(windowHeight - BORDER
-				    - buttonWindowHeight - 4),
+			      BORDER, (windowHeight - BORDER
+				       - buttonWindowHeight - 4),
 			      2*BTN_BORDER + textWidth,
 			      buttonWindowHeight,
 			      0, 0,
@@ -327,20 +325,16 @@ static void About_create_window(void)
     textWidth = XTextWidth(buttonFont, "NEXT", 4);
     about_next_b
 	= XCreateSimpleWindow(dpy, aboutWindow,
-			      (int)(windowWidth / 2
-				    - BTN_BORDER - textWidth / 2),
-			      (int)(windowHeight
-				    - BORDER - buttonWindowHeight - 4),
+			      windowWidth/2 - BTN_BORDER - textWidth/2,
+			      windowHeight - BORDER - buttonWindowHeight - 4,
 			      2*BTN_BORDER + textWidth, buttonWindowHeight,
 			      0, 0,
 			      colors[buttonColor].pixel);
     textWidth = XTextWidth(buttonFont, "PREV", 4);
     about_prev_b
 	= XCreateSimpleWindow(dpy, aboutWindow,
-			      (int)(windowWidth - BORDER
-				    - 2*BTN_BORDER - textWidth),
-			      (int)(windowHeight - BORDER
-				    - buttonWindowHeight - 4),
+			      windowWidth - BORDER - 2*BTN_BORDER - textWidth,
+			      windowHeight - BORDER - buttonWindowHeight - 4,
 			      2*BTN_BORDER + textWidth, buttonWindowHeight,
 			      0, 0,
 			      colors[buttonColor].pixel);
@@ -372,8 +366,7 @@ void Expose_button_window(int color, Window w)
 	XGetWindowAttributes(dpy, w, &wattr);	/* and width */
 
 	XSetForeground(dpy, buttonGC, colors[color].pixel);
-	XFillRectangle(dpy, w, buttonGC, 0, 0,
-		       (unsigned)wattr.width, (unsigned)wattr.height);
+	XFillRectangle(dpy, w, buttonGC, 0, 0, wattr.width, wattr.height);
 	XSetForeground(dpy, buttonGC, colors[WHITE].pixel);
     }
 
@@ -504,7 +497,7 @@ void Keys_destroy(void)
 #define MAX_MOTD_SIZE	(30*1024)
 
 static char		*motd_buf = NULL;
-static size_t		motd_size;
+static int		motd_size;
        int		motd_viewer = NO_WIDGET;
 static int		motd_auto_popup;
 
@@ -539,22 +532,22 @@ int Handle_motd(long off, char *buf, int len, long filesize)
     if (!motd_buf) {
 	motd_size = MIN(filesize, MAX_MOTD_SIZE);
 	i = MAX(motd_size, (long)(sizeof no_motd_msg)) + 1;
-	if (!(motd_buf = malloc((size_t)i))) {
+	if (!(motd_buf = (char *) malloc(i))) {
 	    error("No memory for MOTD");
 	    return -1;
 	}
 	memset(motd_buf, ' ', motd_size);
-	for (i = 39; i < (int)motd_size; i += 40)
+	for (i = 39; i < motd_size; i += 40)
 	    motd_buf[i] = '\n';
     }
-    else if (filesize < (long)motd_size) {
+    else if (filesize < motd_size) {
 	motd_size = filesize;
 	motd_buf[motd_size] = '\0';
     }
-    if (off < (long)motd_size && len > 0) {
-	if (off + len > (long)motd_size)
+    if (off < motd_size && len > 0) {
+	if (off + len > motd_size)
 	    len = motd_size - off;
-	memcpy(motd_buf + off, buf, (size_t)len);
+	memcpy(motd_buf + off, buf, len);
     }
     else if (len == 0 && off > 0)
 	return 0;

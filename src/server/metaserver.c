@@ -49,7 +49,7 @@ struct MetaServer	meta_servers[2] = {
 
 static char	msg[MSG_LEN];
 
-void Meta_send(char *mesg, size_t len)
+void Meta_send(char *mesg, int len)
 {
     int			i;
 
@@ -58,10 +58,10 @@ void Meta_send(char *mesg, size_t len)
 
     for (i = 0; i < NELEM(meta_servers); i++) {
 	if (sock_send_dest(&contactSocket, meta_servers[i].addr,
-			   META_PORT, mesg, (int)len) != (int)len) {
+			   META_PORT, mesg, len) != len) {
 	    sock_get_error(&contactSocket);
 	    sock_send_dest(&contactSocket, meta_servers[i].addr,
-			   META_PORT, mesg, (int)len);
+			   META_PORT, mesg, len);
 	}
     }
 }
@@ -93,26 +93,24 @@ void Meta_init(void)
     if (!reportToMetaServer)
 	return;
 
-    if (!silent) {
-	xpprintf("%s Locating Internet Meta server... ", showtime());
-	fflush(stdout);
-    }
-
+#ifndef SILENT
+    xpprintf("%s Locating Internet Meta server... ", showtime()); fflush(stdout);
+#endif
     for (i = 0; i < NELEM(meta_servers); i++) {
 	addr = sock_get_addr_by_name(meta_servers[i].name);
 	if (addr)
 	    strlcpy(meta_servers[i].addr, addr, sizeof(meta_servers[i].addr));
-	if (!silent) {
-	    if (addr)
-		xpprintf("found %d", i + 1);
-	    else
-		xpprintf("%d not found", i + 1);
-	    if (i + 1 == NELEM(meta_servers))
-		xpprintf("\n");
-	    else
-		xpprintf("... ");
-	    fflush(stdout);
-	}
+#ifndef SILENT
+	if (addr)
+	    xpprintf("found %d", i + 1);
+	else
+	    xpprintf("%d not found", i + 1);
+	if (i + 1 == NELEM(meta_servers))
+	    xpprintf("\n");
+	else
+	    xpprintf("... ");
+	fflush(stdout);
+#endif
     }
 }
 

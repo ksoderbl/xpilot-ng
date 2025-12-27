@@ -61,7 +61,8 @@ void Laser_pulse_hits_player(player *pl, pulseobject *pulse)
     }
 
     sound_play_sensors(pl->pos, PLAYER_EAT_LASER_SOUND);
-    if (Player_used_emergency_shield(pl))
+    if (BIT(pl->used, (HAS_SHIELD|HAS_EMERGENCY_SHIELD))
+	== (HAS_SHIELD|HAS_EMERGENCY_SHIELD))
 	return;
     if (pulse->type != OBJ_PULSE) {
 	/* kps -remove */
@@ -104,7 +105,7 @@ void Laser_pulse_hits_player(player *pl, pulseobject *pulse)
 	if (kp)
 	    Record_shove(pl, kp, frame_loops + 12 + 6);
     } else {
-	Player_add_fuel(pl, ED_LASER_HIT);
+	Add_fuel(&(pl->fuel), (long)ED_LASER_HIT);
 	if (!BIT(pl->used, HAS_SHIELD)
 	    && !BIT(pl->have, HAS_ARMOR)) {
 	    SET_BIT(pl->status, KILLED);

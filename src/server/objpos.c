@@ -37,7 +37,9 @@ void Object_position_set_clicks(object *obj, int cx, int cy)
 	    *(double *)(-1) = 4321.0;
 	    abort();
 	} else {
-	    Object_crash(obj, CrashUnknown, NO_IND);
+	    struct move mv;
+
+	    Object_crash(obj, &mv, CrashUnknown, NO_IND);
 	    return;
 	}
     }

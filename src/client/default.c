@@ -21,290 +21,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifdef OPTIONHACK
-#  include "xpclient.h"
-#else
-#  include "xpclient_x11.h"
-#endif
+#include "xpclient.h"
 
-#ifndef PATH_MAX
-# define PATH_MAX	1023
-#endif
 
 char default_version[] = VERSION;
-
-char myName[] = "xpilot";
-char myClass[] = "XPilot";
-
-keys_t buttonDefs[MAX_POINTER_BUTTONS][MAX_BUTTON_DEFS+1];
-
-int num_options = 0;
-int max_options = 0;
-#ifdef OPTIONHACK
-cl_option_t *options = NULL;
-#else
-cl_option_t options[];
-#endif
-
-static void Usage(void)
-{
-    int			i;
-
-    printf(
-"Usage: xpilot [-options ...] [server]\n"
-"Where options include:\n"
-"\n"
-	  );
-    for (i = 0; i < num_options; i++) {
-	printf("    -%s %s\n", options[i].name,
-	       (options[i].noArg == NULL) ? "<value>" : "");
-	if (options[i].help && options[i].help[0]) {
-	    const char *str;
-	    printf("        ");
-	    for (str = options[i].help; *str; str++) {
-		putchar(*str);
-		if (*str == '\n' && str[1])
-		    printf("        ");
-	    }
-	    if (str[-1] != '\n')
-		putchar('\n');
-	}
-	if (options[i].fallback && options[i].fallback[0]) {
-	    printf("        The default %s: %s.\n",
-		   (options[i].key == KEY_DUMMY)
-		       ? "value is"
-		       : (strchr(options[i].fallback, ' ') == NULL)
-			   ? "key is"
-			   : "keys are",
-		   options[i].fallback);
-	}
-	printf("\n");
-    }
-    printf(
-"Most of these options can also be set in the .xpilotrc file\n"
-"in your home directory.\n"
-"Each key option may have multiple keys bound to it and\n"
-"one key may be used by multiple key options.\n"
-"If no server is specified then xpilot will search\n"
-"for servers on your local network.\n"
-"For a listing of remote servers try: telnet meta.xpilot.org 4400 \n"
-	  );
-
-    exit(1);
-}
-
-
-
-
-
-
-#ifdef OPTIONHACK
-
-/* kps tries to make this work without Xrm */
-
-cl_option_t default_options[] = {
-    {
-	"help",
-	"Yes",
-	"",
-	KEY_DUMMY,
-	"Display this help message.\n",
-	0
-    }
-};
-
-static inline cl_option_t *Option_by_index(int ind)
-{
-    if (ind < 0 || ind >= num_options)
-	return NULL;
-    return &options[ind];
-}
-
-static inline cl_option_t *Find_option(const char *name)
-{
-    int i;
-
-    for (i = 0; i < num_options; i++) {
-	if (!strcasecmp(name, options[i].name))
-	    return &options[i];
-    }
-
-    return NULL;
-}
-
-static void Insert_option(const char *name, const char *value)
-{
-    cl_option_t option;
-
-    assert(Find_option(name) == NULL);
-
-    option.name = xp_safe_strdup(name);
-    option.noArg = xp_safe_strdup(value);
-
-    STORE(cl_option_t, options, num_options, max_options, option);
-}
-
-/*
- * This could also be used from a client '\set' command, e.g.
- * "\set scalefactor 1.5"
- */
-
-void Set_option(const char *name, const char *value)
-{
-    cl_option_t *opt;
-
-    opt = Find_option(name);
-    if (!opt) {
-	Insert_option(name, value);
-	opt = Find_option(name);
-    }
-
-    printf("setting option '%s' to '%s'\n", opt->name, opt->noArg);
-}
-
-
-static void Parse_xpilotrc_line(const char *line)
-{
-    char *s;
-
-    /*printf("parsing xpilotrc line \"%s\"\n", line);*/
-    /*
-     * Ignore lines that don't start with xpilot. or
-     * xpilot*
-     */
-    if (!(strncasecmp(line, "xpilot.", 7) == 0
-	  || strncasecmp(line, "xpilot*", 7) == 0))
-	/* not interested */
-	return;
-
-    /*printf("-> line is now \"%s\"\n", line);*/
-    line += 7;
-    /*printf("-> line is now \"%s\"\n", line);*/
-    if (!(s = strchr(line, ':'))) {
-	/* no colon on line with xpilot. or xpilot* */
-	/* warn("line missing colon"); */
-	return;
-    }
-    
-    /*
-     * Zero the colon, advance to next char, remove leading whitespace
-     * from option value.
-     */
-    *s++ = '\0';
-    while (isspace(*s))
-	s++;
-
-    Set_option(line, s);
-}
-
-
-void Parse_options(int *argcp, char **argvp, char *realName, int *port,
-		   int *my_team, bool *text, bool *list,
-		   bool *join, bool *noLocalMotd,
-		   char *nickName, char *dispName, char *hostName,
-		   char *shut_msg)
-{
-    char path[PATH_MAX + 1];
-    char buf[BUFSIZ];
-    FILE *fp;
-
-    /*
-     * Create data structure holding all options we know of and their values.
-     */
-    /*warn("numoptions: %d", NELEM(options));*/
-
-    /*
-     * Read options from xpilotrc.
-     */
-    Get_xpilotrc_file(path, sizeof(path));
-    warn("Using xpilotrc file %s\n", path);
-    if (strlen(path) > 0
-	&& ((fp = fopen(path, "r")) != NULL)) {
-	while (fgets(buf, sizeof buf, fp)) {
-	    char *cp;
-	    /* kps - remove NL and CR, does this work in windows ? */
-	    cp = strchr(buf, '\n');
-	    if (cp)
-		*cp = '\0';
-	    cp = strchr(buf, '\r');
-	    if (cp)
-		*cp = '\0';
-	    Parse_xpilotrc_line(buf);
-	}
-	fclose(fp);
-    }
-
-
-
-    
-}
-
-
-
-char *Get_keyHelpString(keys_t key)
-{
-    int			i;
-    char		*nl;
-    static char		buf[MAX_CHARS];
-
-    for (i = 0; i < num_options; i++) {
-	cl_option_t *opt = Option_by_index(i);
-	if (opt->key == key) {
-	    strlcpy(buf, opt->help, sizeof buf);
-	    if ((nl = strchr(buf, '\n')) != NULL)
-		*nl = '\0';
-	    return buf;
-	}
-    }
-
-    return NULL;
-}
-
-
-const char *Get_keyResourceString(keys_t key)
-{
-    int			i;
-
-    for (i = 0; i < num_options; i++) {
-	cl_option_t *opt = Option_by_index(i);
-	if (opt->key == key)
-	    return opt->name;
-    }
-
-    return NULL;
-}
-
-void defaultCleanup(void)
-{
-}
-
-#ifndef _WINDOWS
-void Get_xpilotrc_file(char *path, unsigned size)
-{
-    const char		*home = getenv("HOME");
-    const char		*defaultFile = ".xpilotrc";
-    const char		*optionalFile = getenv("XPILOTRC");
-
-    if (optionalFile != NULL)
-	strlcpy(path, optionalFile, size);
-    else if (home != NULL) {
-	strlcpy(path, home, size);
-	strlcat(path, "/", size);
-	strlcat(path, defaultFile, size);
-    } else
-	strlcpy(path, "", size);
-}
-#else
-void Get_xpilotrc_file(char *path, unsigned size)
-{
-    /* kps - some windows pro implement this */
-}
-#endif
-
-
-
-
-#else /* OPTIONHACK */
 
 
 
@@ -312,6 +32,9 @@ void Get_xpilotrc_file(char *path, unsigned size)
 #define DISPLAY_DEF	":0.0"
 #define KEYBOARD_ENV	"KEYBOARD"
 
+#ifndef PATH_MAX
+#define PATH_MAX	1023
+#endif
 
 /*
  * Default fonts
@@ -326,11 +49,19 @@ void Get_xpilotrc_file(char *path, unsigned size)
 #define MOTD_FONT	"-*-courier-bold-r-*--14-*-*-*-*-*-iso8859-1"
 
 
+char			myName[] = "xpilot";
+char			myClass[] = "XPilot";
+
+
+extern char *talk_fast_msgs[];	/* talk macros */
 char talk_fast_temp_buf[7];		/* can handle up to 999 fast msgs */
 char *talk_fast_temp_buf_big;
 
 
 static void Get_test_resources(XrmDatabase rDB);
+
+
+keys_t buttonDefs[MAX_POINTER_BUTTONS][MAX_BUTTON_DEFS+1];
 
 /* from common/config.c */
 extern char conf_ship_file_string[];
@@ -345,7 +76,7 @@ extern char conf_soundfile_string[];
  * Help lines can span multiple lines, but for
  * the key help window only the first line is used.
  */
-cl_option_t options[] = {
+option options[] = {
     {
 	"help",
 	"Yes",
@@ -480,10 +211,9 @@ cl_option_t options[] = {
 	"",
 	KEY_DUMMY,
 	"Ignore the window manager when opening the top level player window.\n"
-	"This can be handy if you want to have your XPilot window on a\n"
-	"preferred position without window manager borders.\n"
-	"Also sometimes window managers may interfere when switching\n"
-	"colormaps. This option may prevent that.\n",
+	"This can be handy if you want to have your XPilot window on a preferred\n"
+	"position without window manager borders.  Also sometimes window managers\n"
+	"may interfere when switching colormaps.  This option may prevent that.\n",
 	0
     },
     {
@@ -514,9 +244,9 @@ cl_option_t options[] = {
 	"Define the ship shape to use.  Because the argument to this option\n"
 	"is rather large (up to 500 bytes) the recommended way to set\n"
 	"this option is in the .xpilotrc file in your home directory.\n"
-	"The exact format is defined in the file doc/README.SHIPS in the\n"
-	"XPilot distribution. Note that there is a nifty Unix tool called\n"
-	"editss for easy ship creation. There is XPShipEditor for Windows\n"
+	"The exact format is defined in the file doc/README.SHIPS in the XPilot\n"
+	"distribution.  Note that there is a nifty Unix tool called editss for\n"
+	"easy ship creation.  There is XPShipEditor for Windows\n"
 	"and Ship Shaper for Java.  See the XPilot FAQ for details.\n"
 	"See also the \"shipShapeFile\" option below.\n",
 	0
@@ -643,7 +373,7 @@ cl_option_t options[] = {
     {
 	"fuelNotify",
 	NULL,
-	"500.0",
+	"500",
 	KEY_DUMMY,
 	"The limit when the HUD fuel bar will become visible.\n",
 	0
@@ -651,7 +381,7 @@ cl_option_t options[] = {
     {
 	"fuelWarning",
 	NULL,
-	"200.0",
+	"200",
 	KEY_DUMMY,
 	"The limit when the HUD fuel bar will start flashing.\n",
 	0
@@ -659,7 +389,7 @@ cl_option_t options[] = {
     {
 	"fuelCritical",
 	NULL,
-	"100.0",
+	"100",
 	KEY_DUMMY,
 	"The limit when the HUD fuel bar will flash faster.\n",
 	0
@@ -713,8 +443,18 @@ cl_option_t options[] = {
 	NULL,
 	"Yes",
 	KEY_DUMMY,
-	"Allows drawing polygon bitmaps specified by the (new-style) map.\n"
+	"Allows drawing polygon bitmaps specified by the (new-style) map\n"
+	"See also the wallTextureFile option.\n"
 	"Be warned that this needs a reasonably fast graphics system.\n",
+	0
+    },
+    {
+	"wallTextureFile",
+	NULL,
+	"",
+	KEY_DUMMY,
+	"Specify a XPM format pixmap file to load wall texture from.\n"
+	"(this only affects old-style maps, generally useless)\n",
 	0
     },
     {
@@ -784,7 +524,7 @@ cl_option_t options[] = {
     {
 	"charsPerSecond",
 	NULL,
-	"100",
+	"50",
 	KEY_DUMMY,
 	"Speed in which messages appear on screen in characters per second.\n",
 	0
@@ -1656,7 +1396,7 @@ cl_option_t options[] = {
     {
 	"baseWarningType",
 	NULL,
-	"3",
+	"2",
 	KEY_DUMMY,
 	"Which type of base warning you prefer.\n"
 	"A value of 0 disables base warning.\n"
@@ -1848,7 +1588,16 @@ cl_option_t options[] = {
 	NULL,
 	"No",
 	KEY_DUMMY,
-	"Draws the map decoration filled with a texture pattern.\n",
+	"Draws the map decoration filled with a texture pattern.\n"
+	"See also the decorTextureFile and texturedWalls options.\n",
+	0
+    },
+    {
+	"decorTextureFile",
+	NULL,
+	"",
+	KEY_DUMMY,
+	"Specify a XPM format pixmap file to load the decor texture from.\n",
 	0
     },
     {
@@ -1994,7 +1743,7 @@ cl_option_t options[] = {
 	NULL,
 	"equal",
 	KEY_DETONATE_MINES,
-	"Detonate the closest mine you have dropped or thrown.\n",
+	"Detonate the mine you have dropped or thrown, which is closest to you.\n",
 	0
     },
     {
@@ -3051,12 +2800,60 @@ const char* Get_keyResourceString(keys_t key)
 }
 
 
+static void Usage(void)
+{
+    int			i;
+
+    printf(
+"Usage: xpilot [-options ...] [server]\n"
+"Where options include:\n"
+"\n"
+	  );
+    for (i = 0; i < NELEM(options); i++) {
+	printf("    -%s %s\n", options[i].name,
+	       (options[i].noArg == NULL) ? "<value>" : "");
+	if (options[i].help && options[i].help[0]) {
+	    const char *str;
+	    printf("        ");
+	    for (str = options[i].help; *str; str++) {
+		putchar(*str);
+		if (*str == '\n' && str[1])
+		    printf("        ");
+	    }
+	    if (str[-1] != '\n')
+		putchar('\n');
+	}
+	if (options[i].fallback && options[i].fallback[0]) {
+	    printf("        The default %s: %s.\n",
+		   (options[i].key == KEY_DUMMY)
+		       ? "value is"
+		       : (strchr(options[i].fallback, ' ') == NULL)
+			   ? "key is"
+			   : "keys are",
+		   options[i].fallback);
+	}
+	printf("\n");
+    }
+    printf(
+"Most of these options can also be set in the .xpilotrc file\n"
+"in your home directory.\n"
+"Each key option may have multiple keys bound to it and\n"
+"one key may be used by multiple key options.\n"
+"If no server is specified then xpilot will search\n"
+"for servers on your local network.\n"
+"For a listing of remote servers try: telnet meta.xpilot.org 4400 \n"
+	  );
+
+    exit(1);
+}
+
+
 static int Find_resource(XrmDatabase db, const char *resource,
 			 char *result, unsigned size, int *ind)
 {
 #ifndef _WINDOWS
     int			i;
-    size_t		len;
+    int			len;
     char		str_name[80],
 			str_class[80],
 			*str_type[10];
@@ -3171,7 +2968,7 @@ static void Get_bool_resource(XrmDatabase db, const char *resource,
     *result = (ON(resValue) ? true : false);
 }
 
-#if 0
+
 static void Get_bit_resource(XrmDatabase db, const char *resource,
 			     long *mask, int bit)
 {
@@ -3182,7 +2979,6 @@ static void Get_bit_resource(XrmDatabase db, const char *resource,
     if (ON(resValue))
 	SET_BIT(*mask, bit);
 }
-#endif
 
 static void Get_shipshape_resource(XrmDatabase db, char **ship_shape)
 {
@@ -3342,7 +3138,7 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
 
 #ifndef _WINDOWS
     XrmOptionDescRec	*xopt;
-    size_t		size;
+    int			size;
 
 
     XrmInitialize();
@@ -3354,7 +3150,7 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
     for (i = 0; i < NELEM(options); i++)
 	size += 2 * (strlen(options[i].name) + 2);
 
-    if ((ptr = malloc(size)) == NULL) {
+    if ((ptr = (char *)malloc(size)) == NULL) {
 	error("No memory for options");
 	exit(1);
     }
@@ -3374,7 +3170,8 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
 	if (options[i].noArg) {
 	    xopt[i].argKind = XrmoptionNoArg;
 	    xopt[i].value = (char *)options[i].noArg;
-	} else {
+	}
+	else {
 	    xopt[i].argKind = XrmoptionSepArg;
 	    xopt[i].value = NULL;
 	}
@@ -3394,10 +3191,8 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
 	/* The rest of the arguments are hostnames of servers. */
     }
 
-    if (Get_resource(argDB, "help", resValue, sizeof resValue) != 0) {
-	num_options = NELEM(options);
+    if (Get_resource(argDB, "help", resValue, sizeof resValue) != 0)
 	Usage();
-    }
 
     if (Get_resource(argDB, "version", resValue, sizeof resValue) != 0) {
 	puts(TITLE);
@@ -3634,8 +3429,6 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
     Get_int_resource(rDB, "packetSizeMeterColor", &packetSizeMeterColor);
     Get_int_resource(rDB, "packetLossMeterColor", &packetLossMeterColor);
     Get_int_resource(rDB, "packetDropMeterColor", &packetDropMeterColor);
-    if (packetLossMeterColor || packetDropMeterColor)
-	packetMeasurement = true;
     Get_int_resource(rDB, "packetLagMeterColor", &packetLagMeterColor);
     Get_int_resource(rDB, "temporaryMeterColor", &temporaryMeterColor);
     Get_int_resource(rDB, "meterBorderColor", &meterBorderColor);
@@ -3674,33 +3467,36 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
     Get_int_resource(rDB, "team9Color", &team9Color);
     Get_resource(rDB, "sparkColors", sparkColors, MSG_LEN);
 
-    memset(&instruments, 0, sizeof instruments);
+    instruments = 0;
 
-    Get_bool_resource(rDB, "showMessages", &instruments.showMessages);
-    Get_bool_resource(rDB, "mapRadar", &instruments.showMapRadar);
-    Get_bool_resource(rDB, "clientRanker", &instruments.useClientRanker);
-    Get_bool_resource(rDB, "showShipShapes", &instruments.showShipShapes);
-    Get_bool_resource(rDB, "showMyShipShape", &instruments.showMyShipShape);
-    Get_bool_resource(rDB, "ballMsgScan", &instruments.useBallMessageScan);
-    Get_bool_resource(rDB, "showLivesByShip", &instruments.showLivesByShip);
-    Get_bool_resource(rDB, "slidingRadar", &instruments.showSlidingRadar);
-    Get_bool_resource(rDB, "showItems", &instruments.showItems);
-    Get_bool_resource(rDB, "clockAMPM", &instruments.useAMPMFormatClock);
-    Get_bool_resource(rDB, "outlineWorld", &instruments.showOutlineWorld);
-    Get_bool_resource(rDB, "filledWorld", &instruments.showFilledWorld);
-    Get_bool_resource(rDB, "texturedWalls", &instruments.showTexturedWalls);
-    Get_bool_resource(rDB, "showDecor", &instruments.showDecor);
-    Get_bool_resource(rDB, "outlineDecor", &instruments.showOutlineDecor);
-    Get_bool_resource(rDB, "filledDecor", &instruments.showFilledDecor);
-    Get_bool_resource(rDB, "texturedDecor", &instruments.showTexturedDecor);
-    Get_bool_resource(rDB, "reverseScroll", &instruments.showReverseScroll);
-    Get_bool_resource(rDB, "showID", &instruments.showShipId);
+    Get_bit_resource(rDB, "showMessages", &instruments, SHOW_MESSAGES);
+
+    Get_bit_resource(rDB, "mapRadar", &instruments, MAP_RADAR);
+    Get_bit_resource(rDB, "clientRanker", &instruments, CLIENT_RANKER);
+    Get_bit_resource(rDB, "showShipShapes", &instruments, SHOW_SHIP_SHAPES);
+    Get_bit_resource(rDB, "showMyShipShape", &instruments,
+		     SHOW_MY_SHIP_SHAPE);
+    Get_bit_resource(rDB, "ballMsgScan", &instruments, BALL_MSG_SCAN);
+    Get_bit_resource(rDB, "showLivesByShip", &instruments,
+		     SHOW_LIVES_BY_SHIP);
+    Get_bit_resource(rDB, "slidingRadar", &instruments, SHOW_SLIDING_RADAR);
+    Get_bit_resource(rDB, "showItems", &instruments, SHOW_ITEMS);
+    Get_bit_resource(rDB, "clockAMPM", &instruments, SHOW_CLOCK_AMPM_FORMAT);
+    Get_bit_resource(rDB, "outlineWorld", &instruments, SHOW_OUTLINE_WORLD);
+    Get_bit_resource(rDB, "filledWorld", &instruments, SHOW_FILLED_WORLD);
+    Get_bit_resource(rDB, "texturedWalls", &instruments, SHOW_TEXTURED_WALLS);
+    Get_bit_resource(rDB, "showDecor", &instruments, SHOW_DECOR);
+    Get_bit_resource(rDB, "outlineDecor", &instruments, SHOW_OUTLINE_DECOR);
+    Get_bit_resource(rDB, "filledDecor", &instruments, SHOW_FILLED_DECOR);
+    Get_bit_resource(rDB, "texturedDecor", &instruments, SHOW_TEXTURED_DECOR);
+    Get_bit_resource(rDB, "reverseScroll", &instruments, SHOW_REVERSE_SCROLL);
+    Get_bit_resource(rDB, "showID", &instruments, SHOW_SHIP_ID);
 
     Get_bool_resource(rDB, "fullColor", &fullColor);
     Get_bool_resource(rDB, "texturedObjects", &texturedObjects);
     if (!fullColor) {
 	texturedObjects = false;
-	instruments.showTexturedWalls = false;
+	CLR_BIT(instruments, SHOW_TEXTURED_WALLS);
     }
     Get_bool_resource(rDB, "pointerControl", &initialPointerControl);
     Get_float_resource(rDB, "showItemsTime", &showItemsTime);
@@ -3711,9 +3507,9 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
 
     Get_float_resource(rDB, "speedFactHUD", &hud_move_fact);
     Get_float_resource(rDB, "speedFactPTR", &ptr_move_fact);
-    Get_float_resource(rDB, "fuelNotify", &fuelLevel3);
-    Get_float_resource(rDB, "fuelWarning", &fuelLevel2);
-    Get_float_resource(rDB, "fuelCritical", &fuelLevel1);
+    Get_int_resource(rDB, "fuelNotify", &fuelLevel3);
+    Get_int_resource(rDB, "fuelWarning", &fuelLevel2);
+    Get_int_resource(rDB, "fuelCritical", &fuelLevel1);
 
     Get_resource(rDB, "gameFont", gameFontName, sizeof gameFontName);
     Get_resource(rDB, "messageFont", messageFontName, sizeof messageFontName);
@@ -3746,6 +3542,10 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
     clientRankHTMLNOJSFile = xp_strdup(resValue);
     Get_resource(rDB, "texturePath", resValue, sizeof resValue);
     texturePath = xp_strdup(resValue);
+    Get_resource(rDB, "wallTextureFile", resValue, sizeof resValue);
+    wallTextureFile = xp_strdup(resValue);
+    Get_resource(rDB, "decorTextureFile", resValue, sizeof resValue);
+    decorTextureFile = xp_strdup(resValue);
 
     Get_int_resource(rDB, "maxFPS", &maxFPS);
     oldMaxFPS = maxFPS;
@@ -3891,6 +3691,26 @@ void	defaultCleanup(void)
 	free(texturePath);
 	texturePath = NULL;
     }
+/*    if (clientRankFile) {
++	free(clientRankFile);
++	clientRankFile = NULL;
++    }
++    if (clientRankHTMLFile) {
++	free(clientRankHTMLFile);
++	clientRankHTMLFile = NULL;
++    }
++    if (clientRankHTMLNOJSFile) {
++	free(clientRankHTMLNOJSFile);
++	clientRankHTMLNOJSFile = NULL;
++    }*/
+    if (wallTextureFile) {
+	free(wallTextureFile);
+	wallTextureFile = NULL;
+    }
+    if (decorTextureFile) {
+	free(decorTextureFile);
+	decorTextureFile = NULL;
+    }
     if (shipShape) {
 	free(shipShape);
 	shipShape = NULL;
@@ -3961,5 +3781,3 @@ static void Get_test_resources(XrmDatabase rDB)
     (void)rDB;
 }
 #endif
-
-#endif /* OPTIONHACK */

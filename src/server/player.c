@@ -198,8 +198,7 @@ void Go_home(player *pl)
 
     pl->dir = dir;
     pl->float_dir = dir;
-    Player_position_init_clicks(
-	pl, (int)(pos.cx + CLICK * vx),	(int)(pos.cy + CLICK * vy));
+    Player_position_init_clicks(pl, pos.cx + CLICK * vx, pos.cy + CLICK * vy);
     pl->vel.x = vx;
     pl->vel.y = vy;
     pl->velocity = velo;
@@ -254,6 +253,7 @@ void Compute_sensor_range(player *pl)
 	    EnergyRangeFactor = minVisibilityDistance /
 		(World.items[ITEM_FUEL].initial
 		 * (1.0 + ((double)World.items[ITEM_SENSOR].initial * 0.25)));
+	    EnergyRangeFactor /= FUEL_SCALE_FACT;
 	} else
 	    EnergyRangeFactor = ENERGY_RANGE_FACTOR;
 	init = 1;
@@ -270,15 +270,15 @@ void Compute_sensor_range(player *pl)
 /*
  * Give ship one more tank, if possible.
  */
-void Player_add_tank(player *pl, double tank_fuel)
+void Player_add_tank(player *pl, long tank_fuel)
 {
-    double		tank_cap, add_fuel;
+    long		tank_cap, add_fuel;
 
     if (pl->fuel.num_tanks < MAX_TANKS) {
 	pl->fuel.num_tanks++;
 	tank_cap = TANK_CAP(pl->fuel.num_tanks);
 	add_fuel = tank_fuel;
-	LIMIT(add_fuel, 0.0, tank_cap);
+	LIMIT(add_fuel, 0, tank_cap);
 	pl->fuel.sum += add_fuel;
 	pl->fuel.max += tank_cap;
 	pl->fuel.tank[pl->fuel.num_tanks] = add_fuel;
@@ -334,9 +334,9 @@ void Player_used_kill(player *pl)
  * Give player the initial number of tanks and amount of fuel.
  * Upto the maximum allowed.
  */
-static void Player_init_fuel(player *pl, double total_fuel)
+static void Player_init_fuel(player *pl, long total_fuel)
 {
-    double		fuel = total_fuel;
+    long		fuel = total_fuel;
     int			i;
 
     pl->fuel.num_tanks  = 0;
@@ -363,10 +363,9 @@ int Init_player(int ind, shipshape_t *ship)
 
     /*memset(pl, 0, sizeof(player));*/
 
-    pl->vel.x = pl->vel.y = 0.0;
-    pl->acc.x = pl->acc.y = 0.0;
-    pl->float_dir = pl->dir = DIR_UP;
-
+    pl->vel.x	= pl->vel.y	= 0.0;
+    pl->acc.x	= pl->acc.y	= 0.0;
+    pl->float_dir = pl->dir	= DIR_UP;
     pl->turnvel		= 0.0;
     pl->oldturnvel	= 0.0;
     pl->turnacc		= 0.0;
@@ -378,7 +377,7 @@ int Init_player(int ind, shipshape_t *ship)
 	    pl->item[i] = World.items[i].initial;
     }
 
-    pl->fuel.sum = World.items[ITEM_FUEL].initial;
+    pl->fuel.sum        = World.items[ITEM_FUEL].initial << FUEL_SCALE_BITS;
     Player_init_fuel(pl, pl->fuel.sum);
 
     /*
@@ -470,6 +469,7 @@ int Init_player(int ind, shipshape_t *ship)
 
     pl->idleCount = 0;
     pl->flooding = -1;
+    pl->grabbedBallFrame = -1;
 
     /*
      * If limited lives you will have to wait 'til everyone gets GAME OVER.
@@ -531,20 +531,20 @@ void Alloc_players(int number)
 {
     player *p;
     struct _visibility *t;
-    size_t n = number;
     int i;
 
     /* kps - fix this so you can memset the player struct to 0 later */
 
     /* Allocate space for pointers */
-    PlayersArray = (player **) calloc(n, sizeof(player *));
+    PlayersArray = (player **) calloc(number, sizeof(player *));
 
     /* Allocate space for all entries, all player structs */
-    p = playerArray = (player *) calloc(n, sizeof(player));
+    p = playerArray = (player *) calloc(number, sizeof(player));
 
     /* Allocate space for all visibility arrays, n arrays of n entries */
     t = visibilityArray =
-	(struct _visibility *) calloc(n * n, sizeof(struct _visibility));
+	(struct _visibility *) calloc(number * number,
+				      sizeof(struct _visibility));
 
     if (!PlayersArray || !playerArray || !visibilityArray) {
 	error("Not enough memory for Players.");
@@ -600,12 +600,12 @@ void Update_score_table(void)
 	    for (i = 0; i < NumPlayers; i++) {
 		player *pl_i = Players(i);
 		if (pl_i->conn != NULL)
-		    Send_score(pl_i->conn, pl->id, pl->score, (int)pl->life,
+		    Send_score(pl_i->conn, pl->id, pl->score, pl->life,
 			       pl->mychar, pl->alliance);
 	    }
 	    for (i = 0; i < NumObservers; i++)
 		Send_score(Players(i + observerStart)->conn, pl->id,
-			   pl->score, (int)pl->life, pl->mychar, pl->alliance);
+			   pl->score, pl->life, pl->mychar, pl->alliance);
 	}
 	if (BIT(World.rules->mode, TIMING)) {
 	    if (pl->check != pl->prev_check
@@ -851,6 +851,7 @@ static void Give_best_player_bonus(double average_score,
     double		points;
     char		msg[MSG_LEN];
 
+
     if (best_ratio == 0)
 	sprintf(msg, "There is no Deadly Player.");
     else if (num_best_players == 1) {
@@ -867,7 +868,8 @@ static void Give_best_player_bonus(double average_score,
 	for (i = 0; i < num_best_players; i++) {
 	    player	*bp = Players(best_players[i]);
 	    double	ratio = Rate(bp->score, average_score);
-	    double	score = (ratio + num_best_players) / num_best_players;
+	    double	score = (ratio + num_best_players)
+				/ num_best_players;
 
 	    if (msg[0]) {
 		if (i == num_best_players - 1)
@@ -880,7 +882,7 @@ static void Give_best_player_bonus(double average_score,
 		msg[0] = '\0';
 	    }
 	    strcat(msg, bp->name);
-	    points = best_ratio * score;
+	    points = (int) (best_ratio * score);
 	    Score(bp, points, bp->pos, "[Deadly]");
 	}
 	if (strlen(msg) + 64 >= sizeof(msg)) {
@@ -1177,7 +1179,7 @@ void Race_game_over(void)
 			(num_best_players == 1) ? "had" : "shares",
 			(double) bestlap / FPS);
 		Set_message(msg);
-		Score(pl, 5.0 + num_active_players, pl->pos,
+		Score(pl, 5 + num_active_players, pl->pos,
 		      (num_best_players == 1)
 		      ? "[Fastest lap]" : "[Joint fastest lap]");
 	    }
@@ -1922,7 +1924,7 @@ void Kill_player(player *pl, bool add_rank_death)
 
 void Player_death_reset(player *pl, bool add_rank_death)
 {
-    double		minfuel;
+    long		minfuel;
     int			i;
 
 
@@ -1962,9 +1964,9 @@ void Player_death_reset(player *pl, bool add_rank_death)
     pl->warped		= 0;
     pl->lock.distance	= 0;
 
-    pl->fuel.sum       	= pl->fuel.sum * 0.90;	/* Loose 10% of fuel */
-    minfuel		= World.items[ITEM_FUEL].initial;
-    minfuel		+= rfrac() * (1.0 + minfuel) * 0.2;
+    pl->fuel.sum       	= (long)(pl->fuel.sum*0.90);	/* Loose 10% of fuel */
+    minfuel		= (World.items[ITEM_FUEL].initial * FUEL_SCALE_FACT);
+    minfuel		+= (int)(rfrac() * (1 + minfuel) * 0.2f);
     pl->fuel.sum	= MAX(pl->fuel.sum, minfuel);
     Player_init_fuel(pl, pl->fuel.sum);
 

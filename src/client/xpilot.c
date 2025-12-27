@@ -29,6 +29,9 @@ char xpilot_version[] = VERSION;
 char xpilot_versionid[] = "@(#)$" TITLE " $";
 #endif
 
+
+char			hostname[SOCK_HOSTNAME_LENGTH];
+
 char			**Argv;
 int			Argc;
 
@@ -167,7 +170,7 @@ int main(int argc, char *argv[])
 	       conpar->team, conpar->disp_name, conpar->server_version);
     }
     
-    if (instruments.useClientRanker)
+    if (BIT(instruments, CLIENT_RANKER))
 	Print_saved_scores();
 
     return retval;
@@ -187,8 +190,6 @@ extern char bitmaps_version[];
 extern char caudio_version[];
 extern char checknames_version[];
 extern char client_version[];
-extern char clientcommand_version[];
-extern char clientrank_version[];
 extern char colors_version[];
 extern char config_version[];
 extern char configure_version[];
@@ -196,7 +197,6 @@ extern char datagram_version[];
 extern char dbuff_version[];
 extern char default_version[];
 extern char error_version[];
-extern char event_version[];
 extern char gfx2d_version[];
 extern char guimap_version[];
 extern char guiobjects_version[];
@@ -219,12 +219,13 @@ extern char socklib_version[];
 extern char talk_version[];
 extern char talkmacros_version[];
 extern char textinterface_version[];
+extern char texture_version[];
 extern char welcome_version[];
 extern char widget_version[];
 extern char xevent_version[];
 extern char xeventhandlers_version[];
 extern char xinit_version[];
-extern char xpaint_version[];
+extern char xpmread_version[];
 
 
 static void Check_client_versions(void)
@@ -242,8 +243,6 @@ static void Check_client_versions(void)
 	{ "caudio", caudio_version },
 	{ "checknames", checknames_version },
 	{ "client", client_version },
-	{ "clientcommand", clientcommand_version },
-	{ "clientrank", clientrank_version },
 	{ "colors", colors_version },
 	{ "config", config_version },
 	{ "configure", configure_version },
@@ -251,7 +250,6 @@ static void Check_client_versions(void)
 	{ "dbuff", dbuff_version },
 	{ "default", default_version },
 	{ "error", error_version },
-	{ "event", event_version },
 	{ "gfx2d", gfx2d_version },
 	{ "guimap", guimap_version },
 	{ "guiobjects", guiobjects_version },
@@ -274,13 +272,14 @@ static void Check_client_versions(void)
 	{ "talk", talk_version },
 	{ "talkmacros", talkmacros_version },
 	{ "textinterface", textinterface_version },
+	{ "texture", texture_version },
 	{ "welcome", welcome_version },
 	{ "widget", widget_version },
 	{ "xevent", xevent_version },
 	{ "xeventhandlers", xeventhandlers_version },
 	{ "xinit", xinit_version },
-	{ "xpaint", xpaint_version },
 	{ "xpilot", xpilot_version },
+	{ "xpmread", xpmread_version },
     };
     int			i;
     int			oops = 0;

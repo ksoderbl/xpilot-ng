@@ -48,6 +48,9 @@ int 			framesPerSecond = 18;
 long			main_loops = 0;		/* needed in events.c */
 bool			is_server = true;	/* used in common code */
 
+#ifdef LOG
+static bool		Log = true;
+#endif
 static bool		NoPlayersEnteredYet = true;
 int			game_lock = false;
 int			mute_baseless;
@@ -169,9 +172,10 @@ int main(int argc, char **argv)
      */
     serverTime = time(NULL);
 
-    if (!silent)
-	xpprintf("%s Server runs at %d frames per second\n",
-		 showtime(), framesPerSecond);
+#ifndef SILENT
+    xpprintf("%s Server runs at %d frames per second\n",
+	     showtime(), framesPerSecond);
+#endif
 
     /* kps - move this somewhere else ? */
     teamcup_open_score_file();
@@ -603,9 +607,10 @@ static void Handle_signal(int sig_no)
     _exit(sig_no);	/* just in case */
 }
 
-/* kps - is this useful??? */
+
 void Log_game(const char *heading)
 {
+#ifdef LOG
     char str[1024];
     FILE *fp;
     char timenow[81];
@@ -617,7 +622,7 @@ void Log_game(const char *heading)
 
     lt = time(NULL);
     ptr = localtime(&lt);
-    strftime(timenow, 79, "%I:%M:%S %p %Z %A, %B %d, %Y", ptr);
+    strftime(timenow,79,"%I:%M:%S %p %Z %A, %B %d, %Y",ptr);
 
     sprintf(str,"%-50.50s\t%10.10s@%-15.15s\tWorld: %-25.25s\t%10.10s\n",
 	    timenow,
@@ -633,6 +638,9 @@ void Log_game(const char *heading)
 
     fputs(str, fp);
     fclose(fp);
+#else
+    (void)heading;
+#endif
 }
 
 void Game_Over(void)

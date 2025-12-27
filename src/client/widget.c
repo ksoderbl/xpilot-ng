@@ -21,7 +21,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include "xpclient_x11.h"
+#include "xpclient.h"
 
 char widget_version[] = VERSION;
 
@@ -285,7 +285,9 @@ int Widget_resize(int widget_desc, int width, int height)
     widget_t			*widget;
 
     if ((widget = Widget_pointer(widget_desc)) == NULL) {
+#ifndef SILENT
 	printf("no widget pointer for resize (%d)\n", widget_desc);
+#endif
 	return NO_WIDGET;
     }
     XResizeWindow(dpy, widget->window, width, height);
@@ -660,9 +662,11 @@ static void Widget_draw_expose(int widget_desc, XExposeEvent *expose)
 	Widget_draw_viewer(widget, expose);
 	break;
 
+#if 1 && !defined(SILENT)
     default:
 	printf("Widget_draw: default %d\n", widget->type);
 	break;
+#endif
     }
 
 }
@@ -801,9 +805,11 @@ static void Widget_button_motion(XEvent *event, int widget_desc)
 	Widget_button_slider(event, widget, true);
 	break;
 
+#if 1 && !defined(SILENT)
     default:
 	printf("Widget_button_motion: default %d\n", widget->type);
 	break;
+#endif
     }
 }
 
@@ -1061,9 +1067,11 @@ static void Widget_button(XEvent *event, int widget_desc, bool pressed)
     case WIDGET_SLIDER_VERT:
 	Widget_button_slider(event, widget, pressed);
 	break;
+#if 1 && !defined(SILENT)
     default:
 	printf("Widget_button: default %d\n", widget->type);
 	break;
+#endif
     }
 }
 
@@ -1107,9 +1115,11 @@ static void Widget_inside(XEvent *event, int widget_desc, bool inside)
 	if (arroww->pressed == true)
 	    Widget_draw(widget_desc);
 	break;
+#if 1 && !defined(SILENT)
     default:
 	printf("Widget_inside: default %d\n", widget->type);
 	break;
+#endif
     }
 }
 

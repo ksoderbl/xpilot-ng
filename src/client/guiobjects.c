@@ -21,7 +21,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include "xpclient_x11.h"
+#include "xpclient.h"
 
 char guiobjects_version[] = VERSION;
 
@@ -50,64 +50,6 @@ int team7Color;
 int team8Color;
 int team9Color;
 
-void Gui_paint_item_symbol(int type, Drawable d, GC mygc, int x, int y, int c)
-{
-    if (!texturedObjects) {
-#ifdef _WINDOWS
-	rd.paintItemSymbol(type, d, mygc, x, y, c);
-#else
-	gcv.stipple = itemBitmaps[type];
-	gcv.fill_style = FillStippled;
-	gcv.ts_x_origin = x;
-	gcv.ts_y_origin = y;
-	XChangeGC(dpy, mygc,
-		  GCStipple|GCFillStyle|GCTileStipXOrigin|GCTileStipYOrigin,
-		  &gcv);
-	rd.paintItemSymbol(type, d, mygc, x, y, c);
-	XFillRectangle(dpy, d, mygc, x, y, ITEM_SIZE, ITEM_SIZE);
-	gcv.fill_style = FillSolid;
-	XChangeGC(dpy, mygc, GCFillStyle, &gcv);
-#endif
-    } else
-	Bitmap_paint(d, BM_ALL_ITEMS, x, y, type);
-}
-
-void Gui_paint_item(int type, Drawable d, GC mygc, int x, int y)
-{
-    const int		SIZE = ITEM_TRIANGLE_SIZE;
-    XPoint		points[5];
-
-#ifndef NO_ITEM_TRIANGLES
-    points[0].x = x - SIZE;
-    points[0].y = y - SIZE;
-    points[1].x = x;
-    points[1].y = y + SIZE;
-    points[2].x = x + SIZE;
-    points[2].y = y - SIZE;
-    points[3] = points[0];
-    SET_FG(colors[BLUE].pixel);
-    rd.drawLines(dpy, d, mygc, points, 4, CoordModeOrigin);
-#endif
-
-    SET_FG(colors[RED].pixel);
-#if 0
-    str[0] = itemtype_ptr[i].type + '0';
-    str[1] = '\0';
-    rd.drawString(dpy, d, mygc,
-		  x - XTextWidth(gameFont, str, 1)/2,
-		  y + SIZE - 1,
-		  str, 1);
-#endif
-    Gui_paint_item_symbol(type, d, mygc,
-			  x - ITEM_SIZE/2,
-			  y - SIZE + 2, ITEM_PLAYFIELD);
-}
-
-void Gui_paint_item_object(int type, int x, int y)
-{
-    Gui_paint_item(type, drawPixmap, gameGC, WINSCALE(X(x)), WINSCALE(Y(y)));
-}
-
 void Gui_paint_ball(int x, int y)
 {
     x = X(x);
@@ -135,7 +77,7 @@ static void Gui_paint_mine_name(int x, int y, char *name)
 {
     int		name_len, name_width;
 
-    if (!name || !mineNameColor)
+    if (!name)
 	return;
 
     SET_FG(colors[mineNameColor].pixel);
@@ -143,10 +85,11 @@ static void Gui_paint_mine_name(int x, int y, char *name)
     name_len = strlen(name);
     name_width = XTextWidth(gameFont, name, name_len);
 
-    rd.drawString(dpy, drawPixmap, gameGC,
-		  WINSCALE(x) - name_width / 2,
-		  WINSCALE(y + 4) + gameFont->ascent + 1,
-		  name, name_len);
+    if (name != NULL)
+	rd.drawString(dpy, drawPixmap, gameGC,
+		    WINSCALE(x) - name_width / 2,
+		    WINSCALE(y + 4) + gameFont->ascent + 1,
+		    name, name_len);
 }
 
 void Gui_paint_mine(int x, int y, int teammine, char *name)
@@ -194,8 +137,8 @@ void Gui_paint_mine(int x, int y, int teammine, char *name)
 	if (teammine == 0) {
 	    SET_FG(colors[BLUE].pixel);
 	    rd.fillRectangle(dpy, drawPixmap, gameGC,
-			     WINSCALE(x - 7), WINSCALE(y - 2),
-			     UWINSCALE(15), UWINSCALE(5));
+			WINSCALE(x - 7), WINSCALE(y - 2),
+			WINSCALE(15), WINSCALE(5));
 	}
 
 	SET_FG(colors[WHITE].pixel);
@@ -281,7 +224,7 @@ static void Gui_paint_nastyshot(int color, int x, int y, int size)
 {
     int z = size;
 
-    if (rfrac() < 0.5) {
+    if (rfrac() < 0.5f) {
 	Segment_add(color,
 		    x - z, y - z,
 		    x + z, y + z);
@@ -402,7 +345,7 @@ void Gui_paint_paused(int x, int y, int count)
     if (!texturedObjects) {
 	int		x_0, y_0;
 	static int	pauseCharWidth = -1;
-	const unsigned	half_pause_size = 3*BLOCK_SZ/7;
+	const int	half_pause_size = 3*BLOCK_SZ/7;
 
 	if (pauseCharWidth < 0)
 	    pauseCharWidth = XTextWidth(gameFont, "P", 1);
@@ -412,15 +355,15 @@ void Gui_paint_paused(int x, int y, int count)
 	y_0 = Y(y + half_pause_size);
 	rd.fillRectangle(dpy, drawPixmap, gameGC,
 			 WINSCALE(x_0), WINSCALE(y_0),
-			 UWINSCALE(2*half_pause_size+1),
-			 UWINSCALE(2*half_pause_size+1));
+			 WINSCALE(2*half_pause_size+1),
+			 WINSCALE(2*half_pause_size+1));
 	if (count <= 0 || loopsSlow % 10 >= 5) {
 	    SET_FG(colors[WHITE].pixel);
 	    rd.drawRectangle(dpy, drawPixmap, gameGC,
 			     WINSCALE(x_0 - 1),
 			     WINSCALE(y_0 - 1),
-			     UWINSCALE(2*(half_pause_size+1)),
-			     UWINSCALE(2*(half_pause_size+1)));
+			     WINSCALE(2*(half_pause_size+1)),
+			     WINSCALE(2*(half_pause_size+1)));
 	    rd.drawString(dpy, drawPixmap, gameGC,
 			  WINSCALE(X(x)) - pauseCharWidth/2,
 			  WINSCALE(Y(y-1)) + gameFont->ascent/2,
@@ -436,21 +379,35 @@ void Gui_paint_paused(int x, int y, int count)
 /* Create better graphics for this. */
 void Gui_paint_appearing(int x, int y, int id, int count)
 {
-    const unsigned hsize = 3 * BLOCK_SZ / 7;
+    const int hsize = 3 * BLOCK_SZ / 7;
 
     /* Make a note we are doing the base warning */
     if (version >= 0x4F12) {
 	homebase_t *base = Homebase_by_id(id);
+	/* hack */
 	if (base != NULL)
-	    base->appeartime = loops + (count * clientFPS) / 120;
+	    base->deathtime = loops + count;
     }
 
+#if 1
     SET_FG(colors[RED].pixel);
     rd.fillRectangle(dpy, drawPixmap, gameGC,
-		     SCALEX(x - (int)hsize),
-		     SCALEY(y - (int)hsize + (int)(count / 180. * hsize + 1)),
-		     UWINSCALE(2 * hsize + 1),
-		     UWINSCALE((unsigned)(count / 180. * hsize + 1)));
+		     SCALEX(x - hsize),
+		     SCALEY(y - hsize + (int)(count / 180. * hsize + 1)),
+		     WINSCALE(2 * hsize + 1),
+		     WINSCALE((int)(count / 180. * hsize + 1)));
+#else
+    SET_FG(colors[RED].pixel);
+    rd.fillRectangle(dpy, drawPixmap, gameGC, SCALEX(x - hsize), SCALEY(y + hsize),
+		     WINSCALE(2 * hsize + 1), WINSCALE(2 * hsize + 1));
+    SET_FG(colors[WHITE].pixel);
+    count = 360 - count;
+    if (count < 0)
+	count = 0;
+    rd.fillRectangle(dpy, drawPixmap, gameGC, SCALEX(x - hsize), SCALEY(y + hsize),
+		     WINSCALE(2 * hsize + 1),
+		     WINSCALE((int)(count / 180. * hsize + 1)));
+#endif
 }
 
 
@@ -500,8 +457,8 @@ void Gui_paint_connector(int x_0, int y_0, int x_1, int y_1, int tractor)
 	rd.setDashes(dpy, gameGC, 0, dashes, NUM_DASHES);
 
     rd.drawLine(dpy, drawPixmap, gameGC,
-		WINSCALE(X(x_0)), WINSCALE(Y(y_0)),
-		WINSCALE(X(x_1)), WINSCALE(Y(y_1)));
+	      WINSCALE(X(x_0)), WINSCALE(Y(y_0)),
+	      WINSCALE(X(x_1)), WINSCALE(Y(y_1)));
     if (tractor)
 	rd.setDashes(dpy, gameGC, 0, dashes, NUM_DASHES);
 }
@@ -583,7 +540,7 @@ static void Gui_paint_ship_name(int x, int y, other_t *other)
     } else
 	SET_FG(colors[BLUE].pixel);
 
-    if (instruments.showLivesByShip
+    if (BIT(instruments, SHOW_LIVES_BY_SHIP)
 	&& BIT(Setup->mode, LIMITED_LIVES)) {
 	char keff[4] = "";
 
@@ -642,28 +599,29 @@ int Team_color(int team)
 
 int Life_color(other_t *other)
 {
-    int color = 0; /* default is 'no special color' */
+    int color = 0;/* default is 'no special color' */
 
     if (other
 	&& (other->mychar == ' ' || other->mychar == 'R')
-	&& BIT(Setup->mode, LIMITED_LIVES))
-	color = Life_color_by_life(other->life);
+	&& BIT(Setup->mode, LIMITED_LIVES)) {
+		color = Life_color_by_life(other->life);
+    }
     return color;
 }
 
-int Life_color_by_life(int life)
+int Life_color_by_life(int life) /* This function doesn't check stuff */
 {
-    int color;
+  int color;
 	
-    if (life > 2)
-	color = manyLivesColor;
-    else if (life == 2)
-	color = twoLivesColor;
-    else if (life == 1)
-	color = oneLifeColor;
-    else /* we catch all */
-	color = zeroLivesColor;
-    return color;
+	if (life > 2)
+	    color = manyLivesColor;
+	else if (life == 2)
+	    color = twoLivesColor;
+	else if (life == 1)
+	    color = oneLifeColor;
+	else /* we catch all */
+	    color = zeroLivesColor;
+  return color;
 }
 
 static int Gui_calculate_ship_color(int id, other_t *other)
@@ -780,8 +738,7 @@ static void Gui_paint_marking_lights(int id, int x, int y,
 
 
 static void Gui_paint_shields_deflectors(int x, int y, int radius, int shield,
-					 int deflector, int eshield,
-					 int ship_color)
+				  int deflector, int eshield, int ship_color)
 {
     int		e_radius = radius + 4;
     int		half_radius = radius >> 1;
@@ -806,8 +763,7 @@ static void Gui_paint_shields_deflectors(int x, int y, int radius, int shield,
 	rd.drawArc(dpy, drawPixmap, gameGC,
 		   WINSCALE(X(x - half_e_radius)),
 		   WINSCALE(Y(y + half_e_radius)),
-		   (unsigned)WINSCALE(e_radius),
-		   (unsigned)WINSCALE(e_radius),
+		   WINSCALE(e_radius), WINSCALE(e_radius),
 		   0, 64 * 360);
     }
     if (scolor != -1) {
@@ -815,18 +771,17 @@ static void Gui_paint_shields_deflectors(int x, int y, int radius, int shield,
 	rd.drawArc(dpy, drawPixmap, gameGC,
 		   WINSCALE(X(x - half_radius)),
 		   WINSCALE(Y(y + half_radius)),
-		   (unsigned)WINSCALE(radius),
-		   (unsigned)WINSCALE(radius),
+		   WINSCALE(radius), WINSCALE(radius),
 		   0, 64 * 360);
     }
 }
 
-static void Set_drawstyle_dashed(int ship_color);
+static void Set_drawstyle_dashed(int ship_color, int cloak);
 
 static void Gui_paint_ship_cloaked(int ship_color, XPoint *points,
 				   int point_count)
 {
-    Set_drawstyle_dashed(ship_color);
+    Set_drawstyle_dashed(ship_color, 1);
     rd.drawLines(dpy, drawPixmap, gameGC, points, point_count, 0);
 }
 
@@ -838,8 +793,7 @@ static void Gui_paint_ship_phased(int ship_color, XPoint *points,
 
 static void generic_paint_ship(int x, int y, int ang, int ship)
 {
-    Bitmap_paint(drawPixmap, ship,
-		 WINSCALE(X(x) - 16), WINSCALE(Y(y) - 16), ang);
+    Bitmap_paint(drawPixmap, ship, WINSCALE(X(x) - 16), WINSCALE(Y(y) - 16), ang);
 }
 
 
@@ -860,9 +814,9 @@ static void Gui_paint_ship_uncloaked(int id, XPoint *points,
 }
 
 
-static void Set_drawstyle_dashed(int ship_color)
+static void Set_drawstyle_dashed(int ship_color, int cloak)
 {
-    unsigned long mask;
+    int mask;
     if (gcv.line_style != LineOnOffDash) {
 	gcv.line_style = LineOnOffDash;
 	mask = GCLineStyle;
@@ -879,8 +833,8 @@ static int set_shipshape(int world_x, int world_y,
 		  int dir, shipshape_t *ship, XPoint *points)
 {
     int			cnt;
-    position		ship_point_pos;
-    XPoint		*xpts = points;
+    register position	ship_point_pos;
+    register XPoint	*xpts = points;
     int			window_x;
     int			window_y;
 
@@ -912,11 +866,11 @@ void Gui_paint_ship(int x, int y, int dir, int id, int cloak, int phased,
     ship_color = WHITE;
 
     /* mara attempts similar behaviour to the kth ss hack */
-    if ((!instruments.showShipShapes)
+    if ((!BIT(instruments, SHOW_SHIP_SHAPES))
 	&& (self != NULL)
 	&& (self->id != id))
 	cnt = set_shipshape(x, y, dir, Default_ship(), points);
-    else if ((!instruments.showMyShipShape)
+    else if ((!BIT(instruments, SHOW_MY_SHIP_SHAPE))
 	       && (self != NULL)
 	       && (self->id == id))
 	cnt = set_shipshape(x, y, dir, Default_ship(), points);
@@ -976,9 +930,9 @@ void Gui_paint_ship(int x, int y, int dir, int id, int cloak, int phased,
         Gui_paint_marking_lights(id, x, y, ship, dir);
 
     if (shield || deflector) {
-	Set_drawstyle_dashed(ship_color);
+        Set_drawstyle_dashed(ship_color, cloak);
 	Gui_paint_shields_deflectors(x, y, ship->shield_radius,
-				     shield, deflector,
-				     eshield, ship_color);
+				    shield, deflector,
+				    eshield, ship_color);
     }
 }

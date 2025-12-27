@@ -33,6 +33,10 @@
 #define MAX_TOP_HEIGHT	1440
 #define DEF_TOP_HEIGHT	1024
 
+#define MAX_POINTER_BUTTONS	5
+#define MAX_BUTTON_DEFS		3
+#define NUM_BUTTON_DEFS(i)	(buttonDefs[(i)][MAX_BUTTON_DEFS])
+
 #ifdef _WINDOWS
 # ifndef O_BINARY
 #  define O_BINARY		0 /* compability with MSDOS */
@@ -52,10 +56,14 @@ extern bool		multibuffer;
 extern char		color_names[MAX_COLORS][MAX_COLOR_LEN];
 extern int		button_form;
 extern unsigned		top_width, top_height;
+extern unsigned		draw_width, draw_height;
 extern unsigned		players_width, players_height;
 extern char		*geometry;
 extern bool		autoServerMotdPopup;
 extern bool		refreshMotd;
+extern char		sparkColors[MSG_LEN];
+extern int		spark_color[MAX_COLORS];
+extern int		num_spark_colors;
 extern bool		ignoreWindowManager;
 extern bool		quitting;
 
@@ -64,6 +72,9 @@ extern bool		quitting;
  */
 extern const char* Item_get_text(int i);
 extern int Init_top(void);
+extern int Init_playing_windows(void);
+extern int Alloc_msgs(void);
+extern void Free_msgs(void);
 extern void Expose_info_window(void);
 extern void Expose_button_window(int color, Window w);
 extern void Info(Window w);
@@ -71,12 +82,14 @@ extern void Talk_resize(void);
 extern void Talk_cursor(bool visible);
 extern void Talk_map_window(bool map);
 extern int Talk_do_event(XEvent *event);
-extern int Talk_paste(char* data, size_t len, bool overwrite);
+extern int Talk_paste(char* data, int len, bool overwrite);
 extern int Talk_place_cursor(XButtonEvent *xbutton, bool pending);
 extern void Talk_window_cut(XButtonEvent *xbutton);
 extern void Talk_cut_from_messages(XButtonEvent *xbutton);
 extern void Clear_selection(void);
+extern void Print_messages_to_stdout(void);
 extern void Talk_reverse_cut(void);
+extern void Quit(void);
 extern int FatalError(Display *);
 extern void Draw_score_table(void);
 extern void Resize(Window w, unsigned width, unsigned height);

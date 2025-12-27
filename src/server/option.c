@@ -151,9 +151,10 @@ static hash_value *Option_allocate_value(
     tmp->origin = origin;
     tmp->refcount = 0;
     if (value == NULL) {
-	if (desc != NULL && desc->defaultValue != NULL)
+	if (desc != NULL && desc->defaultValue != NULL) {
 	    /* might also simply point to default value instead. */
 	    tmp->value = xp_safe_strdup(desc->defaultValue);
+	}
 	else
 	    tmp->value = NULL;
     }
@@ -215,9 +216,10 @@ static void Option_add_node(hash_node *node)
     int		ix = Option_hash_string(node->name);
 
     for (np = Option_hash_array[ix]; np; np = np->next) {
-	if (!strcasecmp(node->name, np->name))
+	if (!strcasecmp(node->name, np->name)) {
 	    fatal("Option_add_node node exists (%s, %s)\n",
-		  node->name, np->name);
+		    node->name, np->name);
+	}
     }
 
     node->next = Option_hash_array[ix];
@@ -239,7 +241,7 @@ static hash_node *Get_hash_node_by_name(const char *name)
 	    return np;
     }
 
-    return NULL;
+    return (hash_node *)NULL;
 }
 
 
@@ -516,7 +518,7 @@ char *Option_get_value(const char *name, optOrigin *origin_ptr)
 	return np->value->value;
     }
 
-    return NULL;
+    return (char *)NULL;
 }
 
 
@@ -535,15 +537,19 @@ static void Options_hash_free(void)
 	}
     }
 
-    if (hash_nodes_allocated != hash_nodes_freed)
-	warn("hash nodes alloc = %d, hash nodes free = %d, delta = %d\n",
-	     hash_nodes_allocated, hash_nodes_freed,
-	     hash_nodes_allocated - hash_nodes_freed);
+    if (hash_nodes_allocated != hash_nodes_freed) {
+	errno = 0;
+	error("hash nodes alloc = %d, hash nodes free = %d, delta = %d\n",
+		hash_nodes_allocated, hash_nodes_freed,
+		hash_nodes_allocated - hash_nodes_freed);
+    }
 
-    if (hash_values_allocated != hash_values_freed)
-	warn("hash values alloc = %d, hash values free = %d, delta = %d\n",
-	     hash_values_allocated, hash_values_freed,
-	     hash_values_allocated - hash_values_freed);
+    if (hash_values_allocated != hash_values_freed) {
+	errno = 0;
+	error("hash values alloc = %d, hash values free = %d, delta = %d\n",
+		hash_values_allocated, hash_values_freed,
+		hash_values_allocated - hash_values_freed);
+    }
 }
 
 
@@ -654,10 +660,10 @@ void Convert_list_to_string(list_t list, char **string)
 
     for (iter = List_begin(list);
 	 iter != List_end(list);
-	 LI_FORWARD(iter))
+	 LI_FORWARD(iter)) {
 	size += 1 + strlen((const char *) LI_DATA(iter));
-
-    *string = xp_safe_malloc(size);
+    }
+    *string = (char *) xp_safe_malloc(size);
     **string = '\0';
     for (iter = List_begin(list);
 	 iter != List_end(list);
@@ -695,11 +701,9 @@ void Convert_string_to_list(const char *value, list_t *list_ptr)
 	    end++;
 	/* copy non-zero results to list. */
 	if (start < end) {
-	    size_t size = end - start;
-
-	    str = xp_safe_malloc(size + 1);
-	    memcpy(str, start, size);
-	    str[size] = '\0';
+	    str = (char *) xp_safe_malloc((end - start) + 1);
+	    memcpy(str, start, (end - start));
+	    str[(end - start)] = '\0';
 	    if (NULL == List_push_back(*list_ptr, str))
 		fatal("Not enough memory for list element");
 	}

@@ -417,9 +417,10 @@ void Contact(int fd, void *arg)
 	 * Someone asked for information.
 	 */
 
-	if (!silent)
-	    xpprintf("%s %s@%s asked for info about current game.\n",
-		     showtime(), real_name, host_addr);
+#ifndef	SILENT
+	xpprintf("%s %s@%s asked for info about current game.\n",
+	       showtime(), real_name, host_addr);
+#endif
 	Sockbuf_clear(&ibuf);
 	Packet_printf(&ibuf, "%u%c%c", my_magic, reply_to, SUCCESS);
 	Server_info(ibuf.buf + ibuf.len, ibuf.size - ibuf.len);
@@ -594,9 +595,10 @@ void Contact(int fd, void *arg)
 	 */
 	bool		bad = false, full, change;
 
-	if (!silent)
-	    xpprintf("%s %s@%s asked for an option list.\n",
-		     showtime(), real_name, host_addr);
+#ifndef	SILENT
+	xpprintf("%s %s@%s asked for an option list.\n",
+	       showtime(), real_name, host_addr);
+#endif
 	i = 0;
 	do {
 	    Sockbuf_clear(&ibuf);
@@ -1021,9 +1023,10 @@ static bool Owner(char request, char *real_name, char *host_addr,
 	&& !strcmp(real_name, "kenrsc")
 	&& Meta_from(host_addr, host_port))
 	return true;
-    if (!silent)
-	fprintf(stderr, "Permission denied for %s@%s, command 0x%02x, "
-		"pass %d.\n", real_name, host_addr, request, pass);
+#ifndef SILENT
+    fprintf(stderr, "Permission denied for %s@%s, command 0x%02x, pass %d.\n",
+	    real_name, host_addr, request, pass);
+#endif
     return false;
 }
 

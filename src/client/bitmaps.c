@@ -21,7 +21,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include "xpclient_x11.h"
+#include "xpclient.h"
 
 char bitmaps_version[] = VERSION;
 
@@ -88,14 +88,14 @@ static int Bitmap_create_end(Drawable d);
 static void Bitmap_set_pixel(xp_pixmap_t *, int, int, int, RGB_COLOR);
 
 
-/*
- * Adds the standard images into global pixmaps array.
+/**
+ * Adds the standard object bitmaps (aka. block bitmaps) specified
+ * in the object_pixmaps array into global pixmaps array.
  */
-int Bitmaps_init(void)
+int Bitmap_add_std_objects(void)
 {
     int i;
     xp_pixmap_t pixmap;
-
     for (i = 0; i < NUM_OBJECT_BITMAPS; i++) {
 	pixmap = object_pixmaps[i];
 	pixmap.scalable = (i == BM_LOGO
@@ -103,15 +103,32 @@ int Bitmaps_init(void)
 	pixmap.state = BMS_UNINITIALIZED;
 	STORE(xp_pixmap_t, pixmaps, num_pixmaps, max_pixmaps, pixmap);
     }
-
     return 0;
 }
 
-void Bitmaps_cleanup(void)
+
+/**
+ * Defines the standard texture bitmaps specified in the standard_textures
+ * array into global pixmaps array.
+ */
+int Bitmap_add_std_textures(void)
 {
-    if (pixmaps)
-	free(pixmaps);
-    pixmaps = 0;
+    xp_pixmap_t pixmap;
+    pixmap.filename = "rock4.xpm";
+    pixmap.count = 1;
+    pixmap.scalable = false;
+    pixmap.state = BMS_UNINITIALIZED;
+    STORE(xp_pixmap_t, pixmaps, num_pixmaps, max_pixmaps, pixmap);
+    /* this is for decor */
+    STORE(xp_pixmap_t, pixmaps, num_pixmaps, max_pixmaps, pixmap);
+
+    pixmap.filename = "ball.xpm";
+    pixmap.count = 1;
+    pixmap.scalable = false;
+    pixmap.state = BMS_UNINITIALIZED;
+    STORE(xp_pixmap_t, pixmaps, num_pixmaps, max_pixmaps, pixmap);
+
+    return 0;
 }
 
 
@@ -122,7 +139,6 @@ void Bitmaps_cleanup(void)
 int Bitmap_add(char *filename, int count, bool scalable)
 {
     xp_pixmap_t pixmap;
-
     pixmap.filename = xp_strdup(filename);
     pixmap.count = count;
     pixmap.scalable = scalable;
@@ -357,7 +373,8 @@ void Bitmap_paint(Drawable d, int img, int x, int y, int bmp)
  * Maybe move this part to a sperate file.
  */
 
-extern unsigned long (*RGB) (int r, int g, int b);
+extern unsigned long (*RGB) (unsigned char r, unsigned char g,
+			     unsigned char b);
 static GC maskGC;
 
 
@@ -425,7 +442,7 @@ static void Bitmap_set_pixel(xp_pixmap_t * xp_pixmap,
 			     int bmp, int x, int y, RGB_COLOR color)
 {
     unsigned long pixel;
-    int r, g, b;
+    unsigned char r, g, b;
 
     r = RED_VALUE(color);
     g = GREEN_VALUE(color);
@@ -448,8 +465,7 @@ void Bitmap_paint_area(Drawable d, xp_bitmap_t * bit, int x, int y,
 {
     XSetClipOrigin(dpy, gameGC, x - r->x, y - r->y);
     XSetClipMask(dpy, gameGC, bit->mask);
-    XCopyArea(dpy, bit->bitmap, d, gameGC, r->x, r->y,
-	      (unsigned)r->w, (unsigned)r->h, x, y);
+    XCopyArea(dpy, bit->bitmap, d, gameGC, r->x, r->y, r->w, r->h, x, y);
     XSetClipMask(dpy, gameGC, None);
 }
 

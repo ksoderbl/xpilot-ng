@@ -542,8 +542,10 @@ static void Cannon_update(void)
 		    && cannonItemProbMult > 0
 		    && (int)(rfrac() * (60 * 12))
 		    < (cannonItemProbMult * World.items[item].cannonprob))
-		    Cannon_add_item(c, item, (item == ITEM_FUEL
-					      ?  ENERGY_PACK_FUEL : 1));
+		    Cannon_add_item(c, item,
+				    (item == ITEM_FUEL ?
+				     ENERGY_PACK_FUEL >> FUEL_SCALE_BITS
+				     : 1));
 	    }
 	}
 	if ((c->damaged -= timeStep) <= 0)
@@ -604,7 +606,8 @@ static void Target_update(void)
 	targ->damage += TARGET_REPAIR_PER_FRAME * timeStep;
 	if (targ->damage >= TARGET_DAMAGE)
 	    targ->damage = TARGET_DAMAGE;
-	else if (targ->last_change + TARGET_UPDATE_DELAY < frame_loops)
+	else if (targ->last_change + TARGET_UPDATE_DELAY
+		 < frame_loops)
 	    /*
 	     * We don't send target info to the clients every frame
 	     * if the latest repair wouldn't change their display.
@@ -740,16 +743,16 @@ static void Use_items(player *pl)
      */
     if (do_update_this_frame) {
 	if (BIT(pl->used, HAS_SHIELD))
-	    Player_add_fuel(pl, ED_SHIELD);
+	    Add_fuel(&(pl->fuel), (long)ED_SHIELD);
 
 	if (BIT(pl->used, HAS_PHASING_DEVICE))
-	    Player_add_fuel(pl, ED_PHASING_DEVICE);
+	    Add_fuel(&(pl->fuel), (long)ED_PHASING_DEVICE);
 
 	if (BIT(pl->used, HAS_CLOAKING_DEVICE))
-	    Player_add_fuel(pl, ED_CLOAKING_DEVICE);
+	    Add_fuel(&(pl->fuel), (long)ED_CLOAKING_DEVICE);
 
 	if (BIT(pl->used, HAS_DEFLECTOR))
-	    Player_add_fuel(pl, ED_DEFLECTOR);
+	    Add_fuel(&(pl->fuel), (long)ED_DEFLECTOR);
     }
 }
 
@@ -778,9 +781,9 @@ static void Do_refuel(player *pl)
 		fs->fuel -= REFUEL_RATE * timeStep;
 		fs->conn_mask = 0;
 		fs->last_change = frame_loops;
-		Player_add_fuel(pl, REFUEL_RATE * timeStep);
+		Add_fuel(&(pl->fuel), REFUEL_RATE * timeStep);
 	    } else {
-		Player_add_fuel(pl, fs->fuel);
+		Add_fuel(&(pl->fuel), fs->fuel);
 		fs->fuel = 0;
 		fs->conn_mask = 0;
 		fs->last_change = frame_loops;
@@ -819,7 +822,7 @@ static void Do_repair(player *pl)
 		targ->damage += TARGET_FUEL_REPAIR_PER_FRAME;
 		targ->conn_mask = 0;
 		targ->last_change = frame_loops;
-		Player_add_fuel(pl, -REFUEL_RATE * timeStep);
+		Add_fuel(&(pl->fuel), -REFUEL_RATE * timeStep);
 		if (targ->damage > TARGET_DAMAGE) {
 		    targ->damage = TARGET_DAMAGE;
 		    break;
@@ -1007,16 +1010,87 @@ static void Do_warping(player *pl)
 }
 
 
-/* * * * * *
- *
- * Player loop. Computes miscellaneous updates.
- *
+/********** **********
+ * Updating objects and the like.
  */
-static void Update_players(void)
+void Update_objects(void)
 {
     int i, j;
     player *pl;
 
+    /*
+     * Since the amount per frame of some things could get too small to
+     * be represented accurately as an integer, FPSMultiplier makes these
+     * things happen less often (in terms of frames) rather than smaller
+     * amount each time.
+     *
+     * Can also be used to do some updates less frequently.
+     */
+    do_update_this_frame = false;
+    if ((time_to_update -= timeStep) <= 0) {
+	do_update_this_frame = true;
+	time_to_update += 1;
+    }
+
+    Robot_update();
+
+    if (fastAim)
+	Players_turn();
+
+    for (i = 0; i < NumPlayers; i++) {
+	pl = Players(i);
+
+	if (pl->stunned > 0) {
+	    pl->stunned -= timeStep;
+	    if (pl->stunned <= 0)
+		pl->stunned = 0;
+	    CLR_BIT(pl->used, HAS_SHIELD|HAS_LASER|HAS_SHOT);
+	    pl->did_shoot = false;
+	    CLR_BIT(pl->status, THRUSTING);
+	}
+	if (pl->warped > 0) {
+	    pl->warped -= timeStep;
+	    if (pl->warped <= 0)
+		pl->warped = 0;
+	}
+	if (BIT(pl->used, HAS_SHOT) || pl->did_shoot)
+	    Fire_normal_shots(pl);
+	if (BIT(pl->used, HAS_LASER)) {
+	    if (pl->item[ITEM_LASER] <= 0 || BIT(pl->used, HAS_PHASING_DEVICE))
+		CLR_BIT(pl->used, HAS_LASER);
+	    else
+		Fire_laser(pl);
+	}
+	pl->did_shoot = false;
+    }
+
+    /*
+     * Special items.
+     */
+    if (do_update_this_frame) {
+	for (i = 0; i < NUM_ITEMS; i++)
+	    if (World.items[i].num < World.items[i].max
+		&& World.items[i].chance > 0
+		&& (rfrac() * World.items[i].chance) < 1.0f)
+		Place_item(NULL, i);
+    }
+
+    Fuel_update();
+    Misc_object_update();
+    Asteroid_update();
+    Ecm_update();
+    Transporter_update();
+    Cannon_update();
+    Target_update();
+
+    if (!fastAim)
+	Players_turn();
+
+    /* * * * * *
+     *
+     * Player loop. Computes miscellaneous updates.
+     *
+     */
     for (i = 0; i < NumPlayers; i++) {
 	pl = Players(i);
 
@@ -1075,8 +1149,7 @@ static void Update_players(void)
 		}
 		if (BIT(pl->status, SELF_DESTRUCT)) {
 		    if (selfDestructScoreMult != 0) {
-			double sc = Rate(0.0, pl->score)
-			    * selfDestructScoreMult;
+			double sc = Rate(0, pl->score) * selfDestructScoreMult;
 			Score(pl, -sc, pl->pos, "Self-Destruct");
 		    }
 		    SET_BIT(pl->status, KILLED);
@@ -1151,7 +1224,7 @@ static void Update_players(void)
 	    pl->acc.y = power * tsin(pl->dir) / inert;
 	    /* Decrement fuel */
 	    if (do_update_this_frame)
-		Player_add_fuel(pl, -f);
+		Add_fuel(&(pl->fuel), (long)(-f * FUEL_SCALE_FACT));
 	} else
 	    pl->acc.x = pl->acc.y = 0.0;
 
@@ -1177,85 +1250,6 @@ static void Update_players(void)
 
 	pl->used &= pl->have;
     }
-}
-
-/********** **********
- * Updating objects and the like.
- */
-void Update_objects(void)
-{
-    int i;
-    player *pl;
-
-    /*
-     * Since the amount per frame of some things could get too small to
-     * be represented accurately as an integer, FPSMultiplier makes these
-     * things happen less often (in terms of frames) rather than smaller
-     * amount each time.
-     *
-     * Can also be used to do some updates less frequently.
-     */
-    do_update_this_frame = false;
-    if ((time_to_update -= timeStep) <= 0) {
-	do_update_this_frame = true;
-	time_to_update += 1;
-    }
-
-    Robot_update();
-
-    /*
-     * Fast aim:
-     * When calculating a frame, turn the ship before firing.
-     * This means you can change aim one frame faster.
-     */
-    Players_turn();
-
-    for (i = 0; i < NumPlayers; i++) {
-	pl = Players(i);
-
-	if (pl->stunned > 0) {
-	    pl->stunned -= timeStep;
-	    if (pl->stunned <= 0)
-		pl->stunned = 0;
-	    CLR_BIT(pl->used, HAS_SHIELD|HAS_LASER|HAS_SHOT);
-	    pl->did_shoot = false;
-	    CLR_BIT(pl->status, THRUSTING);
-	}
-	if (pl->warped > 0) {
-	    pl->warped -= timeStep;
-	    if (pl->warped <= 0)
-		pl->warped = 0;
-	}
-	if (BIT(pl->used, HAS_SHOT) || pl->did_shoot)
-	    Fire_normal_shots(pl);
-	if (BIT(pl->used, HAS_LASER)) {
-	    if (pl->item[ITEM_LASER] <= 0 || BIT(pl->used, HAS_PHASING_DEVICE))
-		CLR_BIT(pl->used, HAS_LASER);
-	    else
-		Fire_laser(pl);
-	}
-	pl->did_shoot = false;
-    }
-
-    /*
-     * Special items.
-     */
-    if (do_update_this_frame) {
-	for (i = 0; i < NUM_ITEMS; i++)
-	    if (World.items[i].num < World.items[i].max
-		&& World.items[i].chance > 0
-		&& (rfrac() * World.items[i].chance) < 1.0f)
-		Place_item(NULL, i);
-    }
-
-    Fuel_update();
-    Misc_object_update();
-    Asteroid_update();
-    Ecm_update();
-    Transporter_update();
-    Cannon_update();
-    Target_update();
-    Update_players();
 
     for (i = World.NumWormholes - 1; i >= 0; i--) {
 	wormhole_t *wh = Wormholes(i);
@@ -1297,6 +1291,7 @@ void Update_objects(void)
      * Checking for collision, updating score etc. (see collision.c)
      */
     Check_collision();
+
 
     /*
      * Update tanks, Kill players that ought to be killed.

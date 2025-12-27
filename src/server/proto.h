@@ -85,7 +85,8 @@ int shape_is_inside(int cx, int cy, int hitmask, const object *obj,
 int Polys_to_client(unsigned char **);
 void Ball_line_init(void);
 void Player_crash(player *pl, int crashtype, int mapobj_ind, int pt);
-void Object_crash(object *obj, int crashtype, int mapobj_ind);
+void Object_crash(object *obj, struct move *move, int crashtype,
+		  int mapobj_ind);
 
 /*
  * Prototypes for event.c
@@ -161,7 +162,7 @@ void Delta_mv_elastic(object *obj1, object *obj2);
 void Obj_repel(object *obj1, object *obj2, int repel_dist);
 void Item_damage(player *pl, double prob);
 void Tank_handle_detach(player *pl);
-void Add_fuel(pl_fuel_t *, double);
+void Add_fuel(pl_fuel_t *, long);
 void Update_tanks(pl_fuel_t *);
 void Place_item(player *pl, int type);
 int Choose_random_item(void);
@@ -218,8 +219,8 @@ void Fire_general_laser(player *pl, int team, clpos pos,
 void Do_deflector(player *pl);
 void Do_transporter(player *pl);
 void Do_general_transporter(player *pl, clpos pos, player *victim,
-			    int *item, double *amount);
-bool Do_hyperjump(player *pl);
+			    int *item, long *amount);
+void do_hyperjump(player *pl);
 void do_lose_item(player *pl);
 void Update_torpedo(torpobject *torp);
 void Update_missile(missileobject *shot);
@@ -278,7 +279,7 @@ list_t Asteroid_get_list(void);
  * Prototypes for cannon.c
  */
 void Cannon_init(cannon_t *cannon);
-void Cannon_add_item(cannon_t *cannon, int item, double amount);
+void Cannon_add_item(cannon_t *cannon, int item, int amount);
 void Cannon_throw_items(cannon_t *cannon);
 void Cannon_check_defense(cannon_t *cannon);
 void Cannon_check_fire(cannon_t *cannon);
@@ -298,19 +299,8 @@ int GetInd(int id);
 void Pick_startpos(player *pl);
 void Go_home(player *pl);
 void Compute_sensor_range(player *pl);
-void Player_add_tank(player *pl, double tank_fuel);
+void Player_add_tank(player *pl, long tank_fuel);
 void Player_remove_tank(player *pl, int which_tank);
-static inline void Player_add_fuel(player *pl, double amount)
-{
-    Add_fuel(&(pl->fuel), amount);
-}
-static inline bool Player_used_emergency_shield(player *pl)
-{
-    if (BIT(pl->used, (HAS_SHIELD|HAS_EMERGENCY_SHIELD)) ==
-	(HAS_SHIELD|HAS_EMERGENCY_SHIELD))
-	return true;
-    return false;
-}
 void Player_hit_armor(player *pl);
 void Player_used_kill(player *pl);
 int Init_player(int ind, shipshape_t *ship);
@@ -385,7 +375,7 @@ void Set_deny_hosts(void);
 /*
  * Prototypes for metaserver.c
  */
-void Meta_send(char *mesg, size_t len);
+void Meta_send(char *mesg, int len);
 int Meta_from(char *addr, int port);
 void Meta_gone(void);
 void Meta_init(void);

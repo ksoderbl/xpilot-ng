@@ -421,9 +421,9 @@ void Parse_robot_file(void)
 	    /*
 	     * Fill in some default values.
 	     */
-	    strlcpy(ship_buf, "(15,0)(-9,8)(-9,-8)", sizeof ship_buf);
-	    strlcpy(type_buf, DEFAULT_ROBOT_TYPE, sizeof type_buf);
-	    strlcpy(para_buf, "", sizeof para_buf);
+	    strcpy(ship_buf, "(15,0)(-9,8)(-9,-8)");
+	    strcpy(type_buf, DEFAULT_ROBOT_TYPE);
+	    strcpy(para_buf, "");
 
 	    while (fp) {
 		int end_of_record = 0;
@@ -433,10 +433,11 @@ void Parse_robot_file(void)
 		    fclose(fp);
 		    fp = NULL;
 		}
-		else if (*buf == '\n')
+		else if (*buf == '\n') {
 		    end_of_record = 1;
+		}
 		else {
-		    size_t size = 0;
+		    int size = 0;
 		    int key = 0;
 		    char *dst = 0;
 
@@ -476,10 +477,12 @@ void Parse_robot_file(void)
 		    if (num_robs == max_robs) {
 			if (max_robs == 0) {
 			    max_robs = 10;
-			    robs = malloc(max_robs* sizeof(robot_t));
+			    robs = (robot_t *)
+				malloc(max_robs* sizeof(robot_t));
 			} else {
 			    max_robs += 10;
-			    robs = realloc(robs, max_robs * sizeof(robot_t));
+			    robs = (robot_t *)
+				realloc(robs, max_robs * sizeof(robot_t));
 			}
 			if (!robs) {
 			    error("Not enough memory to parse robotsfile");
@@ -487,14 +490,10 @@ void Parse_robot_file(void)
 			    break;
 			}
 		    }
-		    strlcpy(robs[num_robs].driver, type_buf,
-			    sizeof robs[num_robs].driver);
-		    strlcpy(robs[num_robs].name, name_buf,
-			    sizeof robs[num_robs].name);
-		    strlcpy(robs[num_robs].config, para_buf,
-			    sizeof robs[num_robs].config);
-		    strlcpy(robs[num_robs].shape, ship_buf,
-			    sizeof robs[num_robs].shape);
+		    strcpy(robs[num_robs].driver, type_buf);
+		    strcpy(robs[num_robs].name, name_buf);
+		    strcpy(robs[num_robs].config, para_buf);
+		    strcpy(robs[num_robs].shape, ship_buf);
 		    robs[num_robs].used = 0;
 		    num_robs++;
 		}
@@ -552,8 +551,9 @@ void Robot_init(void)
     for (i = 0; i < num_robot_types; i++) {
 	memset(&robot_types[n], 0, sizeof(robot_type_t));
 	result = (*robot_type_setups[i].setup_func)(&robot_types[n]);
-	if (result == 0)
+	if (result == 0) {
 	    n++;
+	}
     }
     num_robot_types = n;
 
@@ -630,8 +630,9 @@ static void Robot_talks(enum robot_talk_t says_what,
     int			two, i, n;
     char		msg[MSG_LEN];
 
-    if (robotsTalk != true && says_what != ROBOT_TALK_ENTER)
+    if (robotsTalk != true && says_what != ROBOT_TALK_ENTER) {
 	return;
+    }
 
     switch (says_what) {
     case ROBOT_TALK_ENTER:
@@ -754,9 +755,9 @@ static void Robot_create(void)
     if (robot->mychar != 'W')
 	robot->mychar = 'R';
 
-    robot->fuel.l1 = 100.0;
-    robot->fuel.l2 = 200.0;
-    robot->fuel.l3 = 500.0;
+    robot->fuel.l1 = 100 * FUEL_SCALE_FACT;
+    robot->fuel.l2 = 200 * FUEL_SCALE_FACT;
+    robot->fuel.l3 = 500 * FUEL_SCALE_FACT;
 
     Pick_startpos(robot);
 
@@ -771,8 +772,8 @@ static void Robot_create(void)
     if (BIT(World.rules->mode, TEAM_PLAY) && teamShareScore) {
 	if (World.teams[robot->team].NumMembers == 1)
 	    /* reset team score on first player */
-	    World.teams[robot->team].score = 0.0;
-	TEAM_SCORE(robot->team, 0.0);
+	    World.teams[robot->team].score = 0;
+	TEAM_SCORE(robot->team, 0);
     }
 
     for (i = 0; i < NumPlayers - 1; i++) {
@@ -785,10 +786,12 @@ static void Robot_create(void)
 
     Robot_talks(ROBOT_TALK_ENTER, robot->name, "");
 
-    if (!silent && logRobots)
+#ifndef	SILENT
+    if (logRobots)
 	xpprintf("%s %s (%d, %s) starts at startpos %d.\n",
 		 showtime(), robot->name, NumPlayers, robot->realname,
 		 robot->home_base->ind);
+#endif
 
     if (round_delay > 0 || NumPlayers == 1) {
 	round_delay = roundDelaySeconds * FPS;
@@ -1024,8 +1027,9 @@ static void Robot_round_tick(void)
     int			i;
 
     if (NumRobots > 0) {
-	for (i = 0; i < num_robot_types; i++)
+	for (i = 0; i < num_robot_types; i++) {
 	    (*robot_types[i].round_tick)();
+	}
     }
 }
 
@@ -1050,8 +1054,6 @@ void Robot_update(void)
     static double	new_robot_delay;
     int			num_playing_ships;
     int			num_any_ships;
-    bool		tick_this_update = false;
-    static int		ticks_per_second = 0;
 
     num_any_ships = NumPlayers + login_in_progress;
     num_playing_ships = num_any_ships - NumPseudoPlayers;
@@ -1081,50 +1083,10 @@ void Robot_update(void)
 	}
     }
 
-    if (NumRobots <= 0 && NumPseudoPlayers <= 0)
+    if (NumRobots <= 0 && NumPseudoPlayers <= 0) {
 	return;
-
-    /*
-     * Robots play better the more updates they get. They can be made
-     * easier opponents by setting a lower value for robotTicksPerSecond.
-     */
-    {
-	static time_t oldtime = 0;
-	static int updates_per_second = 0, updates_last_second;
-	static double seconds_per_update = 1.0, seconds_per_tick = 1.0;
-	static double seconds_since_last_update = 0.0;
-	time_t t = time(NULL);
-
-	updates_per_second++;
-
-	seconds_since_last_update += seconds_per_update;
-	if (seconds_since_last_update > seconds_per_tick) {
-	    tick_this_update = true;
-	    seconds_since_last_update -= seconds_per_tick;
-	    /* make sure seconds_since_last_update stays limited */
-	    if (seconds_since_last_update > seconds_per_tick)
-		seconds_since_last_update = seconds_per_tick;
-	}
-
-	/* another second has elapsed */
-	if (t != oldtime) {
-	    oldtime = t;
-	    assert(updates_per_second > 0);
-	    seconds_per_update = 1.0 / (double)updates_per_second;
-	    updates_last_second = updates_per_second;
-	    /*warn("updates_per_second = %d, ticks_per_second = %d",
-	      updates_per_second, ticks_per_second);*/
-	    ticks_per_second = 0;
-	    updates_per_second = 0;
-	    assert(robotTicksPerSecond > 0);
-	    seconds_per_tick = 1.0 / (double)robotTicksPerSecond;
-	}
     }
 
-    if (!tick_this_update)
-	return;
-
-    ticks_per_second++;
     Robot_round_tick();
 
     for (i = 0; i < NumPlayers; i++) {

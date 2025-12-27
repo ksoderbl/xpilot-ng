@@ -21,7 +21,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include "xpclient_x11.h"
+#include "xpclient.h"
 
 char xeventhandlers_version[] = VERSION;
 
@@ -92,8 +92,9 @@ static void Selection_request(void)
 	if (Talk_paste(selection.txt, selection.len, False) > 0)
 	    save_talk_str = true;
     }
-    else if (XGetSelectionOwner(dpy, XA_PRIMARY) == None)
+    else if (XGetSelectionOwner(dpy, XA_PRIMARY) == None) {
 	Selection_paste(DefaultRootWindow(dpy), XA_CUT_BUFFER0, False);
+    }
     else {
 	prop = XInternAtom(dpy, "VT_SELECTION", False);
 	XConvertSelection(dpy, XA_PRIMARY, XA_STRING, prop, talkWindow,
@@ -134,7 +135,7 @@ static void Selection_send(const XSelectionRequestEvent *rq)
     else if (rq->target == XA_STRING) {
 	XChangeProperty(dpy, rq->requestor, rq->property,
 			rq->target, 8, PropModeReplace,
-			(unsigned char *) selection.txt, (int)selection.len);
+			(unsigned char *) selection.txt, selection.len);
 	ev.xselection.property = rq->property;
     }
     XSendEvent(dpy, rq->requestor, False, 0, &ev);
@@ -155,7 +156,6 @@ void SelectionRequest_event(XEvent *event)
 
 void MapNotify_event(XEvent *event)
 {
-    (void)event;
     if (ignoreWindowManager == 1) {
         XSetInputFocus(dpy, topWindow, RevertToParent, CurrentTime);
         ignoreWindowManager = 2;
@@ -191,7 +191,6 @@ int ClientMessage_event(XEvent *event)
 
 void FocusIn_event(XEvent *event)
 {
-    (void)event;
 #ifdef DEVELOPMENT
     if (!gotFocus)
         time(&back_in_play_since);
@@ -206,7 +205,6 @@ void FocusIn_event(XEvent *event)
 
 void UnmapNotify_event(XEvent *event)
 {
-    (void)event;
     if (pointerControl) {
         initialPointerControl = true;
         Pointer_control_set_state(false);
@@ -221,7 +219,7 @@ void ConfigureNotify_event(XEvent *event)
 
     conf = &(event->xconfigure);
     if (conf->window == topWindow)
-	Resize(conf->window, (unsigned)conf->width, (unsigned)conf->height);
+	Resize(conf->window, conf->width, conf->height);
     else
         Widget_event(event);
 }

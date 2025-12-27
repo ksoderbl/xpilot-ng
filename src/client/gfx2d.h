@@ -23,9 +23,6 @@
 #ifndef GFX2D_H
 #define GFX2D_H
 
-extern char	*texturePath;		/* Path list of texture directories */
-
-
 typedef unsigned int RGB_COLOR;
 
 #define RGB24(r, g, b) \

@@ -186,13 +186,13 @@ void Move_init(void)
     mp.obj_treasure_mask = mp.obj_bounce_mask | OBJ_BALL | OBJ_PULSE;
 }
 
-static void Object_hits_target(object *obj, target_t *targ, double player_cost)
+static void Object_hits_target(object *obj, target_t *targ, long player_cost)
 {
     int			j;
     player		*kp;
     double		sc, por,
-			win_score = 0.0,
-			lose_score = 0.0;
+			win_score = 0,
+			lose_score = 0;
     int			win_team_members = 0,
 			lose_team_members = 0,
 			somebody_flag = 0,
@@ -220,11 +220,11 @@ static void Object_hits_target(object *obj, target_t *targ, double player_cost)
 	    drainfactor = (drainfactor * drainfactor * ABS(obj->mass))
 			  / (ShotsSpeed * ShotsSpeed * ShotsMass);
 	} else
-	    drainfactor = 1.0;
-	targ->damage += ED_SHOT_HIT * drainfactor * SHOT_MULT(obj);
+	    drainfactor = 1.0f;
+	targ->damage += (int)(ED_SHOT_HIT * drainfactor * SHOT_MULT(obj));
 	break;
     case OBJ_PULSE:
-	targ->damage += ED_LASER_HIT;
+	targ->damage += (int)(ED_LASER_HIT);
 	break;
     case OBJ_SMART_SHOT:
     case OBJ_TORPEDO:
@@ -233,9 +233,9 @@ static void Object_hits_target(object *obj, target_t *targ, double player_cost)
 	    /* happens at end of round reset. */
 	    return;
 	if (BIT(obj->mods.nuclear, NUCLEAR))
-	    targ->damage = 0.0;
+	    targ->damage = 0;
 	else
-	    targ->damage += ED_SMART_SHOT_HIT / (obj->mods.mini + 1);
+	    targ->damage += (int)(ED_SMART_SHOT_HIT / (obj->mods.mini + 1));
 	break;
     case OBJ_MINE:
 	if (!obj->mass)
@@ -244,8 +244,8 @@ static void Object_hits_target(object *obj, target_t *targ, double player_cost)
 	targ->damage -= TARGET_DAMAGE / (obj->mods.mini + 1);
 	break;
     case OBJ_PLAYER:
-	if (player_cost <= 0.0 || player_cost > TARGET_DAMAGE / 4.0)
-	    player_cost = TARGET_DAMAGE / 4.0;
+	if (player_cost <= 0 || player_cost > TARGET_DAMAGE / 4)
+	    player_cost = TARGET_DAMAGE / 4;
 	targ->damage -= player_cost;
 	break;
 
@@ -256,7 +256,7 @@ static void Object_hits_target(object *obj, target_t *targ, double player_cost)
 
     targ->conn_mask = 0;
     targ->last_change = frame_loops;
-    if (targ->damage > 0.0)
+    if (targ->damage > 0)
 	return;
 
     Target_remove_from_map(targ);
@@ -271,10 +271,10 @@ static void Object_hits_target(object *obj, target_t *targ, double player_cost)
 	/* status         */ GRAVITY,
 	/* color          */ RED,
 	/* radius         */ 6,
-	/* num debris     */ (int)(75 + 75 * rfrac()),
+	/* num debris     */ 75 + 75 * rfrac(),
 	/* min,max dir    */ 0, RES-1,
-	/* min,max speed  */ 20.0, 70.0,
-	/* min,max life   */ 10.0, 100.0
+	/* min,max speed  */ 20, 70,
+	/* min,max life   */ 10, 100
 	);
 
     if (BIT(World.rules->mode, TEAM_PLAY)) {
@@ -334,14 +334,16 @@ static void Object_hits_target(object *obj, target_t *targ, double player_cost)
     }
 
     sprintf(msg, "%s blew up team %d's %starget.",
-	    kp->name, targ->team, (targets_total > 1) ? "last " : "");
+	    kp->name,
+	    (int) targ->team,
+	    (targets_total > 1) ? "last " : "");
     Set_message(msg);
 
     if (targetKillTeam)
 	Rank_AddTargetKill(kp);
 
     sc  = Rate(win_score, lose_score);
-    por = (sc * lose_team_members) /win_team_members;
+    por = (sc*lose_team_members)/win_team_members;
 
     for (j = 0; j < NumPlayers; j++) {
 	player *pl = Players(j);
@@ -369,7 +371,8 @@ static void Object_hits_target(object *obj, target_t *targ, double player_cost)
 
 
 
-void Object_crash(object *obj, int crashtype, int mapobj_ind)
+void Object_crash(object *obj, struct move *move, int crashtype,
+		  int mapobj_ind)
 {
     switch (crashtype) {
 
@@ -388,7 +391,7 @@ void Object_crash(object *obj, int crashtype, int mapobj_ind)
 
     case CrashTarget:
 	obj->life = 0;
-	Object_hits_target(obj, Targets(mapobj_ind), -1.0);
+	Object_hits_target(obj, Targets(mapobj_ind), -1);
 	break;
 
     case CrashWall:
@@ -473,7 +476,7 @@ void Player_crash(player *pl, int crashtype, int mapobj_ind, int pt)
 	howfmt = "%s smashed%s against a target";
 	hudmsg = "[Target]";
 	sound_play_sensors(pl->pos, PLAYER_HIT_WALL_SOUND);
-	Object_hits_target(OBJ_PTR(pl), Targets(mapobj_ind), -1.0);
+	Object_hits_target(OBJ_PTR(pl), Targets(mapobj_ind), -1);
 	break;
 
     case CrashTreasure:
@@ -485,14 +488,16 @@ void Player_crash(player *pl, int crashtype, int mapobj_ind, int pt)
     case CrashCannon:
         {
 	    cannon_t *cannon = Cannons(mapobj_ind);
-	    if (!Player_used_emergency_shield(pl)) {
+	    if (BIT(pl->used, HAS_SHIELD|HAS_EMERGENCY_SHIELD)
+		!= (HAS_SHIELD|HAS_EMERGENCY_SHIELD)) {
 		howfmt = "%s smashed%s against a cannon";
 		hudmsg = "[Cannon]";
 		sound_play_sensors(pl->pos, PLAYER_HIT_CANNON_SOUND);
 	    }
 	    if (!BIT(cannon->used, HAS_EMERGENCY_SHIELD)) {
 		/* pl gets points if the cannon is rammed with shields up */
-		if (Player_used_emergency_shield(pl))
+		if (BIT(pl->used, HAS_SHIELD|HAS_EMERGENCY_SHIELD)
+		    == (HAS_SHIELD|HAS_EMERGENCY_SHIELD))
 		    Cannon_dies(cannon, pl);
 		else
 		    Cannon_dies(cannon, NULL);
@@ -557,8 +562,8 @@ void Player_crash(player *pl, int crashtype, int mapobj_ind, int pt)
 	else {
 	    int		msg_len = strlen(msg);
 	    char	*msg_ptr = &msg[msg_len];
-	    double	average_pusher_score
-		= total_pusher_score / total_pusher_count;
+	    int		average_pusher_score = total_pusher_score
+						/ total_pusher_count;
 
 	    for (i = 0; i < num_pushers; i++) {
 		player		*pusher = pushers[i];
@@ -683,17 +688,18 @@ static int Bounce_object(object *obj, struct move *move, int line, int point)
 
     if (type == TARGET) {
 	obj->life = 0;
-	Object_hits_target(obj, Targets(mapobj_ind), -1.0);
+	Object_hits_target(obj, Targets(mapobj_ind), -1);
 	return 0;
     }
 
     if (type == CANNON) {
-	Object_crash(obj, CrashCannon, mapobj_ind);
+	Object_crash(obj, move, CrashCannon, mapobj_ind);
 	return 0;
     }
 
+    /* kps - wormhole polygons disabled */
     if (type == WORMHOLE) {
-	Object_crash(obj, CrashWormHole, mapobj_ind);
+	Object_crash(obj, move, CrashWormHole, mapobj_ind);
 	return 0;
     }
 
@@ -808,16 +814,18 @@ static void Bounce_player(player *pl, struct move *move, int line, int point)
     pl->last_wall_touch = frame_loops;
     {
 	double	speed = VECTOR_LENGTH(pl->vel);
-	double	v = speed * 0.25;
-	double	m = pl->mass - pl->emptymass * 0.75;
-	double	b = 1.0 - 0.5 * playerWallBrakeFactor;
-	double	cost = b * m * v;
+	int	v = (int) speed >> 2;
+	int	m = (int) (pl->mass - pl->emptymass * 0.75f);
+	double	b = 1 - 0.5f * playerWallBrakeFactor;
+	long	cost = (long) (b * m * v);
 	double	max_speed = BIT(pl->used, HAS_SHIELD)
 		? maxShieldedWallBounceSpeed
 		: maxUnshieldedWallBounceSpeed;
 
-	if (Player_used_emergency_shield(pl))
-	    max_speed = 100.0;
+	if (BIT(pl->used, (HAS_SHIELD|HAS_EMERGENCY_SHIELD))
+	    == (HAS_SHIELD|HAS_EMERGENCY_SHIELD)) {
+	    max_speed = 100;
+	}
 
 	/* only use armor if neccessary */
 	if (speed > max_speed
@@ -842,11 +850,13 @@ static void Bounce_player(player *pl, struct move *move, int line, int point)
 	 * which don't collide with player.
 	 */
 	cost *= 0.9; /* used to depend on bounce angle, .5 .. 1.0 */
-	if (!Player_used_emergency_shield(pl)) {
-	    Player_add_fuel(pl, -cost * wallBounceFuelDrainMult);
+	if (BIT(pl->used, (HAS_SHIELD|HAS_EMERGENCY_SHIELD))
+	    != (HAS_SHIELD|HAS_EMERGENCY_SHIELD)) {
+	    Add_fuel(&pl->fuel, (long)(-((cost << FUEL_SCALE_BITS)
+					 * wallBounceFuelDrainMult)));
 	    Item_damage(pl, wallBounceDestroyItemProb);
 	}
-	if (pl->fuel.sum == 0.0 && wallBounceFuelDrainMult != 0.0) {
+	if (!pl->fuel.sum && wallBounceFuelDrainMult != 0) {
 	    if (type == TARGET)
 		Player_crash(pl, CrashTarget, mapobj_ind, 1);
 	    else
@@ -876,7 +886,8 @@ static void Bounce_player(player *pl, struct move *move, int line, int point)
 #endif
 	    sound_play_sensors(pl->pos, PLAYER_BOUNCED_SOUND);
 	    if (type == TARGET) {
-		cost *= wallBounceFuelDrainMult / 4.0;
+		cost <<= FUEL_SCALE_BITS;
+		cost = (long)(cost * (wallBounceFuelDrainMult / 4.0));
 		Object_hits_target(OBJ_PTR(pl), Targets(mapobj_ind), cost);
 	    }
 	}
@@ -2799,7 +2810,7 @@ void Move_player(player *pl)
 
 void Turn_player(player *pl)
 {
-    int		new_dir = MOD2((int)(pl->float_dir + 0.5), RES);
+    int		new_dir = MOD2((int)(pl->float_dir + 0.5f), RES);
     int		next_dir, sign, hitmask;
 
     if (recOpt) {
@@ -2808,10 +2819,9 @@ void Turn_player(player *pl)
 	else if (playback)
 	    new_dir = *playback_data++;
     }
-
-    if (new_dir == pl->dir)
+    if (new_dir == pl->dir) {
 	return;
-
+    }
     if (!Player_is_playing(pl)) {
 	/* kps - what is the point of this ??? */
 	pl->dir = new_dir;

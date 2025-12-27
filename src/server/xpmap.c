@@ -33,6 +33,7 @@ static void Xpmap_wormhole_to_polygon(int wormhole_ind);
 
 static void Xpmap_extra_error(int line_num)
 {
+#ifndef SILENT
     static int prev_line_num, error_count;
     const int max_error = 5;
 
@@ -44,11 +45,13 @@ static void Xpmap_extra_error(int line_num)
 	else if (error_count - max_error == 1)
 	    xpprintf("And so on...\n");
     }
+#endif
 }
 
 
 static void Xpmap_missing_error(int line_num)
 {
+#ifndef SILENT
     static int prev_line_num, error_count;
     const int max_error = 5;
 
@@ -59,6 +62,7 @@ static void Xpmap_missing_error(int line_num)
 	else if (error_count - max_error == 1)
 	    xpprintf("And so on...\n");
     }
+#endif
 }
 
 
@@ -96,16 +100,14 @@ void Xpmap_grok_map_data(void)
 	    if (c == '\0' || c == EOF) {
 		if (x < World.x) {
 		    /* not enough map data on this line */
-		    if (!silent)
-			Xpmap_missing_error(World.y - y);
+		    Xpmap_missing_error(World.y - y);
 		    c = ' ';
 		} else
 		    c = '\n';
 	    } else {
 		if (c == '\n' && x < World.x) {
 		    /* not enough map data on this line */
-		    if (!silent)
-			Xpmap_missing_error(World.y - y);
+		    Xpmap_missing_error(World.y - y);
 		    c = ' ';
 		} else
 		    s++;
@@ -114,8 +116,7 @@ void Xpmap_grok_map_data(void)
 	if (x >= World.x || c == '\n') {
 	    y--; x = -1;
 	    if (c != '\n') {			/* Get rest of line */
-		if (!silent)
-		    Xpmap_extra_error(World.y - y);
+		Xpmap_extra_error(World.y - y);
 		while (c != '\n' && c != EOF)
 		    c = *s++;
 	    }

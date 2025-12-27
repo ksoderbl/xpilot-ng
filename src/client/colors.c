@@ -21,7 +21,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include "xpclient_x11.h"
+#include "xpclient.h"
 
 
 char colors_version[] = VERSION;
@@ -98,9 +98,9 @@ static struct rgb_cube_size {
  */
 #define RGB2COLOR(c) RGB(((c) >> 16) & 255, ((c) >> 8) & 255, ((c) & 255))
 
-unsigned long		(*RGB)(int r, int g, int b) = NULL;
-static unsigned long	RGB_PC(int r, int g, int b);
-static unsigned long	RGB_TC(int r, int g, int b);
+unsigned long		(*RGB)(u_byte r, u_byte g, u_byte b) = 0;
+static unsigned long	RGB_PC(u_byte r, u_byte g, u_byte b);
+static unsigned long	RGB_TC(u_byte r, u_byte g, u_byte b);
 
 /*
  * Visual names.
@@ -164,8 +164,9 @@ static const char *Visual_class_name(int visual_class)
     int			i;
 
     for (i = 0; i < MAX_VISUAL_CLASS; i++) {
-	if (visual_class_names[i].visual_class == visual_class)
+	if (visual_class_names[i].visual_class == visual_class) {
 	    return visual_class_names[i].visual_name;
+	}
     }
     return "UnknownVisual";
 }
@@ -246,8 +247,9 @@ static void Choose_visual(void)
 		}
 	    }
 	    if (visual_class == -1) {
-		warn("Unknown visual class named \"%s\", using default\n",
-		     visualName);
+		errno = 0;
+		error("Unknown visual class named \"%s\", using default\n",
+		    visualName);
 	    }
 	}
     }
@@ -258,9 +260,9 @@ static void Choose_visual(void)
 	    strcpy(visualName, "PseudoColor");
 	}
 	using_default = true;
-    } else
+    } else {
 	using_default = false;
-
+    }
     if (visual_class >= 0 || visual_id >= 0) {
 	mask = 0;
 	my_vinfo.screen = DefaultScreen(dpy);
@@ -277,8 +279,9 @@ static void Choose_visual(void)
 	if ((vinfo_ptr = XGetVisualInfo(dpy, mask, &my_vinfo, &num)) == NULL
 	    || num <= 0) {
 	    if (using_default == false) {
-		warn("No visuals available with class name \"%s\", "
-		     "using default", visualName);
+		errno = 0;
+		error("No visuals available with class name \"%s\", using default",
+		    visualName);
 	    }
 	    visual_class = -1;
 	}
@@ -288,11 +291,13 @@ static void Choose_visual(void)
 		best_size = best_vinfo->colormap_size;
 		cmap_size = vinfo_ptr[i].colormap_size;
 		if (cmap_size > best_size) {
-		    if (best_size < 256)
+		    if (best_size < 256) {
 			best_vinfo = &vinfo_ptr[i];
+		    }
 		}
-		else if (cmap_size >= 256)
+		else if (cmap_size >= 256) {
 		    best_vinfo = &vinfo_ptr[i];
+		}
 	    }
 	    visual = best_vinfo->visual;
 	    visual_class = best_vinfo->class;
@@ -362,20 +367,22 @@ static void Fill_colormap(void)
     unsigned long	pixels[256];
     XColor		mycolors[256];
 
-    if (colormap == 0 || colorSwitch != true)
+    if (colormap == 0 || colorSwitch != true) {
 	return;
-
+    }
     cells_needed = (maxColors == 16) ? 256
 	: (maxColors == 8) ? 64
 	: 16;
     max_fill = MAX(256, visual->map_entries) - cells_needed;
-    if (max_fill <= 0)
+    if (max_fill <= 0) {
 	return;
+    }
 
     if (XAllocColorCells(dpy, colormap,
 			 False, NULL,
-			 0, pixels, (unsigned)max_fill) == False) {
-	warn("Can't pre-alloc color cells");
+			 0, pixels, max_fill) == False) {
+	errno = 0;
+	error("Can't pre-alloc color cells");
 	return;
     }
 
@@ -383,15 +390,17 @@ static void Fill_colormap(void)
     for (i = 0; i < max_fill; i++) {
 	if (i != (int) pixels[i]) {
 #ifdef DEVELOPMENT
-	    warn("Can't pre-fill color map, got %d'th pixel %lu",
-		 i, pixels[i]);
+	    errno = 0;
+	    error("Can't pre-fill color map, got %d'th pixel %lu",
+		  i, pixels[i]);
 #endif
 	    XFreeColors(dpy, colormap, pixels, max_fill, 0);
 	    return;
 	}
     }
-    for (i = 0; i < max_fill; i++)
+    for (i = 0; i < max_fill; i++) {
 	mycolors[i].pixel = pixels[i];
+    }
     XQueryColors(dpy, DefaultColormap(dpy, DefaultScreen(dpy)),
 		 mycolors, max_fill);
     XStoreColors(dpy, colormap, mycolors, max_fill);
@@ -405,8 +414,7 @@ static void Fill_colormap(void)
  */
 int Colors_init(void)
 {
-    int				i;
-    unsigned			num_planes;
+    int				i, num_planes;
 
     colormap = 0;
 
@@ -417,9 +425,9 @@ int Colors_init(void)
      */
     if (visual->class == StaticGray ||
 	visual->class == StaticColor ||
-	visual->class == TrueColor)
+	visual->class == TrueColor) {
 	colorSwitch = false;
-
+    }
     if (visual->map_entries < 16)
 	colorSwitch = false;
 
@@ -442,15 +450,16 @@ int Colors_init(void)
 	return -1;
     }
 
-    if (colormap != 0)
+    if (colormap != 0) {
 	Fill_colormap();
+    }
 
     /*
      * Initialize the double buffering routine.
      */
     dbuf_state = NULL;
 
-    if (multibuffer)
+    if (multibuffer) {
 	dbuf_state = start_dbuff(dpy,
 				 (colormap != 0)
 				     ? colormap
@@ -459,7 +468,8 @@ int Colors_init(void)
 				 MULTIBUFFER,
 				 num_planes,
 				 colors);
-    if (dbuf_state == NULL)
+    }
+    if (dbuf_state == NULL) {
 	dbuf_state = start_dbuff(dpy,
 				 (colormap != 0)
 				     ? colormap
@@ -468,6 +478,7 @@ int Colors_init(void)
 				 ((colorSwitch) ? COLOR_SWITCH : PIXMAP_COPY),
 				 num_planes,
 				 colors);
+    }
     if (dbuf_state == NULL && colormap == 0) {
 
 	/*
@@ -480,22 +491,26 @@ int Colors_init(void)
 	 * Try to initialize the double buffering again.
 	 */
 
-	if (multibuffer)
-	    dbuf_state = start_dbuff(dpy, colormap, MULTIBUFFER, num_planes,
-				     colors);
-
-	if (dbuf_state == NULL)
+	if (multibuffer) {
 	    dbuf_state = start_dbuff(dpy, colormap,
-				     ((colorSwitch)
-				      ? COLOR_SWITCH : PIXMAP_COPY),
+				     MULTIBUFFER,
 				     num_planes,
 				     colors);
+	}
+
+	if (dbuf_state == NULL) {
+	    dbuf_state = start_dbuff(dpy, colormap,
+				     ((colorSwitch) ? COLOR_SWITCH : PIXMAP_COPY),
+				     num_planes,
+				     colors);
+	}
     }
 
     if (dbuf_state == NULL) {
 	/* Can't setup double buffering */
-	warn("Can't setup colors with visual %s and %d colormap entries",
-	     Visual_class_name(visual->class), visual->map_entries);
+	errno = 0;
+	error("Can't setup colors with visual %s and %d colormap entries",
+	      Visual_class_name(visual->class), visual->map_entries);
 	return -1;
     }
 
@@ -524,8 +539,9 @@ int Colors_init(void)
 	exit(1);
     }
 
-    for (i = maxColors; i < MAX_COLORS; i++)
+    for (i = maxColors; i < MAX_COLORS; i++) {
 	colors[i] = colors[i % maxColors];
+    }
 
     Colors_init_radar_hack();
 
@@ -551,10 +567,12 @@ static void Colors_init_radar_hack(void)
 	for (i = 0; i < 32; i++) {
 	    if (!((1 << i) & dbuf_state->drawing_plane_masks[p])) {
 	        num++;
-		if (num == 1 || num == 3)
+		if (num == 1 || num == 3) {
 		    dpl_1[p] |= 1<<i;   /* planes with moving radar objects */
-		else
+		}
+		else {
 		    dpl_2[p] |= 1<<i;   /* constant map part of radar */
+		}
 	    }
 	}
     }
@@ -617,10 +635,10 @@ void Colors_init_style_colors(void)
     int i;
     for (i = 0; i < num_polygon_styles; i++)
 	polygon_styles[i].color = (fullColor && RGB) ?
-	    RGB2COLOR(polygon_styles[i].rgb) : (unsigned long)wallColor;
+	    RGB2COLOR(polygon_styles[i].rgb) : wallColor;
     for (i = 0; i < num_edge_styles; i++)
 	edge_styles[i].color = (fullColor && RGB) ?
-	    RGB2COLOR(edge_styles[i].rgb) : (unsigned long)wallColor;
+	    RGB2COLOR(edge_styles[i].rgb) : wallColor;
 }
 
 
@@ -657,7 +675,7 @@ int Colors_init_bitmaps(void)
 /*
  * Calculate a pixel from a RGB triplet for a PseudoColor visual.
  */
-static unsigned long RGB_PC(int r, int g, int b)
+static unsigned long RGB_PC(u_byte r, u_byte g, u_byte b)
 {
     int			i;
 
@@ -673,7 +691,7 @@ static unsigned long RGB_PC(int r, int g, int b)
 /*
  * Calculate a pixel from a RGB triplet for a TrueColor visual.
  */
-static unsigned long RGB_TC(int r, int g, int b)
+static unsigned long RGB_TC(u_byte r, u_byte g, u_byte b)
 {
     unsigned long	pixel = 0;
 
@@ -758,7 +776,7 @@ static int Colors_init_color_cube(void)
 						   DefaultScreen(dpy)),
 			     False, NULL, 0,
 			     &color_cube->pixels[0],
-			     (unsigned)n) == False) {
+			     n) == False) {
 	    /*printf("Could not alloc %d colors for RGB cube\n", n);*/
 	    continue;
 	}
@@ -855,8 +873,9 @@ static int Colors_init_true_color(void)
 	if ((visual->red_mask & (1UL << i)) != 0) {
 	    if (r >= 0) {
 		for (j = 0; j < 256; j++) {
-		    if (j & (1 << r))
+		    if (j & (1 << r)) {
 			true_color->red_bits[j] |= (1UL << i);
+		    }
 		}
 		r--;
 	    }
@@ -864,8 +883,9 @@ static int Colors_init_true_color(void)
 	if ((visual->green_mask & (1UL << i)) != 0) {
 	    if (g >= 0) {
 		for (j = 0; j < 256; j++) {
-		    if (j & (1 << g))
+		    if (j & (1 << g)) {
 			true_color->green_bits[j] |= (1UL << i);
+		    }
 		}
 		g--;
 	    }
@@ -873,8 +893,9 @@ static int Colors_init_true_color(void)
 	if ((visual->blue_mask & (1UL << i)) != 0) {
 	    if (b >= 0) {
 		for (j = 0; j < 256; j++) {
-		    if (j & (1 << b))
+		    if (j & (1 << b)) {
 			true_color->blue_bits[j] |= (1UL << i);
+		    }
 		}
 		b--;
 	    }
@@ -958,9 +979,10 @@ void Colors_debug(void)
 	i = 0;
 	for (r = 0; r < color_cube->reds; r++) {
 	    for (g = 0; g < color_cube->greens; g++) {
-		for (b = 0; b < color_cube->blues; b++, i++)
+		for (b = 0; b < color_cube->blues; b++, i++) {
 		    fprintf(fp, "color %4d    %04X  %04X  %04X\n",
 			    i, colors[i].red, colors[i].green, colors[i].blue);
+		}
 	    }
 	}
 	fprintf(fp,

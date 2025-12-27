@@ -21,9 +21,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include "xpclient_x11.h"
+#include "xpclient.h"
 
 char painthud_version[] = VERSION;
+
+extern score_object_t	score_objects[MAX_SCORE_OBJECTS];
+extern int		score_object;
 
 int	hudColor;		/* Color index for HUD drawing */
 int	hudHLineColor;		/* Color index for horiz. HUD line drawing */
@@ -47,6 +50,7 @@ int	msgScanCoverColor;	/* Color index for cover msg */
 int	msgScanPopColor;	/* Color index for pop msg */
 int	messagesColor;		/* Color index for messages */
 int	oldMessagesColor;	/* Color index for old messages */
+double	scoreObjectTime;	/* How long to flash score objects */
 int	baseWarningType;	/* Which type of base warning you prefer */
 
 radar_t	*old_radar_ptr;
@@ -64,6 +68,12 @@ int	packetDropMeterColor;	/* Color index for packet drop meter */
 int	packetLagMeterColor;	/* Color index for packet lag meter */
 int	temporaryMeterColor;	/* Color index for temporary meter drawing */
 int	meterBorderColor;	/* Color index for meter border drawing */
+
+message_t	*TalkMsg[MAX_MSGS], *GameMsg[MAX_MSGS];
+/* store incoming messages while a cut is pending */
+message_t	*TalkMsg_pending[MAX_MSGS], *GameMsg_pending[MAX_MSGS];
+/* history of the talk window */
+char		*HistoryMsg[MAX_HIST_MSGS];
 
 /*
  * Draw a meter of some kind on screen.
@@ -83,9 +93,9 @@ static void Paint_meter(int xoff, int y, const char *title, int val, int max,
 
     if (xoff >= 0) {
 	x = xoff;
-        xstr = WINSCALE(x + (int)meterWidth) + BORDER;
+        xstr = WINSCALE(x + meterWidth) + BORDER;
     } else {
-	x = ext_view_width - ((int)meterWidth - xoff);
+	x = ext_view_width - (meterWidth - xoff);
         xstr = WINSCALE(x)
 	    - (BORDER + XTextWidth(gameFont, title, (int)strlen(title)));
     }
@@ -100,8 +110,8 @@ static void Paint_meter(int xoff, int y, const char *title, int val, int max,
 
 	SET_FG(colors[color].pixel);
 	rd.drawRectangle(dpy, drawPixmap, gameGC,
-			 WINSCALE(x), WINSCALE(y),
-			 UWINSCALE(meterWidth), UWINSCALE(meterHeight));
+		       WINSCALE(x), WINSCALE(y),
+		       WINSCALE(meterWidth), WINSCALE(meterHeight));
 
 	/* Paint scale levels(?) */
 	Segment_add(color, x,       y-4,	x,       y+meterHeight+4);
@@ -115,8 +125,8 @@ static void Paint_meter(int xoff, int y, const char *title, int val, int max,
 	SET_FG(colors[meter_color].pixel);
 
     rd.drawString(dpy, drawPixmap, gameGC,
-		  xstr, WINSCALE(y)+(gameFont->ascent+meterHeight)/2,
-		  title, (int)strlen(title));
+		  (xstr), WINSCALE(y)+(gameFont->ascent+meterHeight)/2,
+		  title, strlen(title));
 
     /* texturedObjects - TODO */
     /*int width = WINSCALE((int)(((meterWidth-3)*val)/(max?max:1)));*/
@@ -162,9 +172,6 @@ void Paint_score_objects(void)
 		x = sobj->x * BLOCK_SZ + BLOCK_SZ/2;
 		y = sobj->y * BLOCK_SZ + BLOCK_SZ/2;
 		if (wrap(&x, &y)) {
-		    if (sobj->msg_width == -1)
-			sobj->msg_width = 
-			    XTextWidth(gameFont, sobj->msg, sobj->msg_len);
 		    SET_FG(colors[scoreObjectColor].pixel);
 		    x = WINSCALE(X(x)) - sobj->msg_width / 2,
 		    y = WINSCALE(Y(y)) + gameFont->ascent / 2,
@@ -278,7 +285,7 @@ static void Paint_lock(int hud_pos_x, int hud_pos_y)
     static int	mapdiag = 0;
 
     if (mapdiag == 0)
-	mapdiag = LENGTH(Setup->width, Setup->height);
+	mapdiag = (int)LENGTH(Setup->width, Setup->height);
 
     /*
      * Display direction arrow and miscellaneous target information.
@@ -345,8 +352,8 @@ static void Paint_lock(int hud_pos_x, int hud_pos_y)
 		y = (int)(hud_pos_y - MIN_HUD_SIZE * 0.6 * tsin(lock_dir)
 			  - size * 0.5),
 		rd.fillArc(dpy, drawPixmap, gameGC,
-			   WINSCALE(x), WINSCALE(y),
-			   UWINSCALE(size), UWINSCALE(size), 0, 64*360);
+			 WINSCALE(x), WINSCALE(y),
+			 WINSCALE(size), WINSCALE(size), 0, 64*360);
 	    }
 	}
     }
@@ -383,7 +390,7 @@ static void Paint_hudradar(double hrscale, double xlimit, double ylimit,
  	    x = x + ext_view_width / 2 - sz / 2;
  	    y = -y + ext_view_height / 2 - sz / 2;
 
-	    if (radar_ptr[i].type == normal) {
+	    if (radar_ptr[i].color == WHITE) {
 		if (hudRadarEnemyColor >= 1)
 		    Arc_add(hudRadarEnemyColor, x, y, sz, sz, 0, 64 * 360);
 	    } else {
@@ -432,7 +439,7 @@ static void Paint_HUD_items(int hud_pos_x, int hud_pos_y)
     char		str[50];
     int			vert_pos, horiz_pos;
     int			i, maxWidth = -1,
-			rect_x, rect_y, rect_width = 0, rect_height = 0;
+			rect_x, rect_y, rect_width, rect_height;
     static int		vertSpacing = -1;
 
     SET_FG(colors[hudItemsColor].pixel);
@@ -454,7 +461,7 @@ static void Paint_HUD_items(int hud_pos_x, int hud_pos_y)
 	if (i == ITEM_FUEL)
 	    continue;
 
-	if (instruments.showItems) {
+	if (BIT(instruments, SHOW_ITEMS)) {
 	    lastNumItems[i] = num;
 	    if (num <= 0)
 		num = -1;
@@ -473,7 +480,7 @@ static void Paint_HUD_items(int hud_pos_x, int hud_pos_y)
 	    int len, width;
 
 	    /* Paint item symbol */
-	    Gui_paint_item_symbol((u_byte)i, drawPixmap, gameGC,
+	    Paint_item_symbol((u_byte)i, drawPixmap, gameGC,
 			horiz_pos - ITEM_SIZE,
 			vert_pos,
 			ITEM_HUD);
@@ -535,12 +542,12 @@ void Paint_HUD(void)
      */
     if (ptr_move_fact != 0.0
 	&& selfVisible
-	&& (selfVel.x != 0 || selfVel.y != 0))
+	&& (FOOvel.x != 0 || FOOvel.y != 0))
 	Segment_add(hudColor,
 		    ext_view_width / 2,
 		    ext_view_height / 2,
-		    (int)(ext_view_width / 2 - ptr_move_fact * selfVel.x),
-		    (int)(ext_view_height / 2 + ptr_move_fact * selfVel.y));
+		    (int)(ext_view_width / 2 - ptr_move_fact * FOOvel.x),
+		    (int)(ext_view_height / 2 + ptr_move_fact * FOOvel.y));
 
     if (selfVisible && dirPtrColor)
 	Segment_add(dirPtrColor,
@@ -555,21 +562,21 @@ void Paint_HUD(void)
 	hudRadarMapScale = (double) Setup->width / (double) 256;
 	Paint_hudradar(
 	    hudRadarScale,
-	    hudRadarLimit * (active_view_width / 2) * hudRadarScale
-	    / hudRadarMapScale,
-	    hudRadarLimit * (active_view_width / 2) * hudRadarScale
-	    / hudRadarMapScale,
+	    (int)(hudRadarLimit * (active_view_width / 2)
+		  * hudRadarScale / hudRadarMapScale),
+	    (int)(hudRadarLimit * (active_view_width / 2)
+		  * hudRadarScale / hudRadarMapScale),
 	    hudRadarDotSize);
 
-	if (instruments.showMapRadar)
+	if (BIT(instruments, MAP_RADAR))
 	    Paint_hudradar(hudRadarMapScale,
-			   (double)active_view_width / 2,
-			   (double)active_view_height / 2,
+			   active_view_width / 2,
+			   active_view_height / 2,
 			   SHIP_SZ);
     }
 
     /* message scan hack by mara*/
-    if (instruments.useBallMessageScan) {
+    if (BIT(instruments, BALL_MSG_SCAN)) {
 	if (ball_shout && msgScanBallColor)
 	    Arc_add(msgScanBallColor, ext_view_width / 2 - 5,
 		    ext_view_height / 2 - 5, 10, 10, 0, 64 * 360);
@@ -581,8 +588,8 @@ void Paint_HUD(void)
     /*
      * Display the HUD
      */
-    hud_pos_x = (int)(ext_view_width / 2 - hud_move_fact * selfVel.x);
-    hud_pos_y = (int)(ext_view_height / 2 + hud_move_fact * selfVel.y);
+    hud_pos_x = (int)(ext_view_width / 2 - hud_move_fact * FOOvel.x);
+    hud_pos_y = (int)(ext_view_height / 2 + hud_move_fact * FOOvel.y);
 
     /* HUD frame */
     gcv.line_style = LineOnOffDash;
@@ -604,10 +611,10 @@ void Paint_HUD(void)
     if (hudVLineColor) {
 	SET_FG(colors[hudVLineColor].pixel);
 	rd.drawLine(dpy, drawPixmap, gameGC,
-		    WINSCALE(hud_pos_x - hudSize + HUD_OFFSET),
-		    WINSCALE(hud_pos_y - hudSize),
-		    WINSCALE(hud_pos_x - hudSize + HUD_OFFSET),
-		    WINSCALE(hud_pos_y + hudSize));
+		    WINSCALE(hud_pos_x -hudSize + HUD_OFFSET),
+		    WINSCALE(hud_pos_y -hudSize),
+		    WINSCALE(hud_pos_x -hudSize + HUD_OFFSET),
+		    WINSCALE(hud_pos_y +hudSize));
 	rd.drawLine(dpy, drawPixmap, gameGC,
 		    WINSCALE(hud_pos_x + hudSize - HUD_OFFSET),
 		    WINSCALE(hud_pos_y - hudSize),
@@ -629,7 +636,7 @@ void Paint_HUD(void)
 		    WINSCALE(hud_pos_x + hudSize-HUD_OFFSET+BORDER),
 		    WINSCALE(hud_pos_y + hudSize-HUD_OFFSET+BORDER)
 				+ gameFont->ascent,
-		    str, (int)strlen(str));
+		    str, strlen(str));
 	if (numItems[ITEM_TANK]) {
 	    if (fuelCurrent == 0)
 		strcpy(str,"M ");
@@ -639,7 +646,7 @@ void Paint_HUD(void)
 			  WINSCALE(hud_pos_x + hudSize-HUD_OFFSET + BORDER),
 			  WINSCALE(hud_pos_y + hudSize-HUD_OFFSET + BORDER)
 			  + gameFont->descent + 2*gameFont->ascent,
-			  str, (int)strlen(str));
+			  str, strlen(str));
 	}
     }
 
@@ -654,11 +661,6 @@ void Paint_HUD(void)
 	    score_object_t*	sobj
 		= &score_objects[(i+score_object)%MAX_SCORE_OBJECTS];
 	    if (sobj->hud_msg_len > 0) {
-		if (sobj->hud_msg_width == -1)
-		    sobj->hud_msg_width = 
-			XTextWidth(gameFont, 
-				   sobj->hud_msg, 
-				   sobj->hud_msg_len);
 		if (j == 0 &&
 		    sobj->hud_msg_width > WINSCALE(2*hudSize-HUD_OFFSET*2) &&
 		    (did_fuel || hudVLineColor))
@@ -682,7 +684,7 @@ void Paint_HUD(void)
 			  - size,
 			  WINSCALE(hud_pos_y - hudSize+HUD_OFFSET - BORDER)
 			  - gameFont->descent,
-			  str, (int)strlen(str));
+			  str, strlen(str));
 	}
 
 	/* Update the modifiers */
@@ -692,7 +694,7 @@ void Paint_HUD(void)
 		      - XTextWidth(gameFont, mods, modlen),
 		      WINSCALE(hud_pos_y + hudSize-HUD_OFFSET+BORDER)
 		      + gameFont->ascent,
-		      mods, (int)strlen(mods));
+		      mods, strlen(mods));
 
 	if (autopilotLight) {
 	    int text_width = XTextWidth(gameFont, autopilot,
@@ -727,8 +729,8 @@ void Paint_HUD(void)
 				  + FUEL_GAUGE_OFFSET) - 1,
 			 WINSCALE(hud_pos_y - hudSize + HUD_OFFSET
 				  + FUEL_GAUGE_OFFSET) - 1,
-			 UWINSCALE(HUD_OFFSET - (2*FUEL_GAUGE_OFFSET)) + 3,
-			 UWINSCALE(HUD_FUEL_GAUGE_SIZE) + 3);
+			 WINSCALE(HUD_OFFSET - (2*FUEL_GAUGE_OFFSET)) + 3,
+			 WINSCALE(HUD_FUEL_GAUGE_SIZE) + 3);
 
 	size = (HUD_FUEL_GAUGE_SIZE * fuelSum) / fuelMax;
 	rd.fillRectangle(dpy, drawPixmap, gameGC,
@@ -737,16 +739,15 @@ void Paint_HUD(void)
 			 WINSCALE(hud_pos_y - hudSize + HUD_OFFSET
 				  + FUEL_GAUGE_OFFSET + HUD_FUEL_GAUGE_SIZE
 				  - size) + 1,
-			 UWINSCALE(HUD_OFFSET - (2*FUEL_GAUGE_OFFSET)),
-			 UWINSCALE(size));
+			 WINSCALE(HUD_OFFSET - (2*FUEL_GAUGE_OFFSET)),
+			 WINSCALE(size));
     }
 }
 
 
 void Paint_messages(void)
 {
-    int		i, x, y, top_y, bot_y, width;
-    size_t	len;
+    int		i, x, y, top_y, bot_y, width, len;
     const int	BORDER = 10,
 		SPACING = messageFont->ascent+messageFont->descent+1;
     message_t	*msg;
@@ -763,9 +764,10 @@ void Paint_messages(void)
 	last_msg_index--; /* make it an index */
     }
 
-    for (i = (instruments.showReverseScroll ? 2 * maxMessages - 1 : 0);
-	 (instruments.showReverseScroll ? i >= 0 : i < 2 * maxMessages);
-	 i += (instruments.showReverseScroll ? -1 : 1)) {
+    for (i = (BIT(instruments, SHOW_REVERSE_SCROLL) ? 2 * maxMessages - 1 : 0);
+	 (BIT(instruments, SHOW_REVERSE_SCROLL)
+	  ? i >= 0 : i < 2 * maxMessages);
+	 i += (BIT(instruments, SHOW_REVERSE_SCROLL) ? -1 : 1)) {
 	if (i < maxMessages)
 	    msg = TalkMsg[i];
 	else
@@ -774,15 +776,18 @@ void Paint_messages(void)
 	    continue;
 
 	/*
-	 * While there is something emphasized, freeze the life time counter
-	 * of a message if it is not drawn "flashed" (not in oldMessagesColor)
-	 * anymore.
+	 * while there is something emphasized, freeze the life time counter
+	 * of a message if it is not drawn `flashed' (red) anymore
 	 */
+	if (
+	    msg->lifeTime > MSG_FLASH_TIME
 #ifndef _WINDOWS
-	if (msg->lifeTime > MSG_FLASH_TIME
 	    || !selectionAndHistory
 	    || (selection.draw.state != SEL_PENDING
-		&& selection.draw.state != SEL_EMPHASIZED)) {
+		&& selection.draw.state != SEL_EMPHASIZED)
+#endif
+	    ) {
+
 	    if ((msg->lifeTime -= timePerFrame) <= 0.0) {
 		msg->txt[0] = '\0';
 		msg->len = 0;
@@ -790,29 +795,24 @@ void Paint_messages(void)
 		continue;
 	    }
 	}
-#else
-	if ((msg->lifeTime -= timePerFrame) <= 0.0) {
-	    msg->txt[0] = '\0';
-	    msg->len = 0;
-	    msg->lifeTime = 0.0;
-	    continue;
-	}
+#ifdef _WINDOWS
+	else if ((msg->lifeTime -= timePerFrame) <= 0.0) {
+		msg->txt[0] = '\0';
+		msg->len = 0;
+		msg->lifeTime = 0.0;
+		continue;
+	    }
 #endif
 
 	if (msg->lifeTime <= MSG_FLASH_TIME)
 	    msg_color = oldMessagesColor;
 	else {
-	    /* If paused, don't bother to paint messages in mscScan* colors. */
-	    if (self && strchr("P", self->mychar))
-		msg_color = messagesColor;
-	    else {
-		switch (msg->bmsinfo) {
-		case BmsBall:	msg_color = msgScanBallColor;	break;
-		case BmsSafe:	msg_color = msgScanSafeColor;	break;
-		case BmsCover:	msg_color = msgScanCoverColor;	break;
-		case BmsPop:	msg_color = msgScanPopColor;	break;
-		default:	msg_color = messagesColor;	break;
-		}
+	    switch (msg->bmsinfo) {
+	    case BmsBall:	msg_color = msgScanBallColor;	break;
+	    case BmsSafe:	msg_color = msgScanSafeColor;	break;
+	    case BmsCover:	msg_color = msgScanCoverColor;	break;
+	    case BmsPop:	msg_color = msgScanPopColor;	break;
+	    default:		msg_color = messagesColor;	break;
 	    }
 	}
 
@@ -824,13 +824,13 @@ void Paint_messages(void)
 	    y = top_y;
 	    top_y += SPACING;
 	} else {
-	    if (!instruments.showMessages)
+	    if (!BIT(instruments, SHOW_MESSAGES))
 		continue;
 	    x = BORDER;
 	    y = bot_y;
 	    bot_y -= SPACING;
 	}
-	len = charsPerSecond * (MSG_LIFE_TIME - msg->lifeTime);
+	len = (int)(charsPerSecond * (MSG_LIFE_TIME - msg->lifeTime));
 	len = MIN(msg->len, len);
 
 #ifndef _WINDOWS
@@ -873,7 +873,7 @@ void Paint_messages(void)
 		    /*___xxx[___]*/
 		ptr = msg->txt;
 		xoff = 0;
-		if ((int)len < selection.draw.x1)
+		if ( len < selection.draw.x1)
 		    l = len;
 		else {
 			/* at least two parts */
@@ -893,7 +893,7 @@ void Paint_messages(void)
 		    } else {
 			    /* only line */
 			    /*___xxx___*/
-			if ((int)len <= selection.draw.x2)
+			if (len <= selection.draw.x2)
 				/*___xxx___*/
 				/*    ^    */
 			    l2 = len - selection.draw.x1;
@@ -913,7 +913,7 @@ void Paint_messages(void)
 		    /*xxxxxx[___]*/
 		ptr2 = msg->txt;
 		xoff2 = 0;
-		if ((int)len <= selection.draw.x2 + 1)
+		if (len <= selection.draw.x2 + 1)
 			/* all blue */
 			/*xxxxxx[___]*/
 			/*  ^        */
@@ -932,44 +932,45 @@ void Paint_messages(void)
 
 	    if (ptr) {
 		XSetForeground(dpy, messageGC, colors[msg_color].pixel);
-		rd.drawString(dpy, drawPixmap, messageGC, x + xoff, y,
-			      ptr, l);
+		rd.drawString(dpy, drawPixmap, messageGC, x + xoff, y, ptr, l);
 	    }
 	    if (ptr2) {
 		XSetForeground(dpy, messageGC, colors[DRAW_EMPHASIZED].pixel);
-		rd.drawString(dpy, drawPixmap, messageGC, x + xoff2, y,
-			      ptr2, l2);
+		rd.drawString(dpy, drawPixmap, messageGC, x + xoff2, y, ptr2, l2);
 	    }
 	    if (ptr3) {
 		XSetForeground(dpy, messageGC, colors[msg_color].pixel);
-		rd.drawString(dpy, drawPixmap, messageGC, x + xoff3, y,
-			      ptr3, l3);
+		rd.drawString(dpy, drawPixmap, messageGC, x + xoff3, y, ptr3, l3);
 	    }
 
 	} else /* not emphasized */
 #endif
 	{
 	    XSetForeground(dpy, messageGC, colors[msg_color].pixel);
-	    rd.drawString(dpy, drawPixmap, messageGC, x, y,
-			  msg->txt, (int)len);
+	    rd.drawString(dpy, drawPixmap, messageGC, x, y, msg->txt, len);
 	}
 
-	width = XTextWidth(messageFont, msg->txt, (int)MIN(len, msg->len));
+	if (len < msg->len)
+	    width = XTextWidth(messageFont, msg->txt, len);
+	else
+	    width = msg->pixelLen;
     }
 }
 
 
 void Paint_recording(void)
 {
-    int			w, x, y, len;
+    int			w = -1;
+    int			x, y;
     char		buf[32];
+    int			len;
     double		mb;
 
     if (!recording || (loopsSlow % 16) < 8)
 	return;
 
     SET_FG(colors[RED].pixel);
-    mb = Record_size() / 1e6;
+    mb = ((double)Record_size()) / 1e6;
     sprintf(buf, "REC %.1f MB", mb);
     len = strlen(buf);
     w = XTextWidth(gameFont, buf, len);
@@ -981,8 +982,10 @@ void Paint_recording(void)
 
 void Paint_client_fps(void)
 {
-    int			w, x, y, len;
+    int			w = -1;
+    int			x, y;
     char		buf[32];
+    int			len;
 
     if (!hudColor)
 	return;

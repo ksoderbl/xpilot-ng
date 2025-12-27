@@ -1,4 +1,5 @@
 /* 
+ *
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -24,25 +25,19 @@
 #ifndef	DBUFF_H
 #define	DBUFF_H
 
-#include "xpcommon.h"
-
 #ifdef DBE
-#  ifdef HAVE_X11_EXTENSIONS_XDBE_H
-#    include <X11/extensions/Xdbe.h>
-#  endif
-#  undef MBX
+# include <X11/extensions/Xdbe.h>
+# undef MBX
 #else
-#  undef XdbeBackBuffer
-#  define XdbeBackBuffer	unsigned int
+# undef XdbeBackBuffer
+# define XdbeBackBuffer	unsigned int
 #endif
 
 #ifdef MBX
-#  ifdef HAVE_X11_EXTENSIONS_MULTIBUF_H
-#    include <X11/extensions/multibuf.h>
-#  endif
+# include <X11/extensions/multibuf.h>
 #else
-#   undef Multibuffer
-#   define Multibuffer	unsigned int
+# undef Multibuffer
+# define Multibuffer	unsigned int
 #endif
 
 
@@ -90,17 +85,17 @@ extern dbuff_state_t   *dbuf_state;    /* Holds current dbuff state */
 
 dbuff_state_t *start_dbuff(Display *display, Colormap cmap,
 			   dbuff_t type,
-			   unsigned num_planes, XColor *colors);
+			   int num_planes, XColor *colors);
 void dbuff_switch(dbuff_state_t *state);
 void dbuff_init_buffer(dbuff_state_t *state);
 void end_dbuff(dbuff_state_t *state);
 void dbuff_list(Display *display);
 
 #ifndef MBX
-#  undef Multibuffer
+# undef Multibuffer
 #endif
 #ifndef DBE
-#  undef XdbeBackBuffer
+# undef XdbeBackBuffer
 #endif
 
 #endif

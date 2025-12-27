@@ -21,7 +21,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include "xpclient_x11.h"
+#include "xpclient.h"
 #include "icon.h"
 
 /*
@@ -66,6 +66,9 @@ char xinit_version[] = VERSION;
 #define ABOUT_WINDOW_WIDTH	600
 #define ABOUT_WINDOW_HEIGHT	700
 
+extern message_t	*TalkMsg[], *GameMsg[];
+extern message_t	*TalkMsg_pending[], *GameMsg_pending[];
+
 /*
  * Globals.
  */
@@ -73,14 +76,22 @@ int			ButtonHeight;
 Atom			ProtocolAtom, KillAtom;
 int			buttonColor, windowColor, borderColor;
 bool			quitting = false;
-unsigned		top_width, top_height;
-unsigned		players_width, players_height;
+unsigned int		top_width, top_height, /*top_x, top_y, */ top_posmask;
+unsigned int		draw_width, draw_height;
+unsigned int		players_width, players_height;
 char			*geometry;
 bool			radar_score_mapped;
 bool			autoServerMotdPopup;
 bool			refreshMotd;
 Cursor			pointerControlCursor;
+char			sparkColors[MSG_LEN];
+int			spark_color[MAX_COLORS];
+int			num_spark_colors;
 bool			ignoreWindowManager;
+
+static message_t	*MsgBlock = NULL;
+static message_t	*MsgBlock_pending = NULL;
+
 
 /*
  * NB!  Is dependent on the order of the items in item.h!
@@ -822,7 +833,7 @@ int Init_playing_windows(void)
 
     button_form
 	= Widget_create_form(0, topWindow,
-			     0, (int)RadarHeight,
+			     0, RadarHeight,
 			     256, ButtonHeight + 2,
 			     0);
     Widget_create_activate(button_form,
@@ -863,7 +874,7 @@ int Init_playing_windows(void)
     players_height = top_height - (RadarHeight + ButtonHeight + 2);
     playersWindow
 	= XCreateSimpleWindow(dpy, topWindow,
-			      0, (int)RadarHeight + ButtonHeight + 2,
+			      0, RadarHeight + ButtonHeight + 2,
 			      players_width, players_height,
 			      0, 0,
 			      colors[windowColor].pixel);
@@ -980,6 +991,73 @@ void WinXCreateItemBitmaps(void)
 }
 #endif
 
+int Alloc_msgs(void)
+{
+    message_t		*x, *x2 = 0;
+    int			i;
+
+    if ((x = (message_t *)malloc(2 * MAX_MSGS * sizeof(message_t))) == NULL){
+	error("No memory for messages");
+	return -1;
+    }
+
+#ifndef _WINDOWS
+    if (selectionAndHistory &&
+	((x2 = (message_t *)
+	  malloc(2 * MAX_MSGS * sizeof(message_t))) == NULL)){
+	error("No memory for history messages");
+	free(x);
+	return -1;
+    }
+    if (selectionAndHistory)
+	MsgBlock_pending = x2;
+#endif
+
+    MsgBlock = x;
+
+    for (i = 0; i < 2 * MAX_MSGS; i++) {
+	if (i < MAX_MSGS) {
+	    TalkMsg[i] = x;
+	    IFNWINDOWS( if (selectionAndHistory)
+			TalkMsg_pending[i] = x2 );
+	} else {
+	    GameMsg[i - MAX_MSGS] = x;
+	    IFNWINDOWS( if (selectionAndHistory)
+			GameMsg_pending[i - MAX_MSGS] = x2 );
+	}
+	x->txt[0] = '\0';
+	x->len = 0;
+	x->lifeTime = 0.0;
+	x++;
+
+#ifndef _WINDOWS
+	if (selectionAndHistory) {
+	    x2->txt[0] = '\0';
+	    x2->len = 0;
+	    x2->lifeTime = 0.0;
+	    x2++;
+	}
+#endif
+    }
+    return 0;
+}
+
+void Free_msgs(void)
+{
+    if (MsgBlock) {
+	free(MsgBlock);
+	MsgBlock = NULL;
+    }
+
+#ifndef _WINDOWS
+    if (MsgBlock_pending) {
+	free(MsgBlock_pending);
+	MsgBlock_pending = NULL;
+    }
+#endif
+}
+
+
 static int Config_callback(int widget_desc, void *data, const char **str)
 {
     (void)widget_desc; (void)data; (void)str;
@@ -1023,10 +1101,6 @@ static int Quit_callback(int widget_desc, void *data, const char **str)
     return 0;
 }
 
-void Raise_window(void)
-{
-    XMapRaised(dpy, topWindow);
-}
 
 void Resize(Window w, unsigned width, unsigned height)
 {
@@ -1047,7 +1121,7 @@ void Resize(Window w, unsigned width, unsigned height)
 	draw_width = top_width;
     draw_height = top_height;
 
-    Check_view_dimensions();
+    Send_display();
     Net_flush();
     XResizeWindow(dpy, drawWindow, draw_width, draw_height);
 #ifndef _WINDOWS
@@ -1091,6 +1165,7 @@ void Quit(void)
 	button_form = 0;
     }
 #endif
+    Free_msgs();
     Widget_cleanup();
 }
 

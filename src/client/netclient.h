@@ -32,19 +32,9 @@
 #define MIN_RECEIVE_WINDOW_SIZE		1
 #define MAX_RECEIVE_WINDOW_SIZE		4
 
-typedef struct {
-    int view_width;
-    int view_height;
-    int spark_rand;
-    int num_spark_colors;
-} display_t;
-
-extern char	 hostname[SOCK_HOSTNAME_LENGTH];
-extern int	 simulating;
-extern int	 receive_window_size;
-extern long	 last_loops;
-extern bool      packetMeasurement;
-extern display_t server_display; /* the servers idea about our display */
+extern int	simulating;
+extern int	receive_window_size;
+extern long	last_loops;
 
 int Net_setup(void);
 int Net_verify(char *real, char *nick, char *dpy, int my_team);
@@ -120,7 +110,7 @@ int Send_pointer_move(int movement);
 int Receive_audio(void);
 int Receive_talk_ack(void);
 int Send_talk(void);
-int Send_display(int width, int height, int sparks, int spark_colors);
+int Send_display(void);
 int Send_modifier_bank(int);
 int Net_talk(char *str);
 int Net_ask_for_motd(long offset, long maxlen);

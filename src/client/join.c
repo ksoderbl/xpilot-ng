@@ -21,9 +21,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-/* kps - this file could be made X11 independent easily. */
-
-#include "xpclient_x11.h"
+#include "xpclient.h"
 
 char join_version[] = VERSION;
 
@@ -31,14 +29,8 @@ char join_version[] = VERSION;
 # define SCORE_UPDATE_DELAY	4
 #endif
 
-static int Handle_input(int new_input)
-{
-#ifndef _WINDOWS
-    return x_event(new_input);
-#else
-    return 0;
-#endif
-}
+void xpilotShutdown(void);
+
 
 #ifndef _WINDOWS
 static void Input_loop(void)
@@ -56,13 +48,13 @@ static void Input_loop(void)
 	error("Bad server input");
 	return;
     }
-    if (Handle_input(2) == -1)
+    if (Client_input(2) == -1)
 	return;
 
     if (Net_flush() == -1)
 	return;
 
-    if ((clientfd = ConnectionNumber(dpy)) == -1) {
+    if ((clientfd = Client_fd()) == -1) {
 	error("Bad client filedescriptor");
 	return;
     }
@@ -79,7 +71,7 @@ static void Input_loop(void)
 	if ((scoresChanged != 0 && ++scoresChanged > SCORE_UPDATE_DELAY)
 	    || result > 1) {
 	    if (scoresChanged > 2 * SCORE_UPDATE_DELAY) {
-		Paint_score_table();
+		Client_score_table();
 		tv.tv_sec = 10;
 		tv.tv_usec = 0;
 	    } else {
@@ -98,8 +90,8 @@ static void Input_loop(void)
 	}
 	if (n == 0) {
 	    if (scoresChanged > SCORE_UPDATE_DELAY) {
-		Paint_score_table();
-		if (Handle_input(2) == -1)
+		Client_score_table();
+		if (Client_input(2) == -1)
 		    return;
 		continue;
 	    }
@@ -109,7 +101,7 @@ static void Input_loop(void)
 	    }
 	}
 	if (FD_ISSET(clientfd, &rfds)) {
-	    if (Handle_input(1) == -1)
+	    if (Client_input(1) == -1)
 		return;
 
 	    if (Net_flush() == -1) {
@@ -137,15 +129,15 @@ static void Input_loop(void)
 		 * keyboard events and then we wait until the X server
 		 * has finished the drawing of our current frame.
 		 */
-		if (Handle_input(1) == -1)
+		if (Client_input(1) == -1)
 		    return;
 
 		if (Net_flush() == -1) {
 		    error("Bad net flush before sync");
 		    return;
 		}
-		XSync(dpy, False);
-		if (Handle_input(1) == -1)
+		Client_sync();
+		if (Client_input(1) == -1)
 		    return;
 	    }
 	}
@@ -153,7 +145,7 @@ static void Input_loop(void)
 }
 #endif	/* _WINDOWS */
 
-static void xpilotShutdown(void)
+void xpilotShutdown()
 {
     Net_cleanup();
     Client_cleanup();
