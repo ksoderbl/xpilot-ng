@@ -263,10 +263,9 @@ static void tagstart(void *data, const char *el, const char **attr)
 	return;
     }
 
-    /* kps - this should be handled like balltarget */
-#if 0
-    if (!strcasecmp(el, "Target")) {
-	int team = TEAM_NOT_SET, cx = -1, cy = -1;
+    /* kps extensions */
+    if (!strcasecmp(el, "Cannon")) {
+	int team = TEAM_NOT_SET, cx = -1, cy = -1, dir = DIR_UP, ind = -1;
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "team"))
@@ -275,12 +274,138 @@ static void tagstart(void *data, const char *el, const char **attr)
 		cx = atoi(*(attr + 1)) * scale;
 	    if (!strcasecmp(*attr, "y"))
 		cy = atoi(*(attr + 1)) * scale;
+	    if (!strcasecmp(*attr, "dir"))
+		dir = atoi(*(attr + 1));
 	    attr += 2;
 	}
-	Map_place_target(cx, cy, team);
+	/* ind = ... */
+	P_start_cannon(cx, cy, dir, team, ind);
+	return;
+    }    
+    
+    if (!strcasecmp(el, "Target")) {
+	int team = TEAM_NOT_SET, ind = -1;
+
+	while (*attr) {
+	    if (!strcasecmp(*attr, "team"))
+		team = atoi(*(attr + 1));
+	    attr += 2;
+	}
+	/* ind = ... */
+	P_start_target(team, ind);
+	return;
+    }    
+
+    if (!strcasecmp(el, "ItemConcentrator")) {
+	int cx = -1, cy = -1;
+
+	while (*attr) {
+	    if (!strcasecmp(*attr, "x"))
+		cx = atoi(*(attr + 1)) * scale;
+	    if (!strcasecmp(*attr, "y"))
+		cy = atoi(*(attr + 1)) * scale;
+	    attr += 2;
+	}
+	/*Map_place_...(cx, cy);*/
 	return;
     }
-#endif
+
+    if (!strcasecmp(el, "AsteroidConcentrator")) {
+	int cx = -1, cy = -1;
+
+	while (*attr) {
+	    if (!strcasecmp(*attr, "x"))
+		cx = atoi(*(attr + 1)) * scale;
+	    if (!strcasecmp(*attr, "y"))
+		cy = atoi(*(attr + 1)) * scale;
+	    attr += 2;
+	}
+	/*Map_place_...(cx, cy);*/
+	return;
+    }
+
+    if (!strcasecmp(el, "Grav")) {
+	int cx = -1, cy = -1;
+	DFLOAT force = 0.0;
+	int type = SPACE;
+
+	while (*attr) {
+	    if (!strcasecmp(*attr, "x"))
+		cx = atoi(*(attr + 1)) * scale;
+	    else if (!strcasecmp(*attr, "y"))
+		cy = atoi(*(attr + 1)) * scale;
+	    else if (!strcasecmp(*attr, "force"))
+		force = (DFLOAT)atof(*(attr + 1));
+	    else if (!strcasecmp(*attr, "type")) {
+		char *s = (char *)*(attr + 1);
+
+		if (!strcasecmp(s, "pos"))
+		    type = POS_GRAV;
+		else if (!strcasecmp(s, "neg"))
+		    type = NEG_GRAV;
+		else if (!strcasecmp(s, "cwise"))
+		    type = CWISE_GRAV;
+		else if (!strcasecmp(s, "acwise"))
+		    type = ACWISE_GRAV;
+		else if (!strcasecmp(s, "up"))
+		    type = UP_GRAV;
+		else if (!strcasecmp(s, "down"))
+		    type = DOWN_GRAV;
+		else if (!strcasecmp(s, "right"))
+		    type = RIGHT_GRAV;
+		else if (!strcasecmp(s, "left"))
+		    type = LEFT_GRAV;
+	    }
+
+	    attr += 2;
+	}
+	if (type == SPACE) {
+	    warn("Illegal type in grav tag.\n");
+	    exit(1);
+	}	
+	/*Map_place_...(cx, cy, force, type);*/
+	return;
+    }
+
+    if (!strcasecmp(el, "Wormhole")) {
+	int cx = -1, cy = -1;
+	wormType type = WORM_NORMAL;
+
+	while (*attr) {
+	    if (!strcasecmp(*attr, "x"))
+		cx = atoi(*(attr + 1)) * scale;
+	    else if (!strcasecmp(*attr, "y"))
+		cy = atoi(*(attr + 1)) * scale;
+	    else if (!strcasecmp(*attr, "type")) {
+		char *s = (char *)*(attr + 1);
+
+		if (!strcasecmp(s, "normal"))
+		    type = WORM_NORMAL;
+		else if (!strcasecmp(s, "in"))
+		    type = WORM_IN;
+		else if (!strcasecmp(s, "out"))
+		    type = WORM_OUT;
+	    }
+
+	    attr += 2;
+	}
+	/*Map_place_...(cx, cy, force, type);*/
+	return;
+    }
+
+    if (!strcasecmp(el, "FrictionArea")) {
+	DFLOAT friction = 0.0; /* kps - other default ??? */
+
+	while (*attr) {
+	    if (!strcasecmp(*attr, "friction"))
+		friction = atof(*(attr + 1));
+	    attr += 2;
+	}
+	/*Map_place_...(team);*/
+	return;
+    }    
+
+    /* end of kps extensions */
 
     if (!strcasecmp(el, "Option")) {
 	const char *name = NULL, *value = NULL;
@@ -320,16 +445,21 @@ static void tagstart(void *data, const char *el, const char **attr)
 
 static void tagend(void *data, const char *el)
 {
-    void cmdhack(void);
     if (!strcasecmp(el, "Decor"))
 	P_end_decor();
-    if (!strcasecmp(el, "BallArea"))
+    else if (!strcasecmp(el, "BallArea"))
 	P_end_ballarea();
-    if (!strcasecmp(el, "BallTarget"))
+    else if (!strcasecmp(el, "BallTarget"))
 	P_end_balltarget();
-    if (!strcasecmp(el, "Polygon")) {
+    else if (!strcasecmp(el, "Cannon"))
+	P_end_cannon();
+    else if (!strcasecmp(el, "Target"))
+	P_end_target();
+    else if (!strcasecmp(el, "FrictionArea"))
+	P_end_frictionarea();
+    else if (!strcasecmp(el, "Polygon"))
 	P_end_polygon();
-    }
+
     if (!strcasecmp(el, "GeneralOptions")) {
 	/* ok, got to the end of options */
 	Options_parse();

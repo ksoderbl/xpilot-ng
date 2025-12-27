@@ -127,7 +127,7 @@ static int wrap(int *xp, int *yp)
          bitmap based on the color. Unix ignores this parameter*/
 void Paint_item_symbol(u_byte type, Drawable d, GC mygc, int x, int y, int color)
 {
-    if (!blockBitmaps) {
+    if (!texturedObjects) {
 #ifdef _WINDOWS
     rd.paintItemSymbol(type, d, mygc, x, y, color);
 #else
@@ -266,7 +266,7 @@ static void Paint_mines(void)
 		 * We do not know who is safe for mines sent with id==0
 		 */
 		name = NULL;
-		if (BIT(instruments, SHOW_MINE_NAME)) {
+		if (mineNameColor) {
 		    if (mine_ptr[i].id != 0) {
 			other_t *other;
 			if (mine_ptr[i].id == EXPIRED_MINE_ID) {

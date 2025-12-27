@@ -257,6 +257,7 @@ char cdashes[NUM_CDASHES];
 
 static int Quit_callback(int, void *, const char **);
 static int Config_callback(int, void *, const char **);
+static int Colors_callback(int, void *, const char **);
 static int Score_callback(int, void *, const char **);
 static int Player_callback(int, void *, const char **);
 
@@ -477,18 +478,44 @@ int Init_top(void)
     }
 #endif
 
-    if (hudColor >= maxColors || hudColor <= 0) {
-	hudColor = BLUE;
-    }
-    if (hudLockColor >= maxColors || hudLockColor <= 0) {
-	hudLockColor = hudColor;
-    }
-    if (hrColor1 >= maxColors || hrColor1 < 0) {
-	hrColor1 = RED;
-    }
-    if (hrColor2 >= maxColors || hrColor2 < 0) {
-	hrColor2 = BLUE;
-    }
+    /* check that colors have sane values, if not, set a default */
+#define COLORCHECK(c, d) if (c >= maxColors || c < 0) { \
+      xpprintf("Value of option \"" #c "\" (%d) is out of range, " \
+               "setting default value " #d ".\n", c); c = d ; }
+
+    COLORCHECK(hudColor, BLUE);
+    COLORCHECK(hudLockColor, hudColor);
+    COLORCHECK(hrColor1, RED);
+    COLORCHECK(hrColor2, BLUE);
+    COLORCHECK(shipShapesHackColor, BLACK);
+    COLORCHECK(dirPtrColor, BLACK);
+    COLORCHECK(msgScanBallColor, RED);
+    COLORCHECK(msgScanCoverColor, BLUE);
+    COLORCHECK(selfLWColor, RED);
+    COLORCHECK(enemyLWColor, RED);
+    COLORCHECK(teamLWColor, 4);
+    COLORCHECK(teamShotColor, BLUE);
+    COLORCHECK(shipNameColor, BLUE);
+    COLORCHECK(baseNameColor, BLUE);
+    COLORCHECK(mineNameColor, BLUE);
+    COLORCHECK(ballColor, WHITE);
+    COLORCHECK(connColor, WHITE);
+    COLORCHECK(windowColor, BLUE);
+    COLORCHECK(buttonColor, RED);
+    COLORCHECK(borderColor, WHITE);
+    COLORCHECK(scoreColor, WHITE);
+    COLORCHECK(scoreSelfColor, RED);
+    COLORCHECK(scoreInactiveColor, 12);
+    COLORCHECK(scoreInactiveSelfColor, 12);
+    /* kps - add scoreObjectColor */
+    COLORCHECK(scoreZeroColor, 4);
+    COLORCHECK(wallColor, BLUE);
+    COLORCHECK(fuelColor, RED);
+    COLORCHECK(messagesColor, RED);
+    COLORCHECK(oldMessagesColor, BLUE);
+    COLORCHECK(decorColor, RED);
+#undef COLORCHECK
+
     if (hrSize >= SHIP_SZ || hrSize <= 0) {
 	hrSize = 6;
     }
@@ -501,72 +528,13 @@ int Init_top(void)
     if (hudSize >= 6 * MIN_HUD_SIZE || hudSize < MIN_HUD_SIZE) {
 	hudSize = MIN_HUD_SIZE;
     }
-    if (shipShapesHackColor >= maxColors || shipShapesHackColor < 0) {
-	shipShapesHackColor = 0;
-    }
-    if (dirPtrColor >= maxColors || dirPtrColor < 0) {
-	dirPtrColor = 0;
-    }
-    if (msgScanBallColor >= maxColors || msgScanBallColor < 0) {
-	msgScanBallColor = RED;
-    }
-    if (msgScanCoverColor >= maxColors || msgScanCoverColor < 0) {
-	msgScanCoverColor = BLUE;
-    }
-    if (selfLWColor >= maxColors || selfLWColor <= 0) {
-	selfLWColor = RED;
-    }
-    if (enemyLWColor >= maxColors || enemyLWColor <= 0) {
-	enemyLWColor = RED;
-    }
-    if (teamLWColor >= maxColors || teamLWColor <= 0) {
-	teamLWColor = 4;
-    }
-    if (teamShotColor >= maxColors || teamShotColor < 0) {
-	teamShotColor = BLUE;
-    }
 
-    if (nameColor >= maxColors || nameColor <= 0) {
-	nameColor = BLUE;
-    }
-    if (ballColor >= maxColors || ballColor <= 0) {
-	ballColor = WHITE;
-    }
-    if (connColor >= maxColors || connColor <= 0) {
-	connColor = WHITE;
-    }
-    if (windowColor >= maxColors || windowColor < 0) {
-	windowColor = BLUE;
-    }
-    if (buttonColor >= maxColors || buttonColor < 0) {
-	buttonColor = RED;
-    }
-    if (borderColor >= maxColors || borderColor < 0) {
-	borderColor = WHITE;
-    }
-    if (scoreColor >= maxColors || scoreColor < 0) {
-	scoreColor = WHITE;
-    }
-    if (scoreSelfColor >= maxColors || scoreSelfColor < 0) {
-	scoreSelfColor = RED;
-    }
-    if (scoreInactiveColor >= maxColors || scoreInactiveColor < 0) {
-	scoreInactiveColor = 12;
-    }
-    if (scoreInactiveSelfColor >= maxColors || scoreInactiveSelfColor < 0) {
-	scoreInactiveSelfColor = 12;
-    }
-    if (scoreZeroColor >= maxColors || scoreZeroColor < 0) {
-	scoreZeroColor = 4;
-    }
+
     if (scoreObjectTime > 10.0 || scoreObjectTime < 0.0) {
 	scoreObjectTime = 2.0;
     }
     if (baseWarningType > 3 || baseWarningType < 0) {
 	baseWarningType = 1;
-    }
-    if (wallColor >= maxColors || wallColor <= 0) {
-	wallColor = BLUE;
     }
     if (wallRadarColor >= maxColors
 	|| ((wallRadarColor & 5) && colorSwitch)) {
@@ -577,18 +545,11 @@ int Init_top(void)
 	/* should be & 5? !@# */
 	targetRadarColor = BLUE;
     }
-    if (messagesColor >= maxColors || messagesColor < 0) {
-	messagesColor = RED;
-    }
-    if (oldMessagesColor >= maxColors || oldMessagesColor < 0) {
-	oldMessagesColor = BLUE;
-    }
+
     if (charsPerSecond > 255 || charsPerSecond < 10) {
 	charsPerSecond = 50;
     }
-    if (decorColor >= maxColors || decorColor <= 0) {
-	decorColor = RED;
-    }
+
     if (decorRadarColor >= maxColors
 	|| ((decorRadarColor & 5) && colorSwitch)) {
 	decorRadarColor = 2;
@@ -911,6 +872,8 @@ int Init_playing_windows(void)
     Widget_add_pulldown_entry(menu_button,
 			      "CONFIG", Config_callback, NULL);
     Widget_add_pulldown_entry(menu_button,
+			      "COLORS", Colors_callback, NULL);
+    Widget_add_pulldown_entry(menu_button,
 			      "SCORE", Score_callback, NULL);
     Widget_add_pulldown_entry(menu_button,
 			      "PLAYER", Player_callback, NULL);
@@ -1102,14 +1065,19 @@ void Free_msgs(void)
 
 static int Config_callback(int widget_desc, void *data, const char **str)
 {
-    Config(true);
+    Config(true, CONFIG_DEFAULT);
     return 0;
 }
 
+static int Colors_callback(int widget_desc, void *data, const char **str)
+{
+    Config(true, CONFIG_COLORS);
+    return 0;
+}
 
 static int Score_callback(int widget_desc, void *data, const char **str)
 {
-    Config(false);
+    Config(false, CONFIG_NONE);
     if (showRealName != false) {
 	showRealName = false;
 	scoresChanged = 1;
@@ -1117,17 +1085,15 @@ static int Score_callback(int widget_desc, void *data, const char **str)
     return 0;
 }
 
-
 static int Player_callback(int widget_desc, void *data, const char **str)
 {
-    Config(false);
+    Config(false, CONFIG_NONE);
     if (showRealName != true) {
 	showRealName = true;
 	scoresChanged = 1;
     }
     return 0;
 }
-
 
 static int Quit_callback(int widget_desc, void *data, const char **str)
 {

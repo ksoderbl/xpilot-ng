@@ -44,7 +44,7 @@ HDC hDC;
 
 xp_picture_t radar_colors;
 
-extern int blockBitmaps;
+extern int texturedObjects;
 
 void delete_bitmaps()
 {

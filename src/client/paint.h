@@ -55,13 +55,13 @@
 /*#define FUEL_NOTIFY		(3*FPS)*/
 
 #define WARNING_DISTANCE	(VISIBILITY_DISTANCE*0.8)
-/* constants end */
 
-#define MSG_LIFE_TIME		60.0	/* Seconds */
-#define MSG_FLASH_TIME		50.0	/* Old messages have life time less
+#define MSG_LIFE_TIME		120.0	/* Seconds */
+#define MSG_FLASH_TIME		110.0	/* Old messages have life time less
 					   than this */
 
 #define TITLE_DELAY		500	/* Should probably change to seconds */
+/* constants end */
 
 
 /* typedefs begin */
@@ -166,7 +166,9 @@ extern int	msgScanCoverColor;	/* Color index for cover msg scan */
 extern int	selfLWColor;		/* Color index for selfLifeWarning */
 extern int	enemyLWColor;		/* Color index for enemyLifeWarning */
 extern int	teamLWColor;		/* Color index for teamLifeWarning */
-extern int	nameColor;		/* Color index for name drawing */
+extern int	shipNameColor;		/* Color index for ship name drawing */
+extern int	baseNameColor;		/* Color index for base name drawing */
+extern int	mineNameColor;		/* Color index for mine name drawing */
 extern int	teamShotColor;		/* Color index for harmless shot drawing */
 extern int	ballColor;		/* Color index for ball drawing */
 extern int	connColor;		/* Color index for connector drawing */
@@ -175,6 +177,7 @@ extern DFLOAT	scoreObjectTime;	/* how long score objects are flashed */
 extern int	baseWarningType;	/* Which type of base warning you prefer */
 extern int	baseWarningFrames;	/* Duration of base warning */
 extern int	wallColor;		/* Color index for wall drawing */
+extern int	fuelColor;		/* Color index for fuel box drawing */
 extern int	wallRadarColor;		/* Color index for walls on radar */
 extern int	targetRadarColor;	/* Color index for targets on radar */
 extern int	decorColor;		/* Color index for decoration drawing */
@@ -290,7 +293,7 @@ void Paint_vbase(void);
 void Paint_vdecor(void);
 void Paint_objects(void);
 void Paint_world(void);
-void Paint_score_entry(int entry_num, other_t* other, bool best);
+void Paint_score_entry(int entry_num, other_t* other, bool is_team);
 void Paint_score_start(void);
 void Paint_score_objects(void);
 void Paint_meters(void);

@@ -1268,11 +1268,9 @@ int Handle_score_object(DFLOAT score, int x, int y, char *msg)
 
     /* Initialize sobj->hud_msg (is shown on the HUD) */
     if (msg[0] != '\0') {
-	if (showScoreDecimals > 0 && version >= 0x4500
-	    && (version < 0x4F09 || version >= 0x4F11)) {
+	if (Using_score_decimals()) {
 	    sprintf(sobj->hud_msg, "%s %.*f", msg, showScoreDecimals, score);
-	}
-	else {
+	} else {
 	    sprintf(sobj->hud_msg, "%s %d", msg, (int) rint(score));
 	}
 	sobj->hud_msg_len = strlen(sobj->hud_msg);
@@ -1282,11 +1280,9 @@ int Handle_score_object(DFLOAT score, int x, int y, char *msg)
 	sobj->hud_msg_len = 0;
 
     /* Initialize sobj->msg data (is shown on game area) */
-    if (showScoreDecimals > 0 && version >= 0x4500
-	&& (version < 0x4F09 || version >= 0x4F11)) {
+    if (Using_score_decimals()) {
 	sprintf(sobj->msg, "%.*f", showScoreDecimals, score);
-    }
-    else {
+    } else {
 	sprintf(sobj->msg, "%d", (int) rint(score));
     }
     sobj->msg_len = strlen(sobj->msg);
@@ -1298,44 +1294,103 @@ int Handle_score_object(DFLOAT score, int x, int y, char *msg)
     return 0;
 }
 
-void Client_score_table(void)
+static void Print_roundend_messages(other_t **order)
 {
-    struct team_score {
-	DFLOAT		score;
-	int		life;
-	int		playing;
-    };
-    struct team_score	team[MAX_TEAMS],
-			*team_order[MAX_TEAMS];
-    other_t		*other,
-			**order;
-    int			i, j, k, best = -1, entrynum = 0;
-    DFLOAT		ratio, best_ratio = -1e7;
     static char		hackbuf[MSG_LEN];
     static char		hackbuf2[MSG_LEN];
     char		*s;
+    int			i;
+    other_t		*other;
 
-    if (scoresChanged == 0) {
-	return;
-    }
+    roundend = false;
+		
+    sprintf(hackbuf, "Kill ratio - Round: %d/%d, Total: %d/%d",
+	    killratio_kills, killratio_deaths,
+	    killratio_totalkills, killratio_totaldeaths);
 
-    if (players_exposed == false) {
-	return;
-    }
+    killratio_kills = 0;
+    killratio_deaths = 0;
+	
+    Add_message(hackbuf);
+    s = hackbuf;
+    s += sprintf(s, "Points - ");
 
-    if (num_others < 1) {
-	Paint_score_start();
-	scoresChanged = 0;
-	return;
-    }
+    /*
+     * Scores are nice to see e.g. in cup recordings.
+     */
+    for (i = 0; i < num_others; i++) {
+	other = order[i];
+	if (other->team == 0
+	    && BIT(hackedInstruments, TREAT_ZERO_SPECIAL))
+	    continue;
 
-    if ((order = (other_t **)malloc(num_others * sizeof(other_t *))) == NULL) {
-	error("No memory for score");
-	return;
+	if (Using_score_decimals()) {
+	    sprintf(hackbuf2, "%s: %.*f  ", other->name,
+		    showScoreDecimals, other->score);
+	    if ((s - hackbuf) + strlen(hackbuf2) > MSG_LEN) {
+		Add_message(hackbuf);
+		s = hackbuf;
+	    }
+	    s += sprintf(s, "%s", hackbuf2);
+	} else {
+	    sprintf(hackbuf2, "%s: %d  ", other->name,
+		    (int) rint(other->score));
+	    if ((s - hackbuf) + strlen(hackbuf2) > MSG_LEN) {
+		Add_message(hackbuf);
+		s = hackbuf;
+	    }
+	    s += sprintf(s,"%s",hackbuf2);
+	}
     }
-    if (BIT(Setup->mode, TEAM_PLAY|TIMING) == TEAM_PLAY) {
-	memset(&team[0], 0, sizeof team);
+    Add_message(hackbuf);
+}
+
+bool Using_score_decimals(void)
+{
+    if (showScoreDecimals > 0 && version >= 0x4500
+	&& (version < 0x4F09 || version >= 0x4F11))
+	return true;
+    return false;
+}
+
+struct team_score {
+    DFLOAT	score;
+    int		life;
+    int		playing;
+};
+
+
+static void Determine_team_order(struct team_score *team_order[],
+				 struct team_score team[])
+{
+    int i, j, k;
+
+    num_playing_teams = 0;
+    for (i = 0; i < MAX_TEAMS; i++) {
+	if (team[i].playing) {
+	    for (j = 0; j < num_playing_teams; j++) {
+		if (team[i].score > team_order[j]->score
+		    || (team[i].score == team_order[j]->score
+			&& ((BIT(Setup->mode, LIMITED_LIVES))
+			    ? (team[i].life > team_order[j]->life)
+			    : (team[i].life < team_order[j]->life)))) {
+		    for (k = i; k > j; k--) {
+			team_order[k] = team_order[k - 1];
+		    }
+		    break;
+		}
+	    }
+	    team_order[j] = &team[i];
+	    num_playing_teams++;
+	}
     }
+}
+
+static void Determine_order(other_t **order, struct team_score team[])
+{
+    other_t		*other;
+    int			i, j, k;
+
     for (i = 0; i < num_others; i++) {
 	other = &Others[i];
 	if (BIT(Setup->mode, TIMING)) {
@@ -1363,16 +1418,6 @@ void Client_score_table(void)
 	    }
 	}
 	else {
-	    if (BIT(Setup->mode, LIMITED_LIVES)) {
-		ratio = other->score;
-	    } else {
-		ratio = other->score / (other->life + 1);
-	    }
-	    if (best == -1
-		|| ratio > best_ratio) {
-		best_ratio = ratio;
-		best = i;
-	    }
 	    for (j = 0; j < i; j++) {
 		if (order[j]->score < other->score) {
 		    break;
@@ -1409,114 +1454,122 @@ void Client_score_table(void)
 
 	}
     }
-    Paint_score_start();
-    if (BIT(Setup->mode, TIMING)) {
-	best = order[0] - Others;
+    return;
+}
+
+static int Team_heading(int entrynum, int teamnum,
+			int teamlives, DFLOAT teamscore)
+{
+    other_t tmp;
+    tmp.id = -1;
+    tmp.team = teamnum;
+    tmp.war_id = -1;
+    tmp.name_width = 0;
+    tmp.ship = NULL;
+    sprintf(tmp.name, "TEAM %d", tmp.team);
+    strcpy(tmp.real, tmp.name);
+    strcpy(tmp.host, "");
+#if 1
+    if (BIT(Setup->mode, LIMITED_LIVES) && teamlives == 0) {
+	tmp.mychar = 'D';
+    } else {
+	tmp.mychar = ' ';
     }
+#else
+    tmp.mychar = ' ';
+#endif
+    tmp.score = teamscore;
+    tmp.life = teamlives;
+
+    if (teamnum != 0 || !BIT(hackedInstruments, TREAT_ZERO_SPECIAL))
+	Paint_score_entry(entrynum++, &tmp, true);
+    return entrynum;
+}
+
+static int Team_score_table(int entrynum, int teamnum,
+			    struct team_score team, other_t **order)
+{
+    other_t *other;
+    int i, j;
+    bool drawn = false;
+
     for (i = 0; i < num_others; i++) {
 	other = order[i];
+	if (other->team != teamnum)
+	    continue;
+	if (!drawn)
+	    entrynum = Team_heading(entrynum, teamnum, team.life, team.score);
 	j = other - Others;
-	if (!BIT(hackedInstruments, TREAT_ZERO_SPECIAL) || other->team != 0) {
-	    Paint_score_entry(entrynum, other, (j == best) ? true : false);
-	    ++entrynum;
-	}
+	Paint_score_entry(entrynum++, other, false);
+	drawn = true;
     }
-    if (BIT(hackedInstruments, TREAT_ZERO_SPECIAL))
+
+    if (drawn)
+	entrynum++;
+    return entrynum;
+}
+
+
+void Client_score_table(void)
+{
+    struct team_score	team[MAX_TEAMS],
+			*team_order[MAX_TEAMS];
+    other_t		*other,
+			**order;
+    int			i, j, entrynum = 0;
+
+    if (scoresChanged == 0) {
+	return;
+    }
+
+    if (players_exposed == false) {
+	return;
+    }
+
+    if (num_others < 1) {
+	Paint_score_start();
+	scoresChanged = 0;
+	return;
+    }
+
+    if ((order = (other_t **)malloc(num_others * sizeof(other_t *))) == NULL) {
+	error("No memory for score");
+	return;
+    }
+    if (BIT(Setup->mode, TEAM_PLAY|TIMING) == TEAM_PLAY) {
+	memset(&team[0], 0, sizeof team);
+    }
+    Determine_order(order, team);
+    Paint_score_start();
+    if (!(BIT(Setup->mode, TEAM_PLAY|TIMING) == TEAM_PLAY)) {
 	for (i = 0; i < num_others; i++) {
 	    other = order[i];
 	    j = other - Others;
-	    if (other->team == 0) {
-		Paint_score_entry(entrynum, other, (j == best) ? true : false);
-		++entrynum;
-	    }
+	    Paint_score_entry(i, other, false);
 	}
-    if (BIT(Setup->mode, TEAM_PLAY|TIMING) == TEAM_PLAY) {
-	int pos = num_others + 1;
-	num_playing_teams = 0;
-	for (i = 0; i < MAX_TEAMS; i++) {
-	    if (team[i].playing) {
-		for (j = 0; j < num_playing_teams; j++) {
-		    if (team[i].score > team_order[j]->score
-			|| (team[i].score == team_order[j]->score
-			    && ((BIT(Setup->mode, LIMITED_LIVES))
-				? (team[i].life > team_order[j]->life)
-				: (team[i].life < team_order[j]->life)))) {
-			for (k = i; k > j; k--) {
-			    team_order[k] = team_order[k - 1];
-			}
-			break;
-		    }
-		}
-		team_order[j] = &team[i];
-		num_playing_teams++;
-	    }
+    } else {
+	Determine_team_order(team_order, team);
+
+	for (i = (BIT(hackedInstruments, TREAT_ZERO_SPECIAL) ? 1 : 0);
+	     i < MAX_TEAMS;
+	     i++) {
+	    entrynum = Team_score_table(entrynum, i, team[i], order);
 	}
+	if (BIT(hackedInstruments, TREAT_ZERO_SPECIAL)) {
+	    entrynum = Team_score_table(entrynum, 0, team[0], order);
+	}
+#if 0
 	for (i = 0; i < num_playing_teams; i++) {
-	    other_t tmp;
-	    tmp.id = -1;
-	    tmp.team = team_order[i] - &team[0];
-	    tmp.war_id = -1;
-	    tmp.name_width = 0;
-	    tmp.ship = NULL;
-	    sprintf(tmp.name, "Team %d", tmp.team);
-	    strcpy(tmp.real, tmp.name);
-	    strcpy(tmp.host, "");
-	    if (BIT(Setup->mode, LIMITED_LIVES) && team_order[i]->life == 0) {
-		tmp.mychar = 'D';
-	    } else {
-		tmp.mychar = ' ';
-	    }
-	    tmp.score = team_order[i]->score;
-	    tmp.life = team_order[i]->life;
-	    if (tmp.team != 0)
-		Paint_score_entry(pos++, &tmp, false);
+	    entrynum = Team_heading(entrynum,
+				    team_order[i] - &team[0],
+				    team_order[i]->life,
+				    team_order[i]->score);
 	}
+#endif
     }
 
-    if (roundend) {
-	roundend = false;
-		
-	sprintf(hackbuf, "Kill ratio - Round: %d/%d, Total: %d/%d",
-		killratio_kills, killratio_deaths,
-		killratio_totalkills, killratio_totaldeaths);
-
-	killratio_kills = 0;
-	killratio_deaths = 0;
-	
-	Add_message(hackbuf);
-	s = hackbuf;
-	s += sprintf(s, "Points - ");
-
-	/*
-	 * Scores are nice to see e.g. in cup recordings.
-	 */
-	for (i = 0; i < num_others; i++) {
-	    other = order[i];
-	    if (other->team == 0
-		&& BIT(hackedInstruments, TREAT_ZERO_SPECIAL))
-		continue;
-
-	    if (showScoreDecimals > 0 && version >= 0x4500) {
-		sprintf(hackbuf2, "%s: %.*f  ", other->name,
-			showScoreDecimals, other->score);
-		if ((s - hackbuf) + strlen(hackbuf2) > MSG_LEN) {
-		    Add_message(hackbuf);
-		    s = hackbuf;
-		}
-		s += sprintf(s, "%s", hackbuf2);
-	    } else {
-		sprintf(hackbuf2, "%s: %d  ", other->name,
-			(int) rint(other->score));
-		if ((s - hackbuf) + strlen(hackbuf2) > MSG_LEN) {
-		    Add_message(hackbuf);
-		    s = hackbuf;
-		}
-		s += sprintf(s,"%s",hackbuf2);
-	    }
-	}
-	Add_message(hackbuf);
-    }
-
+    if (roundend)
+	Print_roundend_messages(order);
 
     free(order);
 
@@ -1615,7 +1668,7 @@ int Client_setup(void)
 	 * without affecting old ones. It's still possible to turn in on
 	 * from the config menu during play for old maps.
 	 * -- But doesn't seem to work anyway if turned on? Well who cares */
-	/*CLR_BIT(instruments, SHOW_TEXTURED_WALLS); kps -ng wants this */
+	CLR_BIT(instruments, SHOW_TEXTURED_WALLS);
     }
 
     /* kps - the above one is used in the standard code  */

@@ -298,11 +298,19 @@ typedef struct {
     int is_decor;
 } poly_t;
 
+struct move {
+    clvec start;
+    clvec delta;
+    int hit_mask;
+    object *obj;
+};
+
 struct group {
     int type;
-    unsigned int hit_mask;
     int team;
     int item_id;
+    unsigned int hit_mask;
+    bool (*hit_func)(struct group *group, struct move *move);
 };
 
 extern struct polystyle pstyles[256];

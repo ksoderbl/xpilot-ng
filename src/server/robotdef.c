@@ -148,7 +148,6 @@ int Robot_default_setup(robot_type_t *type_ptr)
 /*
  * Private functions.
  */
-/*static bool Check_robot_navigate(int ind, bool * num_evade);*/
 static bool Check_robot_evade(int ind, int mine_i, int ship_i);
 static bool Check_robot_target(int ind, int item_x, int item_y, int new_mode);
 static bool Detect_hunt(int ind, int j);
@@ -382,314 +381,36 @@ static void Robot_default_invite(int ind, int inv_ind)
 }
 
 
-/* XXX looks like this is no longer used.  why? */
-#if 0
-static bool Check_robot_navigate(int ind, bool * num_evade)
-{
-    int         i, j, k;
-    player     *pl = Players[ind];
-    robot_default_data_t	*my_data = Robot_default_get_data(pl);
-    int         area_val[10][10];
-    int         calc_val[10][10];
-    int         locn_block;
-    long        dx, dy;
-    int         di, dj;
-    bool        found_wall;
-    bool        found_grav;
-    bool        near_wall;
-    int         best_val;
-    int         best_i, best_j;
-    DFLOAT      best_vx, best_vy;
-    int         best_dir;
-    int         delta_dir;
-
-    if (pl->velocity > 2.0 || ABS(pl->vel.x) > 1.5)
-	return false;
-
-    for (i = 0; i < 10; i++) {
-	for (j = 0; j < 10; j++) {
-	    area_val[i][j] = 0;
-	}
-    }
-
-    found_wall = false;
-    found_grav = false;
-
-    for (i = 0; i < 10; i += 2) {
-	for (j = 0; j < 10; j += 2) {
-
-	    dx = OBJ_X_IN_BLOCKS(pl) + (i / 2) - 2;
-	    dy = OBJ_Y_IN_BLOCKS(pl) + (j / 2) - 2;
-
-	    if (BIT(World.rules->mode, WRAP_PLAY)) {
-		if (dx < 0) dx += World.x;
-		else if (dx >= World.x) dx -= World.x;
-		if (dy < 0) dy += World.y;
-		else if (dy >= World.y) dy -= World.y;
-	    }
-	    if (dx < 0 || dx >= World.x || dy < 0 || dy >= World.y)
-		locn_block = FILLED;
-	    else
-		locn_block = World.block[dx][dy];
-
-	    switch (locn_block) {
-
-	    case SPACE:
-	    case BASE:
-	    case CHECK:
-	    case ITEM_CONCENTRATOR:
-		area_val[i][j] = 1;
-		area_val[i + 1][j] = 1;
-		area_val[i + 1][j + 1] = 1;
-		area_val[i][j + 1] = 1;
-		break;
-
-	    case WORMHOLE:
-		k = World.itemID[dx][dy];
-		if (World.wormHoles[k].type == WORM_OUT
-		    || !wormholeVisible) {
-		    area_val[i][j] = 1;
-		    area_val[i + 1][j] = 1;
-		    area_val[i + 1][j + 1] = 1;
-		    area_val[i][j + 1] = 1;
-		} else {
-		    found_wall = true;
-		}
-		break;
-
-	    case REC_LU:
-		area_val[i + 1][j] = 1;
-		found_wall = true;
-		break;
-
-	    case REC_LD:
-		area_val[i + 1][j + 1] = 1;
-		found_wall = true;
-		break;
-
-	    case REC_RU:
-		area_val[i][j] = 1;
-		found_wall = true;
-		break;
-
-	    case REC_RD:
-		area_val[i][j + 1] = 1;
-		found_wall = true;
-		break;
-
-	    case POS_GRAV:
-	    case NEG_GRAV:
-	    case CWISE_GRAV:
-	    case ACWISE_GRAV:
-	    case UP_GRAV:
-	    case DOWN_GRAV:
-	    case RIGHT_GRAV:
-	    case LEFT_GRAV:
-		found_grav = true;
-		break;
-
-	    case TARGET:
-		k = World.itemID[dx][dy];
-		if (!targetTeamCollision
-		    && BIT(World.rules->mode, TEAM_PLAY)
-		    && World.targets[k].team == pl->team) {
-		    area_val[i][j] = 1;
-		    area_val[i + 1][j] = 1;
-		    area_val[i + 1][j + 1] = 1;
-		    area_val[i][j + 1] = 1;
-		} else {
-		    found_wall = true;
-		}
-		break;
-
-	    case CANNON:
-		k = World.itemID[dx][dy];
-		if (BIT(World.rules->mode, TEAM_PLAY)
-		    && teamImmunity
-		    && World.cannon[k].team == pl->team) {
-		    area_val[i][j] = 1;
-		    area_val[i + 1][j] = 1;
-		    area_val[i + 1][j + 1] = 1;
-		    area_val[i][j + 1] = 1;
-		} else {
-		    found_wall = true;
-		}
-		break;
-
-	    default:
-		found_wall = true;
-		break;
-	    }
-	}
-    }
-
-    if (found_grav || !found_wall)
-	return false;
-
-    /* iterate twice for weighting, central 6x6 square should be accurate */
-
-    for (k = 0; k < 2; k++) {
-	for (i = 0; i < 10; i++) {
-	    for (j = 0; j < 10; j++) {
-
-		calc_val[i][j] = 0;
-		if (area_val[i][j] == 0)
-		    continue;
-
-		if (i <= 0 || i >= 9 || j <= 0 || j >= 9)
-		    continue;
-
-		calc_val[i][j] += 2 * area_val[i - 1][j];
-		calc_val[i][j] += 2 * area_val[i][j + 1];
-		calc_val[i][j] += 2 * area_val[i + 1][j];
-		calc_val[i][j] += 2 * area_val[i][j - 1];
-
-		calc_val[i][j] += area_val[i - 1][j - 1];
-		calc_val[i][j] += area_val[i - 1][j + 1];
-		calc_val[i][j] += area_val[i + 1][j - 1];
-		calc_val[i][j] += area_val[i + 1][j + 1];
-	    }
-	}
-
-	for (i = 0; i < 10; i++) {
-	    for (j = 0; j < 10; j++) {
-		area_val[i][j] = calc_val[i][j];
-	    }
-	}
-    }
-
-    /* now focus in to local 3x3 square */
-
-    dx = (int)pl->pos.x;
-    dy = (int)pl->pos.y;
-
-    dx = dx - (dx / BLOCK_SZ * BLOCK_SZ);
-    dy = dy - (dy / BLOCK_SZ * BLOCK_SZ);
-
-    di = 3;
-    dj = 3;
-
-    if (dx > BLOCK_SZ / 2) {
-	di++;
-	dx -= BLOCK_SZ / 2;
-    }
-    if (dy > BLOCK_SZ / 2) {
-	dj++;
-	dy -= BLOCK_SZ / 2;
-    }
-    for (i = 0; i < 3; i++) {
-	for (j = 0; j < 3; j++) {
-	    area_val[i][j] = area_val[di + i][dj + j];
-	}
-    }
-
-    *num_evade = true;
-
-    if (ABS(pl->vel.x) < 0.5) {
-
-	best_i = 1;
-	best_j = (pl->vel.y > 0 ? 2 : 0);
-
-    } else if (ABS(pl->vel.y) < 0.5) {
-
-	best_i = (pl->vel.x > 0 ? 2 : 0);
-	best_j = 1;
-
-    } else {
-
-	best_i = (pl->vel.x > 0 ? 2 : 0);
-	best_j = (pl->vel.y > 0 ? 2 : 0);
-    }
-
-    best_val = area_val[best_i][best_j];
-    near_wall = false;
-
-    for (j = 2; j >= 0; j--) {
-	for (i = 0; i <= 2; i++) {
-
-	    if (i == 1 && j == 1)
-		continue;
-
-	    if (area_val[i][j] == 0) {
-		near_wall = true;
-		if (i == 1 && (j == 0 || j == 2)) {
-		    best_i = 1;
-		    best_j = (2 - j);
-		    best_val = 99999;
-		}
-		continue;
-	    }
-	    if (area_val[i][j] > best_val) {
-		best_i = i;
-		best_j = j;
-		best_val = area_val[i][j];
-	    }
-	}
-    }
-
-    if (area_val[1][1] >= best_val)
-	return false;
-
-    if (!near_wall) {
-	if (BIT(pl->used, HAS_REFUEL)
-	    && BIT(my_data->longterm_mode, NEED_FUEL)) {
-	    /* refueling, so hang around */
-	    best_i = 1;
-	    best_j = 1;
-	    best_val = area_val[1][1];
-	} else {
-	    return false;
-	}
-    }
-    if (best_j == 1) {
-	if (dy < BLOCK_SZ / 6)
-	    best_j = 2;
-	if (dy > BLOCK_SZ / 3)
-	    best_j = 0;
-    }
-    pl->turnspeed = MAX_PLAYER_TURNSPEED;
-    pl->power = pl->mass / 2;
-    LIMIT(pl->power, MIN_PLAYER_POWER, MAX_PLAYER_POWER);
-
-    best_vx = (best_i - 1) * 0.75;
-    best_vy = (best_j - 1) * 1.25;
-
-    if (pl->vel.x > best_vx + 0.75)
-	best_dir = 3 * RES / 8;
-    else if (pl->vel.x < best_vx - 0.75)
-	best_dir = RES / 8;
-    else if (pl->vel.x > best_vx + 0.25)
-	best_dir = 5 * RES / 16;
-    else if (pl->vel.x < best_vx - 0.25)
-	best_dir = 3 * RES / 16;
-    else
-	best_dir = RES / 4;
-
-    delta_dir = best_dir - pl->dir;
-    delta_dir = MOD2(delta_dir, RES);
-
-    if (delta_dir > RES / 8 && delta_dir < 7 * RES / 8) {
-	pl->turnacc = (delta_dir < RES / 2 ?
-		       pl->turnspeed : (-pl->turnspeed));
-    } else if (delta_dir > RES / 64 && delta_dir < 63 * RES / 64) {
-	pl->turnspeed = MIN_PLAYER_TURNSPEED;
-	pl->turnacc = (delta_dir < RES / 2 ?
-		       pl->turnspeed : (-pl->turnspeed));
-    } else {
-	pl->turnacc = 0;
-    }
-
-    if (pl->vel.y > best_vy + 0.25) {
-	CLR_BIT(pl->status, THRUSTING);
-    } else if (pl->vel.y < best_vy - 0.25) {
-	SET_BIT(pl->status, THRUSTING);
-    }
-    return true;
-}
-#endif
 
 static bool Really_empty_space(int ind, int x, int y)
 {
+    int group, cx, cy, i, j;
+    int delta = BLOCK_CLICKS / 4;
+    int inside = 0, outside = 0;
+    int hitmask = NONBALL_BIT; /* kps - ok ? */
+    /*
+     * kps hack - check a few positions inside the block, if only a few of them
+     * are inside, assume it is empty
+     */
+    cx = BLOCK_CENTER(x);
+    cy = BLOCK_CENTER(y);
+
+    for (i = -1; i <= 1; i++) {
+	for (j = -1; j <= 1; j++) {
+	    group = is_inside(cx + i * delta, cy + j * delta, hitmask, NULL);
+	    if (group != -1)
+		inside++;
+	    else
+		outside++;
+	}
+    }
+    
+    if (inside > 0)
+	return false;
+    return true;
+
+
+#if 0
     player	*pl = Players[ind];
     int		type = World.block[x][y];
 
@@ -735,6 +456,7 @@ static bool Really_empty_space(int ind, int x, int y)
 	break;
     }
     return false;
+#endif
 }
 
 static bool Check_robot_evade(int ind, int mine_i, int ship_i)

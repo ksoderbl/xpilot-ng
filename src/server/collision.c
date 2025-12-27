@@ -543,8 +543,8 @@ static void PlayerCollision(void)
 			 * is-inside testing, which should be relatively easy
 			 * to add on top of current features). !@#*/
 			if ((group = is_inside(ball->pos.cx, ball->pos.cy,
-					       BALL_BIT | HITMASK(pl->team)))
-			    != -1) {
+					       BALL_BIT | HITMASK(pl->team),
+					       (object *)ball)) != -1) {
 			    Ball_hits_goal(ball, group);
 			    ball->life = 0;
 			}

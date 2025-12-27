@@ -207,6 +207,7 @@ void P_start_ballarea(void)
     groups[current_group].type = TREASURE;
     groups[current_group].team = TEAM_NOT_SET;
     groups[current_group].hit_mask = BALL_BIT;
+    groups[current_group].hit_func = NULL;
     groups[current_group].item_id = -1;
 }
 
@@ -220,8 +221,9 @@ void P_start_balltarget(int team)
     current_group = ++num_groups;
     groups[current_group].type = TREASURE;
     groups[current_group].team = team;
-    groups[current_group].hit_mask
-	= NONBALL_BIT | (((NOTEAM_BIT << 1) - 1) & ~(1 << team));
+    groups[current_group].hit_mask = NONBALL_BIT;
+    /*= NONBALL_BIT | (((NOTEAM_BIT << 1) - 1) & ~(1 << team));*/
+    groups[current_group].hit_func = Balltarget_hit_func;
     groups[current_group].item_id = -1;
 }
 
@@ -235,8 +237,8 @@ void P_start_target(int team, int ind)
     current_group = ++num_groups;
     groups[current_group].type = TARGET;
     groups[current_group].team = team;
-    groups[current_group].hit_mask
-	= (team == TEAM_NOT_SET ? NOTEAM_BIT : 1 << team);
+    groups[current_group].hit_mask = HITMASK(team);
+    groups[current_group].hit_func = NULL;
     groups[current_group].item_id = ind;
 }
 
@@ -245,13 +247,13 @@ void P_end_target(void)
     current_group = 0; 
 }
 
-void P_start_cannon(int team, int ind)
+void P_start_cannon(int cx, int cy, int dir, int team, int ind)
 {
     current_group = ++num_groups;
     groups[current_group].type = CANNON;
     groups[current_group].team = team;
-    groups[current_group].hit_mask
-	= (team == TEAM_NOT_SET ? NOTEAM_BIT : 1 << team);
+    groups[current_group].hit_mask = HITMASK(team);
+    groups[current_group].hit_func = NULL;
     groups[current_group].item_id = ind;
 }
 
@@ -266,6 +268,7 @@ void P_start_wormhole(int ind)
     groups[current_group].type = WORMHOLE;
     groups[current_group].team = TEAM_NOT_SET;
     groups[current_group].hit_mask = 0;
+    groups[current_group].hit_func = NULL;
     groups[current_group].item_id = ind;
 }
 
@@ -274,6 +277,20 @@ void P_end_wormhole(void)
     current_group = 0; 
 }
 
+void P_start_frictionarea(void)
+{
+    current_group = ++num_groups;
+    groups[current_group].type = FRICTION;
+    groups[current_group].team = TEAM_NOT_SET;
+    groups[current_group].hit_mask = 0xFFFFFFFF; /* kps - hack */
+    groups[current_group].hit_func = NULL;
+    groups[current_group].item_id = -1;
+}
+
+void P_end_frictionarea(void)
+{
+    current_group = 0; 
+}
 
 void P_start_decor(void)
 {

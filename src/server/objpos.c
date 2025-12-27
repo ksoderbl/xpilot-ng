@@ -39,6 +39,7 @@
 #include "map.h"
 #include "object.h"
 #include "objpos.h"
+#include "walls.h"
 
 char objpos_version[] = VERSION;
 
@@ -47,21 +48,26 @@ void Object_position_set_clicks(object *obj, int cx, int cy)
 {
     struct _objposition		*pos = (struct _objposition *)&obj->pos;
 
-#if 1
-    if (cx < 0 || cx >= PIXEL_TO_CLICK(World.width) || 
-	cy < 0 || cy >= PIXEL_TO_CLICK(World.height)) {
-	printf("BUG!  Illegal object position %d,%d\n", cx, cy);
-	printf("      Type = %d\n", obj->type);
-	*(double *)(-1) = 4321.0;
-	abort();
+    if (cx < 0 || cx >= World.cwidth || cy < 0 || cy >= World.cheight) {
+	if (0) {
+	    printf("BUG!  Illegal object position %d,%d\n", cx, cy);
+	    printf("      Type = %d (%s)\n", obj->type, Object_typename(obj));
+	    *(double *)(-1) = 4321.0;
+	    abort();
+	} else {
+	    struct move mv;
+
+	    Object_crash(obj, &mv, CrashUnknown, -1);
+	    return;
+	}
     }
-#endif
+
     pos->cx = cx;
     pos->px = CLICK_TO_PIXEL(cx);
-    pos->bx = pos->px / BLOCK_SZ;
+    pos->bx = CLICK_TO_BLOCK(cx);
     pos->cy = cy;
     pos->py = CLICK_TO_PIXEL(cy);
-    pos->by = pos->py / BLOCK_SZ;
+    pos->by = CLICK_TO_BLOCK(cy);
 }
 
 void Object_position_init_clicks(object *obj, int cx, int cy)
@@ -80,20 +86,25 @@ void Player_position_set_clicks(player *pl, int cx, int cy)
 {
     struct _objposition		*pos = (struct _objposition *)&pl->pos;
 
-#if 1
-    if (cx < 0 || cx >= PIXEL_TO_CLICK(World.width) || 
-	cy < 0 || cy >= PIXEL_TO_CLICK(World.height)) {
-	printf("BUG!  Illegal player position %d,%d\n", cx, cy);
-	*(double *)(-1) = 4321.0;
-	abort();
+    if (cx < 0 || cx >= World.cwidth || cy < 0 || cy >= World.cheight) {
+	if (0) {
+	    printf("BUG!  Illegal player position %d,%d\n", cx, cy);
+	    *(double *)(-1) = 4321.0;
+	    abort();
+	} else {
+	    struct move mv;
+
+	    Player_crash(pl, &mv, CrashUnknown, -1, 1);
+	    return;
+	}
     }
-#endif
+
     pos->cx = cx;
     pos->px = CLICK_TO_PIXEL(cx);
-    pos->bx = pos->px / BLOCK_SZ;
+    pos->bx = CLICK_TO_BLOCK(cx);
     pos->cy = cy;
     pos->py = CLICK_TO_PIXEL(cy);
-    pos->by = pos->py / BLOCK_SZ;
+    pos->by = CLICK_TO_BLOCK(cy);
 }
 
 void Player_position_init_clicks(player *pl, int cx, int cy)

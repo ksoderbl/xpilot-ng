@@ -61,6 +61,7 @@ char paintmap_version[] = VERSION;
 
 
 int	wallColor;		/* Color index for wall drawing */
+int	fuelColor;		/* Color index for fuel station drawing */
 int	decorColor;		/* Color index for decoration drawing */
 char	*wallTextureFile;	/* Filename of wall texture */
 char	*decorTextureFile;	/* Filename of decor texture */

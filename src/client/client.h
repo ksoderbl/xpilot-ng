@@ -52,7 +52,7 @@
 #define SHOW_FUEL_GAUGE		(1L << 4)
 #define SHOW_TURNSPEED_METER	(1L << 5)
 #define SHOW_POWER_METER	(1L << 6)
-#define SHOW_SHIP_NAME		(1L << 7)
+/*#define SHOW_SHIP_NAME		(1L << 7)*/
 #define SHOW_SLIDING_RADAR	(1L << 8)
 #define SHOW_PACKET_SIZE_METER	(1L << 10)
 #define SHOW_PACKET_LOSS_METER	(1L << 11)
@@ -60,7 +60,7 @@
 #define SHOW_CLOCK		(1L << 13)
 #define SHOW_ITEMS		(1L << 14)
 #define SHOW_MESSAGES		(1L << 15)
-#define SHOW_MINE_NAME		(1L << 16)
+/*#define SHOW_MINE_NAME		(1L << 16)*/
 #define SHOW_OUTLINE_WORLD	(1L << 17)
 #define SHOW_FILLED_WORLD	(1L << 18)
 #define SHOW_TEXTURED_WALLS	(1L << 19)
@@ -80,7 +80,7 @@
 #define SHOW_SHIP_SHAPES	(1L << 2)
 #define SHOW_MY_SHIP_SHAPE	(1L << 3)
 
-#define SHOW_BASE_NAME		(1L << 5)
+/*#define SHOW_BASE_NAME		(1L << 5)*/
 #define BALL_MSG_SCAN		(1L << 6)
 #define CLIENT_RANKER		(1L << 7)
 /*#define BASE_WARNING		(1L << 8)
@@ -426,6 +426,7 @@ int Handle_seek(int programmer_id, int robot_id, int sought_id);
 void Map_dots(void);
 void Map_restore(int startx, int starty, int width, int height);
 void Map_blue(int startx, int starty, int width, int height);
+bool Using_score_decimals(void);
 void Client_score_table(void);
 int Client_init(char *server, unsigned server_version);
 int Client_setup(void);

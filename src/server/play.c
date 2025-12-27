@@ -236,14 +236,22 @@ void Make_debris(
 }
 
 
-void Ball_is_replaced(ballobject *ball, treasure_t *tt, player *pl)
+/*
+ * Ball has been replaced back in the hoop from whence
+ * it came. The player must be from the same team as the ball,
+ * otherwise Bounce_object() wouldn't have been called. It
+ * should be replaced into the hoop without exploding and
+ * the player gets some points.
+ */
+void Ball_is_replaced(ballobject *ball)
 {
     char msg[MSG_LEN];
+    player *pl = Players[GetInd[ball->owner]];
 
     ball->life = 0;
     SET_BIT(ball->status, (NOEXPLOSION|RECREATE));
     
-    SCORE(GetInd[pl->id], 5, tt->pos.cx, tt->pos.cy, "Treasure: ");
+    SCORE(GetInd[pl->id], 5, ball->pos.cx, ball->pos.cy, "Treasure: ");
     sprintf(msg, " < %s (team %d) has replaced the treasure >",
 	    pl->name, pl->team);
     Set_message(msg);
@@ -251,6 +259,10 @@ void Ball_is_replaced(ballobject *ball, treasure_t *tt, player *pl)
 }
 
 
+/*
+ * Ball has been brought back to home treasure.
+ * The team should be punished.
+ */
 void Ball_is_destroyed(ballobject *ball)
 {
     char msg[MSG_LEN];
@@ -258,10 +270,6 @@ void Ball_is_destroyed(ballobject *ball)
     int ind = GetInd[ball->owner];
     DFLOAT seconds = ((DFLOAT)frames) / framesPerSecond;
 
-    /*
-     * Ball has been brought back to home treasure.
-     * The team should be punished.
-     */
     if (FPSMultiplier != 1.0) {
 	DFLOAT frames12 = ((DFLOAT)frames) / FPSMultiplier;
 
@@ -285,19 +293,65 @@ void Ball_hits_goal(ballobject *ball, int group)
 	return;
     }
     if (World.treasures[ball->treasure].team == groups[group].team) {
-	/*
-	 * Ball has been replaced back in the hoop from whence
-	 * it came. The player must be from the same team as the ball,
-	 * otherwise Bounce_object() wouldn't have been called. It
-	 * should be replaced into the hoop without exploding and
-	 * the player gets some points.
-	 */
-	Ball_is_replaced(ball, &World.treasures[ball->treasure],
-			 Players[GetInd[ball->owner]]);
+	Ball_is_replaced(ball);
 	return;
     }
-    Ball_is_destroyed(ball);
-    if (Punish_team(GetInd[ball->owner], ball->treasure,
-		    ball->pos.cx, ball->pos.cy))
-	CLR_BIT(ball->status, RECREATE);
+    if (groups[group].team == Players[GetInd[ball->owner]]->team) {
+	Ball_is_destroyed(ball);
+	if (Punish_team(GetInd[ball->owner], ball->treasure,
+			ball->pos.cx, ball->pos.cy))
+	    CLR_BIT(ball->status, RECREATE);
+	return;
+    }
+    SET_BIT(ball->status, (NOEXPLOSION|RECREATE));
 }
+
+
+/*
+ * This function is called when something would hit a balltarget.
+ * The function determines if it hits or not.
+ */
+bool Balltarget_hit_func(struct group *group, struct move *move)
+{
+    ballobject *ball = NULL;
+
+    /* this can happen if is_inside is called for a balltarget with
+       a NULL obj */
+    if (move->obj == NULL)
+	return true;
+
+    /* can this happen ? */
+    if (move->obj->type != OBJ_BALL) {
+	printf("Balltarget_hit_func: hit by a %s.\n",
+	       Object_typename(move->obj));
+	return true;
+    }
+
+    ball = BALL_PTR(move->obj);
+
+    if (ball->owner == NO_ID)
+	return true;
+
+    if (BIT(World.rules->mode, TEAM_PLAY)) {
+	/*
+	 * The only case a ball does not hit a balltarget is when
+	 * the ball and the target are of the same team, but the
+	 * owner is not.
+	 */
+	if (World.treasures[ball->treasure].team == group->team
+	    && Players[GetInd[ball->owner]]->team != group->team)
+	    return false;
+	return true;
+    }
+
+    /* not teamplay */
+
+    /* kps - fix this */
+
+    return true;
+}
+
+
+
+
+

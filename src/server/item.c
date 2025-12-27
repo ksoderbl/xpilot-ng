@@ -249,7 +249,7 @@ void Place_item(int item, int ind)
 	by = cy / BLOCK_CLICKS;
 
 	if (is_polygon_map || !useOldCode) {
-	    if (is_inside(cx, cy, NOTEAM_BIT | NONBALL_BIT) != -1)
+	    if (is_inside(cx, cy, NOTEAM_BIT | NONBALL_BIT, NULL) != -1)
 		return;
 	} else {
 	    /*if (!BIT(1U << World.block[bx][by], SPACE_BLOCKS))*/
@@ -309,7 +309,7 @@ void Place_item(int item, int ind)
 	    }
 
 	    if (is_polygon_map || !useOldCode) {
-		if (is_inside(cx, cy, NOTEAM_BIT | NONBALL_BIT) == -1)
+		if (is_inside(cx, cy, NOTEAM_BIT | NONBALL_BIT, NULL) == -1)
 		    break;
 	    } else {
 		if (BIT(1U << World.block[bx][by], SPACE_BLOCKS|CANNON_BIT))
@@ -586,9 +586,6 @@ void Do_deflector(int ind)
     int		dx, dy;
     DFLOAT	dist;
 
-#if 0
-    /* kps - this is removed here because uau wants to do this in another place
-     */
     if (pl->fuel.sum < -ED_DEFLECTOR) {
 	if (BIT(pl->used, HAS_DEFLECTOR)) {
 	    Deflector(ind, false);
@@ -596,7 +593,6 @@ void Do_deflector(int ind)
 	return;
     }
     Add_fuel(&(pl->fuel), (long)ED_DEFLECTOR);
-#endif
 
     Cell_get_objects(OBJ_X_IN_BLOCKS(pl), OBJ_Y_IN_BLOCKS(pl),
 		     (int)(range / BLOCK_CLICKS + 1), 200,

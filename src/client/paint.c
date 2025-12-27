@@ -231,7 +231,7 @@ void Paint_frame(void)
 
     /*
      * Estimate suitable number of frames to do the base warning.
-     * kps - maybe add baseWarningTime option.
+     * kps - maybe add baseWarningTime option ;).
      */
     baseWarningFrames = 3 * FPS;
 
@@ -488,6 +488,8 @@ void Paint_score_start(void)
 
     if (showRealName) {
 	strlcpy(headingStr, "NICK=USER@HOST", sizeof(headingStr));
+    } else if (BIT(Setup->mode, TEAM_PLAY)) {
+	;
     } else {
 	strlcpy(headingStr, "  ", sizeof(headingStr));
 	if (BIT(Setup->mode, TIMING)) {
@@ -495,11 +497,7 @@ void Paint_score_start(void)
 		strcat(headingStr, "LAP ");
 	    }
 	}
-	if (BIT(Setup->mode, TEAM_PLAY)) {
-	    strlcpy(headingStr, " TM ", sizeof(headingStr));
-	} else {
-	    strlcpy(headingStr, " AL ", sizeof(headingStr));
-	}
+	strlcpy(headingStr, " AL ", sizeof(headingStr));
 	strcat(headingStr, "  SCORE  ");
 	if (BIT(Setup->mode, LIMITED_LIVES)) {
 	    strlcat(headingStr, "LIFE", sizeof(headingStr));
@@ -508,20 +506,22 @@ void Paint_score_start(void)
     }
     Paint_score_background(thisLine);
 
-    ShadowDrawString(dpy, players, scoreListGC,
-		     SCORE_BORDER, thisLine,
-		     headingStr,
-		     colors[WHITE].pixel,
-		     colors[BLACK].pixel);
+    if (!BIT(Setup->mode, TEAM_PLAY) || showRealName) {
+	ShadowDrawString(dpy, players, scoreListGC,
+			 SCORE_BORDER, thisLine,
+			 headingStr,
+			 colors[WHITE].pixel,
+			 colors[BLACK].pixel);
 
-    gcv.line_style = LineSolid;
-    XChangeGC(dpy, scoreListGC, GCLineStyle, &gcv);
-    XDrawLine(dpy, players, scoreListGC,
-	      SCORE_BORDER, thisLine,
-	      players_width - SCORE_BORDER, thisLine);
+	gcv.line_style = LineSolid;
+	XChangeGC(dpy, scoreListGC, GCLineStyle, &gcv);
+	XDrawLine(dpy, players, scoreListGC,
+		  SCORE_BORDER, thisLine,
+		  players_width - SCORE_BORDER, thisLine);
 
-    gcv.line_style = LineOnOffDash;
-    XChangeGC(dpy, scoreListGC, GCLineStyle, &gcv);
+	gcv.line_style = LineOnOffDash;
+	XChangeGC(dpy, scoreListGC, GCLineStyle, &gcv);
+    }
 
     Paint_clock(1);
 }
@@ -529,7 +529,7 @@ void Paint_score_start(void)
 
 void Paint_score_entry(int entry_num,
 		       other_t* other,
-		       bool best)
+		       bool is_team)
 {
     static char		raceStr[8], teamStr[4], lifeStr[8], label[MSG_LEN];
     static int		lineSpacing = -1, firstLine;
@@ -587,65 +587,50 @@ void Paint_score_entry(int entry_num,
 	if (BIT(Setup->mode, LIMITED_LIVES))
 	    sprintf(lifeStr, " %3d", other->life);
 
-	if (showScoreDecimals > 0 && version >= 0x4500) {
+	if (Using_score_decimals()) {
 	    sprintf(scoreStr, "%*.*f",
-		    8 - showScoreDecimals, showScoreDecimals,
+		    9 - showScoreDecimals, showScoreDecimals,
 		    other->score);
+	} else {
+	    sprintf(scoreStr, "%6d", (int) rint(other->score));
 	}
-	else {
-	    sprintf(scoreStr, "%5d", (int) rint(other->score));
-	}
-	sprintf(label, "%c %s%s%s%s  %s",
-		other->mychar, raceStr, teamStr,
-		scoreStr, lifeStr,
-		other->name);
-	if (war) {
-	    if (strlen(label) + strlen(war->name) + 5 < sizeof(label)) {
-		sprintf(label + strlen(label), " (%s)", war->name);
+	if (BIT(Setup->mode, TEAM_PLAY)) {
+	    sprintf(label, "%c %s  %-18s%s",
+		    other->mychar, scoreStr, other->name, lifeStr);
+	} else {
+	    sprintf(label, "%c %s%s%s%s  %s",
+		    other->mychar, raceStr, teamStr,
+		    scoreStr, lifeStr,
+		    other->name);
+	    if (war) {
+		if (strlen(label) + strlen(war->name) + 5 < sizeof(label)) {
+		    sprintf(label + strlen(label), " (%s)", war->name);
+		}
 	    }
 	}
     }
 
     /*
      * Draw the line
+     * e94_msu eKthHacks
      */
     if ((other->mychar == 'D'
 	|| other->mychar == 'P'
 	|| other->mychar == 'W')
 	&& !mono) {
-#if 0 /* kps - what is this ??? */
-	/*if (BIT(hackedInstruments, BASE_WARNING))*/
-	{
-	    int i;
-	    /*if (deadcount>0) { */
-	    for (i = 0; i < 10; i++) {
-		if (deatharray[i].id == other->id) {
-		    deatharray[i].id = -1;
-		}
-	    }
-	}
-#endif
-	if (!fullColor) {
-	    /* START team zero pausing */
-	    if (BIT(hackedInstruments, TREAT_ZERO_SPECIAL)
-		&& other->team == 0)
-		XSetForeground(dpy, scoreListGC,
-			       colors[scoreZeroColor].pixel);
-	    /* e94_msu eKthHacks */
-	    else if (other->id == self->id)
-		XSetForeground(dpy, scoreListGC,
-			       colors[scoreInactiveSelfColor].pixel);
-	    else
-		XSetForeground(dpy, scoreListGC,
-			       colors[scoreInactiveColor].pixel);
-	} else { 
+
+	if (BIT(hackedInstruments, TREAT_ZERO_SPECIAL) && other->team == 0)
+	    XSetForeground(dpy, scoreListGC, colors[scoreZeroColor].pixel);
+	else if (other->id == self->id)
+	    XSetForeground(dpy, scoreListGC,
+			   colors[scoreInactiveSelfColor].pixel);
+	else
 	    XSetForeground(dpy, scoreListGC, colors[scoreInactiveColor].pixel);
-	}	
+
 	XDrawString(dpy, players, scoreListGC,
 		    SCORE_BORDER, thisLine,
 		    label, strlen(label));
     } else {
-	/* e94_msu eKthHacks */
 	if (!mono &&
 	    other->id == self->id)
 	    ShadowDrawString(dpy, players, scoreListGC, SCORE_BORDER,
@@ -661,12 +646,17 @@ void Paint_score_entry(int entry_num,
     }
 
     /*
-     * Underline the best player
+     * Underline the teams
      */
-    if (best) {
+    if (is_team) {
+	XSetForeground(dpy, scoreListGC, colors[BLUE].pixel);
+	gcv.line_style = LineSolid;
+	XChangeGC(dpy, scoreListGC, GCLineStyle, &gcv);
 	XDrawLine(dpy, players, scoreListGC,
 		  SCORE_BORDER, thisLine,
 		  players_width - SCORE_BORDER, thisLine);
+	gcv.line_style = LineOnOffDash;
+	XChangeGC(dpy, scoreListGC, GCLineStyle, &gcv);
     }
 }
 

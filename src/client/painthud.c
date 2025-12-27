@@ -136,7 +136,7 @@ static void Paint_meter(int xoff, int y, const char *title, int val, int max)
 	x = ext_view_width - (meterWidth - xoff);
         xstr = WINSCALE(x) - (BORDER + XTextWidth(gameFont, title, strlen(title)));
     }
-    if (1 || !blockBitmaps) {
+    if (1 || !texturedObjects) {
 	Rectangle_add(meterColor1,
 		      x+2, y+2,
 		      (int)(((meterWidth-3)*val)/(max?max:1)), meterHeight-3);
@@ -199,14 +199,19 @@ void Paint_score_objects(void)
 {
     int		i, x, y;
 
-    for (i=0; i < MAX_SCORE_OBJECTS; i++) {
+    if (!shipNameColor)
+	return;
+
+    /* kps - move SET_FG here ? */
+
+    for (i = 0; i < MAX_SCORE_OBJECTS; i++) {
 	score_object_t*	sobj = &score_objects[i];
 	if (sobj->hud_msg_len > 0) {
 	    if (loopsSlow % 3) {
 		x = sobj->x * BLOCK_SZ + BLOCK_SZ/2;
 		y = sobj->y * BLOCK_SZ + BLOCK_SZ/2;
 		if (wrap(&x, &y)) {
-		    SET_FG(colors[nameColor].pixel);
+		    SET_FG(colors[shipNameColor].pixel);
 		    x = WINSCALE(X(x)) - sobj->msg_width / 2,
 		    y = WINSCALE(Y(y)) + gameFont->ascent / 2,
 		    rd.drawString(dpy, p_draw, gc,

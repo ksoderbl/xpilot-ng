@@ -249,7 +249,6 @@ bool		reportToMetaServer;	/* Send status to meta-server? */
 bool		searchDomainForXPilot;	/* Do a DNS lookup for XPilot.domain? */
 char		*denyHosts;		/* Computers which are denied service */
 DFLOAT		gameDuration;		/* total duration of game in minutes */
-bool		allowViewing;		/* Allowed to watch other players? */
 bool		fullFramerate;		/* Are players allowed to watch
 					   others with full framerate? */
 bool		fullZeroFramerate;	/* Are team zero pausers allowed to
@@ -331,6 +330,7 @@ int		constantScoring;	/* Fixed points for kills etc? */
 int		eliminationRace;	/* Last player drops each lap? */
 
 DFLOAT		FPSMultiplier;		/* Slow everything by this factor */
+DFLOAT		gameSpeed;		/* FPS/FPSMultiplier */
 int		timeStep;		/* Game time step per frame */
 DFLOAT		timeStep2;		/* timeStep /TIME_FACT */
 					/* before: framespeed, framespeed2 */
@@ -1826,7 +1826,7 @@ static option_desc options[] = {
     {
 	"framesPerSecond",
 	"FPS",
-	"14",
+	"12",
 	&framesPerSecond,
 	valInt,
 	tuner_none,
@@ -3177,17 +3177,6 @@ static option_desc options[] = {
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
-	"allowViewing",
-	"allowViewing",
-	"true",
-	&allowViewing,
-	valBool,
-	tuner_dummy,
-	"Are active players allowed to watch any other player while paused, "
-	"waiting or dead?\n",
-	OPT_ORIGIN_ANY | OPT_VISIBLE
-    },
-    {
 	"fullFramerate",
 	"fullFramerate",
 	"true",
@@ -3384,6 +3373,7 @@ static option_desc options[] = {
 	"Whether the server is prevented from being swapped out of memory.\n",
 	OPT_COMMAND | OPT_DEFAULTS | OPT_VISIBLE
     },
+    /* kps - what to do about this ? */
     {
 	"timerResolution",
 	"timerResolution",
@@ -3564,6 +3554,7 @@ static option_desc options[] = {
 	"URL where the client can get extra data for this map\n",
 	OPT_ORIGIN_ANY | OPT_DEFAULTS /* kps - was OPT_ANY */
     },
+#if 0
     {
 	"FPSMultiplier",
 	"FPSMultiplier",
@@ -3574,6 +3565,19 @@ static option_desc options[] = {
 	"Everything is slowed by this factor. Allows using higher\n"
 	"FPS without making the game too fast.\n",
 	OPT_ORIGIN_ANY | OPT_DEFAULTS /* kps - was OPT_ANY */
+    },
+#endif
+    {
+	"gameSpeed",
+	"gameSpeed",
+	"0.0",
+	&gameSpeed,
+	valReal,
+	Timing_setup,
+	"Rate at which game events happen. Allows using higher\n"
+	"FPS without making the game too fast.\n"
+	"A value of 0 means the game speed is the same as FPS.\n",
+	OPT_ORIGIN_ANY | OPT_DEFAULTS
     },
     /* useOldCode - kps tmp hack */
     {
@@ -3706,12 +3710,36 @@ option_desc* Find_option_by_name(const char* name)
 }
 
 
+
+
+
 void Timing_setup(void)
 {
-    if (FPSMultiplier < 1.0)
+#if 0
+    FPSMultiplier = FPS / gameSpeed;
+#else
+    if (gameSpeed > FPS)
+	gameSpeed = FPS;
+    if (gameSpeed < 0.0)
+	gameSpeed = 0.0;
+
+    if (gameSpeed == 0.0)
+	gameSpeed = FPS;
+
+    FPSMultiplier = FPS / gameSpeed;
+
+    /* this can't happen */
+    if (FPSMultiplier < 1.0) {
+	printf("BUG - FPSMultiplier < 1.0\n");
 	FPSMultiplier = 1.0;
+    }
+
+    /* we want timeStep >= 1 */
     if (FPSMultiplier > 64.0)
 	FPSMultiplier = 64.0;
+
+    gameSpeed = FPS / FPSMultiplier;
+#endif
 
     /*
      * Calculate amount of game time that elapses per frame.
@@ -3738,6 +3766,7 @@ void Timing_setup(void)
 #endif
 
 #if 0
+    xpprintf(__FILE__ ": gameSpeed         = %f\n", gameSpeed);
     xpprintf(__FILE__ ": FPSMultiplier     = %f\n", FPSMultiplier);
     xpprintf(__FILE__ ": timeStep          = %d\n", timeStep);
     xpprintf(__FILE__ ": timeStep2         = %f\n", timeStep2);

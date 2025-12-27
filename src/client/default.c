@@ -304,7 +304,7 @@ option options[] = {
     {
 	"power",
 	NULL,
-	"45.0",
+	"55.0",
 	KEY_DUMMY,
 	"Set the engine power.\n"
 	"Valid values are in the range 5-55.\n"
@@ -550,7 +550,7 @@ option options[] = {
     {
 	"filledWorld",
 	NULL,
-	"Yes",
+	"No",
 	KEY_DUMMY,
 	"Draws the walls solid, filled with one color,\n"
 	"unless overridden by texture.\n"
@@ -610,14 +610,14 @@ option options[] = {
     {
 	"markingLights",
 	NULL,
-	"Yes",
+	"No",
 	KEY_DUMMY,
 	"Should the fighters have marking lights, just like airplanes?\n"
     },
     {
 	"sparkProb",
 	NULL,
-	"0.50",
+	"0.25",
 	KEY_DUMMY,
 	"The chance that sparks are drawn or not.\n"
 	"This gives a sparkling effect.\n"
@@ -1199,11 +1199,25 @@ option options[] = {
 	"Which color to use to paint teammate ships in when on last life.\n"
     },
     {
-	"nameColor",
+	"shipNameColor",
 	NULL,
 	"2",
 	KEY_DUMMY,
-	"Which color number to use for drawing names of players.\n"
+	"Which color number to use for drawing names of ships.\n"
+    },
+    {
+	"baseNameColor",
+	NULL,
+	"2",
+	KEY_DUMMY,
+	"Which color number to use for drawing names of bases.\n"
+    },
+    {
+	"mineNameColor",
+	NULL,
+	"2",
+	KEY_DUMMY,
+	"Which color number to use for drawing names of mines.\n"
     },
     {
 	"ballColor",
@@ -1215,21 +1229,21 @@ option options[] = {
     {
 	"connColor",
 	NULL,
-	"1",
+	"2",
 	KEY_DUMMY,
 	"Which color number to use for drawing connectors.\n"
     },
     {
 	"windowColor",
 	NULL,
-	"2",
+	"8",
 	KEY_DUMMY,
 	"Which color number to use for drawing windows.\n"
     },
     {
 	"buttonColor",
 	NULL,
-	"3",
+	"2",
 	KEY_DUMMY,
 	"Which color number to use for drawing buttons.\n"
     },
@@ -1301,9 +1315,16 @@ option options[] = {
 	"Which color number to use for drawing walls.\n"
     },
     {
+	"fuelColor",
+	NULL,
+	"3",
+	KEY_DUMMY,
+	"Which color number to use for drawing fuel stations.\n"
+    },
+    {
 	"wallRadarColor",
 	NULL,
-	"2",
+	"8",
 	KEY_DUMMY,
 	"Which color number to use for drawing walls on the radar.\n"
 	"Valid values all even numbers smaller than maxColors.\n"
@@ -3085,7 +3106,9 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
     Get_int_resource(rDB, "selfLWColor", &selfLWColor);
     Get_int_resource(rDB, "enemyLWColor", &enemyLWColor);
     Get_int_resource(rDB, "teamLWColor", &teamLWColor);
-    Get_int_resource(rDB, "nameColor", &nameColor);
+    Get_int_resource(rDB, "shipNameColor", &shipNameColor);
+    Get_int_resource(rDB, "baseNameColor", &baseNameColor);
+    Get_int_resource(rDB, "mineNameColor", &mineNameColor);
     Get_int_resource(rDB, "ballColor", &ballColor);
     Get_int_resource(rDB, "connColor", &connColor);
     Get_int_resource(rDB, "windowColor", &windowColor);
@@ -3100,6 +3123,7 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
     Get_float_resource(rDB, "scoreObjectTime", &scoreObjectTime);
     Get_int_resource(rDB, "baseWarningType", &baseWarningType);
     Get_int_resource(rDB, "wallColor", &wallColor);
+    Get_int_resource(rDB, "fuelColor", &fuelColor);
     Get_int_resource(rDB, "wallRadarColor", &wallRadarColor);
     Get_int_resource(rDB, "decorColor", &decorColor);
     Get_int_resource(rDB, "decorRadarColor", &decorRadarColor);
@@ -3111,9 +3135,6 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
     instruments = 0;
     hackedInstruments = 0;
 
-    Get_bit_resource(rDB, "showShipName", &instruments, SHOW_SHIP_NAME);
-    Get_bit_resource(rDB, "showBaseName", &hackedInstruments, SHOW_BASE_NAME);
-    Get_bit_resource(rDB, "showMineName", &instruments, SHOW_MINE_NAME);
     Get_bit_resource(rDB, "showMessages", &instruments, SHOW_MESSAGES);
     Get_bit_resource(rDB, "showHUD", &instruments, SHOW_HUD_INSTRUMENTS);
     Get_bit_resource(rDB, "showHUDRadar", &instruments, SHOW_HUD_RADAR);
@@ -3152,9 +3173,11 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
     Get_bit_resource(rDB, "showID", &instruments, SHOW_SHIP_ID);
 
     Get_bool_resource(rDB, "fullColor", &fullColor);
-    Get_bool_resource(rDB, "texturedObjects", &blockBitmaps);
-    if (!fullColor)
-	blockBitmaps = 0;
+    Get_bool_resource(rDB, "texturedObjects", &texturedObjects);
+    if (!fullColor) {
+	texturedObjects = false;
+	CLR_BIT(instruments, SHOW_TEXTURED_WALLS);
+    }
     Get_bool_resource(rDB, "pointerControl", &initialPointerControl);
     Get_bool_resource(rDB, "erase", &useErase);
     Get_float_resource(rDB, "showItemsTime", &showItemsTime);

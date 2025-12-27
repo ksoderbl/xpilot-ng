@@ -39,6 +39,7 @@ extern	void Keys_destroy();
 extern int motd_viewer;		/* so Windows can clean him up */
 extern int keys_viewer;
 
+
 /*
  * colors.c
  */

@@ -2018,15 +2018,11 @@ void Detach_ball(int ind, int obj)
 
 void Kill_player(int ind)
 {
-#if 1 /* kps - don't want to change this */
-    Explode_fighter(ind);
-#else
     /* Don't create an explosion if the player is being transported back
      * to home base after being killed. */
     if (BIT(Players[ind]->status, PLAYING)) {
 	Explode_fighter(ind);
     }
-#endif
     Player_death_reset(ind);
 }
 

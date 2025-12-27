@@ -155,7 +155,7 @@ int main(int argc, char **argv)
     plock_server(pLockServer);           /* Lock the server into memory */
     Make_table();			/* Make trigonometric tables */
     Compute_gravity();
-    Xpmap_find_base_direction(); /* kps - ng does not want this */
+    Find_base_direction();
 
     Walls_init();
 
@@ -169,6 +169,7 @@ int main(int argc, char **argv)
 
     Robot_init();
 
+    /* kps - remove ??? */
     Treasure_init();
 
     Rank_init_saved_scores();

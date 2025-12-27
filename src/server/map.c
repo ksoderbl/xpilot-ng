@@ -295,14 +295,9 @@ int Map_place_grav(int cx, int cy, DFLOAT force, int type)
 
 
 
-static void Init_map(void)
-{
-    /*
-     * note - when this is called, options have already been parsed,
-     * so for example items are partially initialized
-     */
-    Reset_map_object_counters();
-}
+
+
+
 
 void Free_map(void)
 {
@@ -499,13 +494,8 @@ bool Grok_map(void)
     return TRUE;
 }
 
-bool Grok_map_new(void)
+bool Grok_map_options(void)
 {
-    Init_map();
-
-    if (!Grok_map_size())
-	return FALSE;
-
     strlcpy(World.name, mapName, sizeof(World.name));
     strlcpy(World.author, mapAuthor, sizeof(World.author));
     strlcpy(World.dataURL, dataURL, sizeof(World.dataURL));
@@ -514,6 +504,7 @@ bool Grok_map_new(void)
 
     Set_world_rules();
     Set_world_items();
+    Set_world_asteroids();
 
     if (BIT(World.rules->mode, TEAM_PLAY|TIMING) == (TEAM_PLAY|TIMING)) {
 	error("Cannot teamplay while in race mode -- ignoring teamplay");
@@ -523,6 +514,15 @@ bool Grok_map_new(void)
     return TRUE;
 }
 
+bool Grok_map_new(void)
+{
+    Reset_map_object_counters();
+
+    if (!Grok_map_size())
+	return FALSE;
+
+    return Grok_map_options();
+}
 
 /*
  * Get space for special objects.
@@ -674,7 +674,7 @@ static bool Grok_map_old(void)
     if (is_polygon_map)
 	return TRUE;
 
-    Init_map();
+    Reset_map_object_counters();
 
     if (!Grok_map_size()) {
 	if (mapData != NULL) {
@@ -682,9 +682,6 @@ static bool Grok_map_old(void)
 	    mapData = NULL;
 	}
     }
-
-    strlcpy(World.name, mapName, sizeof(World.name));
-    strlcpy(World.author, mapAuthor, sizeof(World.author));
 
     if (!mapData) {
 	errno = 0;
@@ -695,16 +692,7 @@ static bool Grok_map_old(void)
 	}
     }
 
-    Alloc_map();
-
-    Set_world_rules();
-    Set_world_items();
-    Set_world_asteroids();
-
-    if (BIT(World.rules->mode, TEAM_PLAY|TIMING) == (TEAM_PLAY|TIMING)) {
-	error("Cannot teamplay while in race mode -- ignoring teamplay");
-	CLR_BIT(World.rules->mode, TEAM_PLAY);
-    }
+    Grok_map_options();
 
     Xpmap_grok_map_data();
 
@@ -777,6 +765,13 @@ unsigned short Find_closest_team(int cx, int cy)
     return team;
 }
 
+
+void Find_base_direction(void)
+{
+    /* kps - this might go wrong if we run in -polygonMode ? */
+    if (!is_polygon_map)
+	Xpmap_find_base_direction();
+}
 
 /*
  * Determine the order in which players are placed

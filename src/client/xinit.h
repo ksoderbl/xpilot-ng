@@ -48,7 +48,7 @@ extern Visual		*visual;
 extern int		dispDepth;
 extern bool		mono;
 extern bool		useErase;
-extern bool		blockBitmaps;
+extern bool		texturedObjects;
 extern bool		fullColor;
 extern bool		colorSwitch;
 extern bool		multibuffer;

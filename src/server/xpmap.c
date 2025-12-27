@@ -711,6 +711,9 @@ static void Xpmap_target_to_polygon(int ind)
     int cx, cy, ps, es;
     target_t *targ = &World.targets[ind];
 
+    /* too buggy currently */
+    return ;
+
     ps = P_get_poly_id("target_ps");
     es = P_get_edge_id("target_es");
 
@@ -777,14 +780,17 @@ static void Xpmap_cannon_polygon(cannon_t *cannon,
 static void Xpmap_cannon_to_polygon(int ind)
 {
     int ps, es;
-    cannon_t *cannon = &World.cannon[ind];
+    cannon_t *c = &World.cannon[ind];
+
+    /* too buggy currently */
+    return ;
 
     ps = P_get_poly_id("cannon_ps");
     es = P_get_edge_id("cannon_es");
 
-    P_start_cannon(cannon->team, ind);
+    P_start_cannon(c->pos.cx, c->pos.cy, c->dir, c->team, ind);
     /* we need a more general function for this purpose */
-    Xpmap_cannon_polygon(cannon, ps, es);
+    Xpmap_cannon_polygon(c, ps, es);
     P_end_cannon();
 }
 
@@ -852,8 +858,8 @@ static void Xpmap_wormhole_to_polygon(int ind)
  */
 
 static void Xpmap_wall_poly(int bx, int by, char startblock,
-			  char endblock, int numblocks,
-			  int polystyle, int edgestyle)
+			    char endblock, int numblocks,
+			    int polystyle, int edgestyle)
 {
     int i;
     clpos pos[5]; /* positions of vertices */
@@ -915,8 +921,7 @@ static void Xpmap_wall_poly(int bx, int by, char startblock,
      * Since we want to form a closed loop of line segments, the
      * last vertex must equal the first.
      */
-    pos[4].cx = pos[0].cx;
-    pos[4].cy = pos[0].cy;
+    pos[4] = pos[0];
 
     P_start_polygon(pos[0].cx, pos[0].cy, polystyle);
     for (i = 1; i <= 4; i++)

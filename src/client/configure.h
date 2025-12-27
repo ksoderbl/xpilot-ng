@@ -25,7 +25,11 @@
 #ifndef	CONFIGURE_H
 #define	CONFIGURE_H
 
-int Config(bool);
+#define CONFIG_NONE    0
+#define CONFIG_DEFAULT 1
+#define CONFIG_COLORS  2
+
+int Config(bool, int);
 void Config_redraw(void);
 void Config_resize(void);
 void Config_destroy(void);

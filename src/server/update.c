@@ -55,7 +55,7 @@
 char update_version[] = VERSION;
 
 
-/* kps - remove block based gravity ??? */
+/* kps - gravity is block based, even on polygon maps */
 #define update_object_speed(o_)						\
     if (BIT((o_)->status, GRAVITY)) {					\
 	(o_)->vel.x += ((o_)->acc.x					\
@@ -952,7 +952,8 @@ void Update_objects(void)
 	    }
 	}
 
-	if (BIT(pl->used, HAS_DEFLECTOR)) {
+	if (do_update_this_frame
+	    && BIT(pl->used, HAS_DEFLECTOR)) {
 	    Do_deflector(i);
 	}
 
@@ -1024,9 +1025,13 @@ void Update_objects(void)
 	    if (BIT(pl->used, HAS_CLOAKING_DEVICE))
 		Add_fuel(&(pl->fuel), (long)ED_CLOAKING_DEVICE);
 
-	    /* added by kps - remove ED_DEFLECTOR stuff from Do_deflector() */
+#if 0
+	    /* kps - consider adding this if Do_deflector is done
+	     * every update
+	     */
 	    if (BIT(pl->used, HAS_DEFLECTOR))
 		Add_fuel(&(pl->fuel), (long)ED_DEFLECTOR);
+#endif
 	}
 
 #define UPDATE_RATE 100
@@ -1291,19 +1296,19 @@ void Update_objects(void)
 		for (k = 0; k < NumObjs; k++) {
 		    object *b = Obj[k];
 		    if (BIT(b->type, OBJ_BALL) && b->id == pl->id) {
-			position ballpos;
-			ballpos.x = b->pos.cx
+			clpos ballpos;
+			ballpos.cx = b->pos.cx
 			    + (PIXEL_TO_CLICK(w.x) - pl->pos.cx);
-			ballpos.y = b->pos.cy
+			ballpos.cy = b->pos.cy
 			    + (PIXEL_TO_CLICK(w.y) - pl->pos.cy);
-			ballpos.x = WRAP_XCLICK(ballpos.x);
-			ballpos.y = WRAP_YCLICK(ballpos.y);
-			if (ballpos.x < 0 || ballpos.x >= World.cwidth ||
-			    ballpos.y < 0 || ballpos.y >= World.cheight) {
+			ballpos.cx = WRAP_XCLICK(ballpos.cx);
+			ballpos.cy = WRAP_YCLICK(ballpos.cy);
+			if (ballpos.cx < 0 || ballpos.cx >= World.cwidth ||
+			    ballpos.cy < 0 || ballpos.cy >= World.cheight) {
 			    b->life = 0;
 			    continue;
 			}
-			Object_position_set_clicks(b, ballpos.x, ballpos.y);
+			Object_position_set_clicks(b, ballpos.cx, ballpos.cy);
 			Object_position_remember(b);
 			b->vel.x *= WORM_BRAKE_FACTOR;
 			b->vel.y *= WORM_BRAKE_FACTOR;

@@ -85,9 +85,12 @@ void Move_init(void);
 void Move_object(object *obj);
 void Move_player(int ind);
 void Turn_player(int ind);
-int is_inside(int x, int y, int hit_mask);
+int is_inside(int x, int y, int hit_mask, object *obj);
 int Polys_to_client(unsigned char *);
 void Ball_line_init(void);
+void Player_crash(player *pl, struct move *move, int crashtype,
+		  int item_id, int pt);
+void Object_crash(object *obj, struct move *move, int crashtype, int item_id);
 
 /*
  * Prototypes for event.c
@@ -217,8 +220,9 @@ void Fire_right_rshot(int ind, int type, int dir, int gun);
 void Make_treasure_ball(int treasure);
 int Punish_team(int ind, int t_destroyed, int cx, int cy);
 void Ball_hits_goal(ballobject *ball, int group);
-void Ball_is_replaced(ballobject *ball, treasure_t *tt, player *pl);
+void Ball_is_replaced(ballobject *ball);
 void Ball_is_destroyed(ballobject *ball);
+bool Balltarget_hit_func(struct group *group, struct move *move);
 void Delete_shot(int ind);
 void Fire_laser(int ind);
 void Fire_general_laser(int ind, unsigned short team, int cx, int cy, int dir,
@@ -459,6 +463,7 @@ void Object_free_ind(int ind);
 void Object_free_ptr(object *obj);
 void Alloc_shots(int number);
 void Free_shots(void);
+char *Object_typename(object *obj);
 
 /*
  * Prototypes for polygon.c
@@ -477,12 +482,14 @@ void P_start_balltarget(int team);
 void P_end_balltarget(void);
 void P_start_target(int team, int ind);
 void P_end_target(void);
-void P_start_cannon(int team, int ind);
+void P_start_cannon(int cx, int cy, int dir, int team, int ind);
 void P_end_cannon(void);
 void P_start_wormhole(int ind);
 void P_end_wormhole(void);
 void P_start_decor(void);
 void P_end_decor(void);
+void P_start_frictionarea(void);
+void P_end_frictionarea(void);
 int P_get_bmp_id(const char *s);
 int P_get_edge_id(const char *s);
 int P_get_poly_id(const char *s);

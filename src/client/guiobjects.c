@@ -77,14 +77,16 @@ extern setup_t		*Setup;
 
 extern XGCValues	gcv;
 
-static int blockBitmapShips = 0; /* Turned this off because the images drawn
+static int texturedShips = 0; /* Turned this off because the images drawn
 				  * don't match the actual shipshape used
 				  * for wall collisions by the server. */
 
 int selfLWColor;
 int enemyLWColor;
 int teamLWColor;
-int nameColor;
+int shipNameColor;
+int baseNameColor;
+int mineNameColor;
 int ballColor;
 int connColor;
 int teamShotColor;
@@ -95,7 +97,7 @@ void Gui_paint_ball(int x, int y)
     x = X(x);
     y = Y(y);
 
-    if (!blockBitmaps) {
+    if (!texturedObjects) {
 	Arc_add(ballColor, x - BALL_RADIUS, y - BALL_RADIUS,
 		2 * BALL_RADIUS, 2 * BALL_RADIUS, 0, 64 * 360);
     }
@@ -124,6 +126,8 @@ static void Gui_paint_mine_name(int x, int y, char *name)
 	return;
     }
 
+    SET_FG(colors[mineNameColor].pixel);
+
     name_len = strlen(name);
     name_width = XTextWidth(gameFont, name, name_len);
 
@@ -142,7 +146,7 @@ static void Gui_paint_mine_name(int x, int y, char *name)
 
 void Gui_paint_mine(int x, int y, int teammine, char *name)
 {
-    if (!blockBitmaps) {
+    if (!texturedObjects) {
 	static DFLOAT	lastScaleFactor;
 	static XPoint	mine_points[21];
 	static XPoint	world_mine_points[21] = {
@@ -305,7 +309,7 @@ void Gui_paint_fastshot(int color, int x, int y)
     if (color == 0)
 	return;
 
-    if (!blockBitmaps) {
+    if (!texturedObjects) {
         int z = shot_size/2;
 
 	if (showNastyShots) {
@@ -327,7 +331,7 @@ void Gui_paint_fastshot(int color, int x, int y)
 
 void Gui_paint_teamshot(int color, int x, int y)
 {
-    if (!blockBitmaps) {
+    if (!texturedObjects) {
 	Gui_paint_nastyshot(teamShotColor, x, y, shot_size/2);
     }
     else {
@@ -405,7 +409,7 @@ void Gui_paint_laser(int color, int x1, int y1, int len, int dir)
 
 void Gui_paint_paused(int x, int y, int count)
 {
-    if (!blockBitmaps) {
+    if (!texturedObjects) {
 
 	int		x0, y0;
 	static int	pauseCharWidth = -1;
@@ -466,7 +470,7 @@ void Gui_paint_ecm(int x, int y, int size)
 
 void Gui_paint_refuel(int x0, int y0, int x1, int y1)
 {
-    if (!blockBitmaps) {
+    if (!texturedObjects) {
 	rd.drawLine(dpy, p_draw, gc,
 		    WINSCALE(X(x0)), WINSCALE(Y(y0)),
 		    WINSCALE(X(x1)), WINSCALE(Y(y1)));
@@ -577,8 +581,8 @@ static void Gui_paint_rounddelay(int x, int y)
 static void Gui_paint_ship_name(int x , int y, other_t *other)
 {
     FIND_NAME_WIDTH(other);
-    SET_FG(colors[nameColor].pixel);
-    if (BIT(instruments, SHOW_SHIP_NAME)) {
+    SET_FG(colors[shipNameColor].pixel);
+    if (shipNameColor) {
 	rd.drawString(dpy, p_draw, gc,
 		      WINSCALE(X(x)) - other->name_width / 2,
 		      WINSCALE(Y(y) + 16) + gameFont->ascent,
@@ -913,7 +917,7 @@ void Gui_paint_ship(int x, int y, int dir, int id, int cloak, int phased,
      * Determine if the name of the player should be drawn below
      * his/her ship.
      */
-    if (BIT(instruments, SHOW_SHIP_NAME)
+    if (shipNameColor
 	&& self != NULL
 	&& self->id != id
 	&& other != NULL) {
@@ -929,7 +933,7 @@ void Gui_paint_ship(int x, int y, int dir, int id, int cloak, int phased,
     ship_color = Gui_calculate_ship_color(id, other);
 
     if (cloak == 0 && phased == 0) {
-	if (!blockBitmaps || !blockBitmapShips) {
+	if (!texturedObjects || !texturedShips) {
 	    Gui_paint_ship_uncloaked(id, points, ship_color, cnt);
 	    /* shipshapeshack - Mara */
 	    if (shipShapesHackColor >= 1) {

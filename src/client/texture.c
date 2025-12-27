@@ -202,7 +202,7 @@ Pixmap Texture_ball(void)
 Pixmap Texture_wall(void)
 {
     xp_bitmap_t *bmp;
-    if (!blockBitmaps)
+    if (!texturedObjects)
 	return None;
     if ((bmp = Bitmap_get(top, BM_WALL_TEXTURE, 0)) == NULL)
 	return None;
@@ -212,7 +212,7 @@ Pixmap Texture_wall(void)
 Pixmap Texture_decor(void)
 {
     xp_bitmap_t *bmp;
-    if (!blockBitmaps)
+    if (!texturedObjects)
 	return None;
     if ((bmp = Bitmap_get(top, BM_DECOR_TEXTURE, 0)) == NULL)
 	return None;

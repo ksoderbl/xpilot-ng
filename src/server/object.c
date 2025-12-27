@@ -149,3 +149,44 @@ void Free_shots(void)
     }
 }
 
+
+/* kps debug hack */
+char *Object_typename(object *obj)
+{
+    int type;
+
+    if (!obj)
+	return "none";
+
+    type = obj->type;
+
+    if (type == OBJ_PLAYER)
+	return "OBJ_PLAYER";
+    if (type == OBJ_DEBRIS)
+	return "OBJ_DEBRIS";
+    if (type == OBJ_SPARK)
+	return "OBJ_SPARK";
+    if (type == OBJ_BALL)
+	return "OBJ_BALL";
+    if (type == OBJ_SHOT)
+	return "OBJ_SHOT";
+    if (type == OBJ_SMART_SHOT)
+	return "OBJ_SMART_SHOT";
+    if (type == OBJ_MINE)
+	return "OBJ_MINE";
+    if (type == OBJ_TORPEDO)
+	return "OBJ_TORPEDO";
+    if (type == OBJ_HEAT_SHOT)
+	return "OBJ_HEAT_SHOT";
+    if (type == OBJ_PULSE)
+	return "OBJ_PULSE";
+    if (type == OBJ_ITEM)
+	return "OBJ_ITEM";
+    if (type == OBJ_WRECKAGE)
+	return "OBJ_WRECKAGE";
+    if (type == OBJ_ASTEROID)
+	return "OBJ_ASTEROID";
+    if (type == OBJ_CANNON_SHOT)
+	return "OBJ_CANNON_SHOT";
+    return "unknown type";
+}

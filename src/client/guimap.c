@@ -63,19 +63,9 @@
 char guimap_version[] = VERSION;
 
 
-/* XXX better include a header. */
-extern int	wallColor;		/* Color index for wall drawing */
-extern int	decorColor;		/* Color index for decoration drawing */
-extern char	*wallTextureFile;	/* Filename of wall texture */
-extern char	*decorTextureFile;	/* Filename of decor texture */
-
-
-extern setup_t	*Setup;
-
-
 void Gui_paint_walls(int x, int y, int type, int xi, int yi)
 {
-    if (!blockBitmaps) {
+    if (!texturedObjects) {
 	if (type & BLUE_LEFT) {
 	    Segment_add(wallColor,
 			X(x),
@@ -157,7 +147,7 @@ void Gui_paint_walls(int x, int y, int type, int xi, int yi)
 
 void Gui_paint_cannon(int x, int y, int type)
 {
-    if (!blockBitmaps) {
+    if (!texturedObjects) {
 	XPoint		points[5];
 
 	SET_FG(colors[WHITE].pixel);
@@ -232,7 +222,11 @@ void Gui_paint_cannon(int x, int y, int type)
 
 void Gui_paint_fuel(int x, int y, int fuel)
 {
-    if (!blockBitmaps) {
+    /* fuel box drawing can be disabled */
+    if (fuelColor == BLACK)
+	return;
+
+    if (!texturedObjects) {
 #define FUEL_BORDER 2
 	int			size;
 
@@ -247,7 +241,7 @@ void Gui_paint_fuel(int x, int y, int fuel)
 	    text_is_bigger = text_width+4 > WINSCALE(BLOCK_SZ)+1 ||
 			    (gameFont->ascent + gameFont->descent) > WINSCALE(BLOCK_SZ) + 2;
 	}
-	SET_FG(colors[RED].pixel);
+	SET_FG(colors[fuelColor].pixel);
 	size = (BLOCK_SZ - 2*FUEL_BORDER) * fuel / MAX_STATION_FUEL;
 	if (useErase) {
 	/* speedup for slow old cheap graphics cards like cg3.
@@ -272,7 +266,7 @@ void Gui_paint_fuel(int x, int y, int fuel)
 
 	/* Draw F in fuel cells */
 	XSetFunction(dpy, gc, GXxor);
-	SET_FG(colors[BLACK].pixel ^ colors[RED].pixel);
+	SET_FG(colors[BLACK].pixel ^ colors[fuelColor].pixel);
 	x = SCALEX(x + BLOCK_SZ/2) - text_width/2,
 	y = SCALEY(y + BLOCK_SZ/2) + gameFont->ascent/2,
 	rd.drawString(dpy, p_draw, gc, x, y, s, 1);
@@ -334,13 +328,8 @@ void Gui_paint_fuel(int x, int y, int fuel)
 
 void Gui_paint_base(int x, int y, int id, int team, int type)
 {
-    int baseColor;
+    int baseColor = baseNameColor;
     int i;
-
-    if (!blockBitmaps)
-	baseColor = BLUE;
-    else
-	baseColor = WHITE;
 
     /* Mara's flashy basewarning */
     if (baseWarningType & 2) {
@@ -356,7 +345,7 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
 	}
     }
 
-    if (!blockBitmaps) {
+    if (!texturedObjects) {
 	const int BORDER = 4;		/* in pixels */
 	int size;
 	other_t *other;
@@ -391,7 +380,7 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
 	    return;
 	}
 	/* only draw base teams if base naming is on, Mara 01/12/14  */
-	if (!BIT(hackedInstruments, SHOW_BASE_NAME))
+	if (!baseNameColor)
 	    return;
 
 	/* operate in pixels from here out */
@@ -484,7 +473,7 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
 	    return;
 	}
 	/* only draw base teams if base naming is on, Mara 01/12/14  */
-	if (!BIT(hackedInstruments, SHOW_BASE_NAME))
+	if (!baseNameColor)
 	    return;
 
 	/* operate in pixels from here out */
@@ -732,7 +721,7 @@ void Gui_paint_decor(int x, int y, int xi, int yi, int type, bool last, bool mor
 void Gui_paint_setup_check(int x, int y, bool isNext)
 {
     XPoint points[5];
-    if (!blockBitmaps) {
+    if (!texturedObjects) {
 	SET_FG(colors[BLUE].pixel);
 	points[0].x = WINSCALE(X(x+(BLOCK_SZ/2)));
 	points[0].y = WINSCALE(Y(y));
@@ -841,7 +830,7 @@ void Gui_paint_setup_cwise_grav(int x, int y)
 void Gui_paint_setup_pos_grav(int x, int y)
 {
     static const int	INSIDE_BL = BLOCK_SZ - 2;
-    if (!blockBitmaps) {
+    if (!texturedObjects) {
 
     Arc_add(RED,
 	    X(x+1), Y(y+BLOCK_SZ-1),
@@ -868,7 +857,7 @@ void Gui_paint_setup_neg_grav(int x, int y)
 {
     static const int	INSIDE_BL = BLOCK_SZ - 2;
 
-    if (!blockBitmaps) {
+    if (!texturedObjects) {
 	Arc_add(RED,
 		X(x+1), Y(y+BLOCK_SZ-1),
 		INSIDE_BL, INSIDE_BL, 0, 64*360);
@@ -970,7 +959,7 @@ void Gui_paint_setup_left_grav(int x, int y)
 
 void Gui_paint_setup_worm(int x, int y, int wormDrawCount)
 {
-    if (!blockBitmaps) {
+    if (!texturedObjects) {
 	static const int	INSIDE_BL = BLOCK_SZ - 2;
 	static int wormOffset[8][3] = {
 	    { 10, 10, 10 },
@@ -1028,7 +1017,7 @@ void Gui_paint_setup_item_concentrator(int x, int y)
     unsigned		rdir, tdir;
     int			i, cx, cy;
     XPoint		pts[4];
-    if (!blockBitmaps) {
+    if (!texturedObjects) {
 	SET_FG(colors[RED].pixel);
 	if (concentratorloop != loops) {
 	    concentratorloop = loops;
@@ -1098,7 +1087,7 @@ void Gui_paint_setup_asteroid_concentrator(int x, int y)
     unsigned		rdir, tdir;
     int			i, cx, cy;
     XPoint		pts[5];
-    if (!blockBitmaps) {
+    if (!texturedObjects) {
 	SET_FG(colors[RED].pixel);
 	if (concentratorloop != loops) {
 	    concentratorloop = loops;
@@ -1212,7 +1201,7 @@ void Gui_paint_setup_target(int x, int y, int target, int damage, bool own)
 
 void Gui_paint_setup_treasure(int x, int y, int treasure, bool own)
 {
-    if (!blockBitmaps) {
+    if (!texturedObjects) {
 	char    s[2];
 	int	    color;
 	int	    size;
