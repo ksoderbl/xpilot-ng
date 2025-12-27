@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -121,7 +121,6 @@ extern xp_pixmap_t xp_pixmaps[];
 
 int Bitmaps_init(void);
 void Bitmaps_cleanup(void);
-int Bitmap_add (char *filename, int count, bool scalable);
 int Bitmap_create (Drawable d, int img);
 void Bitmap_update_scale (void);
 

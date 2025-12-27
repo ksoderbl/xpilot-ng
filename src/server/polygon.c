@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 2000-2004 by
  *
@@ -23,15 +23,12 @@
 
 #include "xpserver.h"
 
-char polygon_version[] = VERSION;
-
 /* polygon map format related stuff */
 int num_edges, max_edges;
-extern int num_polys;
 
 int *edgeptr;
 int *estyleptr;
-static int ptscount, ecount;
+static int ptscount = -1, ecount;
 
 struct polystyle pstyles[256];
 struct edgestyle estyles[256] =
@@ -44,7 +41,7 @@ int max_bases, max_balls, max_polys,max_echanges; /* !@# make static after testi
 static int current_estyle, current_group, is_decor;
 
 static int Create_group(int type, int team, hitmask_t hitmask,
-			bool (*hitfunc)(group_t *gp, move_t *move),
+			bool (*hitfunc)(group_t *gp, const move_t *move),
 			int mapobj_ind)
 {
     group_t gp;
@@ -92,7 +89,6 @@ void P_polystyle(const char *id, int color, int texture_id, int defedge_id,
 	warn("Too many polygon styles");
 	exit(1);
     }
-    /* kps - add sanity checks ??? */
     if (defedge_id == 0) {
 	warn("Polygon default edgestyle cannot be omitted or set "
 	     "to 'internal'!");
@@ -127,9 +123,8 @@ static clpos_t P_cv;
 void P_start_polygon(clpos_t pos, int style)
 {
     poly_t t;
-    world_t *world = &World;
 
-    if (!World_contains_clpos(world, pos)) {
+    if (!World_contains_clpos(pos)) {
 	warn("Polygon start point (%d, %d) is not inside the map"
 	     "(0 <= x < %d, 0 <= y < %d)",
 	     pos.cx, pos.cy, world->cwidth, world->cheight);
@@ -146,8 +141,14 @@ void P_start_polygon(clpos_t pos, int style)
     t.group = current_group;
     t.edges = num_edges;
     t.style = style;
+    t.current_style = style;
+    t.destroyed_style = style; /* may be changed */
     t.estyles_start = ecount;
     t.is_decor = is_decor;
+
+    t.update_mask = 0;
+    t.last_change = frame_loops;
+
     current_estyle = pstyles[style].defedge_id;
     STORE(poly_t, pdata, num_polys, max_polys, t);
 }
@@ -156,6 +157,11 @@ void P_start_polygon(clpos_t pos, int style)
 void P_offset(clpos_t offset, int edgestyle)
 {
     int i, offcx = offset.cx, offcy = offset.cy;
+
+    if (ptscount < 0) {
+	warn("Can't have <Offset> outside <Polygon>.");
+	exit(1);
+    }
 
     if (offcx == 0 && offcy == 0) {
 	/*
@@ -200,17 +206,41 @@ void P_vertex(clpos_t pos, int edgestyle)
     P_offset(offset, edgestyle);
 }
 
+void P_style(const char *state, int style)
+{
+    if (style == -1) {
+	warn("<Style> needs a style id.");
+	exit(1);
+    }
+
+    if (ptscount < 0) {
+	warn("Can't have <Style> outside <Polygon>.");
+	exit(1);
+    }
+
+    if (!strcmp(state, "destroyed"))
+	pdata[num_polys - 1].destroyed_style = style;
+    else {
+	warn("<Style> does not support state \"%s\".", state);
+	exit(1);
+    }
+}
+
 void P_end_polygon(void)
 {
     if (ptscount < 3) {
 	warn("Polygon with less than 3 edges?? (start %d, %d)",
 	     pdata[num_polys - 1].pos.cx, pdata[num_polys - 1].pos.cy);
-	exit(-1);
+	exit(1);
     }
+
+    /* kps - add check that e.g. cannons have "destroyed" state <Style> ? */
+
     pdata[num_polys - 1].num_points = ptscount;
     pdata[num_polys - 1].num_echanges
 	= ecount -pdata[num_polys - 1].estyles_start;
     STORE(int, estyleptr, ecount, max_echanges, INT_MAX);
+    ptscount = -1;
 }
 
 int P_start_ballarea(void)
@@ -243,8 +273,7 @@ void P_end_balltarget(void)
 
 int P_start_target(int target_ind)
 {
-    world_t *world = &World;
-    target_t *targ = Target_by_index(world, target_ind);
+    target_t *targ = Target_by_index(target_ind);
 
     targ->group = Create_group(TARGET,
 			       targ->team,
@@ -261,8 +290,7 @@ void P_end_target(void)
 
 int P_start_cannon(int cannon_ind)
 {
-    world_t *world = &World;
-    cannon_t *cannon = Cannon_by_index(world, cannon_ind);
+    cannon_t *cannon = Cannon_by_index(cannon_ind);
 
     cannon->group = Create_group(CANNON,
 				 cannon->team,
@@ -279,8 +307,7 @@ void P_end_cannon(void)
 
 int P_start_wormhole(int wormhole_ind)
 {
-    world_t *world = &World;
-    wormhole_t *wormhole = Wormhole_by_index(world, wormhole_ind);
+    wormhole_t *wormhole = Wormhole_by_index(wormhole_ind);
 
     wormhole->group = Create_group(WORMHOLE,
 				   TEAM_NOT_SET,
@@ -297,8 +324,7 @@ void P_end_wormhole(void)
 
 int P_start_friction_area(int fa_ind)
 {
-    world_t *world = &World;
-    friction_area_t *fa = FrictionArea_by_index(world, fa_ind);
+    friction_area_t *fa = FrictionArea_by_index(fa_ind);
 
     fa->group = Create_group(FRICTION,
 			     TEAM_NOT_SET,
@@ -331,7 +357,7 @@ int P_get_bmp_id(const char *s)
 	if (!strcmp(bstyles[i].id, s))
 	    return i;
     warn("Broken map: Undeclared bmpstyle %s", s);
-    exit(-1);
+    exit(1);
 }
 
 
@@ -343,7 +369,7 @@ int P_get_edge_id(const char *s)
 	if (!strcmp(estyles[i].id, s))
 	    return i;
     warn("Broken map: Undeclared edgestyle %s", s);
-    exit(-1);
+    exit(1);
 }
 
 
@@ -355,26 +381,8 @@ int P_get_poly_id(const char *s)
 	if (!strcmp(pstyles[i].id, s))
 	    return i;
     warn("Broken map: Undeclared polystyle %s", s);
-    exit(-1);
+    exit(1);
 }
-
-/*
- * Call given function f with group map object pointer as argument for
- * all groups of grouptype 'type'.
- */
-#if 0
-void P_grouphack(int type, void (*f)(int, void *))
-{
-    int group;
-
-    for (group = 0; group < num_groups; group++) {
-	group_t *gp = groupptr_by_id(group);
-
-	if (gp->type == type)
-	    (*f)(group, gp->mapobj);
-    }
-}
-#endif
 
 void P_set_hitmask(int group, hitmask_t hitmask)
 {

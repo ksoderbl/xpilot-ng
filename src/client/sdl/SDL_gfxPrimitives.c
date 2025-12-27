@@ -28,6 +28,23 @@
 #define clip_ymax(surface) surface->clip_rect.y+surface->clip_rect.h-1
 
 /* ----- Pixel - fast, no blending, no locking, clipping */
+int fastPixelColorNolock(SDL_Surface * dst, Sint16 x, Sint16 y, Uint32 color);
+int fastPixelColorNolockNoclip(SDL_Surface * dst, Sint16 x, Sint16 y, Uint32 color);
+int fastPixelColor(SDL_Surface * dst, Sint16 x, Sint16 y, Uint32 color);
+int fastPixelRGBA(SDL_Surface * dst, Sint16 x, Sint16 y, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
+int fastPixelRGBANolock(SDL_Surface * dst, Sint16 x, Sint16 y, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
+int _putPixelAlpha(SDL_Surface * surface, Sint16 x, Sint16 y, Uint32 color, Uint8 alpha);
+int pixelColorNolock(SDL_Surface * dst, Sint16 x, Sint16 y, Uint32 color);
+int _filledRectAlpha(SDL_Surface * surface, Sint16 x1, Sint16 y_1, Sint16 x2, Sint16 y2, Uint32 color, Uint8 alpha);
+int filledRectAlpha(SDL_Surface * dst, Sint16 x1, Sint16 y_1, Sint16 x2, Sint16 y2, Uint32 color);
+int HLineAlpha(SDL_Surface * dst, Sint16 x1, Sint16 x2, Sint16 y, Uint32 color);
+int VLineAlpha(SDL_Surface * dst, Sint16 x, Sint16 y_1, Sint16 y2, Uint32 color);
+int pixelColorWeight(SDL_Surface * dst, Sint16 x, Sint16 y, Uint32 color, Uint32 weight);
+int pixelColorWeightNolock(SDL_Surface * dst, Sint16 x, Sint16 y, Uint32 color, Uint32 weight);
+int hlineColorStore(SDL_Surface * dst, Sint16 x1, Sint16 x2, Sint16 y, Uint32 color);
+int hlineRGBAStore(SDL_Surface * dst, Sint16 x1, Sint16 x2, Sint16 y, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
+int aalineColorInt(SDL_Surface * dst, Sint16 x1, Sint16 y_1, Sint16 x2, Sint16 y2, Uint32 color, int draw_endpoint);
+double evaluateBezier (double *data, int ndata, double t);
 
 int fastPixelColorNolock(SDL_Surface * dst, Sint16 x, Sint16 y, Uint32 color)
 {
@@ -3597,7 +3614,7 @@ int bezierColor(SDL_Surface * dst, Sint16 * vx, Sint16 * vy, int n, int s, Uint3
 {
     int result;
     int i;
-    double *x, *y, t, stepsize;
+    double *x, *y, t, stepsize, tmpx, tmpy;
     Sint16 x1, y_1, x2, y2;
 
     /*
@@ -3635,12 +3652,16 @@ int bezierColor(SDL_Surface * dst, Sint16 * vx, Sint16 * vy, int n, int s, Uint3
      */
     result = 0;
     t=0.0;
-    x1=evaluateBezier(x,n+1,t);
-    y_1=evaluateBezier(y,n+1,t);
+    tmpx = evaluateBezier(x,n+1,t);
+    tmpy = evaluateBezier(y,n+1,t);
+    x1 = (Sint16) tmpx;
+    y_1 = (Sint16) tmpy;
     for (i = 0; i <= (n*s); i++) {
 	t += stepsize;
-	x2=(Sint16)evaluateBezier(x,n,t);
-	y2=(Sint16)evaluateBezier(y,n,t);
+	tmpx = evaluateBezier(x,n,t);
+	tmpy = evaluateBezier(y,n,t);
+	x2 = (Sint16)tmpx;
+	y2 = (Sint16)tmpy;
 	result |= lineColor(dst, x1, y_1, x2, y2, color);
 	x1 = x2;
 	y_1 = y2;

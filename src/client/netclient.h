@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -43,11 +43,23 @@ typedef struct {
     int num_spark_colors;
 } display_t;
 
-extern int	 simulating;
 extern int	 receive_window_size;
 extern long	 last_loops;
 extern bool      packetMeasurement;
 extern display_t server_display; /* the servers idea about our display */
+
+typedef struct {
+    int movement;
+    double turnspeed;
+    int id;
+} pointer_move_t;
+
+#define MAX_POINTER_MOVES 128
+
+extern pointer_move_t pointer_moves[MAX_POINTER_MOVES];
+extern int pointer_move_next;
+extern long last_keyboard_ack;
+extern bool dirPrediction;
 
 int Net_setup(void);
 int Net_verify(char *real, char *nick, char *dpy);
@@ -85,6 +97,7 @@ int Receive_debris(void);
 int Receive_wreckage(void);
 int Receive_asteroid(void);
 int Receive_wormhole(void);
+int Receive_polystyle(void);
 int Receive_fastshot(void);
 int Receive_ecm(void);
 int Receive_trans(void);

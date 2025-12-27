@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -25,35 +25,115 @@
 
 #include "xpserver.h"
 
-void Object_hits_wormhole(object_t *obj, int ind)
+shape_t wormhole_wire;
+
+/*
+ * Initialization functions.
+ */
+
+void Wormhole_line_init(void)
 {
-    /*world_t *world = &World;
-      wormhole_t *wormhole = Wormhole_by_index(world, ind);*/
+    int i;
+    static clpos_t coords[MAX_SHIP_PTS];
 
-    SET_BIT(obj->status, WARPING);
-    obj->wormHoleHit = ind;
-
-#if 0
-    if (BIT(obj->type, OBJ_PLAYER)) {
-	player_t *pl = (player_t *)obj;
-
-	warn("Player %s hits wormhole %d.", pl->name, ind);
+    wormhole_wire.num_points = MAX_SHIP_PTS;
+    for (i = 0; i < MAX_SHIP_PTS; i++) {
+	wormhole_wire.pts[i] = coords + i;
+	coords[i].cx = (int)(cos(i * 2 * PI / MAX_SHIP_PTS) * WORMHOLE_RADIUS);
+	coords[i].cy = (int)(sin(i * 2 * PI / MAX_SHIP_PTS) * WORMHOLE_RADIUS);
     }
-#endif
+
+    return;
 }
 
+bool Verify_wormhole_consistency(void)
+{
+    int i, worm_in = 0, worm_out = 0, worm_norm = 0;
+
+    /* count wormhole types */
+    for (i = 0; i < Num_wormholes(); i++) {
+	int type = Wormhole_by_index(i)->type;
+
+	if (type == WORM_NORMAL)
+	    worm_norm++;
+	else if (type == WORM_IN)
+	    worm_in++;
+	else if (type == WORM_OUT)
+	    worm_out++;
+    }
+
+    /*
+     * Verify that the wormholes are consistent, i.e. that if
+     * we have no 'out' wormholes, make sure that we don't have
+     * any 'in' wormholes, and (less critical) if we have no 'in'
+     * wormholes, make sure that we don't have any 'out' wormholes.
+     */
+    if (worm_norm > 0) {
+	if (worm_norm + worm_out < 2) {
+	    warn("Map has only one 'normal' wormhole.");
+	    warn("Add at least one 'normal' or 'out' wormhole.");
+	    return false;
+	}
+    } else if (worm_in > 0) {
+	if (worm_out < 1) {
+	    warn("Map has %d 'in' wormholes, "
+		 "but no 'normal' or 'out' wormholes.", worm_in);
+	    warn("Add at least one 'normal' or 'out' wormhole.");
+	    return false;
+	}
+    } else if (worm_out > 0) {
+	warn("Map has %d 'out' wormholes, but no 'normal' or 'in' wormholes.",
+	     worm_out);
+	warn("Add at least one 'normal' or 'in' wormhole.");
+	return false;
+    }
+
+    return true;
+}
+
+/*
+ * Functions used in game.
+ */
+
+hitmask_t Wormhole_hitmask(wormhole_t *wormhole)
+{
+    if (wormhole->type == WORM_OUT)
+	return ALL_BITS;
+    return 0;
+}
+
+bool Wormhole_hitfunc(group_t *gp, const move_t *move)
+{
+    const object_t *obj = move->obj;
+    wormhole_t *wormhole = Wormhole_by_index(gp->mapobj_ind);
+
+    if (wormhole->type == WORM_OUT)
+	return false;
+
+    if (obj == NULL)
+	return true;
+
+    if (BIT(obj->obj_status, WARPED|WARPING))
+	return false;
+
+    return true;
+}
+
+void Object_hits_wormhole(object_t *obj, int ind)
+{
+    SET_BIT(obj->obj_status, WARPING);
+    obj->wormHoleHit = ind;
+}
 
 /*
  * Warp balls connected to warped player.
  */
 static void Warp_balls(player_t *pl, clpos_t dest)
 {
-    world_t *world = pl->world;
-
     /*
      * Don't connect to balls while warping.
      */
-    if (BIT(pl->used, HAS_CONNECTOR))
+    if (Player_uses_connector(pl))
 	pl->ball = NULL;
 
     if (BIT(pl->have, HAS_BALL)) {
@@ -63,152 +143,116 @@ static void Warp_balls(player_t *pl, clpos_t dest)
 	 * allowed, so long as the ball itself doesn't collide.
 	 */
 	int k;
+
 	for (k = 0; k < NumObjs; k++) {
 	    object_t *b = Obj[k];
-	    if (BIT(b->type, OBJ_BALL) && b->id == pl->id) {
+
+	    if (b->type == OBJ_BALL && b->id == pl->id) {
 		clpos_t ballpos;
 		hitmask_t hitmask = BALL_BIT|HITMASK(pl->team);
 
 		ballpos.cx = b->pos.cx + dest.cx - pl->pos.cx;
 		ballpos.cy = b->pos.cy + dest.cy - pl->pos.cy;
-		ballpos = World_wrap_clpos(world, ballpos);
-		if (!World_contains_clpos(world, ballpos)
+		ballpos = World_wrap_clpos(ballpos);
+		if (!World_contains_clpos(ballpos)
 		    || (shape_is_inside(ballpos.cx, ballpos.cy, hitmask,
 					(object_t *)b, &ball_wire, 0)
 			!= NO_GROUP)) {
 		    b->life = 0.0;
 		    continue;
 		}
-		Object_position_set_clpos(world, b, ballpos);
+		Object_position_set_clpos(b, ballpos);
 		Object_position_remember(b);
-		b->vel.x *= WORM_BRAKE_FACTOR;
-		b->vel.y *= WORM_BRAKE_FACTOR;
-		Cell_add_object(world, b);
+		Cell_add_object(b);
 	    }
 	}
     }
 }
 
-
-static int Find_wormhole_dest(world_t *world, wormhole_t *wh_hit, player_t *pl)
+static int Find_wormhole_dest(int wh_hit_ind)
 {
-    int wh_dest, wcx, wcy, nearestFront, nearestRear;
-    double proximity, proxFront, proxRear;
+    int wh_ind;
+    wormhole_t *wh, *wh_hit = Wormhole_by_index(wh_hit_ind);
+
+    if (wh_hit->type == WORM_FIXED)
+	return wh_hit_ind;
 
     if (wh_hit->countdown > 0)
 	return wh_hit->lastdest;
 
-    if (rfrac() < 0.1) {
-	do
-	    wh_dest = (int)(rfrac() * world->NumWormholes);
-	while (world->wormholes[wh_dest].type == WORM_IN
-	       || pl->wormHoleHit == wh_dest);
-	return wh_dest;
+    do {
+	wh_ind = (int)(rfrac() * Num_wormholes());
+	wh = Wormhole_by_index(wh_ind);
     }
+    while (wh->type == WORM_IN
+	   || wh->type == WORM_FIXED
+	   || wh_hit_ind == wh_ind);
 
-    nearestFront = nearestRear = -1;
-    proxFront = proxRear = 1e20;
-
-    for (wh_dest = 0; wh_dest < world->NumWormholes; wh_dest++) {
-	wormhole_t *wh = Wormhole_by_index(world, wh_dest);
-
-	if (wh_dest == pl->wormHoleHit
-	    || wh->type == WORM_IN)
-	    continue;
-
-	wcx = WRAP_DCX(wh->pos.cx - wh_hit->pos.cx);
-	wcy = WRAP_DCY(wh->pos.cy - wh_hit->pos.cy);
-
-	proximity = (pl->vel.y * wcx + pl->vel.x * wcy);
-	proximity = ABS(proximity);
-
-	if (pl->vel.x * wcx + pl->vel.y * wcy < 0) {
-	    if (proximity < proxRear) {
-		nearestRear = wh_dest;
-		proxRear = proximity;
-	    }
-	} else if (proximity < proxFront) {
-	    nearestFront = wh_dest;
-	    proxFront = proximity;
-	}
-    }
-
-#define RANDOM_REAR_WORM 1
-
-    if (! RANDOM_REAR_WORM)
-	wh_dest = nearestFront < 0 ? nearestRear : nearestFront;
-    else {
-	if (nearestFront >= 0)
-	    wh_dest = nearestFront;
-	else {
-	    do
-		wh_dest = (int)(rfrac() * world->NumWormholes);
-	    while (world->wormholes[wh_dest].type == WORM_IN
-		   || wh_dest == pl->wormHoleHit);
-	}
-    }
-
-    return wh_dest;
+    return wh_ind;
 }
-
 
 /*
  * Move player trough wormhole.
  */
-void Traverse_wormhole(player_t *pl)
+static void Traverse_wormhole(player_t *pl)
 {
     clpos_t dest;
     int wh_dest;
-    world_t *world = pl->world;
-    wormhole_t *wh_hit = Wormhole_by_index(world, pl->wormHoleHit);
+    wormhole_t *wh_hit = Wormhole_by_index(pl->wormHoleHit);
 
-#if 0
-    warn("player %s is in Traverse_wormhole", pl->name);
-#endif
-
-    wh_dest = Find_wormhole_dest(world, wh_hit, pl);
-
+    wh_dest = Find_wormhole_dest(pl->wormHoleHit);
+    /*assert(wh_dest != pl->wormHoleHit);*/
     sound_play_sensors(pl->pos, WORM_HOLE_SOUND);
-    dest = world->wormholes[wh_dest].pos;
-
+    dest = Wormhole_by_index(wh_dest)->pos;
     Warp_balls(pl, dest);
-
     pl->wormHoleDest = wh_dest;
-    Player_position_init_clpos(pl, dest);
-    pl->vel.x *= WORM_BRAKE_FACTOR;
-    pl->vel.y *= WORM_BRAKE_FACTOR;
+    Object_position_init_clpos(OBJ_PTR(pl), dest);
     pl->forceVisible += 15;
-
-    assert(pl->wormHoleHit != -1);
+    /*assert(pl->wormHoleHit != NO_IND);*/
 
     if (wh_dest != pl->wormHoleHit) {
 	wh_hit->lastdest = wh_dest;
 	wh_hit->countdown = options.wormholeStableTicks;
     }
+    /*else
+      assert(0);*/
 
-    CLR_BIT(pl->status, WARPING);
-    SET_BIT(pl->status, WARPED);
+    CLR_BIT(pl->obj_status, WARPING);
+    SET_BIT(pl->obj_status, WARPED);
 
     sound_play_sensors(pl->pos, WORM_HOLE_SOUND);
 }
 
 /*
+ * Returns true if warp status was achieved.
+ */
+bool Initiate_hyperjump(player_t *pl)
+{
+    if (pl->item[ITEM_HYPERJUMP] <= 0)
+	return false;
+    if (pl->fuel.sum < -ED_HYPERJUMP)
+	return false;
+    pl->item[ITEM_HYPERJUMP]--;
+    Player_add_fuel(pl, ED_HYPERJUMP);
+    SET_BIT(pl->obj_status, WARPING);
+    pl->wormHoleHit = -1;
+    return true;
+}
+
+/*
  * Player has used hyperjump item.
  */
-void Hyperjump(player_t *pl)
+static void Hyperjump(player_t *pl)
 {
     clpos_t dest;
-    world_t *world = pl->world;
     int counter;
     hitmask_t hitmask = NONBALL_BIT | HITMASK(pl->team); /* kps - ok ? */
 
     /* Try to find empty space to hyperjump to. */
-    for (counter = 20; counter > 0; counter--) {
-	dest = World_get_random_clpos(world);
-	if (shape_is_inside(dest.cx, dest.cy, hitmask,
-			    (object_t *)pl, (shape_t *)pl->ship,
-			    pl->dir)
-	    == NO_GROUP)
+    for (counter = 100; counter > 0; counter--) {
+	dest = World_get_random_clpos();
+	if (shape_is_inside(dest.cx, dest.cy, hitmask, OBJ_PTR(pl),
+			    (shape_t *)pl->ship, pl->dir) == NO_GROUP)
 	    break;
     }
 
@@ -216,7 +260,7 @@ void Hyperjump(player_t *pl)
     if (!counter) {
 	/* need to do something else here ? */
 	Set_player_message(pl, "Could not hyperjump. [*Server notice*]");
-	CLR_BIT(pl->status, WARPING);
+	CLR_BIT(pl->obj_status, WARPING);
 	sound_play_sensors(pl->pos, HYPERJUMP_SOUND);
 	return;
     }
@@ -225,88 +269,79 @@ void Hyperjump(player_t *pl)
 
     Warp_balls(pl, dest);
 
-    Player_position_init_clpos(pl, dest);
-    pl->vel.x *= WORM_BRAKE_FACTOR;
-    pl->vel.y *= WORM_BRAKE_FACTOR;
+    Object_position_init_clpos(OBJ_PTR(pl), dest);
     pl->forceVisible += 15;
 
-    CLR_BIT(pl->status, WARPING);
+    CLR_BIT(pl->obj_status, WARPING);
 }
 
-
-
-/*
- * Wormhole specific functions
- */
-hitmask_t Wormhole_hitmask(wormhole_t *wormhole)
+void Player_warp(player_t *pl)
 {
-    if (wormhole->type == WORM_OUT)
-	return ALL_BITS;
-    return 0;
+    if (pl->wormHoleHit == NO_IND)
+	Hyperjump(pl);
+    else
+	Traverse_wormhole(pl);
 }
 
-bool Wormhole_hitfunc(group_t *gp, move_t *move)
+void Player_finish_warp(player_t *pl)
 {
-    object_t *obj = move->obj;
-    world_t *world = &World;
-    wormhole_t *wormhole = Wormhole_by_index(world, gp->mapobj_ind);
+    int group;
+    hitmask_t hitmask = NONBALL_BIT | HITMASK(pl->team);
+    /*
+     * clear warped, so we can use shape_is inside,
+     * Wormhole_hitfunc check for WARPED bit.
+     */
+    CLR_BIT(pl->obj_status, WARPED);
+    group = shape_is_inside(pl->pos.cx, pl->pos.cy, hitmask,
+			    OBJ_PTR(pl), (shape_t *)pl->ship,
+			    pl->dir);
+    /*
+     * kps - we might possibly have entered another polygon, e.g.
+     * a wormhole ?
+     */
+    if (group != NO_GROUP)
+	SET_BIT(pl->obj_status, WARPED);
+}
 
-    if (wormhole->type == WORM_OUT)
-	return false;
+void Object_warp(object_t *obj)
+{
+    clpos_t dest;
+    int wh_dest;
+    wormhole_t *wh_hit = Wormhole_by_index(obj->wormHoleHit);
 
-    if (obj == NULL)
-	return true;
+    wh_dest = Find_wormhole_dest(obj->wormHoleHit);
+    /*assert(wh_dest != obj->wormHoleHit);*/
+    dest = Wormhole_by_index(wh_dest)->pos;
+    obj->wormHoleDest = wh_dest;
+    Object_position_init_clpos(obj, dest);
+    /*assert(obj->wormHoleHit != NO_IND);*/
 
-    if (BIT(obj->status, WARPED|WARPING))
-	return false;
-
-    return true;
-
-#if 0
-    warn("Wormhole_hitfunc: wormhole %p hit by a %s",
-	 wormhole, Object_typename(move->obj));
-#endif
-    if (obj->type == OBJ_PLAYER) {
-	player_t *pl = (player_t *)obj;
-	if (pl->wormHoleHit == gp->mapobj_ind)
-	    return false;
+    if (wh_dest != obj->wormHoleHit) {
+	wh_hit->lastdest = wh_dest;
+	wh_hit->countdown = options.wormholeStableTicks;
     }
+    /*else
+      assert(0);*/
 
-    return true;
-
-#if 0
-
-    if (obj->type == OBJ_PLAYER) {
-	player_t *pl = (player_t *)obj;
-
-	if (BIT(pl->status, WARPING))
-	    return false;
-#if 0
-	/*
-	 * Don't warp again if we are still on the
-	 * same wormhole we have just been warped to.
-	 */
-	if (pl->warped > 0
-	    && wormhole->type == WORM_NORMAL
-	    && wormhole == Wormhole_by_index(pl->wormHoleDest)
-	    /* kps - wormHoleDest is now pointer */
-	    /*&& pl->wormHoleDest == ind */)
-	    return false;
-#endif
-    } else {
-	    /*int last = wormhole->lastdest;*/
-
-	return false;
-    }
-
-    return true;
-#endif
+    CLR_BIT(obj->obj_status, WARPING);
+    SET_BIT(obj->obj_status, WARPED);
 }
 
-void World_remove_wormhole(world_t *world, wormhole_t *wormhole)
+void Object_finish_warp(object_t *obj)
 {
-    blkpos_t blk = Clpos_to_blkpos(wormhole->pos);
+    int group;
+    hitmask_t hitmask = NONBALL_BIT | HITMASK(obj->team);
+    /*
+     * clear warped, so we can use shape_is inside,
+     * Wormhole_hitfunc check for WARPED bit.
+     */
+    CLR_BIT(obj->obj_status, WARPED);
+    group = is_inside(obj->pos.cx, obj->pos.cy, hitmask, obj);
 
-    World_set_block(world, blk, wormhole->lastblock);
+    /*
+     * kps - we might possibly have entered another polygon, e.g.
+     * a wormhole ?
+     */
+    if (group != NO_GROUP)
+	SET_BIT(obj->obj_status, WARPED);
 }
-

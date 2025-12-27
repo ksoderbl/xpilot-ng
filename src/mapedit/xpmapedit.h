@@ -1,7 +1,7 @@
-/* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+/*
+ * XPilot NG XP-MapEdit, a map editor for xp maps.  Copyright (C) 1993 by
  *
- * Copyright (C) 2002 Thorsten Kroeger
+ *      Aaron Averill           <averila@oes.orst.edu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,19 +15,32 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ * Modifications:
+ * 1996:
+ *      Robert Templeman        <mbcaprt@mphhpd.ph.man.ac.uk>
+ * 1997:
+ *      William Docter          <wad2@lehigh.edu>
  */
 
-#ifndef AUTH_H
-#define AUTH_H
+#ifndef XPMAPEDIT_H
+#define XPMAPEDIT_H
 
-#define PASSWD_OK	0
-#define PASSWD_WRONG	1
-#define PASSWD_NONE	2
-#define PASSWD_ERROR	4
+#include "xpcommon.h"
 
-int Check_player_password(const char *nick, const char *password);
-int Remove_player_password(const char *nick);
-int Set_player_password(const char *nick, const char *password, int new);
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+#include <X11/Xos.h>
+#include <X11/Xatom.h>
+#include <X11/keysym.h>
+
+#include "T_Toolkit.h"
+
+#include "defaults.h"
+#include "default_colors.h"
+#include "proto.h"
+#include "file.h"
+#include "main.h"
 
 #endif

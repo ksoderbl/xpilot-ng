@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 2003-2004 by
  *
@@ -29,9 +29,6 @@
  */
 
 #include "xpserver.h"
-
-char alliance_version[] = VERSION;
-
 
 /*
  * Alliance information.
@@ -349,7 +346,7 @@ static void Alliance_add_player(alliance_t *alliance, player_t *pl)
 	if (pl2->invite == pl->id)
 	    Cancel_invitation(pl2);
     }
-    pl->alliance = alliance->id;
+    Player_set_alliance(pl,alliance->id);
     alliance->NumMembers++;
     updateScores = true;
 }
@@ -390,7 +387,7 @@ int Leave_alliance(player_t *pl)
 static int Alliance_remove_player(alliance_t *alliance, player_t *pl)
 {
     if (pl->alliance == alliance->id) {
-	pl->alliance = ALLIANCE_NOT_SET;
+	Player_set_alliance(pl,ALLIANCE_NOT_SET);
 	alliance->NumMembers--;
 	updateScores = true;
 	return 1;

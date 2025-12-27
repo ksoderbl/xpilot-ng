@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -25,44 +25,34 @@
 
 #include "xpserver.h"
 
-char tuner_version[] = VERSION;
-
-void tuner_plock(world_t *world)
+void tuner_plock(void)
 {
-    UNUSED_PARAM(world);
-
     options.pLockServer
 	= (plock_server(options.pLockServer) == 1) ? true : false;
 }
 
-void tuner_shipmass(world_t *world)
+void tuner_shipmass(void)
 {
     int i;
-
-    UNUSED_PARAM(world);
 
     for (i = 0; i < NumPlayers; i++)
 	Player_by_index(i)->emptymass = options.shipMass;
 }
 
-void tuner_ballmass(world_t *world)
+void tuner_ballmass(void)
 {
     int i;
 
-    UNUSED_PARAM(world);
-
     for (i = 0; i < NumObjs; i++) {
-	if (BIT(Obj[i]->type, OBJ_BALL))
+	if (Obj[i]->type == OBJ_BALL)
 	    Obj[i]->mass = options.ballMass;
     }
 }
 
-void tuner_maxrobots(world_t *world)
+void tuner_maxrobots(void)
 {
-    UNUSED_PARAM(world);
-
     if (options.maxRobots < 0)
-	options.maxRobots = world->NumBases;
+	options.maxRobots = Num_bases();
 
     if (options.maxRobots < options.minRobots)
 	options.minRobots = options.maxRobots;
@@ -71,10 +61,8 @@ void tuner_maxrobots(world_t *world)
 	Robot_delete(NULL, true);
 }
 
-void tuner_minrobots(world_t *world)
+void tuner_minrobots(void)
 {
-    UNUSED_PARAM(world);
-
     if (options.minRobots < 0)
 	options.minRobots = options.maxRobots;
 
@@ -82,11 +70,11 @@ void tuner_minrobots(world_t *world)
 	options.maxRobots = options.minRobots;
 }
 
-void tuner_allowshields(world_t *world)
+void tuner_allowshields(void)
 {
     int i;
 
-    Set_world_rules(world);
+    Set_world_rules();
 
     if (options.allowShields) {
 	SET_BIT(DEF_HAVE, HAS_SHIELD);
@@ -112,116 +100,105 @@ void tuner_allowshields(world_t *world)
     }
 }
 
-void tuner_playerstartsshielded(world_t *world)
+void tuner_playerstartsshielded(void)
 {
-    UNUSED_PARAM(world);
-
     if (options.allowShields)
 	/* Doesn't make sense to turn off when shields are on. */
 	options.playerStartsShielded = true;
 }
 
-void tuner_worldlives(world_t *world)
+void tuner_worldlives(void)
 {
     if (options.worldLives < 0)
 	options.worldLives = 0;
 
-    Set_world_rules(world);
+    Set_world_rules();
 
     if (BIT(world->rules->mode, LIMITED_LIVES)) {
-	Reset_all_players(world);
+	Reset_all_players();
 	if (options.gameDuration == -1)
 	    options.gameDuration = 0;
     }
 }
 
-void tuner_cannonsmartness(world_t *world)
+void tuner_cannonsmartness(void)
 {
-    UNUSED_PARAM(world);
-    LIMIT(options.cannonSmartness, 0, 3);
+    LIMIT(options.cannonSmartness, 0, CANNON_SMARTNESS_MAX);
 }
 
-void tuner_teamcannons(world_t *world)
+void tuner_teamcannons(void)
 {
     int i;
     int team;
 
     if (options.teamCannons) {
-	for (i = 0; i < world->NumCannons; i++) {
-	    cannon_t *cannon = Cannon_by_index(world, i);
+	for (i = 0; i < Num_cannons(); i++) {
+	    cannon_t *cannon = Cannon_by_index(i);
 
-	    team = Find_closest_team(world, cannon->pos);
+	    team = Find_closest_team(cannon->pos);
 	    if (team == TEAM_NOT_SET)
 		warn("Couldn't find a matching team for the cannon.");
 	    cannon->team = team;
 	}
     }
     else {
-	for (i = 0; i < world->NumCannons; i++)
-	    Cannon_by_index(world, i)->team = TEAM_NOT_SET;
+	for (i = 0; i < Num_cannons(); i++)
+	    Cannon_by_index(i)->team = TEAM_NOT_SET;
     }
 }
 
-void tuner_cannonsuseitems(world_t *world)
+void tuner_mincannonshotlife(void)
 {
-    int i, j;
-    cannon_t *c;
-
-    Move_init(world);
-
-    for (i = 0; i < world->NumCannons; i++) {
-	c = Cannon_by_index(world, i);
-	for (j = 0; j < NUM_ITEMS; j++) {
-	    c->item[j] = 0;
-
-	    if (options.cannonsUseItems)
-		Cannon_add_item(c, j,
-				(int)(rfrac()
-				      * (world->items[j].initial + 1)));
-	}
-    }
+    LIMIT(options.minCannonShotLife, 0, FLT_MAX);
+    LIMIT(options.maxCannonShotLife, options.minCannonShotLife, FLT_MAX);
 }
 
-void tuner_wormhole_stable_ticks(world_t *world)
+void tuner_maxcannonshotlife(void)
+{
+    LIMIT(options.maxCannonShotLife, 0, FLT_MAX);
+    LIMIT(options.minCannonShotLife, 0, options.maxCannonShotLife);
+}
+
+void tuner_wormhole_stable_ticks(void)
 {
     int i;
 
-    if (options.wormholeStableTicks < 0.0)
-	options.wormholeStableTicks = 0.0;
+    if (options.wormholeStableTicks < 1.0)
+	options.wormholeStableTicks = 1.0;
 
-    for (i = 0; i < world->NumWormholes; i++)
-	Wormhole_by_index(world, i)->countdown = options.wormholeStableTicks;
+    /* Make sure all wormholes get a new destination */
+    for (i = 0; i < Num_wormholes(); i++)
+	Wormhole_by_index(i)->countdown = 0.0;
 }
 
-void tuner_modifiers(world_t *world)
+void tuner_modifiers(void)
 {
     int i;
 
-    Set_world_rules(world);
+    Set_world_rules();
 
     for (i = 0; i < NumPlayers; i++)
-	filter_mods(world, &Player_by_index(i)->mods);
+	Mods_filter(&(Player_by_index(i))->mods);
 }
 
-void tuner_gameduration(world_t *world)
+void tuner_gameduration(void)
 {
-    UNUSED_PARAM(world);
     if (options.gameDuration <= 0.0)
 	gameOverTime = time(NULL);
     else
 	gameOverTime = (time_t) (options.gameDuration * 60) + time(NULL);
 }
 
-void tuner_racelaps(world_t *world)
+void tuner_racelaps(void)
 {
     if (BIT(world->rules->mode, TIMING)) {
-	Reset_all_players(world);
+	Reset_all_players();
 	if (options.gameDuration == -1)
 	    options.gameDuration = 0;
     }
 }
 
-void tuner_allowalliances(world_t *world)
+void tuner_allowalliances(void)
 {
     if (BIT(world->rules->mode, TEAM_PLAY))
 	CLR_BIT(world->rules->mode, ALLIANCES);
@@ -230,8 +207,15 @@ void tuner_allowalliances(world_t *world)
 	Dissolve_all_alliances();
 }
 
-void tuner_announcealliances(world_t *world)
+void tuner_announcealliances(void)
 {
-    UNUSED_PARAM(world);
     updateScores = true;
+}
+
+void tuner_playerwallbouncetype(void)
+{
+    int type = options.playerWallBounceType;
+
+    if (!(type >= 0 && type <= 3))
+	options.playerWallBounceType = 3;
 }

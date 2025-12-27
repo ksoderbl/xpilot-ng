@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 2000-2004 Uoti Urpala <uau@users.sourceforge.net>
  *
@@ -129,6 +129,8 @@ struct bmpstyle {
 
 typedef struct {
     int style;
+    int current_style;
+    int destroyed_style;
     int group;
     int edges;
     clpos_t pos;
@@ -136,15 +138,25 @@ typedef struct {
     int estyles_start;
     int num_echanges;
     int is_decor;
+    unsigned update_mask;
+    long last_change;
 } poly_t;
 
+/*
+ * Hitmasks are 32 bits.
+ */
+#define ALL_BITS		0xffffffffU
+#define BALL_BIT		(1U << 11)
+#define NONBALL_BIT		(1U << 12)
+#define NOTEAM_BIT		(1U << 10)
+#define HITMASK(team) ((team) == TEAM_NOT_SET ? NOTEAM_BIT : 1U << (team))
 typedef uint32_t hitmask_t;
 
 typedef struct move {
     clvec_t start;
     clvec_t delta;
     hitmask_t hitmask;
-    object_t *obj;
+    const object_t *obj;
 } move_t;
 
 typedef struct group group_t;
@@ -153,7 +165,7 @@ struct group {
     int type;
     int team;
     hitmask_t hitmask;
-    bool (*hitfunc)(group_t *groupptr, move_t *move);
+    bool (*hitfunc)(group_t *groupptr, const move_t *move);
     int mapobj_ind;
 };
 
@@ -173,6 +185,6 @@ static inline group_t *groupptr_by_id(int group)
     return NULL;
 }
 
-extern int num_pstyles, num_estyles, num_bstyles;
+extern int num_polys, num_pstyles, num_estyles, num_bstyles;
 
 #endif

@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -27,8 +27,6 @@
 
 #include "xpclient_x11.h"
 
-char guiobjects_version[] = VERSION;
-
 static bool texturedShips = false; /* Turned this off because the images drawn
 				    * don't match the actual shipshape used
 				    * for wall collisions by the server. */
@@ -44,6 +42,7 @@ static int enemyLWColor;	/* Color index for enemyLifeWarning */
 static int teamLWColor;		/* Color index for teamLifeWarning */
 static int shipNameColor;	/* Color index for ship name drawing */
 static int mineNameColor;	/* Color index for mine name drawing */
+static int teamShipColor;   	/* Color index to associate with team 0 */
 static int team0Color;		/* Color index to associate with team 0 */
 static int team1Color;		/* Color index to associate with team 1 */
 static int team2Color;		/* Color index to associate with team 2 */
@@ -244,9 +243,9 @@ void Gui_paint_mine(int x, int y, int teammine, char *name)
 	    { 0, -2 }
 	};
 
-	if (lastScaleFactor != scaleFactor) {
+	if (lastScaleFactor != clData.scaleFactor) {
 	    int			i;
-	    lastScaleFactor = scaleFactor;
+	    lastScaleFactor = clData.scaleFactor;
 	    for (i = 1; i < 21; ++i) {
 		mine_points[i].x = WINSCALE(world_mine_points[i].x);
 		mine_points[i].y = WINSCALE(world_mine_points[i].y);
@@ -400,7 +399,7 @@ void Gui_paint_fastshot(int color, int x, int y)
 	}
     }
     else {
-	int s_size = MIN(shotSize, 8);
+	int s_size = MIN(shotSize, 16);
 	int z = s_size / 2;
 
 	Bitmap_paint(drawPixmap, BM_BULLET, WINSCALE(x) - z,
@@ -436,7 +435,7 @@ void Gui_paint_teamshot(int x, int y)
 	}
     }
     else {
-	int s_size = MIN(teamShotSize, 8);
+	int s_size = MIN(teamShotSize, 16);
 	int z = s_size / 2;
 	Bitmap_paint(drawPixmap, BM_BULLET_OWN, WINSCALE(x) - z,
 		     WINSCALE(y) - z, s_size - 1);
@@ -551,7 +550,7 @@ void Gui_paint_appearing(int x, int y, int id, int count)
     if (version >= 0x4F12) {
 	homebase_t *base = Homebase_by_id(id);
 	if (base != NULL)
-	    base->appeartime = loops + (count * clientFPS) / 120;
+	    base->appeartime = (long)(loops + (count * clientFPS) / 120);
     }
 
     SET_FG(colors[color].pixel);
@@ -739,7 +738,7 @@ static int Gui_calculate_ship_color(int id, other_t *other)
 	    && (other->life == 0))
 	    ship_color = teamLWColor;
 	else
-	    ship_color = BLUE;
+	    ship_color = teamShipColor;
     }
 
     if (eyes != NULL
@@ -752,7 +751,7 @@ static int Gui_calculate_ship_color(int id, other_t *other)
 	    && (other->life == 0))
 	    ship_color = teamLWColor;
 	else
-	    ship_color = BLUE;
+	    ship_color = teamShipColor;
     }
 
     if (Gui_is_my_tank(other))
@@ -937,18 +936,26 @@ static void Set_drawstyle_dashed(int ship_color)
 static int set_shipshape(int world_x, int world_y,
 			 int dir, shipshape_t *ship, XPoint *points)
 {
-    int			cnt;
-    position_t		ship_point_pos;
-    XPoint		*xpts = points;
-    int			window_x;
-    int			window_y;
+    int cnt;
+    position_t ship_point_pos;
+    XPoint *xpts = points;
+    double off_x, off_y;
 
     for (cnt = 0; cnt < ship->num_points; cnt++) {
 	ship_point_pos = Ship_get_point_position(ship, cnt, dir);
-	window_x = X(world_x + ship_point_pos.x);
-	window_y = Y(world_y + ship_point_pos.y);
-	xpts->x = WINSCALE(window_x);
-	xpts->y = WINSCALE(window_y);
+	off_x = ship_point_pos.x / clData.scaleFactor;
+	if (off_x > 0.0)
+	    off_x += 0.5;
+	else if (off_x < 0.0)
+	    off_x -= 0.5;
+	off_y = ship_point_pos.y / clData.scaleFactor;
+	if (off_y > 0.0)
+	    off_y += 0.5;
+	else if (off_y < 0.0)
+	    off_y -= 0.5;
+	xpts->x = (short)(((world_x - world.x) / clData.scaleFactor) + off_x);
+	xpts->y = (short)(((world.y + ext_view_height - world_y)
+			   / clData.scaleFactor) - off_y);
 	xpts++;
     }
     points[cnt++] = points[0];
@@ -996,7 +1003,7 @@ void Gui_paint_ship(int x, int y, int dir, int id, int cloak, int phased,
 	return;
     }
 
-    ship_color = Gui_calculate_ship_color(id, other);
+    if (!(ship_color = Gui_calculate_ship_color(id, other))) return;
 
     if (cloak == 0 && phased == 0) {
 	if (!texturedObjects || !texturedShips) {
@@ -1171,6 +1178,12 @@ static xp_option_t guiobject_options[] = {
 	2,
 	&mineNameColor,
 	"Which color number to use for drawing names of mines.\n"),
+
+    COLOR_INDEX_OPTION(
+	"teamShipColor",
+	2,
+	&teamShipColor,
+	"Which color number to use for drawing your teammates.\n"),
 
     COLOR_INDEX_OPTION(
 	"team0Color",

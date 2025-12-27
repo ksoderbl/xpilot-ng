@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -24,8 +24,6 @@
  */
 
 #include "xpclient_x11.h"
-
-char join_version[] = VERSION;
 
 static int Handle_input(int new_input)
 {
@@ -100,6 +98,10 @@ static void Input_loop(void)
 	    }
 	}
 	if (FD_ISSET(netfd, &rfds) || result > 1) {
+	    struct timeval tv1, tv2;
+
+	    gettimeofday(&tv1, NULL);
+
 	    if ((result = Net_input()) == -1) {
 		warn("Bad net input.  Have a nice day!");
 		return;
@@ -126,9 +128,16 @@ static void Input_loop(void)
 		    error("Bad net flush before sync");
 		    return;
 		}
+
 		XSync(dpy, False);
+
 		if (Handle_input(1) == -1)
 		    return;
+	    }
+
+	    if (newSecond) {
+		gettimeofday(&tv2, NULL);
+		clData.clientLag = 1e-3 * timeval_sub(&tv2, &tv1);
 	    }
 	}
     }

@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -24,9 +24,6 @@
  */
 
 #include "xpclient.h"
-
-char talkmacros_version[] = VERSION;
-
 
 char *talk_fast_msgs[TALK_FAST_NR_OF_MSGS];	/* talk macros */
 
@@ -125,7 +122,7 @@ static char *Talk_macro_get_field(char *buf, int wanted_field)
 
     }
     len = (size_t) (end_ptr - start_ptr);
-    if ((field_ptr = malloc(len + 1)) == NULL) {
+    if ((field_ptr = XMALLOC(char, len + 1)) == NULL) {
 	error("Can't allocate memory for talk macro");
 	return NULL;
     }
@@ -202,7 +199,8 @@ static int Talk_macro_parse_mesg(char *outbuf, char *inbuf, long pos,
 			error("Talk_macro_get_field (1) error!");
 			break;
 		    }
-		    if ((tmpptr1 = malloc(MSG_PARSED_FIELD_LEN)) == NULL) {
+		    if ((tmpptr1
+			 = XMALLOC(char, MSG_PARSED_FIELD_LEN)) == NULL) {
 			error("Can't allocate memory for talk macro.");
 			free(tmpptr);	/* successful malloc from before */
 			break;
@@ -215,7 +213,8 @@ static int Talk_macro_parse_mesg(char *outbuf, char *inbuf, long pos,
 			error("Talk_macro_get_field (2) error!");
 			break;
 		    }
-		    if ((tmpptr2 = malloc(MSG_PARSED_FIELD_LEN)) == NULL) {
+		    if ((tmpptr2
+			 = XMALLOC(char, MSG_PARSED_FIELD_LEN)) == NULL) {
 			error("Can't allocate memory for talk macro.");
 			free(tmpptr);	/* successful malloc from before */
 			break;
@@ -259,7 +258,8 @@ static int Talk_macro_parse_mesg(char *outbuf, char *inbuf, long pos,
 			break;
 		    }
 		    inbuf = nextpos;
-		    if ((filename = malloc(TALK_FAST_MSG_FNLEN)) == NULL) {
+		    if ((filename
+			 = XMALLOC(char, TALK_FAST_MSG_FNLEN)) == NULL) {
 			error("Can't allocate memory for talk macro.");
 			break;
 		    }
@@ -279,7 +279,7 @@ static int Talk_macro_parse_mesg(char *outbuf, char *inbuf, long pos,
 		    fsize = ftell(fp);
 		    rewind(fp);
 
-		    if ((tmpptr = malloc(fsize + 1)) == NULL) {
+		    if ((tmpptr = XMALLOC(char, fsize + 1)) == NULL) {
 			fclose(fp);
 			break;
 		    }
@@ -390,9 +390,7 @@ static bool Set_talk_macro(xp_option_t *opt, const char *value)
     assert(i >= 0);
     assert(i < TALK_FAST_NR_OF_MSGS);
 
-    if (talk_fast_msgs[i])
-	xp_free(talk_fast_msgs[i]);
-
+    XFREE(talk_fast_msgs[i]);
     talk_fast_msgs[i] = xp_safe_strdup(value);
 
     return true;
@@ -501,7 +499,7 @@ xp_option_t talk_macro_options[] = {
 
     XP_STRING_OPTION(
 	"msg11",
-	"\\quit",
+	"",
 	NULL, 0,
 	Set_talk_macro, NULL, Get_talk_macro,
 	XP_OPTFLAG_DEFAULT,

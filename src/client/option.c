@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -27,35 +27,17 @@
 
 #include "xpclient.h"
 
-char option_version[] = VERSION;
-
 int num_options = 0;
 int max_options = 0;
 
 xp_option_t *options = NULL;
 
-
-unsigned String_hash(const char *s)
-{
-    unsigned		hash = 0;
-
-    for (; *s; s++) {
-	/* hash gives same values even if case is different */
-	int c = tolower(*s);
-
-	hash = (((hash >> 29) & 7) | (hash << 3)) ^ c;
-    }
-
-    return hash;
-}
-
 xp_option_t *Find_option(const char *name)
 {
     int i;
-    unsigned hash = String_hash(name);
 
     for (i = 0; i < num_options; i++) {
-	if (hash == options[i].hash && !strcasecmp(name, options[i].name))
+	if (!strcasecmp(name, options[i].name))
 	    return &options[i];
     }
 
@@ -71,7 +53,7 @@ static const char *Option_default_value_to_string(xp_option_t *opt)
 	strcpy(buf, "");
 	break;
     case xp_bool_option:
-	sprintf(buf, "%s", opt->bool_defval == true ? "yes" : "no");
+	sprintf(buf, "%s", opt->bool_defval ? "yes" : "no");
 	break;
     case xp_int_option:
 	sprintf(buf, "%d", opt->int_defval);
@@ -435,8 +417,7 @@ static bool Set_key_option(xp_option_t *opt, const char *value,
     /*
      * First remove the old setting.
      */
-    if (opt->key_string)
-	xp_free(opt->key_string);
+    XFREE(opt->key_string);
     Remove_key_from_keydefs(opt->key);
 
     /*
@@ -466,7 +447,7 @@ static bool Set_key_option(xp_option_t *opt, const char *value,
 
     /* in fact if we only get invalid keysyms we should return false */
     opt->origin = origin;
-    xp_free(valcpy);
+    XFREE(valcpy);
     return true;
 }
 
@@ -586,7 +567,7 @@ void Set_command(const char *args)
     }
 
  out:
-    xp_free(valcpy);
+    XFREE(valcpy);
 }
 
 const char *Option_value_to_string(xp_option_t *opt)
@@ -595,10 +576,10 @@ const char *Option_value_to_string(xp_option_t *opt)
 
     switch (opt->type) {
     case xp_noarg_option:
-	sprintf(buf, "%s", *opt->noarg_ptr == true ? "yes" : "no");
+	sprintf(buf, "%s", *opt->noarg_ptr ? "yes" : "no");
 	break;
     case xp_bool_option:
-	sprintf(buf, "%s", *opt->bool_ptr == true ? "yes" : "no");
+	sprintf(buf, "%s", *opt->bool_ptr ? "yes" : "no");
 	break;
     case xp_int_option:
 	sprintf(buf, "%d", *opt->int_ptr);
@@ -657,7 +638,7 @@ void Get_command(const char *args)
 	Add_message(msg);
     }
 
-    xp_free(valcpy);
+    XFREE(valcpy);
 }
 
 /*
@@ -671,9 +652,6 @@ void Store_option(xp_option_t *opt)
     assert(strlen(opt->name) > 0);
     assert(opt->help);
     assert(strlen(opt->help) > 0);
-
-    /* Find_option() needs the hash value. */
-    opt->hash = String_hash(opt->name);
 
     /*
      * Let's not allow several options with the same name 
@@ -776,7 +754,7 @@ static void Parse_xpilotrc_line(const char *line)
     colon = strchr(l, ':');
     if (colon == NULL) {
 	/* no colon on line, not ok */
-	warn("WARNING: Xpilotrc line %d:", num_xpilotrc_lines + 1);
+	warn("Xpilotrc line %d:", num_xpilotrc_lines + 1);
 	warn("Line has no colon after option name, ignoring.");
 	goto line_is_comment;
     }
@@ -801,6 +779,14 @@ static void Parse_xpilotrc_line(const char *line)
     if (opt == NULL)
 	goto line_is_comment;
 
+    if (Option_get_flags(opt) & XP_OPTFLAG_NEVER_SAVE) {
+	/* discard the line */
+	warn("Xpilotrc line %d:", num_xpilotrc_lines + 1);
+	warn("Option %s must not be specified in xpilotrc.", name);
+	warn("It will be removed from xpilotrc if you save configuration.");
+	XFREE(lcpy);
+	return;
+    }
 
     /* did we see this before ? */
     for (i = 0; i < num_xpilotrc_lines; i++) {
@@ -808,7 +794,7 @@ static void Parse_xpilotrc_line(const char *line)
 	
 	if (x->opt == opt) {
 	    /* same option defined several times in xpilotrc */
-	    warn("WARNING: Xpilotrc line %d:", num_xpilotrc_lines + 1);
+	    warn("Xpilotrc line %d:", num_xpilotrc_lines + 1);
 	    warn("Option %s previously given on line %d, ignoring new value.",
 		 name, i + 1);
 	    goto line_is_comment;
@@ -832,7 +818,7 @@ static void Parse_xpilotrc_line(const char *line)
     }
 
     if (!Set_option(name, value, xp_option_origin_xpilotrc)) {
-	warn("WARNING: Xpilotrc line %d:", num_xpilotrc_lines + 1);
+	warn("Xpilotrc line %d:", num_xpilotrc_lines + 1);
 	warn("Failed to set option %s value \"%s\", ignoring.", name, value);
 	goto line_is_comment;
     }
@@ -844,7 +830,7 @@ static void Parse_xpilotrc_line(const char *line)
     STORE(xpilotrc_line_t,
 	  xpilotrc_lines, num_xpilotrc_lines, max_xpilotrc_lines, t);
     num_ok_options++;
-    xp_free(lcpy);
+    XFREE(lcpy);
     return;
 
  line_is_comment:
@@ -857,7 +843,7 @@ static void Parse_xpilotrc_line(const char *line)
     t.comment = xp_safe_strdup(line);
     STORE(xpilotrc_line_t,
 	  xpilotrc_lines, num_xpilotrc_lines, max_xpilotrc_lines, t);
-    xp_free(lcpy);
+    XFREE(lcpy);
 }
 
 static inline bool is_noarg_option(const char *name)
@@ -886,7 +872,7 @@ int Xpilotrc_read(const char *path)
 	return -2;
     }
 
-    warn("Reading options from xpilotrc file %s.\n", path);
+    xpinfo("Reading options from xpilotrc file %s.", path);
 
     while (fgets(buf, sizeof buf, fp)) {
 	char *cp;
@@ -909,65 +895,6 @@ int Xpilotrc_read(const char *path)
     return 0;
 }
 
-
-#if 0
-/*
- * Find a key in keydefs[].
- * On success set output pointer to index into keydefs[] and return true.
- * On failure return false.
- */
-static int Config_find_key(keys_t key, int start, int end, int *key_index)
-{
-    int			i;
-
-    for (i = start; i < end; i++) {
-	if (keydefs[i].key == key) {
-	    *key_index = i;
-	    return true;
-	}
-    }
-
-    return false;
-}
-
-static void Config_save_keys(FILE *fp)
-{
-    int			i, j;
-    KeySym		ks;
-    keys_t		key;
-    const char		*str,
-			*res;
-    char		buf[512];
-
-    buf[0] = '\0';
-    for (i = 0; i < num_keydefs; i++) {
-	ks = keydefs[i].keysym;
-	key = keydefs[i].key;
-
-	/* try and see if we have already saved this key. */
-	if (Config_find_key(key, 0, i, &j) == true)
-	    /* yes, saved this one before.  skip it now. */
-	    continue;
-
-	if ((str = XKeysymToString(ks)) == NULL)
-	    continue;
-
-	if ((res = Get_keyResourceString(key)) != NULL) {
-	    strlcpy(buf, str, sizeof(buf));
-	    /* find all other keysyms which map to the same key. */
-	    j = i;
-	    while (Config_find_key(key, j + 1, num_keydefs, &j) == true) {
-		ks = keydefs[j].keysym;
-		if ((str = XKeysymToString(ks)) != NULL) {
-		    strlcat(buf, " ", sizeof(buf));
-		    strlcat(buf, str, sizeof(buf));
-		}
-	    }
-	    Config_save_resource(fp, res, buf);
-	}
-    }
-}
-#endif
 
 #define TABSIZE 8
 static void Xpilotrc_create_line(char *buf, size_t size,
@@ -1058,8 +985,11 @@ int Xpilotrc_write(const char *path)
 	if (was_in_xpilotrc)
 	    continue;
 
+	/* If this wasn't in xpilotrc, don't save it */
+	if (Option_get_flags(opt) & XP_OPTFLAG_KEEP)
+	    continue;
 	/* Let's not save these */
-	if (Option_get_flags(opt) & XP_OPTFLAG_NO_SAVE)
+	if (Option_get_flags(opt) & XP_OPTFLAG_NEVER_SAVE)
 	    continue;
 
 	origin = Option_get_origin(opt);
@@ -1113,47 +1043,6 @@ int Xpilotrc_write(const char *path)
     }
 
     fclose(fp);
-
-#if 0
-    int			i;
-    FILE		*fp = NULL;
-    char		buf[512];
-
-    char		oldfile[PATH_MAX + 1],
-			newfile[PATH_MAX + 1];
-
-    if ((fp = fopen(oldfile, "r")) != NULL) {
-	while (fgets(buf, sizeof buf, fp))
-	    Xpilotrc_add(buf);
-	fclose(fp);
-    }
-    sprintf(newfile, "%s.new", oldfile);
-    unlink(newfile);
-    if ((fp = fopen(newfile, "w")) == NULL) {
-	Config_save_failed("Can't open file to save to.", strptr);
-	return 1;
-    }
-
-    Config_save_comment(fp,
-			";\n"
-			"; Keys\n"
-			";\n"
-			"; The X Window System program xev can be used to\n"
-			"; find out the names of keyboard keys.\n"
-			";\n");
-    Config_save_keys(fp);
-
-#ifndef _WINDOWS
-    Xpilotrc_end(fp);
-    fclose(fp);
-    sprintf(newfile, "%s.bak", oldfile);
-    rename(oldfile, newfile);
-    unlink(oldfile);
-    sprintf(newfile, "%s.new", oldfile);
-    rename(newfile, oldfile);
-#endif
-#endif
-
 
     return 0;
 }

@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 2003-2004 Kristian Söderblom <kps@users.sourceforge.net>
  *
@@ -45,15 +45,18 @@
 #  endif
 #endif
 
+#include "serverconst.h"
+#include "object.h"
+#include "player.h"
 #include "asteroid.h"
-#include "auth.h"
 #include "cannon.h"
-#include "click.h"
 #include "connection.h"
 #include "defaults.h"
 #include "map.h"
+#include "modifiers.h"
 #include "netserver.h"
 #include "objpos.h"
+#include "option.h"
 #include "packet.h"
 #include "rank.h"
 #include "recwrap.h"
@@ -62,13 +65,12 @@
 #include "sched.h"
 #include "setup.h"
 #include "score.h"
-#include "server.h"
-#include "serverconst.h"
 #include "srecord.h"
 #include "target.h"
 #include "teamcup.h"
 #include "tuner.h"
 #include "walls.h"
 #include "wormhole.h"
+#include "server.h"
 
 #endif /* XPSERVER_H */

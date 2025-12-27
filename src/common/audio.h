@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -23,8 +23,8 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef _audio_h
-#define _audio_h
+#ifndef AUDIO_H
+#define AUDIO_H
 
 #define SOUND_MAX_VOLUME	100
 #define SOUND_MIN_VOLUME	10
@@ -118,7 +118,7 @@ enum {
 
 #ifdef _CAUDIO_C_
 
-static char    *soundNames[] =
+static const char    *soundNames[] =
 {
     "start",
     "fire_shot",
@@ -207,12 +207,4 @@ static char    *soundNames[] =
 
 #endif						/* _CAUDIO_C_ */
 
-extern	void audioInit(char* display);
-extern	void audioCleanup(void);
-extern	int	Handle_audio(int type, int volume);
-
-extern	int	audioDeviceInit(char *display);
-extern	void	audioDeviceEvents(void);
-extern	void	audioDevicePlay(char *filename, int type, int volume, void **private);
-
-#endif						/* _audio_h */
+#endif						/* AUDIO_H */

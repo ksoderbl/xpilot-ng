@@ -90,14 +90,16 @@ typedef struct {
 #define IMG_CWISEGRAV     33
 #define IMG_MISSILE       34
 #define IMG_ASTEROID      35
+#define IMG_TARGET        36
+#define IMG_HUD_ITEMS     37
 
 int Images_init(void);
 void Images_cleanup(void);
-int Bitmap_add(const char *filename, int count, bool scalable);
 void Image_paint(int ind, int x, int y, int frame, int c);
 void Image_paint_area(int ind, int x, int y, int frame, irec_t *r, int c);
 image_t *Image_get(int ind);
 image_t *Image_get_texture(int ind);
 void Image_use_texture(int ind);
 void Image_no_texture(void);
+
 #endif

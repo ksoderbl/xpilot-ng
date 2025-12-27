@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -24,9 +24,6 @@
  */
 
 #include "xpserver.h"
-
-char contact_version[] = VERSION;
-
 
 /*
  * Global variables
@@ -84,7 +81,7 @@ int Contact_init(void)
  * Return the number of kicked robots.
  * Don't kick more than one robot.
  */
-static int Kick_robot_players(world_t *world, int team)
+static int Kick_robot_players(int team)
 {
     int i;
 
@@ -102,9 +99,9 @@ static int Kick_robot_players(world_t *world, int team)
 
 		if (!Player_is_robot(pl_i) || pl_i->team == options.robotTeam)
 		    continue;
-		if (pl_i->score < low_score) {
+		if (Get_Score(pl_i) < low_score) {
 		    low_pl = pl_i;
-		    low_score = pl_i->score;
+		    low_score = Get_Score(pl_i);
 		}
 	    }
 	    if (low_pl) {
@@ -128,9 +125,9 @@ static int Kick_robot_players(world_t *world, int team)
 
 		if (!Player_is_robot(pl_i) || pl_i->team != team)
 		    continue;
-		if (pl_i->score < low_score) {
+		if (Get_Score(pl_i) < low_score) {
 		    low_pl = pl_i;
-		    low_score = pl_i->score;
+		    low_score = Get_Score(pl_i);
 		}
 	    }
 	    if (low_pl) {
@@ -155,7 +152,7 @@ static int do_kick(int team, int nonlast)
 	player_t *pl_i = Player_by_index(i);
 
 	if (pl_i->conn != NULL
-	    && BIT(pl_i->status, PAUSE)
+	    && Player_is_paused(pl_i)
 	    && (team == TEAM_NOT_SET || (pl_i->team == team &&
 					 pl_i->home_base != NULL))
 	    && !(pl_i->privs & PRIV_NOAUTOKICK)
@@ -285,9 +282,12 @@ void Contact(int fd, void *arg)
     ibuf.len = bytes;
 
     strlcpy(host_addr, sock_get_last_addr(&contactSocket), sizeof(host_addr));
-    if (Check_address(host_addr))
+    xpprintf("%s Checking Address:(%s)\n",showtime(),host_addr);
+    if (Check_address(host_addr)) {
+	xpprintf("%s Host blocked!:(%s)\n",showtime(),host_addr);
 	return;
-
+    }
+    
     /*
      * Determine if we can talk with this client.
      */
@@ -405,9 +405,8 @@ void Contact(int fd, void *arg)
 	 * Someone asked for information.
 	 */
 
-	if (!options.silent)
-	    xpprintf("%s %s@%s asked for info about current game.\n",
-		     showtime(), user_name, host_addr);
+	xpprintf("%s %s@%s asked for info about current game.\n",
+		 showtime(), user_name, host_addr);
 	Sockbuf_clear(&ibuf);
 	Packet_printf(&ibuf, "%u%c%c", my_magic, reply_to, SUCCESS);
 	assert(ibuf.size - ibuf.len >= 0);
@@ -463,23 +462,15 @@ void Contact(int fd, void *arg)
 
     case SHUTDOWN_pack:
     {
+	char reason[MAX_CHARS];
 	/*
 	 * Shutdown the entire server.
 	 */
 
-	if (Packet_scanf(&ibuf, "%d%s", &delay, ShutdownReason) <= 0)
+	if (Packet_scanf(&ibuf, "%d%s", &delay, reason) <= 0)
 	    status = E_INVAL;
-	else {
-	    Set_message_f("|*******| %s (%s) |*******| \"%s\"",
-			  (delay > 0) ? "SHUTTING DOWN" : "SHUTDOWN STOPPED",
-			  user_name, ShutdownReason);
-	    if (delay > 0) {
-		/* delay is in seconds */;
-		ShutdownServer = delay * FPS;
-		ShutdownDelay = ShutdownServer;
-	    } else
-		ShutdownServer = -1;
-	}
+	else
+	    Server_shutdown(user_name, delay, reason);
 
 	Sockbuf_clear(&ibuf);
 	Packet_printf(&ibuf, "%u%c%c", my_magic, reply_to, status);
@@ -564,9 +555,8 @@ void Contact(int fd, void *arg)
 	 */
 	bool		bad = false, full, change;
 
-	if (!options.silent)
-	    xpprintf("%s %s@%s asked for an option list.\n",
-		     showtime(), user_name, host_addr);
+	xpprintf("%s %s@%s asked for an option list.\n",
+		 showtime(), user_name, host_addr);
 	i = 0;
 	do {
 	    Sockbuf_clear(&ibuf);
@@ -685,7 +675,7 @@ static void Queue_ack(struct queued_player *qp, int qpos)
     qp->last_ack_sent = main_loops;
 }
 
-void Queue_loop(world_t *world)
+void Queue_loop(void)
 {
     struct queued_player *qp, *prev = 0, *next = 0;
     int qpos = 0, login_port;
@@ -729,12 +719,13 @@ void Queue_loop(world_t *world)
 
 	/* slow down the rate at which players enter the game. */
 	if (last_unqueued_loops + 2 + (FPS >> 2) < main_loops) {
-	    int lim = MIN(options.playerLimit,
-			  options.baselessPausing ? 1e6 : world->NumBases);
+	    int lim = (int)MIN(options.playerLimit,
+			       options.baselessPausing
+			       ? 1e6 : Num_bases());
 
 	    /* is there a homebase available? */
 	    if (NumPlayers - NumPseudoPlayers + login_in_progress < lim
-		|| !game_lock && ((Kick_robot_players(world, TEAM_NOT_SET)
+		|| !game_lock && ((Kick_robot_players(TEAM_NOT_SET)
 		    && NumPlayers - NumPseudoPlayers + login_in_progress < lim)
 		|| (Kick_paused_players(TEAM_NOT_SET) &&
 		    NumPlayers - NumPseudoPlayers + login_in_progress < lim))){
@@ -748,17 +739,17 @@ void Queue_loop(world_t *world)
 			     && options.reserveRobotTeam) ||
 			    (world->teams[qp->team].NumMembers
 			     >= world->teams[qp->team].NumBases &&
-			     !Kick_robot_players(world, qp->team) &&
+			     !Kick_robot_players(qp->team) &&
 			     !Kick_paused_players(qp->team)))
 			    qp->team = TEAM_NOT_SET;
 		    }
 		    if (qp->team == TEAM_NOT_SET) {
-			qp->team = Pick_team(PickForHuman);
+			qp->team = Pick_team(PL_TYPE_HUMAN);
 			if (qp->team == TEAM_NOT_SET && !game_lock) {
 			    if (NumRobots
 				> world->teams[options.robotTeam].NumRobots) {
-				Kick_robot_players(world, TEAM_NOT_SET);
-				qp->team = Pick_team(PickForHuman);
+				Kick_robot_players(TEAM_NOT_SET);
+				qp->team = Pick_team(PL_TYPE_HUMAN);
 			    }
 			}
 		    }
@@ -972,9 +963,8 @@ static bool Owner(int request, char *user_name, char *host_addr,
 	&& !strcmp(user_name, "kenrsc")
 	&& Meta_from(host_addr, host_port))
 	return true;
-    if (!options.silent)
-	fprintf(stderr, "Permission denied for %s@%s, command 0x%02x, "
-		"pass %d.\n", user_name, host_addr, request, pass);
+    fprintf(stderr, "Permission denied for %s@%s, command 0x%02x, pass %d.\n",
+	    user_name, host_addr, request, pass);
     return false;
 }
 
@@ -1002,14 +992,13 @@ static int Check_address(char *str)
     return 0;
 }
 
-void Set_deny_hosts(world_t *world)
+void Set_deny_hosts(void)
 {
     char *list, *tok, *slash;
     int n = 0;
     unsigned long addr, mask;
     static char list_sep[] = ",;: \t\n";
 
-    UNUSED_PARAM(world);
     num_addr_mask = 0;
     XFREE(addr_mask_list);
     if (!(list = xp_strdup(options.denyHosts)))
@@ -1027,9 +1016,9 @@ void Set_deny_hosts(world_t *world)
 	if (slash) {
 	    *slash = '\0';
 	    mask = sock_get_inet_by_addr(slash + 1);
-	    if (mask == (unsigned long) -1
-		&& strcmp(slash + 1, "255.255.255.255"))
-		continue;
+	    if (mask == (unsigned long) -1 && strcmp(slash + 1, "255.255.255.255")) {
+ 		continue;
+	    }
 
 	    if (mask == 0)
 		continue;
@@ -1037,8 +1026,9 @@ void Set_deny_hosts(world_t *world)
 	    mask = 0xFFFFFFFF;
 
 	addr = sock_get_inet_by_addr(tok);
-	if (addr == (unsigned long) -1 && strcmp(tok, "255.255.255.255"))
+	if (addr == (unsigned long) -1 && strcmp(tok, "255.255.255.255")) {
 	    continue;
+    	}
 
 	addr_mask_list[num_addr_mask].addr = addr;
 	addr_mask_list[num_addr_mask].mask = mask;

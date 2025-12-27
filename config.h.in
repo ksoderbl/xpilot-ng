@@ -268,6 +268,9 @@
 /* Define to 1 if you have the <X11/X.h> header file. */
 #undef HAVE_X11_X_H
 
+/* Define to 1 if you have the Xf86Misc library */
+#undef HAVE_XF86MISC
+
 /* Define to 1 if `lstat' dereferences a symlink specified with a trailing
    slash. */
 #undef LSTAT_FOLLOWS_SLASHED_SYMLINK
@@ -299,6 +302,9 @@
 /* Define to 1 if the C compiler supports function prototypes. */
 #undef PROTOTYPES
 
+/* enable replay program */
+#undef REPLAY
+
 /* Define as the return type of signal handlers (`int' or `void'). */
 #undef RETSIGTYPE
 
@@ -307,6 +313,9 @@
 
 /* enable sdl gameloop in sdl client */
 #undef SDL_GAMELOOP
+
+/* enable new server scheduling most useful on Linux 2.6 */
+#undef SELECT_SCHED
 
 /* Define to the type of arg 1 for `select'. */
 #undef SELECT_TYPE_ARG1
@@ -337,8 +346,17 @@
 /* Version number of package */
 #undef VERSION
 
+/* enable x11 client */
+#undef X11_CLIENT
+
+/* enable xp-mapedit program */
+#undef XP_MAPEDIT
+
 /* Define to 1 if the X Window System is missing or not being used. */
 #undef X_DISPLAY_MISSING
+
+/* compiling for windows target */
+#undef _WINDOWS
 
 /* Define like PROTOTYPES; this can be used by system headers. */
 #undef __PROTOTYPES

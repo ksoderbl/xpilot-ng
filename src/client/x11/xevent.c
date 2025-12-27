@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -24,12 +24,7 @@
  */
 
 #include "xpclient_x11.h"
-
-char xevent_version[] = VERSION;
-
-
-bool		initialPointerControl = false;
-bool		pointerControl = false;
+#include "../xhacks.h"
 
 int	talk_key_repeating;
 XEvent	talk_key_repeat_event;
@@ -68,11 +63,15 @@ keys_t Lookup_key(XEvent *event, KeySym ks, bool reset)
     return ret;
 }
 
-void Pointer_control_set_state(bool on)
+void Platform_specific_pointer_control_set_state(bool on)
 {
+    assert(clData.pointerControl != on);
+
     if (on) {
-	pointerControl = true;
-	XGrabPointer(dpy, drawWindow, true, 0, GrabModeAsync,
+	if (mouseAccelInClient)
+	    XChangePointerControl(dpy, True, True,
+				  new_acc_num, new_acc_denom, new_threshold);
+	XGrabPointer(dpy, drawWindow, True, 0, GrabModeAsync,
 		     GrabModeAsync, drawWindow, pointerControlCursor,
 		     CurrentTime);
 	XWarpPointer(dpy, None, drawWindow,
@@ -82,80 +81,31 @@ void Pointer_control_set_state(bool on)
 	XSelectInput(dpy, drawWindow,
 		     PointerMotionMask | ButtonPressMask | ButtonReleaseMask);
     } else {
-	pointerControl = false;
-	XUngrabPointer(dpy, CurrentTime);
-	XDefineCursor(dpy, drawWindow, None);
-	if (!selectionAndHistory)
-	    XSelectInput(dpy, drawWindow, 0);
-	else
-	    XSelectInput(dpy, drawWindow, ButtonPressMask | ButtonReleaseMask);
-	XFlush(dpy);
-    }
-}
-
-void Talk_set_state(bool on)
-{
-
-    if (on) {
-	/* Enable talking, disable pointer control if it is enabled. */
-	if (pointerControl) {
-	    initialPointerControl = true;
-	    Pointer_control_set_state(false);
-	}
-	if (selectionAndHistory)
-	    XSelectInput(dpy, drawWindow, PointerMotionMask
-			 | ButtonPressMask | ButtonReleaseMask);
-	Talk_map_window(true);
-    }
-    else {
-	/* Disable talking, enable pointer control if it was enabled. */
-	Talk_map_window(false);
-	if (initialPointerControl) {
-	    initialPointerControl = false;
-	    Pointer_control_set_state(true);
-	}
-    }
-}
-
-bool Key_press_pointer_control(void)
-{
-    if (mouseAccelInClient) {    
-	if (pre_exists && pointerControl)
+	if (mouseAccelInClient && pre_exists)
 	    XChangePointerControl(dpy, True, True, 
 				  pre_acc_num, pre_acc_denom, pre_threshold);
-	else
-	    XChangePointerControl(dpy, True, True,
-				  new_acc_num, new_acc_denom, new_threshold);
+	XUngrabPointer(dpy, CurrentTime);
+	XDefineCursor(dpy, drawWindow, None);
+	XSelectInput(dpy, drawWindow, ButtonPressMask | ButtonReleaseMask);
+	XFlush(dpy);
     }
-
-    Pointer_control_set_state(!pointerControl);
-    
-    return false;	/* server doesn't need to know */
+    Disable_emulate3buttons(on, dpy);
 }
 
-bool Key_press_swap_scalefactor(void)
+void Platform_specific_talk_set_state(bool on)
 {
-    double tmp;
+    assert(clData.talking != on);
 
-    tmp = scaleFactor;
-    scaleFactor = scaleFactor_s;
-    scaleFactor_s = tmp;
-
-    Init_scale_array();
-    Scale_dashes();
-    Config_redraw();
-    Bitmap_update_scale();
-
-    return false;
+    if (on) {
+	XSelectInput(dpy, drawWindow,
+		     PointerMotionMask | ButtonPressMask | ButtonReleaseMask);
+	Talk_map_window(true);
+    }
+    else
+	Talk_map_window(false);
 }
 
-bool Key_press_talk(void)
-{
-    Talk_set_state((talk_mapped == false) ? true : false);
-    return false;	/* server doesn't need to know */
-}
-
-bool Key_press_toggle_radar_score(void)
+void Toggle_radar_and_scorelist(void)
 {
     if (radar_score_mapped) {
 
@@ -204,19 +154,11 @@ bool Key_press_toggle_radar_score(void)
 
 	radar_score_mapped = true;
     }
-
-    return false;
 }
 
-bool Key_press_toggle_record(void)
+void Toggle_fullscreen(void)
 {
-    Record_toggle();
-    return false;	/* server doesn't need to know */
-}
-
-bool Key_press_toggle_fullscreen(void)
-{
-    return false;
+    return;
 }
 
 void Key_event(XEvent *event)
@@ -256,7 +198,7 @@ static void Handle_talk_key_repeat(void)
 	    Talk_event(&talk_key_repeat_event);
 	    talk_key_repeating = 2;
 	    talk_key_repeat_time = time_now;
-	    if (!talk_mapped)
+	    if (!clData.talking)
 		talk_key_repeating = 0;
 	}
     }
@@ -309,7 +251,7 @@ void xevent_pointer(void)
 {
     XEvent event;
 
-    if (!pointerControl || talk_mapped)
+    if (!clData.pointerControl || clData.talking)
 	return;
 
     if (mouseMovement != 0) {
@@ -374,8 +316,7 @@ int x_event(int new_input)
 	    break;
 
 	case SelectionClear:
-	    if (selectionAndHistory)
-		Clear_selection();
+	    Clear_selection();
 	    break;
 
 	case MapNotify:

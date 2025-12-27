@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -48,11 +48,18 @@ extern char textFontName[FONT_LEN];
 extern char talkFontName[FONT_LEN];
 extern char motdFontName[FONT_LEN];
 
+#define NUM_DASHES		2
+#define NUM_CDASHES		2
+#define DASHES_LENGTH		12
+
+extern char	dashes[NUM_DASHES];
+extern char	cdashes[NUM_CDASHES];
+
 extern Display	*dpy;			/* Display of player (pointer) */
 extern Display	*kdpy;			/* Keyboard display */
 extern short	about_page;		/* Which page is the player on? */
-extern bool	players_exposed;	/* Is score window exposed? */
 extern int	radar_exposures;	/* Is radar window exposed? */
+extern bool     radar_score_mapped;     /* Is the radar and score window mapped */
 
 #define	ITEM_HUD	0		/* one color for the HUD */
 #define	ITEM_PLAYFIELD	1		/* and one color for the playfield */
@@ -77,6 +84,7 @@ extern XColor	colors[MAX_COLORS];	/* Colors */
 extern Colormap	colormap;		/* Private colormap */
 extern int	maxColors;		/* Max. number of colors to use */
 extern bool	titleFlip;		/* Do special titlebar flipping? */
+extern bool	gotFocus;		/* Do we have the mouse pointer */
 
 extern int	(*radarDrawRectanglePtr)/* Function to draw player on radar */
 		(Display *disp, Drawable d, GC gc,

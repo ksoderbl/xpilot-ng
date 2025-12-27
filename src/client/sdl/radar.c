@@ -83,8 +83,8 @@ static void to_screen(GLWidget *radar, int *x, int *y, int from_w, int from_h)
 	fy += rb.h/2;
     }
 
-    *x = rb.x + (fx + 0.5);
-    *y = rb.y + rb.h - (fy + 0.5);
+    *x = (int)(rb.x + (fx + 0.5));
+    *y = (int)(rb.y + rb.h - (fy + 0.5));
 }
 
 static void Radar_paint_border(GLWidget *radar)
@@ -175,7 +175,7 @@ static void Radar_paint_world_blocks(GLWidget *radar, SDL_Surface *s)
 
 }
 
-static void Compute_bounds(ipos_t *min, ipos_t *max, const irec_t *b)
+static void Compute_bounds_radar(ipos_t *min, ipos_t *max, const irec_t *b)
 {
     min->x = (0 - (b->x + b->w)) / Setup->width;
     if (0 > b->x + b->w) min->x++;
@@ -205,7 +205,7 @@ static void Radar_paint_world_polygons(GLWidget *radar, SDL_Surface *s)
 
 	if (BIT(polygon_styles[polygons[i].style].flags,
 		STYLE_INVISIBLE_RADAR)) continue;
-	Compute_bounds(&min, &max, &polygons[i].bounds);
+	Compute_bounds_radar(&min, &max, &polygons[i].bounds);
 
 	for (xoff = min.x; xoff <= max.x; xoff++) {
 	    for (yoff = min.y; yoff <= max.y; yoff++) {
@@ -249,7 +249,7 @@ static void Radar_paint_objects( GLWidget *radar )
 	to_screen(radar, &x, &y, RadarWidth, RadarHeight);
 	x -= s/2;
 	y -= s/2;
-	if (radar_ptr[i].type == friend) glColor3ub(0, 0xff, 0);
+	if (radar_ptr[i].type == friendly) glColor3ub(0, 0xff, 0);
 	else glColor3ub(0xff, 0xff, 0xff);
 	glBegin(GL_QUADS);
 	glVertex2i(x, y);
@@ -323,8 +323,18 @@ static void Radar_paint_checkpoint(GLWidget *radar)
 
 static void move(Sint16 xrel,Sint16 yrel,Uint16 x,Uint16 y, void *data)
 {
-    ((GLWidget *)data)->bounds.x += xrel;
-    ((GLWidget *)data)->bounds.y += yrel;
+    char buf[40];
+    SDL_Rect *b;
+    
+    b = &(((GLWidget *)data)->bounds);
+    b->x += xrel;
+    b->y += yrel;
+    sprintf(buf, "%dx%d+%d+%d", 
+	    radar_bounds.w, 
+	    radar_bounds.h,
+	    b->x,
+	    b->y);
+    Set_string_option(Find_option("radarGeometry"), buf, xp_option_origin_config);
 }
 
 static void button( Uint8 button, Uint8 state , Uint16 x , Uint16 y, void *data )
@@ -459,8 +469,6 @@ static void Radar_paint( GLWidget *widget )
 {
     float xf, yf;
     
-    SDL_Rect radar_bounds;
-
     radar_bounds.x = ((GLWidget *)widget)->bounds.x;
     radar_bounds.y = ((GLWidget *)widget)->bounds.y;
     radar_bounds.w = ((GLWidget *)widget)->bounds.w-1;

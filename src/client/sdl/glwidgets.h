@@ -92,8 +92,11 @@ GLWidget *FindGLWidget( GLWidget *list, Uint16 x,Uint16 y );
 void DrawGLWidgetsi( GLWidget *list, int x, int y, int w, int h);
 GLWidget *FindGLWidgeti( GLWidget *widget, Uint16 x, Uint16 y );
 
-extern GLWidget *target[NUM_MOUSE_BUTTONS];
+extern GLWidget *clicktarget[NUM_MOUSE_BUTTONS];
 extern GLWidget *hovertarget;
+
+/* puts text into the copy buffer */
+void load_textscrap(char *text);
 /****************************************************/
 /* END: Main GLWidget stuff 	    	    	    */
 /****************************************************/
@@ -346,8 +349,9 @@ GLWidget *Init_ColorModWidget( Uint32 *value, Uint32 *fgcolor, Uint32 *bgcolor,
 /**********************/
 /* Begin: ListWidget  */
 /**********************/
-typedef enum {LW_DOWN, LW_UP} ListWidget_ver_dir_t;
-typedef enum {LW_RIGHT, LW_LEFT} ListWidget_hor_dir_t;
+typedef enum {HORISONTAL, VERTICAL} ListWidget_direction;
+typedef enum {LW_DOWN, LW_VCENTER, LW_UP} ListWidget_ver_dir_t;
+typedef enum {LW_RIGHT, LW_HCENTER, LW_LEFT} ListWidget_hor_dir_t;
 #define LISTWIDGET 11
 typedef struct {
      int num_elements;
@@ -355,13 +359,14 @@ typedef struct {
      Uint32 *bg2;
      Uint32 *highlight_color;/*not used (yet) */
      bool   reverse_scroll;
+     ListWidget_direction   direction;
      ListWidget_ver_dir_t   v_dir;
      ListWidget_hor_dir_t   h_dir;    
 } ListWidget;
 
 GLWidget *Init_ListWidget( Uint16 x, Uint16 y, Uint32 *bg1, Uint32 *bg2, Uint32 *highlight_color
     	    	    	    ,ListWidget_ver_dir_t v_dir, ListWidget_hor_dir_t h_dir
-			    ,bool reverse_scroll );
+			    ,ListWidget_direction direction, bool reverse_scroll );
 
 /*TODO: allow lists in prepen,append (needs to check against loops) */
 
@@ -389,7 +394,8 @@ GLWidget *ListWidget_GetItemByIndex( GLWidget *list, int i );
 /****************************/
 #define SCROLLPANEWIDGET 12
 typedef struct {
-    GLWidget	*scroller;
+    GLWidget	*vert_scroller;
+    GLWidget	*hori_scroller;
     GLWidget	*masque;
     GLWidget	*content;
 } ScrollPaneWidget;
@@ -431,6 +437,7 @@ typedef struct {
     GLWidget	*scorelist;
     GLWidget	*chat_msgs;
     GLWidget	*game_msgs;
+    GLWidget	*alert_msgs;
     int	    	BORDER;
     font_data	*font;
 } WrapperWidget;
@@ -448,12 +455,13 @@ void MainWidget_ShowMenu( GLWidget *widget, bool show );
 typedef struct {
     bool	showconf;
     GLWidget	*scrollpane;
+    GLWidget	*main_list;
+    GLWidget	*button_list;
+    GLWidget	*join_list;
     GLWidget	*ql;
-    GLWidget	*qb;
-    GLWidget	*sl;
-    GLWidget	*sb;
     GLWidget	*cl;
-    GLWidget	*cb;
+    GLWidget	*sl;
+    GLWidget	*jl;
 } ConfMenuWidget;
 
 GLWidget *Init_ConfMenuWidget( Uint16 x, Uint16 y );

@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -80,13 +80,6 @@
 	((pl1)->pseudo_team == (pl2)->pseudo_team)
 
 /*
- * Not used where we wish to know if a player is on the same team
- * and has immunity to shots, thrust sparks, lasers, ecms, etc.
- */
-/*#define TEAM_IMMUNE(pl1, pl2)	(options.teamImmunity && TEAM((pl1), (pl2)))*/
-
-#define NO_ID			(-1)
-/*
  * Used when we want to pass an index which is not in use.
  */
 #define NO_IND			(-1)
@@ -94,16 +87,23 @@
 #define RECOVERY_DELAY		(12 * 3)
 #define ROBOT_CREATE_DELAY	(12 * 2)
 
-#define NUM_IDS			256
-#define MAX_PSEUDO_PLAYERS      16
+/*
+ * ID values: In the network protocol these are 16 bit signed values.
+ */
+#define NO_ID			(-1)
 
-#define MIN_PASS_LEN		5
-#define MAX_PASS_LEN		16
+/* Currently there is 256 possible player IDs. */
+#define NUM_IDS			256
+#define MAX_PSEUDO_PLAYERS	16
+
+/* Expired mines have id EXPIRED_MINE_ID, defined in common/const.h */
+
+/* Cannon IDs. */
+#define NUM_CANNON_IDS		10000
+#define MIN_CANNON_ID		(EXPIRED_MINE_ID + 1)
+#define MAX_CANNON_ID		(EXPIRED_MINE_ID + NUM_CANNON_IDS)
 
 #define MAX_TOTAL_SHOTS		16384	/* must be <= 65536 */
-#define MAX_TOTAL_PULSES	(5 * 64)
-#define MAX_TOTAL_ECMS		64
-#define MAX_TOTAL_TRANSPORTERS	(2 * 64)
 
 /*
  * Energy drainage
@@ -121,7 +121,7 @@
 #define ED_SHOT_HIT		(-25.0)
 #define ED_SMART_SHOT_HIT	(-120.0)
 #define ED_PL_CRASH		(-100.0)
-#define ED_BALL_HIT		(-50.0)
+#define ED_BALL_HIT		(-options.ballCollisionFuelDrain)
 #define ED_LASER		(-10.0)
 #define ED_LASER_HIT		(-100.0)
 
@@ -156,27 +156,15 @@
 #define GRAVS_POWER		2.7
 
 #define ECM_DISTANCE		(VISIBILITY_DISTANCE*0.4)
-/* kps - maybe change this to ((VISIBILITY_DISTANCE*0.2) * CLICK),
- *   or even better, do VISIBILITY_DISTANCE *= CLICK
- */
 #define TRANSPORTER_DISTANCE	(VISIBILITY_DISTANCE*0.2)
-
-/*#define SHOT_DEFAULT_LIFE	60.0*/
-#define SHOT_MULT(o) \
-	((BIT((o)->mods.nuclear, NUCLEAR) && BIT((o)->mods.warhead, CLUSTER)) \
-	 ? options.nukeClusterDamage : 1.0)
 
 #define MINE_RADIUS		8
 #define MINE_RANGE	 	(VISIBILITY_DISTANCE*0.1)
 #define MINE_SENSE_BASE_RANGE   (MINE_RANGE*1.3)
 #define MINE_SENSE_RANGE_FACTOR (MINE_RANGE*0.3)
 #define MINE_MASS		30.0
-/*#define MINE_LIFETIME           (5000+(randomMT()&255)) */
-/*#define MINE_DEFAULT_LIFE	7200.0	*/
 #define MINE_SPEED_FACT		1.3
 
-/*#define MISSILE_LIFETIME	((randomMT()%(64 * 12 - 1) + 128 * 12))*/
-/*#define MISSILE_DEFAULT_LIFE	2400.0 */
 #define MISSILE_MASS		5.0
 #define MISSILE_RANGE		4
 #define SMART_SHOT_ACC		0.6
@@ -197,7 +185,6 @@
 #define NUKE_MASS_MULT		1
 #define NUKE_MINE_EXPL_MULT	3
 #define NUKE_SMART_EXPL_MULT	4
-/*#define NUKE_DEFAULT_DEBRIS_LIFE	120.0*/
 
 #define HEAT_RANGE		(VISIBILITY_DISTANCE/2)
 #define HEAT_SPEED_FACT		1.7
@@ -217,14 +204,6 @@
 #define HEAT_SHOT_LEN		15
 #define TORPEDO_LEN		18
 
-#if 0
-#define PULSE_SPEED		(90 * CLICK)
-#define PULSE_SAMPLE_DISTANCE	(5 * CLICK)
-#define PULSE_LENGTH		(PULSE_SPEED - PULSE_SAMPLE_DISTANCE)
-#define PULSE_MIN_LIFE		(4.5)
-#define PULSE_LIFE(lasers)	(PULSE_MIN_LIFE + ((lasers) / 4))
-#endif
-/*#define PULSE_DEFAULT_LIFE	6.0*/
 #define CANNON_PULSE_LIFE	(4.75)
 
 #define TRACTOR_MAX_RANGE(items)  (200 + (items) * 50)
@@ -266,8 +245,6 @@
 /* map dimension limitation: (0x7FFF - 1280) */
 /* Where does 1280 come from? uau */
 #define MAX_MAP_SIZE		31500
-
-#define WORM_BRAKE_FACTOR	1
 
 #define POLYGON_MAX_OFFSET	30000
 #define NO_GROUP		(-1)

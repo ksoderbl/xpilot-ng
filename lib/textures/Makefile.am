@@ -28,6 +28,7 @@ xpilottextures_DATA = \
 	fuelcell.ppm \
 	holder1.ppm \
 	holder2.ppm \
+	huditems.ppm \
 	logo.ppm \
 	metabtndown.png \
 	metabtnup.png \
@@ -48,11 +49,14 @@ xpilottextures_DATA = \
 	sdlmetabg.png \
 	shield.ppm \
 	ship.ppm \
+	ship_enemy.ppm \
+	ship_friend.ppm \
 	ship_blue.ppm \
 	ship_red.ppm \
 	ship_red2.ppm \
 	ship_red3.ppm \
 	sparks.ppm \
+	target.ppm \
 	volcanic.ppm \
 	wall_bottom.ppm \
 	wall_dl.ppm \

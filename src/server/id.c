@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -24,9 +24,6 @@
  */
 
 #include "xpserver.h"
-
-char id_version[] = VERSION;
-
 
 static int		ID_queue[NUM_IDS];
 static int		ID_inuse[NUM_IDS + 1];

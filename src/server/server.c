@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 2000-2004 by
  *
@@ -30,12 +30,6 @@
 
 #include "xpserver.h"
 
-char server_version[] = VERSION;
-
-#ifndef	lint
-char xpilots_versionid[] = "@(#)$" TITLE " $";
-#endif
-
 /*
  * Global variables
  */
@@ -53,21 +47,31 @@ long			main_loops = 0;		/* needed in events.c */
 bool			is_server = true;	/* used in common code */
 
 static bool		NoPlayersEnteredYet = true;
-int			game_lock = false;
-int			mute_baseless;
+bool			game_lock = false;
+bool			mute_baseless = false;
 
 time_t			gameOverTime = 0;
 time_t			serverStartTime = 0;
 
-static void Check_server_versions(void);
 static void Handle_signal(int sig_no);
 
 int main(int argc, char **argv)
 {
+    int timer_tick_rate;
     char *addr;
-    world_t *world = &World;
 
-    World_init(world);
+    /* world is a global now */
+    world = &World;
+
+    if (sock_startup() < 0) {
+    	warn("Error initializing sockets\n");
+	return 1;
+    }
+
+    if (World_init() < 0) {
+	warn("Error initializing world\n");
+	return 1;
+    }
 
     /*
      * Make output always linebuffered.  By default pipes
@@ -86,7 +90,6 @@ int main(int argc, char **argv)
 	   "  provided COPYING file.\n\n");
 
     init_error(argv[0]);
-    Check_server_versions();
 
     /*seedMT((unsigned)time(NULL) * Get_process_id());*/
     /* Removed seeding random number generator because of server recordings. */
@@ -96,27 +99,27 @@ int main(int argc, char **argv)
     /* Make trigonometric tables */
     Make_table();
 
-    if (!Parser(argc, argv, world))
+    if (!Parser(argc, argv))
 	exit(1);
 
-    Init_recording(world);
+    Init_recording();
     /* Lock the server into memory */
     plock_server(options.pLockServer);
 
-    Asteroid_line_init(world);
-    Wormhole_line_init(world);
-    Walls_init(world);
+    Asteroid_line_init();
+    Wormhole_line_init();
+    Walls_init();
 
     /* Allocate memory for players, shots and messages */
-    Alloc_players(world->NumBases + MAX_PSEUDO_PLAYERS + MAX_SPECTATORS);
-    spectatorStart = world->NumBases + MAX_PSEUDO_PLAYERS;
-    Alloc_shots(world, MAX_TOTAL_SHOTS);
-    Alloc_cells(world);
+    Alloc_players(Num_bases() + MAX_PSEUDO_PLAYERS + MAX_SPECTATORS);
+    spectatorStart = Num_bases() + MAX_PSEUDO_PLAYERS;
+    Alloc_shots(MAX_TOTAL_SHOTS);
+    Alloc_cells();
 
-    Move_init(world);
-    Robot_init(world);
-    Treasure_init(world);
-    Hitmasks_init(world);
+    Move_init();
+    Robot_init();
+    Treasure_init();
+    Hitmasks_init();
 
     Rank_init_saved_scores();
 
@@ -127,11 +130,7 @@ int main(int argc, char **argv)
 	addr = sock_get_addr_by_name(options.serverHost);
 	if (addr == NULL) {
 	    warn("Failed name lookup on: %s", options.serverHost);
-#ifndef _WINDOWS
 	    exit(1);
-#else
-	    return(1);
-#endif
 	}
 	serverAddr = xp_strdup(addr);
 	strlcpy(Server.host, options.serverHost, sizeof(Server.host));
@@ -150,8 +149,8 @@ int main(int argc, char **argv)
 
     Meta_init();
 
-    Timing_setup(world);
-    Check_playerlimit(world);
+    Timing_setup();
+    Check_playerlimit();
 
     if (Setup_net_server() == -1)
 	End_game();
@@ -174,14 +173,27 @@ int main(int argc, char **argv)
      */
     serverStartTime = time(NULL);
 
-    if (!options.silent)
-	xpprintf("%s Server runs at %d frames per second\n",
-		 showtime(), options.framesPerSecond);
+    xpprintf("%s Server runs at %d frames per second\n",
+	     showtime(), options.framesPerSecond);
 
-    teamcup_open_score_file();
-    teamcup_round_start();
+    teamcup_init();
 
+#ifdef SELECT_SCHED
     install_timer_tick(Main_loop, FPS);
+#else
+    if (options.timerResolution > 0)
+	timer_tick_rate = options.timerResolution;
+    else
+	timer_tick_rate = FPS;
+
+# ifdef _WINDOWS
+    /* Windows returns here, we let the worker thread call sched() */
+    install_timer_tick(ServerThreadTimerProc, timer_tick_rate);
+# else
+    install_timer_tick(Main_loop, timer_tick_rate);
+
+# endif
+#endif
 
     sched();
     xpprintf("sched returned!?");
@@ -192,7 +204,10 @@ int main(int argc, char **argv)
 
 void Main_loop(void)
 {
-    world_t *world = &World;
+    struct timeval tv1, tv2;
+    double t1, t2;
+
+    gettimeofday(&tv1, NULL);
 
     main_loops++;
 
@@ -227,7 +242,7 @@ void Main_loop(void)
 	    }
 	}
 
-	Update_objects(world);
+	Update_objects();
 
 	if ((main_loops % CONF_UPDATES_PR_FRAME) == 0)
 	    Frame_update();
@@ -249,7 +264,7 @@ void Main_loop(void)
     }
 
     playback = record = 0;
-    Queue_loop(world);
+    Queue_loop();
     playback = rplayback;
     record = rrecord;
 
@@ -272,6 +287,11 @@ void Main_loop(void)
 	j = *playback_ei++;
 	Setup_connection(a, b, c, i, d, e, j);
     }
+
+    gettimeofday(&tv2, NULL);
+    t1 = timeval_to_seconds(&tv1);
+    t2 = timeval_to_seconds(&tv2);
+    options.mainLoopTime = (t2 - t1) * 1e3;
 }
 
 
@@ -282,7 +302,6 @@ int End_game(void)
 {
     player_t *pl;
     char msg[MSG_LEN];
-    world_t *world = &World;
 
     record = rrecord;
     playback = rplayback; /* Could be called from signal handler */
@@ -292,7 +311,7 @@ int End_game(void)
     } else
 	snprintf(msg, sizeof(msg), "server exiting");
 
-    teamcup_close_score_file();
+    teamcup_game_over();
 
     while (NumPlayers > 0) {	/* Kick out all remaining players */
 	pl = Player_by_index(NumPlayers - 1);
@@ -312,7 +331,7 @@ int End_game(void)
 
     if (options.recordMode != 0) {
 	options.recordMode = 0;
-	Init_recording(world);
+	Init_recording();
     }
 
     /* Tell meta server that we are gone. */
@@ -325,18 +344,14 @@ int End_game(void)
     Rank_write_rankfile();
 
     Free_players();
-    Free_shots(world);
-    World_free(world);
-    Free_cells(world);
+    Free_shots();
+    World_free();
+    Free_cells();
     Free_options();
-    Log_game("END");			    /* options.Log end */
+    Log_game("END");
 
-    teamcup_kill_child();
-
-#ifndef _WINDOWS
+    sock_cleanup();
     exit (0);
-#endif
-    return(false); /* return false so windows bubbles out of the main loop */
 }
 
 /*
@@ -364,11 +379,10 @@ int Pick_team(int pick_for_type)
     player_t *pl;
     int playing[MAX_TEAMS], free_bases[MAX_TEAMS], available_teams[MAX_TEAMS];
     double team_score[MAX_TEAMS], losing_score;
-    world_t *world = &World;
 
     /* If game_lock is on, can't join playing teams (might be able to join
      * paused). */
-    if (game_lock && pick_for_type == PickForHuman)
+    if (game_lock && pick_for_type == PL_TYPE_HUMAN)
 	return TEAM_NOT_SET;
 
     for (i = 0; i < MAX_TEAMS; i++) {
@@ -378,7 +392,7 @@ int Pick_team(int pick_for_type)
 	available_teams[i] = 0;
     }
     if (options.restrictRobots) {
-	if (pick_for_type == PickForRobot) {
+	if (pick_for_type == PL_TYPE_ROBOT) {
 	    if (free_bases[options.robotTeam] > 0)
 		return options.robotTeam;
 	    else
@@ -386,7 +400,7 @@ int Pick_team(int pick_for_type)
 	}
     }
     if (options.reserveRobotTeam) {
-	if (pick_for_type != PickForRobot)
+	if (pick_for_type != PL_TYPE_ROBOT)
 	    free_bases[options.robotTeam] = 0;
     }
 
@@ -399,12 +413,12 @@ int Pick_team(int pick_for_type)
 	pl = Player_by_index(i);
 	if (Player_is_tank(pl))
 	    continue;
-	if (BIT(pl->status, PAUSE))
+	if (Player_is_paused(pl))
 	    continue;
 	if (!playing[pl->team]++)
 	    playing_teams++;
 	if (Player_is_human(pl) || Player_is_robot(pl))
-	    team_score[pl->team] += pl->score;
+	    team_score[pl->team] += Get_Score(pl);
     }
     if (playing_teams <= 1) {
 	for (i = 0; i < MAX_TEAMS; i++) {
@@ -474,7 +488,6 @@ void Server_info(char *str, size_t max_size)
     int i, j, k;
     player_t *pl, **order;
     char name[MAX_CHARS], lblstr[MAX_CHARS], msg[MSG_LEN];
-    world_t *world = &World;
 
     snprintf(str, max_size,
 	     "SERVER VERSION..: %s\n"
@@ -488,11 +501,11 @@ void Server_info(char *str, size_t max_size)
 	     "XPILOT NG SERVER, see\n"
 	     "http://xpilot.sourceforge.net/\n"
 	     "\n",
-	     server_version,
+	     VERSION,
 	     Describe_game_status(),
 	     FPS,
 	     world->name, world->author, world->width, world->height,
-	     NumPlayers, world->NumBases);
+	     NumPlayers, Num_bases());
 
     assert(strlen(str) < max_size);
 
@@ -518,7 +531,7 @@ void Server_info(char *str, size_t max_size)
 	pl = Player_by_index(i);
 
 	for (j = 0; j < i; j++) {
-	    if (order[j]->score < pl->score) {
+	    if (Get_Score(order[j]) < Get_Score(pl)) {
 		for (k = i; k > j; k--)
 		    order[k] = order[k - 1];
 		break;
@@ -529,9 +542,9 @@ void Server_info(char *str, size_t max_size)
     for (i = 0; i < NumPlayers; i++) {
 	pl = order[i];
 	strlcpy(name, pl->name, MAX_CHARS);
-	snprintf(lblstr, sizeof(lblstr), "%c%c %-19s%03d%6d",
+	snprintf(lblstr, sizeof(lblstr), "%c%c %-19s%03d%6.0f",
 		 pl->mychar, pl->team == TEAM_NOT_SET ? ' ' : (pl->team + '0'),
-		 name, (int)pl->life, (int)pl->score);
+		 name, pl->pl_life, Get_Score(pl));
 	snprintf(msg, sizeof(msg), "%2d... %-36s%s@%s\n",
 		 i + 1, lblstr, pl->username, pl->hostname);
 	if (strlen(msg) + strlen(str) >= max_size)
@@ -554,20 +567,20 @@ static void Handle_signal(int sig_no)
 	    signal(SIGHUP, SIG_IGN);
 	    return;
 	}
-	error("Caught SIGHUP, terminating.");
+	xpinfo("Caught SIGHUP, terminating.");
 	End_game();
 	break;
     case SIGINT:
-	error("Caught SIGINT, terminating.");
+	xpinfo("Caught SIGINT, terminating.");
 	End_game();
 	break;
     case SIGTERM:
-	error("Caught SIGTERM, terminating.");
+	xpinfo("Caught SIGTERM, terminating.");
 	End_game();
 	break;
 
     default:
-	error("Caught unkown signal: %d", sig_no);
+	xpinfo("Caught unknown signal: %d", sig_no);
 	End_game();
 	break;
     }
@@ -583,7 +596,6 @@ void Log_game(const char *heading)
     char timenow[81];
     struct tm *ptr;
     time_t lt;
-    world_t *world = &World;
 
     if (!options.Log)
 	return;
@@ -611,7 +623,6 @@ void Game_Over(void)
     int i, win_team = TEAM_NOT_SET, lose_team = TEAM_NOT_SET;
     char msg[MSG_LEN];
     player_t *win_pl = NULL, *lose_pl = NULL;
-    world_t *world = &World;
 
     Set_message("Game over...");
 
@@ -625,26 +636,30 @@ void Game_Over(void)
     if (BIT(world->rules->mode, TEAM_PLAY)) {
 	double teamscore[MAX_TEAMS];
 
-	maxsc = -1e6;
-	minsc = 1e6;
-
 	for (i = 0; i < MAX_TEAMS; i++)
-	    teamscore[i] = 1234567; /* These teams are not used... */
+	    teamscore[i] = FLT_MAX; /* These teams are not used... */
 
 	for (i = 0; i < NumPlayers; i++) {
 	    player_t *pl = Player_by_index(i);
 	    int team;
 
-	    if (Player_is_human(pl)) {
+	    if (Player_is_paused(pl))
+		continue;
+
+	    if (Player_is_human(pl)
+		|| Player_is_robot(pl)) {
 		team = pl->team;
-		if (teamscore[team] == 1234567)
+		if (teamscore[team] == FLT_MAX)
 		    teamscore[team] = 0;
-		teamscore[team] += pl->score;
+		teamscore[team] += Get_Score(pl);
 	    }
 	}
 
+	maxsc = -FLT_MAX;
+	minsc = FLT_MAX;
+
 	for (i = 0; i < MAX_TEAMS; i++) {
-	    if (teamscore[i] != 1234567) {
+	    if (teamscore[i] != FLT_MAX) {
 		if (teamscore[i] > maxsc) {
 		    maxsc = teamscore[i];
 		    win_team = i;
@@ -671,20 +686,23 @@ void Game_Over(void)
 	}
     }
 
-    maxsc = -1e6;
-    minsc = 1e6;
+    maxsc = -FLT_MAX;
+    minsc = FLT_MAX;
 
     for (i = 0; i < NumPlayers; i++) {
 	player_t *pl_i = Player_by_index(i);
 
-	SET_BIT(pl_i->status, GAME_OVER);
+	if (Player_is_paused(pl_i))
+	    continue;
+
+	Player_set_state(pl_i, PL_STATE_DEAD);
 	if (Player_is_human(pl_i)) {
-	    if (pl_i->score > maxsc) {
-		maxsc = pl_i->score;
+	    if (Get_Score(pl_i) > maxsc) {
+		maxsc = Get_Score(pl_i);
 		win_pl = pl_i;
 	    }
-	    if (pl_i->score < minsc) {
-		minsc = pl_i->score;
+	    if (Get_Score(pl_i) < minsc) {
+		minsc = Get_Score(pl_i);
 		lose_pl = pl_i;
 	    }
 	}
@@ -701,6 +719,19 @@ void Game_Over(void)
     }
 }
 
+void Server_shutdown(const char *user_name, int delay, const char *reason)
+{
+    Set_message_f("|*******| %s (%s) |*******| \"%s\" [*Server notice*]",
+		  (delay > 0) ? "SHUTTING DOWN" : "SHUTDOWN STOPPED",
+		  user_name, reason);
+    strlcpy(ShutdownReason, reason, sizeof(ShutdownReason));
+    if (delay > 0) {
+	/* delay is in seconds */;
+	ShutdownServer = delay * FPS;
+	ShutdownDelay = ShutdownServer;
+    } else
+	ShutdownServer = -1;
+}
 
 void Server_log_admin_message(player_t *pl, const char *str)
 {
@@ -738,137 +769,6 @@ void Server_log_admin_message(player_t *pl, const char *str)
     }
     else
 	Set_player_message(pl, " < GOD doesn't seem to be listening>");
-}
-
-
-/*
- * Verify that all source files making up this program have been
- * compiled for the same version.  Too often bugs have been reported
- * for incorrectly compiled programs.
- */
-extern char asteroid_version[];
-extern char auth_version[];
-extern char cannon_version[];
-extern char cell_version[];
-extern char checknames_version[];
-extern char cmdline_version[];
-extern char collision_version[];
-extern char command_version[];
-extern char config_version[];
-extern char contact_version[];
-extern char error_version[];
-extern char event_version[];
-extern char fileparser_version[];
-extern char frame_version[];
-extern char id_version[];
-extern char item_version[];
-extern char laser_version[];
-extern char map_version[];
-extern char math_version[];
-extern char metaserver_version[];
-extern char net_version[];
-extern char netserver_version[];
-extern char objpos_version[];
-extern char option_version[];
-extern char parser_version[];
-extern char play_version[];
-extern char player_version[];
-extern char polygon_version[];
-extern char portability_version[];
-extern char rank_version[];
-extern char recwrap_version[];
-extern char robot_version[];
-extern char robotdef_version[];
-extern char rules_version[];
-extern char saudio_version[];
-extern char sched_version[];
-extern char score_version[];
-extern char ship_version[];
-extern char shipshape_version[];
-extern char shot_version[];
-extern char socklib_version[];
-extern char srecord_version[];
-extern char teamcup_version[];
-extern char tuner_version[];
-extern char update_version[];
-extern char walls_version[];
-extern char xpmap_version[];
-extern char xp2map_version[];
-
-static void Check_server_versions(void)
-{
-    static struct file_version {
-	char		filename[16];
-	char		*versionstr;
-    } file_versions[] = {
-	{ "asteroid", asteroid_version },
-	{ "auth", auth_version },
-	{ "cannon", cannon_version },
-	{ "cell", cell_version },
-	{ "checknames", checknames_version },
-	{ "cmdline", cmdline_version },
-	{ "collision", collision_version },
-	{ "command", command_version },
-	{ "config", config_version },
-	{ "contact", contact_version },
-	{ "error", error_version },
-	{ "event", event_version },
-	{ "fileparser", fileparser_version },
-	{ "frame", frame_version },
-	{ "id", id_version },
-	{ "item", item_version },
-	{ "laser", laser_version },
-	{ "map", map_version },
-	{ "math", math_version },
-	{ "metaserver", metaserver_version },
-	{ "net", net_version },
-	{ "netserver", netserver_version },
-	{ "objpos", objpos_version },
-	{ "option", option_version },
-	{ "parser", parser_version },
-	{ "play", play_version },
-	{ "player", player_version },
-	{ "polygon", polygon_version },
-	{ "portability", portability_version },
-	{ "rank", rank_version },
-	{ "recwrap", recwrap_version },
-	{ "robot", robot_version },
-	{ "robotdef", robotdef_version },
-	{ "rules", rules_version },
-	{ "saudio", saudio_version },
-	{ "sched", sched_version },
-	{ "score", score_version },
-	{ "server", server_version },
-	{ "ship", ship_version },
-	{ "shipshape", shipshape_version },
-	{ "shot", shot_version },
-	{ "socklib", socklib_version },
-	{ "srecord", srecord_version },
-	{ "teamcup", teamcup_version },
-	{ "tuner", tuner_version },
-	{ "update", update_version },
-	{ "walls", walls_version },
-	{ "xpmap", xpmap_version },
-	{ "xp2map", xp2map_version },
-    };
-    int			i;
-    int			oops = 0;
-
-    for (i = 0; i < NELEM(file_versions); i++) {
-	if (strcmp(VERSION, file_versions[i].versionstr)) {
-	    oops++;
-	    warn("Source file %s.c (\"%s\") is not compiled "
-		 "for the current version (\"%s\")!",
-		 file_versions[i].filename,
-		 file_versions[i].versionstr,
-		 VERSION);
-	}
-    }
-    if (oops) {
-	warn("%d version inconsistency errors, cannot continue.", oops);
-	warn("Please recompile this program properly.");
-	exit(1);
-    }
 }
 
 #if defined(PLOCKSERVER) && defined(__linux__)
@@ -920,3 +820,48 @@ int plock_server(bool on)
     return 0;
 #endif
 }
+
+
+/* kps - this is really ugly */
+extern bool in_move_player;
+
+bool Friction_area_hitfunc(group_t *groupptr, const move_t *move)
+{
+    UNUSED_PARAM(groupptr); UNUSED_PARAM(move);
+
+    if (in_move_player)
+	return true;
+    return false;
+}
+
+/*
+ * Handling of group properties
+ */
+void Team_immunity_init(void)
+{
+    int group;
+
+    for (group = 0; group < num_groups; group++) {
+	group_t *gp = groupptr_by_id(group);
+
+	if (gp->type == CANNON) {
+	    cannon_t *cannon = Cannon_by_index(gp->mapobj_ind);
+
+	    assert(cannon->group == group);
+	    Cannon_set_hitmask(group, cannon);
+	}
+    }
+
+#if 0
+    /* change hitmask of all cannons */
+    P_grouphack(CANNON, Cannon_set_hitmask);
+#endif
+}
+
+/* kps - called at server startup to initialize hit masks */
+void Hitmasks_init(void)
+{
+    Target_init();
+    Team_immunity_init();
+}
+

@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -46,8 +46,6 @@
 # define HAVE_STRCASECMP 1
 # define HAVE_STRNCASECMP 1
 # define HAVE_LIBZ 1
-# define PACKAGE "xpilot-ng"
-# define PACKAGE_BUGREPORT "kps@users.sourceforge.net"
 #endif
 
 #include <stdio.h>
@@ -234,9 +232,9 @@
 #  include "../server/NT/winServer.h"
 #  include "../server/NT/winSvrThread.h"
 extern char *showtime(void);
-# elif !defined(_XPMONNT_)
+/*# elif !defined(_XPMONNT_)
 #  include "NT/winX.h"
-#  include "../client/NT/winClient.h"
+#  include "../client/NT/winClient.h"*/
 # endif
 static void Win_show_error(char *errmsg);
 # include <io.h>
@@ -253,19 +251,23 @@ static void Win_show_error(char *errmsg);
 # define write(x__, y__, z__) send(x__, y__, z__,0)
   /* Windows some more hacks: */
 # define getpid() _getpid()
+#ifdef _MSC_VER
 typedef int socklen_t;
+#define inline __inline
+#endif
 #endif
 
 /* Common XPilot header files. */
 
 #include "version.h"
 #include "xpconfig.h"
+#include "arraylist.h"
 #include "astershape.h"
 #include "bit.h"
 #include "checknames.h"
+#include "click.h"
 #include "commonproto.h"
 #include "const.h"
-#include "draw.h"
 #include "error.h"
 #include "item.h"
 #include "list.h"
@@ -276,12 +278,41 @@ typedef int socklen_t;
 #include "portability.h"
 #include "rules.h"
 #include "setup.h"
+#include "shipshape.h"
 #include "socklib.h"
 #include "types.h"
 #include "wreckshape.h"
+#include "xpmap.h"
 
 #ifdef	SOUND
 # include "audio.h"
 #endif
+
+static inline double timeval_to_seconds(struct timeval *tvp)
+{
+    return (double)tvp->tv_sec + tvp->tv_usec * 1e-6;
+}
+
+static inline struct timeval seconds_to_timeval(double t)
+{
+    struct timeval tv;
+
+    tv.tv_sec = (unsigned)t;
+    tv.tv_usec = (unsigned)(((t - (double)tv.tv_sec) * 1e6) + 0.5);
+
+    return tv;
+}
+
+/* returns 'tv2 - tv1' */
+static inline int timeval_sub(struct timeval *tv2,
+			      struct timeval *tv1)
+{
+    int s, us;
+
+    s = tv2->tv_sec - tv1->tv_sec;
+    us = tv2->tv_usec - tv1->tv_usec;
+
+    return 1000000 * s + us;
+}
 
 #endif /* XPCOMMON_H */

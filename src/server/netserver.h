@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -26,9 +26,9 @@
 #ifndef	NETSERVER_H
 #define	NETSERVER_H
 
-#ifndef OBJECT_H
+#ifndef PLAYER_H
 /* need player_t */
-#include "object.h"
+#include "player.h"
 #endif
 
 int Setup_net_server(void);
@@ -44,17 +44,14 @@ int Send_self(connection_t *connp, player_t *pl,
 	      int lock_dist,
 	      int lock_dir,
 	      int autopilotlight,
-	      long status,
+	      int status,
 	      char *mods);
 int Send_leave(connection_t *connp, int id);
-int Send_war(connection_t *connp, int robot_id, int killer_id);
-int Send_seek(connection_t *connp, int programmer_id, int robot_id, int sought_id);
 int Send_player(connection_t *connp, int id);
 int Send_team(connection_t *connp, int id, int team);
 int Send_score(connection_t *connp, int id, double score,
 	       int life, int mychar, int alliance);
 int Send_score_object(connection_t *connp, double score, clpos_t pos, const char *string);
-int Send_team_score(connection_t *connp, int team, double score);
 int Send_timing(connection_t *connp, int id, int check, int round);
 int Send_base(connection_t *connp, int id, int num);
 int Send_fuel(connection_t *connp, int num, double fuel);
@@ -73,6 +70,7 @@ int Send_ball(connection_t *connp, clpos_t pos, int id, int style);
 int Send_mine(connection_t *connp, clpos_t pos, int teammine, int id);
 int Send_target(connection_t *connp, int num, int dead_ticks, double damage);
 int Send_wormhole(connection_t *connp, clpos_t pos);
+int Send_polystyle(connection_t *connp, int polyind, int newstyle);
 int Send_audio(connection_t *connp, int type, int vol);
 int Send_item(connection_t *connp, clpos_t pos, int type);
 int Send_paused(connection_t *connp, clpos_t pos, int count);
@@ -103,7 +101,6 @@ int Check_max_clients_per_IP(char *host_addr);
 #define FEATURE(connp, feature)	((connp)->features & (feature))
 #define F_POLY			(1 << 0)
 #define F_FLOATSCORE		(1 << 1)
-#define F_TEAMSCORE		F_FLOATSCORE
 #define F_EXPLICITSELF		(1 << 2)
 #define F_ASTEROID		(1 << 3)
 #define F_TEMPWORM		(1 << 4)
@@ -114,5 +111,6 @@ int Check_max_clients_per_IP(char *host_addr);
 #define F_SENDTEAM		F_SHOW_APPEARING
 #define F_CUMULATIVETURN	(1 << 9)
 #define F_BALLSTYLE		(1 << 10)
+#define F_POLYSTYLE		(1 << 11)
 
 #endif

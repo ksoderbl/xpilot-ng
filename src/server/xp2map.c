@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 2000-2004 by
  *
@@ -25,20 +25,19 @@
 #include <zlib.h>
 #include "xpserver.h"
 
-char xp2map_version[] = VERSION;
-
 #define DEFAULT_POS { -1, -1 }
 
 /*
  * The world whose map we are currently parsing.
  */
-static world_t *current_world = NULL;
+static bool parsing_general_options = false;
+static cannon_t *current_cannon = NULL;
+static base_t *current_base = NULL;
 
 static void tagstart(void *data, const char *el, const char **attr)
 {
     static double scale = 1;
-    static int xptag = 0;
-    world_t *world = current_world;
+    static bool xptag = false;
 
     UNUSED_PARAM(data);
     if (!strcasecmp(el, "XPilotMap")) {
@@ -54,11 +53,11 @@ static void tagstart(void *data, const char *el, const char **attr)
 	}
 	else if (version < 1)
 	    warn("Impossible version in map file");
-	else if (version > 1.1) {
+	else if (version > 1.2) {
 	    warn("Map file has newer version than this server recognizes.");
 	    warn("The map file might use unsupported features.");
 	}
-	xptag = 1;
+	xptag = true;
 	return;
     }
 
@@ -168,9 +167,9 @@ static void tagstart(void *data, const char *el, const char **attr)
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "x"))
-		pos.cx = atoi(*(attr + 1)) * scale;
+		pos.cx = (click_t)(atoi(*(attr + 1)) * scale);
 	    if (!strcasecmp(*attr, "y"))
-		pos.cy = atoi(*(attr + 1)) * scale;
+		pos.cy = (click_t)(atoi(*(attr + 1)) * scale);
 	    if (!strcasecmp(*attr, "style"))
 		style = P_get_poly_id(*(attr + 1));
 	    attr += 2;
@@ -179,17 +178,32 @@ static void tagstart(void *data, const char *el, const char **attr)
 	return;
     }
 
+    if (!strcasecmp(el, "Style")) {
+	char state[100];
+	int style = -1;
+
+	while (*attr) {
+	    if (!strcasecmp(*attr, "state"))
+		strlcpy(state, *(attr + 1), sizeof(state));
+	    if (!strcasecmp(*attr, "id"))
+		style = P_get_poly_id(*(attr + 1));
+	    attr += 2;
+	}
+	P_style(state, style);
+	return;
+    }
+
     if (!strcasecmp(el, "Check")) {
 	clpos_t pos = DEFAULT_POS;
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "x"))
-		pos.cx = atoi(*(attr + 1)) * scale;
+		pos.cx = (click_t)(atoi(*(attr + 1)) * scale);
 	    if (!strcasecmp(*attr, "y"))
-		pos.cy = atoi(*(attr + 1)) * scale;
+		pos.cy = (click_t)(atoi(*(attr + 1)) * scale);
 	    attr += 2;
 	}
-	World_place_check(world, pos, -1);
+	World_place_check(pos, -1);
 	return;
     }
 
@@ -201,35 +215,39 @@ static void tagstart(void *data, const char *el, const char **attr)
 	    if (!strcasecmp(*attr, "team"))
 		team = atoi(*(attr + 1));
 	    if (!strcasecmp(*attr, "x"))
-		pos.cx = atoi(*(attr + 1)) * scale;
+		pos.cx = (click_t)(atoi(*(attr + 1)) * scale);
 	    if (!strcasecmp(*attr, "y"))
-		pos.cy = atoi(*(attr + 1)) * scale;
+		pos.cy = (click_t)(atoi(*(attr + 1)) * scale);
 	    attr += 2;
 	}
-	World_place_fuel(world, pos, team);
+	World_place_fuel(pos, team);
 	return;
     }
 
     if (!strcasecmp(el, "Base")) {
-	int team = TEAM_NOT_SET, dir = DIR_UP;
+	int team = TEAM_NOT_SET, dir = DIR_UP, order = 0;
 	clpos_t pos = DEFAULT_POS;
+	int ind;
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "team"))
 		team = atoi(*(attr + 1));
 	    if (!strcasecmp(*attr, "x"))
-		pos.cx = atoi(*(attr + 1)) * scale;
+		pos.cx = (click_t)(atoi(*(attr + 1)) * scale);
 	    if (!strcasecmp(*attr, "y"))
-		pos.cy = atoi(*(attr + 1)) * scale;
+		pos.cy = (click_t)(atoi(*(attr + 1)) * scale);
 	    if (!strcasecmp(*attr, "dir"))
 		dir = atoi(*(attr + 1));
+	    if (!strcasecmp(*attr, "order"))
+		order = atoi(*(attr + 1));
 	    attr += 2;
 	}
 	if (team < 0 || team >= MAX_TEAMS) {
 	    warn("Illegal team number in base tag.\n");
 	    exit(1);
 	}
-	World_place_base(world, pos, dir, team);
+	ind = World_place_base(pos, dir, team, order);
+	current_base = Base_by_index(ind);
 	return;
     }
 
@@ -242,14 +260,14 @@ static void tagstart(void *data, const char *el, const char **attr)
 	    if (!strcasecmp(*attr, "team"))
 		team = atoi(*(attr + 1));
 	    if (!strcasecmp(*attr, "x"))
-		pos.cx = atoi(*(attr + 1)) * scale;
+		pos.cx = (click_t)(atoi(*(attr + 1)) * scale);
 	    if (!strcasecmp(*attr, "y"))
-		pos.cy = atoi(*(attr + 1)) * scale;
+		pos.cy = (click_t)(atoi(*(attr + 1)) * scale);
 	    if (!strcasecmp(*attr, "style"))
 		style = P_get_poly_id(*(attr + 1));
 	    attr += 2;
 	}
-	World_place_treasure(world, pos, team, false, style);
+	World_place_treasure(pos, team, false, style);
 	return;
     }
 
@@ -261,15 +279,16 @@ static void tagstart(void *data, const char *el, const char **attr)
 	    if (!strcasecmp(*attr, "team"))
 		team = atoi(*(attr + 1));
 	    else if (!strcasecmp(*attr, "x"))
-		pos.cx = atoi(*(attr + 1)) * scale;
+		pos.cx = (click_t)(atoi(*(attr + 1)) * scale);
 	    else if (!strcasecmp(*attr, "y"))
-		pos.cy = atoi(*(attr + 1)) * scale;
+		pos.cy = (click_t)(atoi(*(attr + 1)) * scale);
 	    else if (!strcasecmp(*attr, "dir"))
 		dir = atoi(*(attr + 1));
 	    attr += 2;
 	}
-	cannon_ind = World_place_cannon(world, pos, dir, team);
+	cannon_ind = World_place_cannon(pos, dir, team);
 	P_start_cannon(cannon_ind);
+	current_cannon = Cannon_by_index(cannon_ind);
 	return;
     }
 
@@ -281,12 +300,12 @@ static void tagstart(void *data, const char *el, const char **attr)
 	    if (!strcasecmp(*attr, "team"))
 		team = atoi(*(attr + 1));
 	    else if (!strcasecmp(*attr, "x"))
-		pos.cx = atoi(*(attr + 1)) * scale;
+		pos.cx = (click_t)(atoi(*(attr + 1)) * scale);
 	    else if (!strcasecmp(*attr, "y"))
-		pos.cy = atoi(*(attr + 1)) * scale;
+		pos.cy = (click_t)(atoi(*(attr + 1)) * scale);
 	    attr += 2;
 	}
-	target_ind = World_place_target(world, pos, team);
+	target_ind = World_place_target(pos, team);
 	P_start_target(target_ind);
 	return;
     }
@@ -296,12 +315,12 @@ static void tagstart(void *data, const char *el, const char **attr)
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "x"))
-		pos.cx = atoi(*(attr + 1)) * scale;
+		pos.cx = (click_t)(atoi(*(attr + 1)) * scale);
 	    if (!strcasecmp(*attr, "y"))
-		pos.cy = atoi(*(attr + 1)) * scale;
+		pos.cy = (click_t)(atoi(*(attr + 1)) * scale);
 	    attr += 2;
 	}
-	World_place_item_concentrator(world, pos);
+	World_place_item_concentrator(pos);
 	return;
     }
 
@@ -310,12 +329,12 @@ static void tagstart(void *data, const char *el, const char **attr)
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "x"))
-		pos.cx = atoi(*(attr + 1)) * scale;
+		pos.cx = (click_t)(atoi(*(attr + 1)) * scale);
 	    if (!strcasecmp(*attr, "y"))
-		pos.cy = atoi(*(attr + 1)) * scale;
+		pos.cy = (click_t)(atoi(*(attr + 1)) * scale);
 	    attr += 2;
 	}
-	World_place_asteroid_concentrator(world, pos);
+	World_place_asteroid_concentrator(pos);
 	return;
     }
 
@@ -326,9 +345,9 @@ static void tagstart(void *data, const char *el, const char **attr)
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "x"))
-		pos.cx = atoi(*(attr + 1)) * scale;
+		pos.cx = (click_t)(atoi(*(attr + 1)) * scale);
 	    else if (!strcasecmp(*attr, "y"))
-		pos.cy = atoi(*(attr + 1)) * scale;
+		pos.cy = (click_t)(atoi(*(attr + 1)) * scale);
 	    else if (!strcasecmp(*attr, "force"))
 		force = atof(*(attr + 1));
 	    else if (!strcasecmp(*attr, "type")) {
@@ -358,7 +377,7 @@ static void tagstart(void *data, const char *el, const char **attr)
 	    warn("Illegal type in grav tag.\n");
 	    exit(1);
 	}
-	World_place_grav(world, pos, force, type);
+	World_place_grav(pos, force, type);
 	return;
     }
 
@@ -369,9 +388,9 @@ static void tagstart(void *data, const char *el, const char **attr)
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "x"))
-		pos.cx = atoi(*(attr + 1)) * scale;
+		pos.cx = (click_t)(atoi(*(attr + 1)) * scale);
 	    else if (!strcasecmp(*attr, "y"))
-		pos.cy = atoi(*(attr + 1)) * scale;
+		pos.cy = (click_t)(atoi(*(attr + 1)) * scale);
 	    else if (!strcasecmp(*attr, "type")) {
 		const char *s = *(attr + 1);
 
@@ -381,11 +400,13 @@ static void tagstart(void *data, const char *el, const char **attr)
 		    type = WORM_IN;
 		else if (!strcasecmp(s, "out"))
 		    type = WORM_OUT;
+		else if (!strcasecmp(s, "fixed"))
+		    type = WORM_FIXED;
 	    }
 
 	    attr += 2;
 	}
-	wh_ind = World_place_wormhole(world, pos, type);
+	wh_ind = World_place_wormhole(pos, type);
 	P_start_wormhole(wh_ind);
 	return;
     }
@@ -400,7 +421,7 @@ static void tagstart(void *data, const char *el, const char **attr)
 		fric = atof(*(attr + 1));
 	    attr += 2;
 	}
-	area_ind = World_place_friction_area(world, pos, fric);
+	area_ind = World_place_friction_area(pos, fric);
 	P_start_friction_area(area_ind);
 	return;
     }
@@ -414,7 +435,18 @@ static void tagstart(void *data, const char *el, const char **attr)
 		value = *(attr + 1);
 	    attr += 2;
 	}
-	Option_set_value(name, value, 0, OPT_MAP);
+	if (parsing_general_options)
+	    Option_set_value(name, value, 0, OPT_MAP);
+	else if (current_base)
+	    Base_set_option(current_base, name, value);
+	else if (current_cannon)
+	    Cannon_set_option(current_cannon, name, value);	    
+	else {
+	    warn("Options can be specified for:");
+	    warn("<GeneralOptions>, <Base> or <Cannon>.");
+	    warn("Option %s given out of context in map.", name);
+	    exit(1);
+	}
 	return;
     }
 
@@ -423,9 +455,9 @@ static void tagstart(void *data, const char *el, const char **attr)
 	int edgestyle = -1;
 	while (*attr) {
 	    if (!strcasecmp(*attr, "x"))
-		offset.cx = atoi(*(attr + 1)) * scale;
+		offset.cx = (click_t)(atoi(*(attr + 1)) * scale);
 	    if (!strcasecmp(*attr, "y"))
-		offset.cy = atoi(*(attr + 1)) * scale;
+		offset.cy = (click_t)(atoi(*(attr + 1)) * scale);
 	    if (!strcasecmp(*attr, "style"))
 		edgestyle = P_get_edge_id(*(attr + 1));
 	    attr += 2;
@@ -434,8 +466,10 @@ static void tagstart(void *data, const char *el, const char **attr)
 	return;
     }
 
-    if (!strcasecmp(el, "GeneralOptions"))
+    if (!strcasecmp(el, "GeneralOptions")) {
+	parsing_general_options = true;
 	return;
+    }
 
     warn("Unknown map tag: \"%s\"", el);
     return;
@@ -444,18 +478,20 @@ static void tagstart(void *data, const char *el, const char **attr)
 
 static void tagend(void *data, const char *el)
 {
-    world_t *world = current_world;
-
     UNUSED_PARAM(data);
     if (!strcasecmp(el, "Decor"))
 	P_end_decor();
+    else if (!strcasecmp(el, "Base"))
+	current_base = NULL;
     else if (!strcasecmp(el, "BallArea"))
 	P_end_ballarea();
     else if (!strcasecmp(el, "BallTarget"))
 	P_end_balltarget();
-    else if (!strcasecmp(el, "Cannon"))
+    else if (!strcasecmp(el, "Cannon")) {
 	P_end_cannon();
-    else if (!strcasecmp(el, "FrictionArea"))
+	Cannon_init(current_cannon);
+	current_cannon = NULL;
+    } else if (!strcasecmp(el, "FrictionArea"))
 	P_end_friction_area();
     else if (!strcasecmp(el, "Target"))
 	P_end_target();
@@ -465,22 +501,23 @@ static void tagend(void *data, const char *el)
 	P_end_polygon();
 
     if (!strcasecmp(el, "GeneralOptions")) {
+	parsing_general_options = false;
 	/* ok, got to the end of options */
 	Options_parse();
 	/* kps - this can fail - fix */
-	Grok_map_options(world);
+	Grok_map_options();
     }
     return;
 }
 
 
-bool isXp2MapFile(int fd)
+bool isXp2MapFile(FILE* ifile)
 {
     char start[] = "<XPilotMap";
     char buf[16];
     int n;
 
-    n = read(fd, buf, sizeof(buf));
+    n = fread(buf, 1, sizeof(buf), ifile);
     if (n < 0) {
 	error("Error reading map!");
 	return false;
@@ -489,7 +526,7 @@ bool isXp2MapFile(int fd)
 	return false;
 
     /* assume this works */
-    (void)lseek(fd, 0, SEEK_SET);
+    fseek(ifile, 0, SEEK_SET);
     /* gz magic from gzio.h */
     if (buf[0] == (char)0x1f && buf[1] == (char)0x8b)
 	return true;
@@ -498,16 +535,13 @@ bool isXp2MapFile(int fd)
     return false;
 }
 
-bool parseXp2MapFile(int fd, optOrigin opt_origin, world_t *world)
+bool parseXp2MapFile(char* fname, optOrigin opt_origin)
 {
     gzFile in;
-    struct stat info;
     char buff[8192];
-    int len;
-    unsigned int left;
+    int len, last_chunk;
+    unsigned left;
     XML_Parser p = XML_ParserCreate(NULL);
-
-    current_world = world;
 
     UNUSED_PARAM(opt_origin);
     if (!p) {
@@ -515,9 +549,9 @@ bool parseXp2MapFile(int fd, optOrigin opt_origin, world_t *world)
 	return false;
     }
     XML_SetElementHandler(p, tagstart, tagend);
-    /* dup used here because gzclose closes the fd */
-    fd = dup(fd);
-    if (fd == -1 || (in = gzdopen(fd, "rb")) == NULL) {
+    
+    in = gzopen(fname, "rb");
+    if (in == NULL) {
 	error("Error reading map!");
 	return false;
     }
@@ -526,6 +560,7 @@ bool parseXp2MapFile(int fd, optOrigin opt_origin, world_t *world)
 	gzclose(in);
 	return false;
     }
+    left = 1 << 30;
     if (strncmp("XPD ", buff, 4) == 0) {
 	if (gzgets(in, buff, 8192) == Z_NULL
 	    || sscanf(buff, "%*s %u", &left) != 1) {
@@ -534,30 +569,29 @@ bool parseXp2MapFile(int fd, optOrigin opt_origin, world_t *world)
 	    return false;
 	}
     } else {
-	if (gzrewind(in) == -1
-	    || 	fstat(fd, &info) == -1) {
+	if (gzrewind(in) == -1) {
 	    error("Error reading map!");
 	    gzclose(in);
 	    return false;
 	}
-	left = (unsigned int)info.st_size;
     }
     do {
-	len = gzread(in, buff, MIN(8192, left));
+        len = gzread(in, buff, MIN(8192, left));
 	if (len < 0) {
 	    error("Error reading map!");
 	    gzclose(in);
 	    return false;
 	}
 	left -= len;
-	if (!XML_Parse(p, buff, len, left == 0)) {
+	last_chunk = (left == 0 || len < 8192);
+	if (!XML_Parse(p, buff, len, last_chunk)) {
 	    warn("Parse error reading map at line %d:\n%s\n",
 		  XML_GetCurrentLineNumber(p),
 		  XML_ErrorString(XML_GetErrorCode(p)));
 	    gzclose(in);
 	    return false;
 	}
-    } while (left);
+    } while (!last_chunk);
     gzclose(in);
     return true;
 }

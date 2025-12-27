@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -25,9 +25,6 @@
 
 #include "xpclient_x11.h"
 
-char talk_version[] = VERSION;
-
-
 /* Information window dimensions */
 #define TALK_TEXT_HEIGHT	(talkFont->ascent + talkFont->descent)
 #define TALK_OUTSIDE_BORDER	2
@@ -45,7 +42,6 @@ char talk_version[] = VERSION;
 /*
  * Globals.
  */
-bool			talk_mapped;
 
 static bool		talk_created;
 static char		talk_str[MAX_CHARS];
@@ -78,18 +74,14 @@ static void Talk_create_window(void)
 			      TALK_OUTSIDE_BORDER, colors[WHITE].pixel,
 			      colors[BLACK].pixel);
 
-    if (!selectionAndHistory)
-	XSelectInput(dpy, talkWindow,
-		     KeyPressMask | KeyReleaseMask | ExposureMask);
-    else
-	XSelectInput(dpy, talkWindow, ButtonPressMask | ButtonReleaseMask |
-				KeyPressMask | KeyReleaseMask | ExposureMask);
+    XSelectInput(dpy, talkWindow, ButtonPressMask | ButtonReleaseMask |
+		 KeyPressMask | KeyReleaseMask | ExposureMask);
 }
 
 
 void Talk_cursor(bool visible)
 {
-    if (talk_mapped == false || visible == talk_cursor.visible)
+    if (clData.talking == false || visible == talk_cursor.visible)
 	return;
 
     if (visible == false) {
@@ -101,9 +93,9 @@ void Talk_cursor(bool visible)
 	XSetForeground(dpy, talkGC, colors[WHITE].pixel);
 	if (talk_cursor.point < strlen(talk_str)) {
 	    /* cursor _in message */
-	    if (selectionAndHistory && selection.talk.state == SEL_EMPHASIZED
-		  && talk_cursor.point >= selection.talk.x1
-		  && talk_cursor.point < selection.talk.x2)
+	    if (selection.talk.state == SEL_EMPHASIZED
+		&& talk_cursor.point >= selection.talk.x1
+		&& talk_cursor.point < selection.talk.x2)
 		/* cursor in a selection? redraw the character emphasized */
 		XSetForeground(dpy, talkGC, colors[DRAW_EMPHASIZED].pixel);
 	    XDrawString(dpy, talkWindow, talkGC,
@@ -118,11 +110,10 @@ void Talk_cursor(bool visible)
 	talk_cursor.offset = XTextWidth(talkFont, talk_str,
 					(int)talk_cursor.point);
 	/*
-	 * goodie: `inverse' cursor (an underscore) if there is already an
+	 * goodie: 'inverse' cursor (an underscore) if there is already an
 	 * unemphasized underscore
 	 */
-	if (selectionAndHistory
-	    && talk_cursor.point < strlen(talk_str)
+	if (talk_cursor.point < strlen(talk_str)
 	    && talk_str[talk_cursor.point] == '_'
 	    && ( selection.talk.state != SEL_EMPHASIZED
 		|| talk_cursor.point < selection.talk.x1
@@ -143,7 +134,7 @@ void Talk_map_window(bool map)
     static Window	root;
     static int		root_x, root_y;
 
-    if (map == true) {
+    if (map) {
 	Window child;
 	int win_x, win_y;
 	unsigned int keys_buttons;
@@ -153,7 +144,7 @@ void Talk_map_window(bool map)
 	    talk_created = true;
 	}
 	XMapWindow(dpy, talkWindow);
-	talk_mapped = true;
+	clData.talking = true;
 
 	XQueryPointer(dpy, DefaultRootWindow(dpy),
 		      &root, &child, &root_x, &root_y, &win_x, &win_y,
@@ -164,11 +155,11 @@ void Talk_map_window(bool map)
 		     (int)TALK_WINDOW_HEIGHT / 2);
 	XFlush(dpy);	/* warp pointer ASAP. */
     }
-    else if (talk_created == true) {
+    else if (talk_created) {
 	XUnmapWindow(dpy, talkWindow);
 	XWarpPointer(dpy, None, root, 0, 0, 0, 0, root_x, root_y);
 	XFlush(dpy);	/* warp pointer ASAP. */
-	talk_mapped = false;
+	clData.talking = false;
 	/* reset browsing */
 	history_pos = -1;
     }
@@ -177,7 +168,7 @@ void Talk_map_window(bool map)
 
 /*
  * redraw a possible selection [un]emphasized.
- * to unemphasize a selection, `selection.txt' is needed.
+ * to unemphasize a selection, 'selection.txt' is needed.
  * thus selection.talk.state == SEL_SELECTED indicates that it
  * should not be drawn emphasized
  */
@@ -185,7 +176,7 @@ static void Talk_refresh(void)
 {
     size_t len;
 
-    if (!selectionAndHistory || !talk_mapped)
+    if (!clData.talking)
 	return;
 
     len = strlen(talk_str);
@@ -224,7 +215,7 @@ static void Add_msg_to_history(char *message)
     /*always*/
     save_talk_str = false;
 
-    if (!selectionAndHistory || strlen(message) == 0)
+    if (strlen(message) == 0)
 	return; /* unexpected. nothing to add */
 
     msg_set = HistoryMsg;
@@ -241,15 +232,15 @@ static void Add_msg_to_history(char *message)
 }
 
 /*
- * Fetch a message from the `history' by returning a pointer to it.
+ * Fetch a message from the 'history' by returning a pointer to it.
  * Choice depends on current poition (*pos, call by ref for modification here)
- * and `direction' of browsing
+ * and 'direction' of browsing
  *
- * if we are here _and the gobal `save_talk_str' is set, then the submitted
+ * if we are here _and the gobal 'save_talk_str' is set, then the submitted
  * message is unfinished - call Add_msg_to_history(), but don't return
  * the next line.
  * Purpose: gives ability to abort writing a message and resume later.
- * The global `save_talk' can be set anywhere else in the code whenever
+ * The global 'save_talk' can be set anywhere else in the code whenever
  * a line from the history gets modified
  * (thus save_talk not as parameter here)
  *
@@ -259,10 +250,9 @@ static char *Get_msg_from_history(int* pos, char *message, keys_t direction)
     int i;
     char **msg_set;
 
-    if (!selectionAndHistory
-	|| (direction != KEY_TALK_CURSOR_UP
-	    && direction != KEY_TALK_CURSOR_DOWN
-	    && direction != KEY_DUMMY)) {
+    if (direction != KEY_TALK_CURSOR_UP
+	&& direction != KEY_TALK_CURSOR_DOWN
+	&& direction != KEY_DUMMY) {
 	return NULL;
     }
 
@@ -298,7 +288,7 @@ static char *Get_msg_from_history(int* pos, char *message, keys_t direction)
 /*
  * Pressing a key while there is an emphasized text in the talk window
  * substitutes this text, means: delete the text before inserting the
- * new character and place the character at this `gap'.
+ * new character and place the character at this 'gap'.
  */
 static void Talk_delete_emphasized_text(void)
 {
@@ -307,7 +297,7 @@ static void Talk_delete_emphasized_text(void)
     int		width;
     char	new_str[MAX_CHARS];
 
-    if (! (selectionAndHistory && selection.talk.state == SEL_EMPHASIZED))
+    if (selection.talk.state != SEL_EMPHASIZED)
 	return;
 
     Talk_cursor(false);
@@ -381,9 +371,9 @@ int Talk_do_event(XEvent *event)
 	XDrawString(dpy, talkWindow, talkGC,
 		    TALK_INSIDE_BORDER, talkFont->ascent + TALK_INSIDE_BORDER,
 		    talk_str, (int)strlen(talk_str));
-	if (selectionAndHistory && selection.talk.state == SEL_EMPHASIZED)
+	if (selection.talk.state == SEL_EMPHASIZED)
 	    Talk_refresh();
-	if (cursor_visible == true) {
+	if (cursor_visible) {
 	    talk_cursor.visible = false;
 	    Talk_cursor(cursor_visible);
 	}
@@ -393,8 +383,8 @@ int Talk_do_event(XEvent *event)
 	/*
 	 * stop faster cursor movement in talk window
 	 */
-	if (selectionAndHistory)
-	    talk_crs_repeat_count = 0;
+	talk_crs_repeat_count = 0;
+
 	/*
 	 * Nothing to do.
 	 * We may want to make some kind of key repeat ourselves.
@@ -403,21 +393,18 @@ int Talk_do_event(XEvent *event)
 	break;
 
     case KeyPress:
-	/* `strange' keys exist */
+	/* 'strange' keys exist */
 	if ((keysym = XLookupKeysym(&event->xkey, 0)) == NoSymbol)
 	    break;
 
-	/* `unprintables'? */
+	/* 'unprintables'? */
 	if (XLookupString(&event->xkey, &ch, 1, &keysym, &compose)
 		== NoSymbol) {
 
 	    keys_t key;		/* what key is it */
 	    char *tmp;		/* for receiving a line from the history */
 
-	    if (!selectionAndHistory)
-		break;	/* out of `KeyPress' */
-
-	    /* search the `key' */
+	    /* search the 'key' */
 	    for (key = Lookup_key(event, keysym, true);
 		 key != KEY_DUMMY;
 		 key = Lookup_key(event, keysym, false)) {
@@ -426,7 +413,7 @@ int Talk_do_event(XEvent *event)
 		    Talk_cursor(false);
 		    /*
 		     * faster cursor movement after some time.
-		     * `talk_crs_repeat_count' is reset at `KeyRelease'
+		     * 'talk_crs_repeat_count' is reset at 'KeyRelease'
 		     */
 		    if (talk_crs_repeat_count > CRS_START_HOPPING) {
 			if (talk_cursor.point < strlen(talk_str) - CRS_HOP)
@@ -489,14 +476,14 @@ int Talk_do_event(XEvent *event)
 
 		} /* switch */
 	    } /* for */
-	    break; /* out of `KeyPress' */
+	    break; /* out of 'KeyPress' */
 	} /* XLookupString() == NoSymbol */
 
 	/*
 	 * printable or a <ctrl-char>
 	 */
 
-	if (selectionAndHistory) {
+	{
 	    /*
 	     * unemphasize?
 	     * The key might change the talk string (important when browsing).
@@ -539,8 +526,7 @@ int Talk_do_event(XEvent *event)
 	     * Return.  Send the talk message to the server if there is text.
 	     */
 	    if (talk_str[0] != '\0') {
-		if (selectionAndHistory && selection.talk.state
-		    == SEL_EMPHASIZED) {
+		if (selection.talk.state == SEL_EMPHASIZED) {
 		    /*
 		     * send a message. it will appear as talk message.
 		     * keep a possible emphasizing and set selection.draw.*
@@ -552,12 +538,13 @@ int Talk_do_event(XEvent *event)
 		    selection.draw.x2 = selection.talk.x2;
 		}
 		/* add to history if the message was not gotten by browsing */
-		if (selectionAndHistory && save_talk_str)
+		if (save_talk_str)
 		    Add_msg_to_history(talk_str);
 		Net_talk(talk_str);
 		talk_cursor.point = 0;
 		talk_str[0] = '\0';
-	    } else if (selectionAndHistory) {
+	    }
+	    else {
 		/* talk_str is empty */
 		save_talk_str = false;
 		history_pos = 0;		/* reset history position */
@@ -571,10 +558,8 @@ int Talk_do_event(XEvent *event)
 	     */
 	    talk_str[0] = '\0';
 	    talk_cursor.point = 0;
-	    if (selectionAndHistory) {
-		save_talk_str = false;
-		selection.talk.state = SEL_NONE;
-	    }
+	    save_talk_str = false;
+	    selection.talk.state = SEL_NONE;
 	    result = false;
 	    break;
 
@@ -657,8 +642,7 @@ int Talk_do_event(XEvent *event)
 		 */
 		newlen = talk_cursor.point;
 	    else if (oldlen > 0) {
-		if (selectionAndHistory && selection.talk.state
-		    == SEL_EMPHASIZED) {
+		if (selection.talk.state == SEL_EMPHASIZED) {
 		    /*
 		     * Erase the emphasized text
 		     */
@@ -673,60 +657,45 @@ int Talk_do_event(XEvent *event)
 		    newlen -= (selection.talk.x2 - selection.talk.x1);
 		    selection.talk.state = SEL_NONE;
 		} else {
-		    if (selectionAndHistory) {
-			/*
-			 * Erase possibly several characters.
-			 */
-			if (talk_crs_repeat_count > CRS_START_HOPPING) {
-			    if (talk_cursor.point > CRS_HOP) {
-				assert(newlen >= CRS_HOP);
-				newlen -= CRS_HOP;
-				if (ch != CTRL('D')
-				    || talk_cursor.point >= newlen)
-				    talk_cursor.point -= CRS_HOP;
-				strlcpy(&new_str[talk_cursor.point],
-					&talk_str[talk_cursor.point + CRS_HOP],
-					MAX_CHARS - talk_cursor.point);
-			    } else {
-				int old_talk_cursor_point = talk_cursor.point;
-				assert(newlen >= talk_cursor.point);
-				newlen -= talk_cursor.point;
-				if (ch != CTRL('D')
-				    || talk_cursor.point >= newlen)
-				    talk_cursor.point = 0;
-				strlcpy(&new_str[0],
-					&talk_str[old_talk_cursor_point],
-					MAX_CHARS);
-			    }
+		    /*
+		     * Erase possibly several characters.
+		     */
+		    if (talk_crs_repeat_count > CRS_START_HOPPING) {
+			if (talk_cursor.point > CRS_HOP) {
+			    assert(newlen >= CRS_HOP);
+			    newlen -= CRS_HOP;
+			    if (ch != CTRL('D')
+				|| talk_cursor.point >= newlen)
+				talk_cursor.point -= CRS_HOP;
+			    strlcpy(&new_str[talk_cursor.point],
+				    &talk_str[talk_cursor.point + CRS_HOP],
+				    MAX_CHARS - talk_cursor.point);
 			} else {
-			    /*
-			     * Erase one character.
-			     */
-			    if (talk_cursor.point > 0) {
-				assert(newlen > 0);
-				newlen--;
-				if (ch != CTRL('D')
-				    || talk_cursor.point >= newlen)
-				    talk_cursor.point--;
-				talk_crs_repeat_count++;
-				strlcpy(&new_str[talk_cursor.point],
-					&talk_str[talk_cursor.point + 1],
-					MAX_CHARS - talk_cursor.point);
-			    }
+			    int old_talk_cursor_point = talk_cursor.point;
+			    assert(newlen >= talk_cursor.point);
+			    newlen -= talk_cursor.point;
+			    if (ch != CTRL('D')
+				|| talk_cursor.point >= newlen)
+				talk_cursor.point = 0;
+			    strlcpy(&new_str[0],
+				    &talk_str[old_talk_cursor_point],
+				    MAX_CHARS);
 			}
 		    } else {
 			/*
 			 * Erase one character.
 			 */
-			assert(newlen > 0);
-			newlen--;
-			if (ch != CTRL('D') || talk_cursor.point >= newlen) {
-			    if (talk_cursor.point > 0)
+			if (talk_cursor.point > 0) {
+			    assert(newlen > 0);
+			    newlen--;
+			    if (ch != CTRL('D')
+				|| talk_cursor.point >= newlen)
 				talk_cursor.point--;
+			    talk_crs_repeat_count++;
+			    strlcpy(&new_str[talk_cursor.point],
+				    &talk_str[talk_cursor.point + 1],
+				    MAX_CHARS - talk_cursor.point);
 			}
-			strlcpy(&new_str[talk_cursor.point],
-			        &talk_str[talk_cursor.point + 1],
-			        MAX_CHARS);
 		    }
 		}
 	    }
@@ -836,13 +805,13 @@ int Talk_do_event(XEvent *event)
 }
 
 /*
- * Try to paste `data_len' amount of `data' at the cursor position into
- * the talk window.  Cut off overflow (`accept_len').
+ * Try to paste 'data_len' amount of 'data' at the cursor position into
+ * the talk window.  Cut off overflow ('accept_len').
  *
- * The global `talk_str' will contain the new content.
+ * The global 'talk_str' will contain the new content.
  * (safe if *data references *talk_str).
  *
- * if `overwrite' then don't insert/append but substitute the text
+ * if 'overwrite' then don't insert/append but substitute the text
  *
  * Return the number of pasted characters.
  */
@@ -858,11 +827,11 @@ int Talk_paste(char *data, size_t data_len, bool overwrite)
     size_t accept_len;			/* for still matching the window */
     char paste_buf[MAX_CHARS];		/* gets the XBuffer */
     char tmp_str[MAX_CHARS];
-    char talk_backup[MAX_CHARS];	/* no `collision' with data */
+    char talk_backup[MAX_CHARS];	/* no 'collision' with data */
     bool cursor_visible = false;
     int i;
 
-    if (!selectionAndHistory || !data || data_len == 0 || strlen(data) == 0)
+    if (!data || data_len == 0 || strlen(data) == 0)
 	return 0;
 
     if (overwrite)
@@ -896,7 +865,7 @@ int Talk_paste(char *data, size_t data_len, bool overwrite)
 
     /*
      * substitute unprintables according to iso-latin-1.
-     *  (according to `data_len' one could ask for all but the
+     *  (according to 'data_len' one could ask for all but the
      *   final '\0' to be converted, but we have only text selections anyway)
      */
     /* don't convert a final newline to space */
@@ -995,7 +964,7 @@ void Talk_resize(void)
 static int Text_width_to_pos(XFontStruct *font, char *text, size_t len,
 			     int width)
 {
-    /* dummies for `XTextExtents', the faster version of XTextWidth */
+    /* dummies for 'XTextExtents', the faster version of XTextWidth */
     int	font_ascent_return, font_descent_return, direction_return;
     /* wanted: overall_return.width */
     XCharStruct overall_return;
@@ -1016,17 +985,14 @@ static int Text_width_to_pos(XFontStruct *font, char *text, size_t len,
  * place the cursor in the talk window with help of the pointer button.
  * return the cursor position as index in talk_str.
  *
- * place cursor conveniently, if `pending' is set and cutting
+ * place cursor conveniently, if 'pending' is set and cutting
  * in the talk window finished outside of it (border is also outside).
  */
 int Talk_place_cursor(XButtonEvent* xbutton, bool pending)
 {
-    int		x, y;		/* pixelpositions */
-    int		cursor_pos;	/* string index */
-    int		Button = xbutton->button;
-
-    if (!selectionAndHistory)
-	return -1;
+    int x, y;		/* pixelpositions */
+    int cursor_pos;	/* string index */
+    int Button = xbutton->button;
 
     x = xbutton->x;
     y = xbutton->y;
@@ -1098,19 +1064,14 @@ static void Selection_set_state(void)
  */
 void Clear_selection(void)
 {
-    if (!selectionAndHistory)
-	return;
-
-    if (talk_mapped && selection.talk.state == SEL_EMPHASIZED) {
+    if (clData.talking && selection.talk.state == SEL_EMPHASIZED) {
 	/* trick to unemphasize */
 	selection.talk.state = SEL_SELECTED;
 	Talk_refresh();
     }
     Clear_draw_selection();
     Clear_talk_selection();
-    if (selection.txt)
-	free(selection.txt);
-    selection.txt = NULL;
+    XFREE(selection.txt);
     selection.txt_size = 0;
     selection.len = 0;
 
@@ -1123,15 +1084,11 @@ void Clear_selection(void)
  */
 void Talk_window_cut(XButtonEvent* xbutton)
 {
-    int		cursor_pos;	/* where to place the text cursor */
-    int		ButtonState = xbutton->type;
-    int		Button      = xbutton->button;
-    char	tmp[MAX_CHARS];	/* preparing a string for the cut buffer */
-    bool	was_pending = false;
-
-
-    if (!selectionAndHistory)
-	return;
+    int cursor_pos;	/* where to place the text cursor */
+    int ButtonState = xbutton->type;
+    int Button      = xbutton->button;
+    char tmp[MAX_CHARS];	/* preparing a string for the cut buffer */
+    bool was_pending = false;
 
     /* convenient cursor placement when finishing a cut */
     if (selection.talk.state == SEL_PENDING
@@ -1170,7 +1127,7 @@ void Talk_window_cut(XButtonEvent* xbutton)
 	 */
 	Clear_draw_selection();
 	selection.txt_size = MAX_MSGS * MSG_LEN;
-	selection.txt = malloc(selection.txt_size);
+	selection.txt = XMALLOC(char, selection.txt_size);
 	if (selection.txt == NULL) {
 	    error("No memory for Selection");
 	    return;
@@ -1187,7 +1144,7 @@ void Talk_window_cut(XButtonEvent* xbutton)
 	 * making the cut available; see end of Talk_cut_from_messages()
 	 */
 	XSetSelectionOwner(dpy, XA_PRIMARY, talkWindow, CurrentTime);
-	/* `cut buffer' is binary stuff - append '\0'  */
+	/* 'cut buffer' is binary stuff - append '\0'  */
 	assert(selection.talk.x2 >= selection.talk.x1);
 	strlcpy(tmp, &talk_str[selection.talk.x1],
 		selection.talk.x2 - selection.talk.x1 + 1);
@@ -1209,6 +1166,25 @@ void Talk_window_cut(XButtonEvent* xbutton)
     } /* ButtonRelease */
 }
 
+bool Talk_cut_area_hit(XButtonEvent *xbutton)
+{
+    const int BORDER = 10;
+    const int SPACING = messageFont->ascent+messageFont->descent+1;
+    int y;	/* of initial ButtonEvent */
+
+    y = xbutton->y - BORDER;
+
+    if (y < 0)
+	y = -1;
+    else
+	y /= SPACING;
+
+    if (y < maxMessages)
+	return true;
+
+    return false;
+}
+
 /*
  * wanted:
  * indices of the characters and the rows of start and end of
@@ -1217,15 +1193,14 @@ void Talk_window_cut(XButtonEvent* xbutton)
  * for proper cutting: Notice if cutting heppens left from the most left
  * or right from the most right character (c1/2.x_off).
  *
- * while the cut is pending, the state of Talk+GameMsg[] is `freezed'
+ * while the cut is pending, the state of Talk+GameMsg[] is 'freezed'
  * in Paint_message(). thus call Add_pending_messages() here after this.
  */
 void Talk_cut_from_messages(XButtonEvent* xbutton)
 {
 
-    const int	BORDER = 10,
-		SPACING = messageFont->ascent+messageFont->descent+1;
-
+    const int BORDER = 10;
+    const int SPACING = messageFont->ascent+messageFont->descent+1;
     int		x, y;	/* of initial ButtonEvent */
 
     typedef struct {
@@ -1241,9 +1216,6 @@ void Talk_cut_from_messages(XButtonEvent* xbutton)
 
     static int	last_msg_index;	/* index of last message */
     int		i;
-
-    if (!selectionAndHistory)
-	return;
 
     /* quick check if there are messages at all */
     if (TalkMsg[0]->len == 0) {
@@ -1388,7 +1360,7 @@ void Talk_cut_from_messages(XButtonEvent* xbutton)
 		= Text_width_to_pos(messageFont, ptr->txt, ptr->len, c2.x);
 
 	/*
-	 * `c1' ~ `c2':
+	 * 'c1' ~ 'c2':
 	 * the cut doesn't really include a character:
 	 * - cutting from the end of a line to the beginning of the next
 	 * - or different pixels but the same character
@@ -1402,7 +1374,7 @@ void Talk_cut_from_messages(XButtonEvent* xbutton)
 	}
 
 	/*
-	 * `plug-in':
+	 * 'plug-in':
 	 * don't include the last character (if explicitly clicked on)
 	 */
 	if (c2.str_index == 0) {
@@ -1440,7 +1412,7 @@ void Talk_cut_from_messages(XButtonEvent* xbutton)
 	 * set the globals
 	 */
 	selection.txt_size = MAX_MSGS * MSG_LEN;
-	selection.txt = malloc(selection.txt_size);
+	selection.txt = XMALLOC(char, selection.txt_size);
 	if (selection.txt == NULL) {
 	    error("No memory for Selection");
 	    return;
@@ -1493,9 +1465,9 @@ void Talk_cut_from_messages(XButtonEvent* xbutton)
 	selection.len = strlen(selection.txt);
 
 	/*
-	 * store in `cut buffer',
+	 * store in 'cut buffer',
 	 * usually a selection request is served by the event in xevent.c.
-	 * We get that event as we own the `primary' from now on.
+	 * We get that event as we own the 'primary' from now on.
 	 * draw the selection emphasized from now on
 	 */
 	XSetSelectionOwner(dpy, XA_PRIMARY, drawWindow, CurrentTime);

@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -24,8 +24,6 @@
  */
 
 #include "xpclient.h"
-
-char paintmap_version[] = VERSION;
 
 
 static double 	hrLimitTime = 0.0;
@@ -97,15 +95,15 @@ static void Paint_background_dots(void)
     dx = (double)Setup->width / count.x;
     dy = (double)Setup->height / count.y;
 
-    min.x = world.x / dx;
+    min.x = (int)(world.x / dx);
     if (world.x > 0)
 	min.x++;
-    min.y = world.y / dy;
+    min.y = (int)(world.y / dy);
     if (world.y > 0)
 	min.y++;
 
-    max.x = (world.x + ext_view_width) / dx;
-    max.y = (world.y + ext_view_height) / dy;
+    max.x = (int)((world.x + ext_view_width) / dx);
+    max.y = (int)((world.y + ext_view_height) / dy);
 
     for (yi = min.y; yi <= max.y; yi++) {
         for (xi = min.x; xi <= max.x; xi++) {
@@ -120,17 +118,18 @@ static void Paint_background_dots(void)
 
 static void Compute_bounds(ipos_t *min, ipos_t *max, const irec_t *b)
 {
-    if (BIT(Setup->mode, WRAP_PLAY)) {
-	min->x = (world.x - (b->x + b->w)) / Setup->width;
-	if (world.x > b->x + b->w) min->x++;
-	max->x = (world.x + ext_view_width - b->x) / Setup->width;
-	if (world.x + ext_view_width < b->x) max->x--;
-	min->y = (world.y - (b->y + b->h)) / Setup->height;
-	if (world.y > b->y + b->h) min->y++;
-	max->y = (world.y + ext_view_height - b->y) / Setup->height;
-	if (world.y + ext_view_height < b->y) max->y--;
-    } else
-	min->x = min->y = max->x = max->y = 0;
+    min->x = (world.x - (b->x + b->w)) / Setup->width;
+    if (world.x > b->x + b->w) min->x++;
+    max->x = (world.x + ext_view_width - b->x) / Setup->width;
+    if (world.x + ext_view_width < b->x) max->x--;
+    min->y = (world.y - (b->y + b->h)) / Setup->height;
+    if (world.y > b->y + b->h) min->y++;
+    max->y = (world.y + ext_view_height - b->y) / Setup->height;
+    if (world.y + ext_view_height < b->y) max->y--;
+    if (!BIT(Setup->mode, WRAP_PLAY)) {
+	if (min->x <= max->x) min->x = max->x = 0;
+	if (min->y <= max->y) min->y = max->y = 0;
+    }
 }
 
 

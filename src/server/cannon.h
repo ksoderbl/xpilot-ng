@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -29,6 +29,10 @@
 
 #ifndef MAP_H
 # include "map.h"
+#endif
+
+#ifndef WALLS_H
+# include "walls.h"
 #endif
 
 extern long CANNON_USE_ITEM;
@@ -71,15 +75,77 @@ extern long CANNON_USE_ITEM;
 #define CANNON_MINE_MASS	(MINE_MASS * 0.6)
 #define CANNON_SHOT_MASS	0.4
 /* lifetime in ticks (frames) of shots, missiles and mines */
-#define CANNON_SHOT_LIFE	(8 + (randomMT() % 24))
+/* #define CANNON_SHOT_LIFE	(8 + (randomMT() % 24)) */
 /* maximum lifetime (only used in aiming) */
-#define CANNON_SHOT_LIFE_MAX	(8 + 24)
+/* #define CANNON_SHOT_LIFE_MAX	(8 + 24) */
 /* number of laser pulses used in calculation of pulse lifetime */
 #define CANNON_PULSES		1
 
 /* sector in which cannonfire is possible */
 #define CANNON_SPREAD		(RES / 3)
 
-extern void Cannon_update(world_t *world, bool do_less_frequent_update);
+/* cannon smartness is 0 to this value */
+#define CANNON_SMARTNESS_MAX	3
+
+void Cannon_update(bool tick);
+void Cannon_init(cannon_t *cannon);
+void Cannon_init_items(cannon_t *cannon);
+void Cannon_add_item(cannon_t *cannon, int type, int amount);
+void Cannon_throw_items(cannon_t *cannon);
+void Cannon_check_defense(cannon_t *cannon);
+void Cannon_check_fire(cannon_t *cannon);
+void Object_hits_cannon(object_t *obj, cannon_t *c);
+void Cannon_dies(cannon_t *cannon, player_t *pl);
+hitmask_t Cannon_hitmask(cannon_t *cannon);
+void Cannon_set_hitmask(int group, cannon_t *cannon);
+bool Cannon_hitfunc(group_t *groupptr, const move_t *move);
+void World_restore_cannon(cannon_t *cannon);
+void World_remove_cannon(cannon_t *cannon);
+void Cannon_set_option(cannon_t *cannon, const char *name, const char *value);
+
+static inline int Cannon_get_smartness(cannon_t *c)
+{
+    if (c->smartness != -1)
+	return c->smartness;
+    return options.cannonSmartness;
+}
+
+static inline double Cannon_get_min_shot_life(cannon_t *c)
+{
+    return options.minCannonShotLife;
+}
+
+static inline double Cannon_get_max_shot_life(cannon_t *c)
+{
+    return options.maxCannonShotLife;
+}
+
+static inline double Cannon_get_shot_life(cannon_t *cannon)
+{
+    double minlife, maxlife, d;
+
+    minlife = Cannon_get_min_shot_life(cannon);
+    maxlife = Cannon_get_max_shot_life(cannon);
+    d = maxlife - minlife;
+
+    return minlife + rfrac() * d;
+}
+
+static inline double Cannon_get_shot_speed(cannon_t *cannon)
+{
+    if (cannon->shot_speed > 0)
+	return cannon->shot_speed;
+    return options.cannonShotSpeed;
+}
+
+static inline cannon_t *Cannon_by_id(int id)
+{
+    int ind;
+
+    if (id < MIN_CANNON_ID || id > MAX_CANNON_ID)
+	return NULL;
+    ind = id - MIN_CANNON_ID;
+    return Cannon_by_index(ind);
+}
 
 #endif

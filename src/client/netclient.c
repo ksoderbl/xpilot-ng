@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -27,8 +27,6 @@
 
 #include "xpclient.h"
 
-char netclient_version[] = VERSION;
-
 #define TALK_RETRY	2
 #define MAX_MAP_ACK_LEN	500
 #define KEYBOARD_STORE	20
@@ -49,6 +47,10 @@ display_t               server_display;
 int			receive_window_size = 3;
 long			last_loops;
 bool                    packetMeasurement;
+pointer_move_t		pointer_moves[MAX_POINTER_MOVES];
+int			pointer_move_next;
+long			last_keyboard_ack;
+bool			dirPrediction;
 #ifdef _WINDOWS
 int			received_self = FALSE;
 #endif
@@ -65,7 +67,6 @@ static int		keyboard_delta;
 static unsigned		magic;
 static time_t           last_send_anything;
 static long		last_keyboard_change,
-			last_keyboard_ack,
 			last_keyboard_update,
 			reliable_offset,
 			talk_pending,
@@ -133,6 +134,7 @@ static void Receive_init(void)
     receive_tbl[PKT_WRECKAGE]	= Receive_wreckage;
     receive_tbl[PKT_ASTEROID]	= Receive_asteroid;
     receive_tbl[PKT_WORMHOLE]	= Receive_wormhole;
+    receive_tbl[PKT_POLYSTYLE]	= Receive_polystyle;
     for (i = 0; i < DEBRIS_TYPES; i++)
 	receive_tbl[PKT_DEBRIS + i] = Receive_debris;
 
@@ -560,9 +562,9 @@ int Net_init(char *server, int port)
  */
 void Net_cleanup(void)
 {
-    int		i;
-    sock_t	sock = wbuf.sock;
-    char	ch;
+    int i;
+    sock_t sock = wbuf.sock;
+    char ch;
 
     if (sock.fd > 2) {
 	ch = PKT_QUIT;
@@ -579,15 +581,11 @@ void Net_cleanup(void)
 	    else
 		break;
 	}
-	free(Frames);
-	Frames = NULL;
+	XFREE(Frames);
     }
     Sockbuf_cleanup(&cbuf);
     Sockbuf_cleanup(&wbuf);
-    if (Setup != NULL) {
-	free(Setup);
-	Setup = NULL;
-    }
+    XFREE(Setup);
     if (sock.fd > 2) {
 	ch = PKT_QUIT;
 	if (sock_write(&sock, &ch, 1) != 1) {
@@ -601,10 +599,11 @@ void Net_cleanup(void)
 	}
 	sock_close(&sock);
     }
+    sock_cleanup();
 }
 
 /*
- * Calculate a new `keyboard-changed-id' which the server has to ack.
+ * Calculate a new 'keyboard-changed-id' which the server has to ack.
  */
 void Net_key_change(void)
 {
@@ -647,7 +646,7 @@ int Net_fd(void)
 }
 
 /*
- * Try to send a `start play' packet to the server and get an
+ * Try to send a 'start play' packet to the server and get an
  * acknowledgement from the server.  This is called after
  * we have initialized all our other stuff like the user interface
  * and we also have the map already.
@@ -761,6 +760,7 @@ int Net_start(void)
 	break;
     }
     packet_measure = NULL;
+    packetMeasurement = true;
     Net_init_measurement();
     Net_init_lag_measurement();
     errno = 0;
@@ -778,17 +778,15 @@ void Net_init_measurement(void)
 	    /*
 	     * Server FPS can change so we had better allocate enough.
 	     */
-	    if ((packet_measure = malloc(MAX_SUPPORTED_FPS)) == NULL) {
+	    if ((packet_measure = XMALLOC(char, MAX_SUPPORTED_FPS)) == NULL) {
 		error("No memory for packet measurement");
 		packetMeasurement = false;
 	    } else
 		memset(packet_measure, PACKET_DRAW, MAX_SUPPORTED_FPS);
 	}
     }
-    else if (packet_measure != NULL) {
-	free(packet_measure);
-	packet_measure = NULL;
-    }
+    else
+	XFREE(packet_measure);
 }
 
 void Net_init_lag_measurement(void)
@@ -1141,7 +1139,7 @@ int Net_input(void)
 	    }
 	}
 	if ((i == receive_window_size - 1 && i > 0)
-#ifdef _WINDOWS
+#if 0
 	    || drawPending
 	    || (ThreadedDraw &&
 		!WaitForSingleObject(dinfo.eventNotDrawing, 0)
@@ -1953,8 +1951,7 @@ int Receive_war(void)
     if ((n = Packet_scanf(&cbuf, "%c%hd%hd",
 			  &ch, &robot_id, &killer_id)) <= 0)
 	return n;
-    if ((n = Handle_war(robot_id, killer_id)) == -1)
-	return -1;
+    /* not interested */
     return 1;
 }
 
@@ -1967,8 +1964,7 @@ int Receive_seek(void)
     if ((n = Packet_scanf(&cbuf, "%c%hd%hd%hd", &ch,
 			  &programmer_id, &robot_id, &sought_id)) <= 0)
 	return n;
-    if ((n = Handle_seek(programmer_id, robot_id, sought_id)) == -1)
-	return -1;
+    /* not interested */
     return 1;
 }
 
@@ -2156,6 +2152,21 @@ int Receive_target(void)
 	return -1;
     if (wbuf.len < MAX_MAP_ACK_LEN)
 	Packet_printf(&wbuf, "%c%ld%hu", PKT_ACK_TARGET, last_loops, num);
+    return 1;
+}
+
+int Receive_polystyle(void)	/* since ng 4.7.0 */
+{
+    int			n;
+    unsigned short	num, newstyle;
+    u_byte		ch;
+
+    if ((n = Packet_scanf(&rbuf, "%c%hu%hu", &ch, &num, &newstyle)) <= 0)
+	return n;
+    if ((n = Handle_polystyle(num, newstyle)) == -1)
+	return -1;
+    if (wbuf.len < MAX_MAP_ACK_LEN)
+	Packet_printf(&wbuf, "%c%ld%hu", PKT_ACK_POLYSTYLE, last_loops, num);
     return 1;
 }
 
@@ -2542,6 +2553,16 @@ int Send_pointer_move(int movement)
     old_tv = tv;
 #endif
 
+    if (dirPrediction) {
+	pointer_moves[pointer_move_next].movement = movement;
+	pointer_moves[pointer_move_next].turnspeed = turnspeed;
+	pointer_moves[pointer_move_next].id = last_keyboard_change + 1;
+	
+        pointer_move_next++;
+	if (pointer_move_next >= MAX_POINTER_MOVES)
+	    pointer_move_next = 0;
+    }
+
     if (version >= 0x4F13) {
 	total += movement;
 	movement = total;
@@ -2549,6 +2570,10 @@ int Send_pointer_move(int movement)
 
     if (Packet_printf(&wbuf, "%c%hd", PKT_POINTER_MOVE, movement) == -1)
 	return -1;
+    
+    if (dirPrediction)
+	Net_key_change();	
+    
     return 0;
 }
 

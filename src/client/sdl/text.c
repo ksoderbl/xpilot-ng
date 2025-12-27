@@ -42,7 +42,7 @@
     slouken@libsdl.org
 */
 
-/* $Id: text.c,v 1.26 2004/04/24 21:21:06 maximan Exp $ */
+/* $Id: text.c,v 1.31 2005/02/20 23:57:27 kps Exp $ */
 /* modified for xpilot by Erik Andersson deity_at_home.se */
 
 #ifdef _WINDOWS
@@ -271,7 +271,7 @@ void pop_projection_matrix(void)
 
 fontbounds nprintsize(font_data *ft_font, int length, const char *fmt, ...)
 {
-    unsigned int i=0,j,textlength;
+    int i=0,j,textlength;
     float len;
     fontbounds returnval;
     int start,end,toklen;
@@ -290,7 +290,7 @@ fontbounds nprintsize(font_data *ft_font, int length, const char *fmt, ...)
     	vsnprintf(text, BUFSIZE, fmt, ap);    /* And Converts Symbols To Actual Numbers */
     	va_end(ap); 	    	    /* Results Are Stored In Text */
     }
-    if (!(textlength = MIN(strlen(text),length))) {
+    if (!(textlength = MIN((int)strlen(text),length))) {
     	return returnval;
     }
 
@@ -342,7 +342,7 @@ fontbounds printsize(font_data *ft_font, const char *fmt, ...)
     	vsnprintf(text, BUFSIZE, fmt, ap);    /* And Converts Symbols To Actual Numbers */
     	va_end(ap); 	    	    /* Results Are Stored In Text */
     }
-    return nprintsize(ft_font, BUFSIZE, text);
+    return nprintsize(ft_font, BUFSIZE, "%s", text);
 }
 
 bool render_text(font_data *ft_font, const char *text, string_tex_t *string_tex)
@@ -355,8 +355,14 @@ bool render_text(font_data *ft_font, const char *text, string_tex_t *string_tex)
     if (!(ft_font)) return false;
     if (!(ft_font->ttffont)) return false;
     if (!(string_tex)) return false;
+#if 0
     if (!strlen(text)) return false; /* something is printing an empty string each frame */
-    
+#else
+    /* kps - fix for empty author field in cannon dodgers */
+    if (!strlen(text))
+	text = " ";
+#endif
+
     forecol = &white;
 	
     string_tex->font_height = ft_font->h;
@@ -403,7 +409,7 @@ bool draw_text_fraq(font_data *ft_font, int color, int XALIGN, int YALIGN, int x
         
     if (!string_tex) {
     	remove_tex = true;
-    	string_tex = malloc(sizeof(string_tex_t));
+    	string_tex = XMALLOC(string_tex_t, 1);
     }
     
     if (render_text(ft_font,text,string_tex)) {
@@ -416,10 +422,8 @@ bool draw_text_fraq(font_data *ft_font, int color, int XALIGN, int YALIGN, int x
     	}
     }
     
-    if (remove_tex) {
-    	free(string_tex);
-    	string_tex = NULL;
-    }
+    if (remove_tex)
+    	XFREE(string_tex);
     
     return true;
 }
@@ -440,8 +444,8 @@ void disp_text_fraq(string_tex_t *string_tex, int color, int XALIGN, int YALIGN,
     set_alphacolor(color);
     glBindTexture(GL_TEXTURE_2D, string_tex->texture);
     
-    x -= string_tex->width/2.0f*XALIGN;
-    y += string_tex->height/2.0f*YALIGN - string_tex->height;
+    x -= (int)(string_tex->width/2.0f*XALIGN);
+    y += (int)(string_tex->height/2.0f*YALIGN - string_tex->height);
     
     if (onHUD) pushScreenCoordinateMatrix();
     glEnable(GL_TEXTURE_2D);
@@ -476,7 +480,7 @@ void free_string_texture(string_tex_t *string_tex)
 
 void print(font_data *ft_font, int color, int XALIGN, int YALIGN, int x, int y, int length, const char *text, bool onHUD)
 {
-    unsigned int i=0,j,textlength;
+    int i=0,j,textlength;
     fontbounds returnval,dummy;
     float xoff = 0.0,yoff = 0.0;
     int start,end,toklen;
@@ -490,7 +494,7 @@ void print(font_data *ft_font, int color, int XALIGN, int YALIGN, int x, int y, 
     
     font=ft_font->list_base;
 
-    returnval = nprintsize(ft_font,length,text);
+    returnval = nprintsize(ft_font,length,"%s",text);
     
     yoff = (returnval.height/2.0f)*((float)YALIGN) - ft_font->h;
 
@@ -540,8 +544,8 @@ void print(font_data *ft_font, int color, int XALIGN, int YALIGN, int x, int y, 
     	Y = (int)(y - ft_font->linespacing*i + yoff);
 	
     	if (color) set_alphacolor(color);
-	if (onHUD) glTranslatef(X,Y,0);
-	else glTranslatef(X*scale,Y*scale,0);
+	if (onHUD) glTranslatef(X, Y, 0);
+	else glTranslatef(X * clData.scale,Y * clData.scale, 0);
     	glMultMatrixf(modelview_matrix);
 
     	glCallLists(toklen, GL_UNSIGNED_BYTE, (GLubyte *) &text[start]);
@@ -562,7 +566,7 @@ void print(font_data *ft_font, int color, int XALIGN, int YALIGN, int x, int y, 
 
 void mapnprint(font_data *ft_font, int color, int XALIGN, int YALIGN, int x, int y, int length, const char *fmt,...)
 {
-    unsigned int textlength;
+    int textlength;
     
     char		text[BUFSIZE];  /* Holds Our String */
     va_list		ap; 	    /* Pointer To List Of Arguments */
@@ -574,7 +578,7 @@ void mapnprint(font_data *ft_font, int color, int XALIGN, int YALIGN, int x, int
     	vsnprintf(text, BUFSIZE, fmt, ap);    /* And Converts Symbols To Actual Numbers */
     	va_end(ap); 	    	    /* Results Are Stored In Text */
     }
-    if (!(textlength = MIN(strlen(text),length))) {
+    if (!(textlength = MIN((int)strlen(text),length))) {
     	return;
     }
 
@@ -585,7 +589,7 @@ void mapnprint(font_data *ft_font, int color, int XALIGN, int YALIGN, int x, int
 
 void HUDnprint(font_data *ft_font, int color, int XALIGN, int YALIGN, int x, int y, int length, const char *fmt, ...)
 {
-    unsigned int textlength;
+    int textlength;
     
     char		text[BUFSIZE];  /* Holds Our String */
     va_list		ap; 	    /* Pointer To List Of Arguments */
@@ -597,7 +601,7 @@ void HUDnprint(font_data *ft_font, int color, int XALIGN, int YALIGN, int x, int
     	vsnprintf(text, BUFSIZE, fmt, ap);    /* And Converts Symbols To Actual Numbers */
     	va_end(ap); 	    	    /* Results Are Stored In Text */
     }
-    if (!(textlength = MIN(strlen(text),length))) {
+    if (!(textlength = MIN((int)strlen(text),length))) {
     	return;
     }
     

@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -108,8 +108,8 @@
 /* packet types: 60 - 69 */
 #define PKT_APPEARING		60
 #define PKT_TEAM		61
-#define PKT_NOT_USED_62		62
-#define PKT_NOT_USED_63		63
+#define PKT_POLYSTYLE		62
+#define PKT_ACK_POLYSTYLE	63
 #define PKT_NOT_USED_64		64
 #define PKT_NOT_USED_65		65
 #define PKT_NOT_USED_66		66

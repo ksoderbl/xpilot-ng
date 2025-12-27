@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2004 by
  *
@@ -26,8 +26,6 @@
  */
 
 #include "xpclient_x11.h"
-
-char painthud_version[] = VERSION;
 
 int hudColor;		/* Color index for HUD drawing, has to be global for windoze */
 static int hudHLineColor;	/* Color index for horiz. HUD line drawing */
@@ -749,12 +747,10 @@ void Paint_messages(void)
     bot_y = WINSCALE(ext_view_height) - messageFont->descent - BORDER;
 
     /* get number of player messages */
-    if (selectionAndHistory) {
-	while (last_msg_index < maxMessages
-		&& TalkMsg[last_msg_index]->len != 0)
-	    last_msg_index++;
-	last_msg_index--; /* make it an index */
-    }
+    while (last_msg_index < maxMessages
+	   && TalkMsg[last_msg_index]->len != 0)
+	last_msg_index++;
+    last_msg_index--; /* make it an index */
 
     for (i = 0; i < 2 * maxMessages; i++) {
 	if (i < maxMessages)
@@ -769,26 +765,12 @@ void Paint_messages(void)
 	 * of a message if it is not drawn "flashed" (not in oldMessagesColor)
 	 * anymore.
 	 */
-#ifndef _WINDOWS
-	if (msg->lifeTime > MSG_FLASH_TIME
-	    || !selectionAndHistory
-	    || (selection.draw.state != SEL_PENDING
-		&& selection.draw.state != SEL_EMPHASIZED)) {
-	    if ((msg->lifeTime -= timePerFrame) <= 0.0) {
-		msg->txt[0] = '\0';
-		msg->len = 0;
-		msg->lifeTime = 0.0;
-		continue;
-	    }
-	}
-#else
 	if ((msg->lifeTime -= timePerFrame) <= 0.0) {
 	    msg->txt[0] = '\0';
 	    msg->len = 0;
 	    msg->lifeTime = 0.0;
 	    continue;
 	}
-#endif
 
 	if (msg->lifeTime <= MSG_FLASH_TIME)
 	    msg_color = oldMessagesColor;
@@ -835,118 +817,6 @@ void Paint_messages(void)
 	len = charsPerSecond * (MSG_LIFE_TIME - msg->lifeTime);
 	len = MIN(msg->len, len);
 
-#ifndef _WINDOWS
-	/*
-	 * it's an emphasized talk message
-	 */
-	if (selectionAndHistory && selection.draw.state == SEL_EMPHASIZED
-	    && i < maxMessages
-	    && i >= selection.draw.y1
-	    && i <= selection.draw.y2) {
-
-	    /*
-	     * three strings (ptr), where they begin (xoff) and their
-	     * length (l):
-	     *   1st is an umemph. string to the left of a selection,
-	     *   2nd an emphasized part itself,
-	     *   3rd an unemph. part to the right of a selection.
-	     * set the according variables if a part exists.
-	     * e.g: a selection of several lines `stopping' somewhere in
-	     *   the middle of a line -> ptr2,ptr3 are needed to draw
-	     *   this line
-	     */
-	    char	*ptr  = NULL;
-	    int		xoff  = 0, l = 0;
-	    char	*ptr2 = NULL;
-	    int		xoff2 = 0, l2 = 0;
-	    char	*ptr3 = NULL;
-	    int		xoff3 = 0, l3 = 0;
-
-	    if (i > selection.draw.y1 && i < selection.draw.y2) {
-		    /* all emphasized on this line */
-		    /*xxxxxxxxx*/
-		ptr2 = msg->txt;
-		l2 = len;
-		xoff2 = 0;
-	    } else if (i == selection.draw.y1) {
-		    /* first/only line */
-		    /*___xxx[___]*/
-		ptr = msg->txt;
-		xoff = 0;
-		if ((int)len < selection.draw.x1)
-		    l = len;
-		else {
-			/* at least two parts */
-			/*___xxx[___]*/
-			/*    ^      */
-		    l = selection.draw.x1;
-		    ptr2 = &(msg->txt[selection.draw.x1]);
-		    xoff2 = XTextWidth(messageFont, msg->txt,
-				       selection.draw.x1);
-
-		    if (i < selection.draw.y2) {
-			    /* first line */
-			    /*___xxxxxx*/
-			    /*     ^   */
-			l2 = len - selection.draw.x1;
-		    } else {
-			    /* only line */
-			    /*___xxx___*/
-			if ((int)len <= selection.draw.x2)
-				/*___xxx___*/
-				/*    ^    */
-			    l2 = len - selection.draw.x1;
-			else {
-				/*___xxx___*/
-				/*       ^ */
-			    l2 = selection.draw.x2 - selection.draw.x1 + 1;
-			    ptr3 = &(msg->txt[selection.draw.x2 + 1]);
-			    xoff3 = XTextWidth(messageFont, msg->txt,
-					       selection.draw.x2 + 1);
-			    l3 = len - selection.draw.x2 - 1;
-			}
-		    } /* only line */
-		} /* at least two parts */
-	    } else {
-		    /* last line */
-		    /*xxxxxx[___]*/
-		ptr2 = msg->txt;
-		xoff2 = 0;
-		if ((int)len <= selection.draw.x2 + 1)
-			/* all blue */
-			/*xxxxxx[___]*/
-			/*  ^        */
-		    l2 = len;
-		else {
-			/*xxxxxx___*/
-			/*       ^ */
-		    l2 = selection.draw.x2 + 1;
-		    ptr3 = &(msg->txt[selection.draw.x2 + 1]);
-		    xoff3 = XTextWidth(messageFont, msg->txt,
-				       selection.draw.x2 + 1);
-		    l3 = len - selection.draw.x2 - 1;
-		}
-	    } /* last line */
-
-
-	    if (ptr) {
-		XSetForeground(dpy, messageGC, colors[msg_color].pixel);
-		rd.drawString(dpy, drawPixmap, messageGC, x + xoff, y,
-			      ptr, l);
-	    }
-	    if (ptr2) {
-		XSetForeground(dpy, messageGC, colors[DRAW_EMPHASIZED].pixel);
-		rd.drawString(dpy, drawPixmap, messageGC, x + xoff2, y,
-			      ptr2, l2);
-	    }
-	    if (ptr3) {
-		XSetForeground(dpy, messageGC, colors[msg_color].pixel);
-		rd.drawString(dpy, drawPixmap, messageGC, x + xoff3, y,
-			      ptr3, l3);
-	    }
-
-	} else /* not emphasized */
-#endif
 	{
 	    XSetForeground(dpy, messageGC, colors[msg_color].pixel);
 	    rd.drawString(dpy, drawPixmap, messageGC, x, y,
@@ -978,65 +848,22 @@ void Paint_recording(void)
 }
 
 
-void Paint_client_fps(void)
+void Paint_HUD_values(void)
 {
-    int			w, x, y, len;
-    char		buf[32];
+    int w, x, y, len;
+    char buf[32];
 
     if (!hudColor)
 	return;
 
     SET_FG(colors[hudColor].pixel);
-    sprintf(buf, "FPS: %d", clientFPS);
+    sprintf(buf, "FPS: %.3f", clientFPS);
     len = strlen(buf);
     w = XTextWidth(gameFont, buf, len);
     x = WINSCALE(ext_view_width) - 10 - w;
     y = 200 + gameFont->ascent;
     rd.drawString(dpy, drawPixmap, gameGC, x, y, buf, len);
 }
-
-static void handle_packet_measurement(void)
-{
-    if (packetDropMeterColor || packetLossMeterColor) {
-	packetMeasurement = true;
-	Net_init_measurement();
-	if (!packetMeasurement)
-	    packetDropMeterColor
-		= packetLossMeterColor = 0;
-    }
-}
-
-static bool Set_packetLossMeterColor(xp_option_t *opt, int value)
-{
-    UNUSED_PARAM(opt);
-
-    packetLossMeterColor = value;
-    handle_packet_measurement();
-
-    return true;
-}
-
-static bool Set_packetDropMeterColor(xp_option_t *opt, int value)
-{
-    UNUSED_PARAM(opt);
-
-    packetDropMeterColor = value;
-    handle_packet_measurement();
-
-    return true;
-}
-
-static bool Set_packetLagMeterColor(xp_option_t *opt, int value)
-{
-    UNUSED_PARAM(opt);
-
-    packetLagMeterColor = value;
-    if (packetLagMeterColor)
-	Net_init_lag_measurement();
-
-    return true;
-}
-
 
 xp_option_t hud_options[] = {
 
@@ -1159,28 +986,25 @@ xp_option_t hud_options[] = {
 	"Which color number to use for drawing the packet size meter.\n"
 	"Each bar is equavalent to 1024 bytes, for a maximum of 4096 bytes.\n"),
 
-    COLOR_INDEX_OPTION_WITH_SETFUNC(
+    COLOR_INDEX_OPTION(
 	"packetLossMeterColor",
 	3,
 	&packetLossMeterColor,
-	Set_packetLossMeterColor,
 	"Which color number to use for drawing the packet loss meter.\n"
 	"This gives the percentage of lost frames due to network failure.\n"),
 
-    COLOR_INDEX_OPTION_WITH_SETFUNC(
+    COLOR_INDEX_OPTION(
 	"packetDropMeterColor",
 	0,
 	&packetDropMeterColor,
-	Set_packetDropMeterColor,
 	"Which color number to use for drawing the packet drop meter.\n"
 	"This gives the percentage of dropped frames due to display\n"
 	"slowness.\n"),
 
-    COLOR_INDEX_OPTION_WITH_SETFUNC(
+    COLOR_INDEX_OPTION(
 	"packetLagMeterColor",
 	3,
 	&packetLagMeterColor,
-	Set_packetLagMeterColor,
 	"Which color number to use for drawing the packet lag meter.\n"
 	"This gives the amount of lag in frames over the past one second.\n"),
 

@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -29,8 +29,6 @@
 /*            CB Fixed Warnings                          */
 
 #include "xpclient_x11.h"
-
-char welcome_version[] = VERSION;
 
 /*
  * Are we in the process of quitting, or joining a game.
@@ -237,6 +235,7 @@ static int Local_join_cb(int widget, void *user_data, const char **text)
     return 0;
 }
 
+#if 0
 /*
  * User asked for status on a local server.
  */
@@ -247,6 +246,7 @@ static int Local_status_cb(int widget, void *user_data, const char **text)
     UNUSED_PARAM(widget); UNUSED_PARAM(user_data); UNUSED_PARAM(text);
     return 0;
 }
+#endif
 
 /* 
  * Cleanup when leaving the mode ModeLocalnet.
@@ -1149,7 +1149,7 @@ static int Internet_cb(int widget, void *user_data, const char **text)
     return 0;
 }
 
-
+#if 0
 /*
  * User pressed the Configure button.
  */
@@ -1161,6 +1161,7 @@ static int Configure_cb(int widget, void *user_data, const char **text)
 
     return 0;
 }
+#endif
 
 /*
  * User pressed the Server button.
@@ -1588,7 +1589,8 @@ int Welcome_screen(Connect_param_t * conpar)
 	Welcome_cleanup();
 	result = Join(conpar);
     } else
-	Quit();
+	/* kps - ?????? */
+	Platform_specific_cleanup();
 
     return result;
 }

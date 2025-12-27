@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -26,8 +26,6 @@
  */
 
 #include "xpclient_x11.h"
-
-char xpaint_version[] = VERSION;
 
 /*
  * Globals.
@@ -61,7 +59,6 @@ Window	about_prev_b;		/* About window's previous button */
 Window	keys_close_b;		/* Help window's close button */
 Window	talkWindow;
 bool	gotFocus;
-bool	players_exposed;
 
 static int clockColor;		/* Clock color index */
 static int scoreColor;		/* Score list color indices */
@@ -76,8 +73,6 @@ static void Paint_clock(bool redraw);
 
 int Paint_init(void)
 {
-    Init_scale_array();
-
     if (Init_wreckage() == -1)
 	return -1;
 
@@ -164,7 +159,7 @@ void Paint_frame(void)
 	Paint_meters();
 	Paint_HUD();
 	Paint_recording();
-	Paint_client_fps();
+	Paint_HUD_values();
 
 	Rectangle_end();
 	Segment_end();
@@ -215,12 +210,17 @@ void Paint_frame(void)
 	    assert(yp >= 0.0);
 	    assert(yp < RadarHeight);
 
+#if 0
 	    /* kps - i don't see what adding 0.5 to these helps. */
 	    x = xp - xo /*+ 0.5*/;
 	    y = yp - yo /*+ 0.5*/;
-	    if (x <= 0.0)
+#else
+	    x = (int)(xp - xo + 0.5);
+	    y = (int)(yp - yo + 0.5);
+#endif
+	    if (x <= 0)
 		x += 256;
-	    if (y <= 0.0)
+	    if (y <= 0)
 		y += RadarHeight;
 	    w1 = (unsigned)x;
 	    h1 = (unsigned)y;
@@ -274,7 +274,7 @@ void Paint_frame(void)
 	}
     }
 
-    if (talk_mapped == true) {
+    if (clData.talking) {
 	static bool toggle;
 	static long last_toggled;
 
@@ -396,8 +396,6 @@ void Paint_score_entry(int entry_num, other_t* other, bool is_team)
 	sprintf(label, "%s=%s@%s",
 		other->nick_name, other->user_name, other->host_name);
     else {
-	other_t *war = Other_by_id(other->war_id);
-
 	if (BIT(Setup->mode, TIMING)) {
 	    raceStr[0] = ' ';
 	    raceStr[1] = ' ';
@@ -423,23 +421,19 @@ void Paint_score_entry(int entry_num, other_t* other, bool is_team)
 		    9 - showScoreDecimals, showScoreDecimals,
 		    other->score);
 	else {
-	    int sc = rint(other->score);
+	    double score = other->score;
+	    int sc = (int)(score >= 0.0 ? score + 0.5 : score - 0.5);
 	    sprintf(scoreStr, "%6d", sc);
 	}
 
 	if (BIT(Setup->mode, TEAM_PLAY))
 	    sprintf(label, "%c %s  %-18s%s",
 		    other->mychar, scoreStr, other->nick_name, lifeStr);
-	else {
+	else
 	    sprintf(label, "%c %s%s%s%s  %s",
 		    other->mychar, raceStr, teamStr,
 		    scoreStr, lifeStr,
 		    other->nick_name);
-	    if (war) {
-		if (strlen(label) + strlen(war->nick_name) + 5 < sizeof(label))
-		    sprintf(label + strlen(label), " (%s)", war->nick_name);
-	    }
-	}
     }
 
     /*

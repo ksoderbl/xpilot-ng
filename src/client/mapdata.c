@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 2001 Juha Lindström <juhal@users.sourceforge.net>
  *
@@ -42,7 +42,7 @@ static bool setup_done = false;
 int Mapdata_setup(const char *urlstr)
 {
     URL url;
-    const char *name, *dir;
+    const char *name, *dir = NULL;
     char path[1024], buf[1024], *ptr;
     int rv = false;
 
@@ -67,18 +67,15 @@ int Mapdata_setup(const char *urlstr)
 	goto end;
     }
 
-    if (texturePath == NULL) {
-	warn("texture path is null");
-	goto end;
+    if (realTexturePath != NULL) {
+	for (dir = strtok(realTexturePath, ":"); dir; dir = strtok(NULL, ":"))
+	    if (access(dir, R_OK | W_OK | X_OK) == 0)
+		break;
     }
-
-    for (dir = strtok(texturePath, ":"); dir; dir = strtok(NULL, ":"))
-	if (access(dir, R_OK | W_OK | X_OK) == 0)
-	    break;
-
+	
     if (dir == NULL) {
 
-	/* texturePath hasn't got a directory with proper access rights */
+	/* realTexturePath hasn't got a directory with proper access rights */
 	/* so lets create one into users home dir */
 
 	char *home = getenv("HOME");
@@ -121,28 +118,28 @@ int Mapdata_setup(const char *urlstr)
     *ptr = '\0';
 
     /* add this new texture directory to texturePath */
-    if (texturePath == NULL) {
-	texturePath = strdup(path);
+    if (realTexturePath == NULL) {
+	realTexturePath = strdup(path);
     } else {
-	char *temp = malloc(strlen(texturePath) + strlen(path) + 2);
+	char *temp = XMALLOC(char, strlen(realTexturePath) + strlen(path) + 2);
 	if (temp == NULL) {
-	    error("not enough memory to new texturePath");
+	    error("not enough memory to new realTexturePath");
 	    goto end;
 	}
-	sprintf(temp, "%s:%s", texturePath, path);
-	free(texturePath);
-	texturePath = temp;
+	sprintf(temp, "%s:%s", realTexturePath, path);
+	free(realTexturePath);
+	realTexturePath = temp;
     }
 
     if (access(path, F_OK) == 0) {
-	printf("Required bitmaps have already been downloaded.\n");
+	warn("Required bitmaps have already been downloaded.");
 	rv = true;
 	goto end;
     }
     /* reset path so that it points to the package file name */
     *ptr = '.';
 
-    printf("Downloading map data from %s to %s.\n", urlstr, path);
+    warn("Downloading map data from %s to %s.", urlstr, path);
 
     if (!Mapdata_download(&url, path)) {
 	warn("downloading map data failed");
@@ -226,7 +223,7 @@ static int Mapdata_extract(const char *name)
 	    return 0;
 	}
 
-	printf("Extracting %s (%ld)\n", fname, size);
+	warn("Extracting %s (%ld)", fname, size);
 
 	if ((out = fopen(fname, "wb")) == NULL) {
 	    error("failed to open %s for writing", buf);
@@ -383,12 +380,14 @@ static int Mapdata_download(const URL *url, const char *filePath)
 			n = len - i - 1;
 			memmove(buf, buf + i + 1, n);
 			len = len - i - 1;
+		    } else if (i == len - 1) {
+			len = 0;
 		    }
 		}
 	    }
 	}
 
-	if (!header) {
+	if (!header && len) {
 	    n = len;
 	    if (fwrite(buf, 1, n, f) < n) {
 		error("file write failed");

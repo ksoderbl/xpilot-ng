@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -26,8 +26,6 @@
 /* kps - this file could be made X11 independent easily. */
 
 #include "xpclient_x11.h"
-
-char join_version[] = VERSION;
 
 static int Handle_input(int new_input)
 {

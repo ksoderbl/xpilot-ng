@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -29,19 +29,11 @@
 
 #include "xpserver.h"
 
-char object_version[] = VERSION;
-
-
 /*
  * Global variables
  */
 int			ObjCount = 0;
-int			NumPulses = 0;
-int			NumEcms = 0;
-int			NumTransporters = 0;
 object_t		*Obj[MAX_TOTAL_SHOTS];
-ecm_t			*Ecms[MAX_TOTAL_ECMS];
-trans_t			*Transporters[MAX_TOTAL_TRANSPORTERS];
 
 
 static void Object_incr_count(void)
@@ -97,10 +89,27 @@ void Object_free_ptr(object_t *obj)
 
 static anyobject_t *objArray;
 
-void Alloc_shots(world_t *world, int number)
+#define SHOWTYPESIZE(T) warn("sizeof(" #T ") = %d", sizeof(T))
+
+void Alloc_shots(int number)
 {
     anyobject_t		*x;
     int			i;
+
+#if 0
+    SHOWTYPESIZE(object_t);
+    SHOWTYPESIZE(ballobject_t);
+    SHOWTYPESIZE(mineobject_t);
+    SHOWTYPESIZE(missileobject_t);
+    SHOWTYPESIZE(smartobject_t);
+    SHOWTYPESIZE(torpobject_t);
+    SHOWTYPESIZE(heatobject_t);
+    SHOWTYPESIZE(wireobject_t);
+    SHOWTYPESIZE(pulseobject_t);
+    SHOWTYPESIZE(itemobject_t);
+    SHOWTYPESIZE(anyobject_t);
+    SHOWTYPESIZE(player_t);
+#endif
 
     x = (anyobject_t *) calloc((size_t)number, sizeof(anyobject_t));
     if (!x) {
@@ -111,15 +120,15 @@ void Alloc_shots(world_t *world, int number)
     objArray = x;
     for (i = 0; i < number; i++) {
 	Obj[i] = &(x->obj);
-	MINE_PTR(Obj[i])->owner = NO_ID;
-	Cell_init_object(world, Obj[i]);
+	/* kps - shouldn't be necessary */
+	/*MINE_PTR(Obj[i])->mine_owner = NO_ID;*/
+	Cell_init_object(Obj[i]);
 	x++;
     }
 }
 
-void Free_shots(world_t *world)
+void Free_shots(void)
 {
-    UNUSED_PARAM(world);
     XFREE(objArray);
 }
 

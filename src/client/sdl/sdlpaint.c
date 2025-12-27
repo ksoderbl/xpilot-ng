@@ -42,18 +42,15 @@
 
 #define SCORE_BORDER 5
 
-char sdlpaint_version[] = VERSION;
-
 /*
  * Globals.
  */
 static TTF_Font     *scoreListFont;
-static char         *scoreListFontName = CONF_FONTDIR "VeraMoBd.ttf";
+static const char   *scoreListFontName = CONF_FONTDIR "VeraMoBd.ttf";
 static sdl_window_t scoreListWin;
 static SDL_Rect     scoreEntryRect; /* Bounds for the last painted score entry */
 static bool         scoreListMoving;
 
-double scale;              /* The opengl scale factor */
 int paintSetupMode;
 
 GLWidget *MainWidget = NULL;
@@ -179,20 +176,20 @@ GLWidget *Init_ScorelistWidget(void)
 
 bool Set_scaleFactor(xp_option_t *opt, double val)
 {
-    scaleFactor = val;
-    scale = 1 / val;
+    clData.scaleFactor = val;
+    clData.scale = 1.0 / val;
+    clData.fscale = (float)clData.scale;
     return true;
 }
 
 bool Set_altScaleFactor(xp_option_t *opt, double val)
 {
-    scaleFactor_s = val;
+    clData.altScaleFactor = val;
     return true;
 }
 
 int Paint_init(void)
 {
-    extern bool players_exposed; /* paint.c */
     int i;
 
     if (Init_wreckage() == -1)
@@ -234,8 +231,10 @@ void setupPaint_stationary(void)
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
     glLoadIdentity();
-    glTranslatef(rint(-world.x * scale), rint(-world.y * scale), 0);
-    glScalef(scale, scale, 0);
+    glTranslatef(rint(-world.x * clData.scale),
+		 rint(-world.y * clData.scale),
+		 0);
+    glScalef(clData.scale, clData.scale, 0);
 }
 
 /* This one works best for things that move, since they don't get
@@ -249,8 +248,8 @@ void setupPaint_moving(void)
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
     glLoadIdentity();
-    glTranslatef(-world.x * scale, -world.y * scale, 0);
-    glScalef(scale, scale, 0);
+    glTranslatef(-world.x * clData.scale, -world.y * clData.scale, 0);
+    glScalef(clData.scale, clData.scale, 0);
 }
 
 void setupPaint_HUD(void)
@@ -268,6 +267,10 @@ void setupPaint_HUD(void)
 
 void Paint_frame(void)
 {
+    struct timeval tv1, tv2;
+
+    gettimeofday(&tv1, NULL);
+
     Paint_frame_start();
 
     if (damaged <= 0) {
@@ -314,7 +317,7 @@ void Paint_frame(void)
 
     	Paint_meters();
     	Paint_HUD();
-    	Paint_client_fps();
+    	Paint_HUD_values();
 
 	Paint_messages();       
 	Console_paint();
@@ -326,6 +329,11 @@ void Paint_frame(void)
     }
     
     SDL_GL_SwapBuffers();
+
+    if (newSecond) {
+	gettimeofday(&tv2, NULL);
+	clData.clientLag = 1e-3 * timeval_sub(&tv2, &tv1);
+    }
 }
 
 void Paint_score_start(void)
@@ -391,6 +399,21 @@ void Paint_score_entry(int entry_num, other_t *other, bool is_team)
 	raceStr[2] = ' ';
 
 	lineSpacing = TTF_FontLineSkip(scoreListFont) + 1;
+	/*
+	 * SDL_ttf 1.2 seems to have a broken TTF_FontLineSkip.
+	 * Enable workaround and print a warning.
+	 */
+	if (lineSpacing == 1) {
+	    static bool warned = false;
+	    if (!warned) {
+		warn("Enabling workaround for bug in SDL_ttf 1.2.");
+		warn("SDL_ttf 2.0 or newer should not have this problem.");
+		warned = true;
+	    }
+	    lineSpacing = 15;
+	}
+	/* End of SDL_ttf 1.2 bug workaround. */
+
 	firstLine = 2*SCORE_BORDER + lineSpacing;
     }
     scoreEntryRect.y = firstLine + lineSpacing * entry_num;
@@ -402,8 +425,6 @@ void Paint_score_entry(int entry_num, other_t *other, bool is_team)
 	sprintf(label, "%s=%s@%s",
 		other->nick_name, other->user_name, other->host_name);
     else {
-	other_t *war = Other_by_id(other->war_id);
-
 	if (BIT(Setup->mode, TIMING)) {
 	    raceStr[0] = ' ';
 	    raceStr[1] = ' ';
@@ -429,23 +450,19 @@ void Paint_score_entry(int entry_num, other_t *other, bool is_team)
 		    7 - showScoreDecimals, showScoreDecimals,
 		    other->score);
 	else {
-	    int sc = rint(other->score);
+	    double score = other->score;
+	    int sc = (int)(score >= 0.0 ? score + 0.5 : score - 0.5);
 	    sprintf(scoreStr, "%6d", sc);
 	}
 
 	if (BIT(Setup->mode, TEAM_PLAY))
 	    sprintf(label, "%c%s %-15s%s",
 		    other->mychar, scoreStr, other->nick_name, lifeStr);
-	else {
+	else
 	    sprintf(label, "%c %s%s%s%s  %s",
 		    other->mychar, raceStr, teamStr,
 		    scoreStr, lifeStr,
 		    other->nick_name);
-	    if (war) {
-		if (strlen(label) + strlen(war->nick_name) + 5 < sizeof(label))
-		    sprintf(label + strlen(label), " (%s)", war->nick_name);
-	    }
-	}
     }
 
     /*

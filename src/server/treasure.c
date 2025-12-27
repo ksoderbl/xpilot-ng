@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -25,7 +25,7 @@
 
 #include "xpserver.h"
 
-void Make_treasure_ball(world_t *world, treasure_t *t)
+void Make_treasure_ball(treasure_t *t)
 {
     ballobject_t *ball;
     clpos_t pos = t->pos;
@@ -46,30 +46,37 @@ void Make_treasure_ball(world_t *world, treasure_t *t)
     if ((ball = BALL_PTR(Object_allocate())) == NULL)
 	return;
 
-    ball->life = 1e6;
+    ball->life = 1;  	  	/* doesn't matter, as long as it is > 0 */
     ball->mass = options.ballMass;
     ball->vel.x = 0;	  	/* make the ball stuck a little */
     ball->vel.y = 0;		/* longer to the ground */
     ball->acc.x = 0;
     ball->acc.y = 0;
-    Object_position_init_clpos(world, OBJ_PTR(ball), pos);
+    Object_position_init_clpos(OBJ_PTR(ball), pos);
     ball->id = NO_ID;
-    ball->owner = NO_ID;
+    ball->ball_owner = NO_ID;
     ball->team = t->team;
     ball->type = OBJ_BALL;
     ball->color = WHITE;
-    ball->count = 0;
     ball->pl_range = BALL_RADIUS;
     ball->pl_radius = BALL_RADIUS;
-    CLEAR_MODS(ball->mods);
-    ball->status = RECREATE;
-    ball->treasure = t;
-    ball->style = t->ball_style;
-    Cell_add_object(world, OBJ_PTR(ball));
+    Mods_clear(&ball->mods);
+    ball->obj_status = RECREATE;
+    ball->ball_treasure = t;
+    ball->ball_loose_ticks = 0;
+    ball->ball_style = t->ball_style;
+    Cell_add_object(OBJ_PTR(ball));
 
     t->have = true;
 }
 
+void Treasure_init(void)
+{
+    int i;
+
+    for (i = 0; i < Num_treasures(); i++)
+	Make_treasure_ball(Treasure_by_index(i));
+}
 
 /*
  * Ball has been replaced back in the hoop from whence
@@ -80,12 +87,12 @@ void Make_treasure_ball(world_t *world, treasure_t *t)
  */
 void Ball_is_replaced(ballobject_t *ball)
 {
-    player_t *pl = Player_by_id(ball->owner);
+    player_t *pl = Player_by_id(ball->ball_owner);
 
     ball->life = 0;
-    SET_BIT(ball->status, (NOEXPLOSION|RECREATE));
+    SET_BIT(ball->obj_status, (NOEXPLOSION|RECREATE));
 
-    Score(pl, 5.0, ball->pos, "Treasure: ");
+    if (!options.zeroSumScoring) Score(pl, 5.0, ball->pos, "Treasure: ");
     Set_message_f(" < %s (team %d) has replaced the treasure >",
 		  pl->name, pl->team);
     Rank_saved_ball(pl);
@@ -98,9 +105,9 @@ void Ball_is_replaced(ballobject_t *ball)
  */
 void Ball_is_destroyed(ballobject_t *ball)
 {
-    player_t *pl = Player_by_id(ball->owner);
-    double ticks = 1e6 - ball->life;
-    int frames = ticks / timeStep + .5;
+    player_t *pl = Player_by_id(ball->ball_owner);
+    double ticks = ball->ball_loose_ticks;
+    int frames = (int)(ticks / timeStep + .5);
     double seconds = ticks / options.gameSpeed;
 
     Set_message_f(" < The ball was loose for %d frames / "
@@ -111,82 +118,42 @@ void Ball_is_destroyed(ballobject_t *ball)
 
 static int Punish_team(player_t *pl, treasure_t *td, clpos_t pos)
 {
-    int i;
-    double win_score = 0.0,lose_score = 0.0;
-    int win_team_members = 0, lose_team_members = 0, somebody_flag = 0;
-    double sc, por;
-    world_t *world = pl->world;
+    double win_score = 0.0, lose_score = 0.0;
+    int i, win_team_members = 0, lose_team_members = 0;
+    bool somebody = false;
 
-    Check_team_members (world, td->team);
+    Check_team_members (td->team);
     if (td->team == pl->team)
 	return 0;
+	
+    Handle_Scoring(SCORE_TREASURE,pl,NULL,td,NULL);
 
     if (BIT(world->rules->mode, TEAM_PLAY)) {
-	for (i = 0; i < NumPlayers; i++) {
-	    player_t *pl_i = Player_by_index(i);
+    	for (i = 0; i < NumPlayers; i++) {
+    	    player_t *pl_i = Player_by_index(i);
 
-	    if (Player_is_tank(pl_i)
-		|| (BIT(pl_i->status, PAUSE) && pl_i->pause_count <= 0)
-		|| Player_is_waiting(pl_i))
-		continue;
-	    if (pl_i->team == td->team) {
-		lose_score += pl_i->score;
-		lose_team_members++;
-		if (BIT(pl_i->status, GAME_OVER) == 0)
-		    somebody_flag = 1;
-	    }
-	    else if (pl_i->team == pl->team) {
-		win_score += pl_i->score;
-		win_team_members++;
-	    }
-	}
+    	    if (Player_is_tank(pl_i)
+    	    	|| (Player_is_paused(pl_i) && pl_i->pause_count <= 0)
+    	    	|| Player_is_waiting(pl_i))
+    	    	continue;
+    	    if (pl_i->team == td->team) {
+    	    	lose_score += Get_Score(pl_i);
+    	    	lose_team_members++;
+    	    	if (!Player_is_dead(pl_i))
+    	    	    somebody = true;
+    	    } else if (pl_i->team == pl->team) {
+    	    	win_score += Get_Score(pl_i);
+    	    	win_team_members++;
+    	    }
+    	}
     }
 
+    if (!somebody) {
+    	return 0;
+    }
     sound_play_all(DESTROY_BALL_SOUND);
     Set_message_f(" < %s's (%d) team has destroyed team %d treasure >",
 		  pl->name, pl->team, td->team);
-
-    if (!somebody_flag) {
-	Score(pl, Rate(pl->score, CANNON_SCORE)/2, pos, "Treasure:");
-	return 0;
-    }
-
-    td->destroyed++;
-    world->teams[td->team].TreasuresLeft--;
-    world->teams[pl->team].TreasuresDestroyed++;
-
-    sc  = 3 * Rate(win_score, lose_score);
-    por = (sc * lose_team_members) / (2 * win_team_members + 1);
-
-    for (i = 0; i < NumPlayers; i++) {
-	player_t *pl_i = Player_by_index(i);
-
-	if (Player_is_tank(pl_i)
-	    || (BIT(pl_i->status, PAUSE) && pl_i->pause_count <= 0)
-	    || Player_is_waiting(pl_i))
-	    continue;
-
-	if (pl_i->team == td->team) {
-	    Score(pl_i, -sc, pos, "Treasure: ");
-	    Rank_lost_ball(pl_i);
-	    if (options.treasureKillTeam)
-		SET_BIT(pl_i->status, KILLED);
-	}
-	else if (pl_i->team == pl->team &&
-		 (pl_i->team != TEAM_NOT_SET || pl_i->id == pl->id)) {
-	    if (lose_team_members > 0) {
-		if (pl_i->id == pl->id)
-		    Rank_cashed_ball(pl_i);
-		Rank_won_ball(pl_i);
-	    }
-	    Score(pl_i, (pl_i->id == pl->id ? 3*por : 2*por),
-		  pos, "Treasure: ");
-	}
-    }
-
-    if (options.treasureKillTeam)
-	Rank_add_treasure_kill(pl);
-
     updateScores = true;
 
     return 1;
@@ -196,14 +163,18 @@ void Ball_hits_goal(ballobject_t *ball, group_t *gp)
 {
     player_t *owner;
     treasure_t *td;
-    world_t *world = &World;
     int i;
+
+    if (gp->type != TREASURE) {
+	warn("Ball_hits_goal: not a treasure! Possible map bug.");
+	return;
+    }
 
     /*
      * Player already quit ?
      */
-    if (ball->owner == NO_ID) {
-	SET_BIT(ball->status, (NOEXPLOSION|RECREATE));
+    if (ball->ball_owner == NO_ID) {
+	SET_BIT(ball->obj_status, (NOEXPLOSION|RECREATE));
 	return;
     }
     /*
@@ -212,14 +183,15 @@ void Ball_hits_goal(ballobject_t *ball, group_t *gp)
     if (!BIT(world->rules->mode, TEAM_PLAY))
 	return;
 
-    td = ball->treasure;
-    owner = Player_by_id(ball->owner);
+    td = ball->ball_treasure;
+    owner = Player_by_id(ball->ball_owner);
     if (td->team == gp->team && td->team == owner->team) {
 	Ball_is_replaced(ball);
 	return;
     }
-    if (gp->team == owner->team) {
-	treasure_t *tt = Treasure_by_index(world, gp->mapobj_ind);
+    if (gp->team == owner->team &&
+        td->team != options.specialBallTeam) {
+	treasure_t *tt = Treasure_by_index(gp->mapobj_ind);
 
 	Ball_is_destroyed(ball);
 
@@ -227,7 +199,7 @@ void Ball_hits_goal(ballobject_t *ball, group_t *gp)
 	    Set_message(" < The treasure must be safe before you "
 			"can cash an opponent's! >");
 	else if (Punish_team(owner, td, ball->pos))
-	    CLR_BIT(ball->status, RECREATE);
+	    CLR_BIT(ball->obj_status, RECREATE);
 	return;
     }
 
@@ -252,7 +224,7 @@ void Ball_hits_goal(ballobject_t *ball, group_t *gp)
 	td->team=i; /* give ball to team that has to be punished*/
 	if (Punish_team(owner, td, ball->pos)) 
 	  {
-	    CLR_BIT(ball->status, RECREATE);
+	    CLR_BIT(ball->obj_status, RECREATE);
 	    /*undo treasure counts from Punish_team so we don't 
 	      have to touch that function and possibly break it*/
 	    world->teams[owner->team].TreasuresDestroyed--;
@@ -265,13 +237,28 @@ void Ball_hits_goal(ballobject_t *ball, group_t *gp)
       world->teams[options.specialBallTeam].TreasuresDestroyed++;
 
       if(!opponent_teams){
-	SET_BIT(ball->status, RECREATE);
-	world->teams[options.specialBallTeam].TreasuresLeft++;
-	if (Punish_team(owner, td, ball->pos));
+	SET_BIT(ball->obj_status, RECREATE);
+	if(Punish_team(owner, td, ball->pos))
+	    world->teams[options.specialBallTeam].TreasuresLeft++;
       }
       return;
     }
-
+    
+    if (td->team == options.specialBallTeam) {
+	Ball_is_destroyed(ball);
+	td->team=gp->team; /* give ball to team that has to be punished*/
+	if (Punish_team(owner, td, ball->pos)) {
+	    CLR_BIT(ball->obj_status, RECREATE);
+	    /*undo treasure counts from Punish_team so we don't 
+	      have to touch that function and possibly break it*/
+	    world->teams[td->team].TreasuresLeft++;
+	    world->teams[options.specialBallTeam].TreasuresLeft--;
+	}
+	
+	td->team=options.specialBallTeam;
+	return;
+	
+    }
    /* {KS} mods for special treasures stop here*/
 }
 
@@ -285,30 +272,28 @@ void Ball_hits_goal(ballobject_t *ball, group_t *gp)
  * anything) unless you know what you are doing.
  */
 
+extern bool in_legacy_mode_ball_hack;
 /*
  * This function is called when something would hit a balltarget.
  * The function determines if it hits or not.
  */
-bool Balltarget_hitfunc(group_t *gp, move_t *move)
+bool Balltarget_hitfunc(group_t *gp, const move_t *move)
 {
-    ballobject_t *ball = NULL;
-    world_t *world = &World;
+    const ballobject_t *ball = NULL;
 
     /* this can happen if is_inside is called for a balltarget with
        a NULL obj */
     if (move->obj == NULL)
 	return true;
 
-    /* can this happen ? */
-    if (move->obj->type != OBJ_BALL) {
-	printf("Balltarget_hitfunc: hit by a %s.\n",
-	       Object_typename(move->obj));
+    assert(move->obj->type == OBJ_BALL);
+
+    ball = (const ballobject_t *)move->obj;
+
+    if (ball->ball_owner == NO_ID)
 	return true;
-    }
 
-    ball = BALL_PTR(move->obj);
-
-    if (ball->owner == NO_ID)
+    if (in_legacy_mode_ball_hack)
 	return true;
 
     if (BIT(world->rules->mode, TEAM_PLAY)) {
@@ -317,9 +302,12 @@ bool Balltarget_hitfunc(group_t *gp, move_t *move)
 	 * the ball and the target are of the same team, but the
 	 * owner is not.
 	 */
-	if (ball->treasure->team != options.specialBallTeam 
-	    && ball->treasure->team == gp->team
-	    && Player_by_id(ball->owner)->team != gp->team)
+	if (ball->ball_treasure->team != options.specialBallTeam /* kps - ? */
+	    /* khs - "special" ball and "special" treasure have the same "team" */
+	    /* the player/team that gets this ball into this treasure scores    */
+            /* against all other teams, therefore the ball must be able to hit - ok? */
+	    && ball->ball_treasure->team == gp->team
+	    && Player_by_id(ball->ball_owner)->team != gp->team)
 	    return false;
 	return true;
     }

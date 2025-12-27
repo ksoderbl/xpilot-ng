@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2004 by
  *
@@ -27,9 +27,6 @@
 
 #include "xpclient.h"
 
-char messages_version[] = VERSION;
-
-
 message_t	*TalkMsg[MAX_MSGS], *GameMsg[MAX_MSGS];
 message_t	*TalkMsg_pending[MAX_MSGS], *GameMsg_pending[MAX_MSGS];
 char		*HistoryMsg[MAX_HIST_MSGS];
@@ -39,7 +36,6 @@ static	char		*HistoryBlock = NULL;
 int			maxLinesInHistory;
 int	maxMessages;		/* Max. number of messages to display */
 int	messagesToStdout;	/* Send messages to standard output */
-bool	selectionAndHistory;
 
 bool ball_shout = false;
 bool need_cover = false;
@@ -179,6 +175,32 @@ static bool Msg_match_fmt(const char *msg, const char *fmt, msgnames_t *mn)
     return false;
 }
 
+static bool Want_scan(void)
+{
+    int i;
+    other_t *other;
+    int num_playing = 0;
+
+    /* if only player on server, let's not bother */
+    if (num_others < 2)
+	return false;
+
+    /* if not playing, don't bother */
+    if (!self || strchr("PW", self->mychar))
+	return false;
+
+    for (i = 0; i < num_others; i++) {
+	other = &Others[i];
+	/* alive and dead ships and robots are considered playing */
+	if (strchr(" DR", other->mychar))
+	    num_playing++;
+    }
+
+    if (num_playing > 1)
+	return true;
+    return false;
+}
+
 /*
  * A total reset is most often done when a new match is starting.
  * If we see a total reset message we clear the statistics.
@@ -208,7 +230,7 @@ static bool Msg_scan_for_replace_treasure(const char *message)
 {
     msgnames_t mn;
 
-    if (!self)
+    if (!self || !Want_scan())
 	return false;
 
     memset(&mn, 0, sizeof(mn));
@@ -244,7 +266,7 @@ static bool Msg_scan_for_ball_destruction(const char *message)
 {
     msgnames_t mn;
 
-    if (!self)
+    if (!self || !Want_scan())
 	return false;
 
     memset(&mn, 0, sizeof(mn));
@@ -267,9 +289,6 @@ static bool Msg_scan_for_ball_destruction(const char *message)
     return false;
 }
 
-
-
-
 /* Needed by base warning hack */
 static void Msg_scan_death(int id)
 {
@@ -283,51 +302,17 @@ static void Msg_scan_death(int id)
     if (!other)
 	return;
 
-    /*
-     * kps - hack, we don't want to do base warning for players who
-     * lost their last life. If deathtime is used for anything else
-     * this must be done some other way.
-     */
+    /* don't do base warning for players who lost their last life */
     if (BIT(Setup->mode, LIMITED_LIVES)	&& other->life == 0)
 	return;
 
     for (i = 0; i < num_bases; i++) {
 	if (bases[i].id == id) {
-	    bases[i].appeartime = end_loops + 3 * clientFPS;
+	    bases[i].appeartime = (long) (end_loops + 3 * clientFPS);
 	    break;
 	}
     }
 }
-
-static bool Want_msg_scan(void)
-{
-    int i;
-    other_t *other;
-    int num_playing = 0;
-
-    /* kps fix */
-    return true;
-
-    /* if only player on server, let's not bother */
-    if (num_others < 2)
-	return false;
-
-    /* if not playing, don't bother */
-    if (!self || strchr("PW", self->mychar))
-	return false;
-
-    for (i = 0; i < num_others; i++) {
-	other = &Others[i];
-	/* alive and dead ships and robots are considered playing */
-	if (strchr(" DR", other->mychar))
-	    num_playing++;
-    }
-
-    if (num_playing > 1)
-	return true;
-    return false;
-}
-
 
 static bool Msg_is_game_msg(const char *message)
 {
@@ -552,12 +537,10 @@ static bool Msg_is_in_angle_brackets(const char *message)
     return true;
 }
 
-static void Msg_scan_angle_bracketed_msg(const char *message, bool want_scan)
+static void Msg_scan_angle_bracketed_msg(const char *message)
 {
     /* let's scan for total reset even if not playing */
     if (Msg_scan_for_total_reset(message))
-	return;
-    if (!want_scan)
 	return;
     if (Msg_scan_for_ball_destruction(message))
 	return;
@@ -674,46 +657,42 @@ static bool Msg_is_from_our_team(const char *message, const char **msg2)
 
 int Alloc_msgs(void)
 {
-    message_t		*x, *x2 = NULL;
-    int			i;
+    message_t *x, *x2 = NULL;
+    int i;
 
-    if ((x = malloc(2 * MAX_MSGS * sizeof(message_t))) == NULL){
+    x = XMALLOC(message_t, 2 * MAX_MSGS);
+    if (x == NULL) {
 	error("No memory for messages");
 	return -1;
     }
 
-    if (selectionAndHistory &&
-	((x2 = malloc(2 * MAX_MSGS * sizeof(message_t))) == NULL)){
+    x2 = XMALLOC(message_t, 2 * MAX_MSGS);
+    if (x2 == NULL) {
 	error("No memory for history messages");
 	free(x);
 	return -1;
     }
-    if (selectionAndHistory)
-	MsgBlock_pending = x2;
 
+    MsgBlock_pending = x2;
     MsgBlock = x;
 
     for (i = 0; i < 2 * MAX_MSGS; i++) {
 	if (i < MAX_MSGS) {
 	    TalkMsg[i] = x;
-	    if (selectionAndHistory)
-		TalkMsg_pending[i] = x2;
+	    TalkMsg_pending[i] = x2;
 	} else {
 	    GameMsg[i - MAX_MSGS] = x;
-	    if (selectionAndHistory)
-		GameMsg_pending[i - MAX_MSGS] = x2;
+	    GameMsg_pending[i - MAX_MSGS] = x2;
 	}
 	x->txt[0] = '\0';
 	x->len = 0;
 	x->lifeTime = 0.0;
 	x++;
 
-	if (selectionAndHistory) {
-	    x2->txt[0] = '\0';
-	    x2->len = 0;
-	    x2->lifeTime = 0.0;
-	    x2++;
-	}
+	x2->txt[0] = '\0';
+	x2->len = 0;
+	x2->lifeTime = 0.0;
+	x2++;
     }
     return 0;
 }
@@ -730,7 +709,8 @@ int Alloc_history(void)
     int		i;
 
     /* maxLinesInHistory is a runtime constant */
-    if ((hist_ptr = malloc((size_t)maxLinesInHistory * MAX_CHARS)) == NULL) {
+    hist_ptr = XMALLOC(char, (size_t)maxLinesInHistory * MAX_CHARS);
+    if (hist_ptr == NULL) {
 	error("No memory for history");
 	return -1;
     }
@@ -759,18 +739,17 @@ void Free_selectionAndHistory(void)
  */
 void Add_message(const char *message)
 {
-    int			i;
-    message_t		*msg, **msg_set;
-    bool		is_game_msg = false, want_scan = false;
-    msg_bms_t		bmsinfo = BmsNone;
-    const char		*msg2;
-    bool		is_drawn_talk_message	= false; /* not pending */
-    int			last_msg_index;
-    bool		scrolling		= false; /* really moving */
+    int i, last_msg_index;
+    message_t *msg, **msg_set;
+    msg_bms_t bmsinfo = BmsNone;
+    const char *msg2;
+    bool is_game_msg = false;
+    bool is_drawn_talk_message	= false; /* not pending */
+    bool scrolling = false; /* really moving */
 
     is_game_msg = Msg_is_game_msg(message);
     if (!is_game_msg) {
-	if (selectionAndHistory && selection.draw.state == SEL_PENDING) {
+	if (selection.draw.state == SEL_PENDING) {
 	    /* the buffer for the pending messages */
 	    msg_set = TalkMsg_pending;
 	} else {
@@ -778,26 +757,24 @@ void Add_message(const char *message)
 	    is_drawn_talk_message = true;
 	}
     } else {
-	if (selectionAndHistory && selection.draw.state == SEL_PENDING)
+	if (selection.draw.state == SEL_PENDING)
 	    msg_set = GameMsg_pending;
 	else
 	    msg_set = GameMsg;
     }
 
-    want_scan = Want_msg_scan();
-    if (is_game_msg && want_scan)
+    if (is_game_msg)
 	Msg_scan_game_msg(message);
 
     else if (Msg_is_in_angle_brackets(message))
-	Msg_scan_angle_bracketed_msg(message, want_scan);
+	Msg_scan_angle_bracketed_msg(message);
 
     else if (!is_game_msg
 	     && BIT(Setup->mode, TEAM_PLAY)
-	     && want_scan
 	     && Msg_is_from_our_team(message, &msg2))
 	bmsinfo = Msg_do_bms(msg2);
 
-    if (selectionAndHistory && is_drawn_talk_message) {
+    if (is_drawn_talk_message) {
 	/* how many talk messages */
         last_msg_index = 0;
         while (last_msg_index < maxMessages
@@ -806,7 +783,7 @@ void Add_message(const char *message)
         last_msg_index--; /* make it an index */
 
 	/*
-	 * keep the emphasizing (`jumping' from talk window to talk messages)
+	 * keep the emphasizing ('jumping' from talk window to talk messages)
 	 */
 	if (selection.keep_emphasizing) {
 	    selection.keep_emphasizing = false;
@@ -830,14 +807,14 @@ void Add_message(const char *message)
     /*
      * scroll also the emphasizing
      */
-    if (selectionAndHistory && is_drawn_talk_message
+    if (is_drawn_talk_message
 	&& selection.draw.state == SEL_EMPHASIZED ) {
 
 	if ((scrolling && selection.draw.y2 == 0)
 	    || (selection.draw.y1 == maxMessages - 1)) {
 	    /*
-	     * the emphasizing vanishes, as it's `last' line
-	     * is `scrolled away'
+	     * the emphasizing vanishes, as it's 'last' line
+	     * is 'scrolled away'
 	     */
 	    selection.draw.state = SEL_SELECTED;
 	} else {
@@ -875,7 +852,7 @@ void Add_newbie_message(const char *message)
 
     snprintf(msg, sizeof(msg), "%s [*Newbie help*]", message);
 
-    Add_message(msg);
+    Add_alert_message(msg,10.0);
 }
 
 /*
@@ -883,11 +860,8 @@ void Add_newbie_message(const char *message)
  */
 static void Delete_pending_messages(void)
 {
-    message_t* msg;
+    message_t *msg;
     int i;
-
-    if (!selectionAndHistory)
-	return;
 
     for (i = 0; i < maxMessages; i++) {
 	msg = TalkMsg_pending[i];
@@ -910,10 +884,8 @@ static void Delete_pending_messages(void)
  */
 void Add_pending_messages(void)
 {
-    int			i;
+    int i;
 
-    if (!selectionAndHistory)
-	return;
     /* just through all messages */
     for (i = maxMessages-1; i >= 0; i--) {
 	if (TalkMsg_pending[i]->len > 0)
@@ -940,13 +912,13 @@ static void Roundend(void)
 
 void Add_roundend_messages(other_t **order)
 {
-    static char		hackbuf[MSG_LEN];
-    static char		hackbuf2[MSG_LEN];
-    static char		kdratio[16];
-    static char		killsperround[16];
-    char		*s;
-    int			i;
-    other_t		*other;
+    static char hackbuf[MSG_LEN];
+    static char hackbuf2[MSG_LEN];
+    static char kdratio[16];
+    static char killsperround[16];
+    char *s;
+    int i;
+    other_t *other;
 
     Roundend();
 
@@ -998,8 +970,8 @@ void Add_roundend_messages(other_t **order)
 	    }
 	    s += sprintf(s, "%s", hackbuf2);
 	} else {
-	    int sc = rint(other->score);
-
+	    double score = other->score;
+	    int sc = (int)(score >= 0.0 ? score + 0.5 : score - 0.5);
 	    sprintf(hackbuf2, "%s: %d ", other->nick_name, sc);
 	    if ((s - hackbuf) + strlen(hackbuf2) > MSG_LEN) {
 		Add_message(hackbuf);
@@ -1017,9 +989,6 @@ void Add_roundend_messages(other_t **order)
 void Print_messages_to_stdout(void)
 {
     int i;
-
-    if (!selectionAndHistory)
-	return;
 
     xpprintf("[talk messages]\n");
     for (i = 0; i < maxMessages; i++) {

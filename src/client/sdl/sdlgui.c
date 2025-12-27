@@ -45,6 +45,7 @@ Uint32 greenRGBA    = 0x00ff00ff;
 Uint32 yellowRGBA   = 0xffff00ff;
 
 Uint32 wallColorRGBA;
+Uint32 decorColorRGBA;
 Uint32 hudColorRGBA;
 Uint32 connColorRGBA;
 Uint32 scoreObjectColorRGBA;
@@ -75,6 +76,7 @@ Uint32 fuelGaugeColorRGBA;
 Uint32 selfLWColorRGBA;
 Uint32 teamLWColorRGBA;
 Uint32 enemyLWColorRGBA;
+Uint32 teamShipColorRGBA;
 Uint32 team0ColorRGBA;
 Uint32 team1ColorRGBA;
 Uint32 team2ColorRGBA;
@@ -117,6 +119,7 @@ float hudRadarDotScale;
 static double shipLineWidth;
 static bool smoothLines;
 static bool texturedBalls;
+static bool texturedShips;
 static GLuint polyListBase = 0;
 static GLuint polyEdgeListBase = 0;
 static GLuint asteroid = 0;
@@ -145,11 +148,14 @@ static GLubyte get_alpha(Uint32 color)
     return (color & 255);
 }
 
-int GL_X(int x) {
-    return (int)((x - world.x)*scale);
+int GL_X(int x)
+{
+    return (int)((x - world.x) * clData.scale);
 }
-int GL_Y(int y) {
-    return (int)((y - world.y)*scale);
+
+int GL_Y(int y)
+{
+    return (int)((y - world.y) * clData.scale);
 }
 
 
@@ -202,53 +208,89 @@ static int wrap(int *xp, int *yp)
 #ifndef CALLBACK
 #define CALLBACK
 #endif
-static void CALLBACK vertex_callback(ipos_t *p, image_t *texture)
+
+static void CALLBACK vertex_callback(ipos_t *p, irec_t *trec)
 {
-    if (texture != NULL) {
-	glTexCoord2f(p->x / (GLfloat)texture->frame_width,
-		     p->y / (GLfloat)texture->height);
+    if (trec != NULL) {
+	glTexCoord2f((p->x + trec->x) / (GLfloat)trec->w,
+		     (p->y + trec->y) / (GLfloat)trec->h);
     }
     glVertex2i(p->x, p->y);
 }
 
-static void tessellate_polygon(GLUtriangulatorObj *tess, int i)
+static void tessellate_polygon(GLUtriangulatorObj *tess, int ind)
 {
-    int j;
-    int x,y;
-
+    int i, x, y, minx, miny;
     xp_polygon_t polygon;
     polygon_style_t p_style;
     image_t *texture = NULL;
+    irec_t trec;
     GLdouble v[3] = { 0, 0, 0 };
     ipos_t p[MAX_VERTICES];
 
-    polygon = polygons[i];
+    polygon = polygons[ind];
     p_style = polygon_styles[polygon.style];
+    
     p[0].x = p[0].y = 0;
-
-    if (BIT(p_style.flags, STYLE_TEXTURED))
+    if (BIT(p_style.flags, STYLE_TEXTURED)) {
 	texture = Image_get_texture(p_style.texture);
-    glNewList(polyListBase + i,  GL_COMPILE);
-    gluTessBeginPolygon(tess, texture);
+	if (texture != NULL) {
+	    x = y = minx = miny = 0;
+	    for (i = 1; i < polygon.num_points; i++) {
+		x += polygon.points[i].x;
+		y += polygon.points[i].y;
+		if (x < minx) minx = x;
+		if (y < miny) miny = y;
+	    }
+	    trec.x = -minx;
+	    trec.y = -miny - (polygon.bounds.h % texture->height);
+	    trec.w = texture->frame_width;
+	    trec.h = texture->height;
+	}
+    }
+    glNewList(polyListBase + ind,  GL_COMPILE);
+    gluTessBeginPolygon(tess, texture ? &trec : NULL);
     gluTessVertex(tess, v, &p[0]);
-    for (j = 1; j < polygon.num_points; j++) {
-	v[0] = p[j].x = p[j-1].x + polygon.points[j].x;
-	v[1] = p[j].y = p[j-1].y + polygon.points[j].y;
-	gluTessVertex(tess, v, &p[j]);
+    for (i = 1; i < polygon.num_points; i++) {
+	v[0] = p[i].x = p[i - 1].x + polygon.points[i].x;
+	v[1] = p[i].y = p[i - 1].y + polygon.points[i].y;
+	gluTessVertex(tess, v, &p[i]);
     }
     gluTessEndPolygon(tess);
     glEndList();
 
-    glNewList(polyEdgeListBase + i,  GL_COMPILE);
-    glBegin(GL_LINE_LOOP);
-    x = y = 0;
-    glVertex2i(x, y);
-    for (j = 1; j < polygon.num_points; j++) {
-	x += polygon.points[j].x;
-	y += polygon.points[j].y;
+    glNewList(polyEdgeListBase + ind,  GL_COMPILE);
+    if (polygon.edge_styles == NULL) { /* No special edges */
+	glBegin(GL_LINE_LOOP);
+	x = y = 0;
 	glVertex2i(x, y);
+	for (i = 1; i < polygon.num_points; i++) {
+	    x += polygon.points[i].x;
+	    y += polygon.points[i].y;
+	    glVertex2i(x, y);
+	}
+	glEnd();
     }
-    glEnd();
+    else { 	/* This polygon has special edges */
+	ipos_t pos1, pos2;
+	int sindex;
+
+	glBegin(GL_LINES);
+	pos1.x = 0;
+	pos1.y = 0;
+	for (i = 1; i < polygon.num_points; i++) {
+	    pos2.x = pos1.x + polygon.points[i].x;
+	    pos2.y = pos1.y + polygon.points[i].y;
+	    sindex = polygon.edge_styles[i - 1];
+	    /* Style 0 means internal edges which are never shown */
+	    if (sindex != 0) {
+		glVertex2i(pos1.x, pos1.y);
+		glVertex2i(pos2.x, pos2.y);
+	    }
+	    pos1 = pos2;
+	}
+	glEnd();
+    }
     glEndList();
 }
 
@@ -300,10 +342,15 @@ int Gui_init(void)
 	return -1;
     }
 
+    /* TODO: figure out proper casting here do not use _GLUfuncptr */
+    /* it doesn't work on windows  or MAC OS X */
+#ifdef _MSC_VER 
     gluTessCallback(tess, GLU_TESS_BEGIN, glBegin);
-	/* TODO: figure out proper casting here do not use _GLUfuncptr */
-	/* it doesn't work on windows  or MAC OS X */
     gluTessCallback(tess, GLU_TESS_VERTEX_DATA, vertex_callback);
+#else
+    gluTessCallback(tess, GLU_TESS_BEGIN, (GLvoid (*)(void))glBegin);
+    gluTessCallback(tess, GLU_TESS_VERTEX_DATA, (GLvoid (*)(void))vertex_callback);
+#endif
     gluTessCallback(tess, GLU_TESS_END, glEnd);
 
     for (i = 0; i < num_polygons; i++) {
@@ -367,12 +414,13 @@ void Gui_paint_fuel(int x, int y, double fuel)
     if (frame >= img->num_frames)
 	frame = (2 * img->num_frames - 1) - frame;
 
-    size = (BLOCK_SZ - 2 * FUEL_BORDER) * fuel / MAX_STATION_FUEL;
+    size = (int)((BLOCK_SZ - 2 * FUEL_BORDER) * fuel / MAX_STATION_FUEL);
 
     Image_paint(IMG_FUELCELL, x, y, 0, fuelColorRGBA);
 
     area.x = 0;
-    area.y = (BLOCK_SZ - 2 * FUEL_BORDER) * (1 - fuel / MAX_STATION_FUEL);
+    area.y = (int)((BLOCK_SZ - 2 * FUEL_BORDER)
+		   * (1 - fuel / MAX_STATION_FUEL));
     area.w = BLOCK_SZ - 2 * FUEL_BORDER;
     area.h = size;
     Image_paint_area(IMG_FUEL,
@@ -385,7 +433,7 @@ void Gui_paint_fuel(int x, int y, double fuel)
 
 void Gui_paint_base(int x, int y, int id, int team, int type)
 {
-    int color;
+    Uint32 color;
     homebase_t *base = NULL;
     other_t *other;
     bool do_basewarning = false;
@@ -432,7 +480,8 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
 	if (version < 0x4F12 && do_basewarning) {
 	    if (baseWarningType & 1) {
 		/* We assume the ship will appear after 3 seconds. */
-		int count = 360 * (base->appeartime - loops) / (3 * clientFPS);
+		int count = (int)(360 * (base->appeartime - loops)
+				  / (3 * clientFPS));
 		LIMIT(count, 0, 360);
 		/* red box basewarning */
 		if (count > 0 && (baseWarningType & 1))
@@ -453,16 +502,16 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
 
     switch (type) {
     case SETUP_BASE_UP:
-	mapnprint(&mapfont,color,CENTER,DOWN ,(x)    	    	,(y - BLOCK_SZ / 2),maxCharsInNames,other->nick_name);
+	mapnprint(&mapfont,color,CENTER,DOWN ,(x)    	    	,(y - BLOCK_SZ / 2),maxCharsInNames,"%s",other->nick_name);
         break;
     case SETUP_BASE_DOWN:
-	mapnprint(&mapfont,color,CENTER,UP   ,(x)    	    	,(y + BLOCK_SZ / 1.5),maxCharsInNames,other->nick_name);
+	mapnprint(&mapfont,color,CENTER,UP   ,(x)    	    	,(int)(y + BLOCK_SZ / 1.5),maxCharsInNames,"%s",other->nick_name);
         break;
     case SETUP_BASE_LEFT:
-	mapnprint(&mapfont,color,RIGHT,UP    ,(x + BLOCK_SZ / 2) ,(y),maxCharsInNames,other->nick_name);
+	mapnprint(&mapfont,color,RIGHT,UP    ,(x + BLOCK_SZ / 2) ,(y),maxCharsInNames,"%s",other->nick_name);
         break;
     case SETUP_BASE_RIGHT:
-	mapnprint(&mapfont,color,LEFT,UP     ,(x - BLOCK_SZ / 2) ,(y),maxCharsInNames,other->nick_name);
+	mapnprint(&mapfont,color,LEFT,UP     ,(x - BLOCK_SZ / 2) ,(y),maxCharsInNames,"%s",other->nick_name);
         break;
     default:
         errno = 0;
@@ -473,6 +522,51 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
 void Gui_paint_decor(int x, int y, int xi, int yi, int type,
 		     bool last, bool more_y)
 {
+	int mask;
+    static unsigned char    decor[256];
+    static int		    decorReady = 0;
+
+    if (!decorReady) {
+		memset(decor, 0, sizeof decor);
+		decor[SETUP_DECOR_FILLED]
+			= DECOR_UP | DECOR_LEFT | DECOR_DOWN | DECOR_RIGHT;
+		decor[SETUP_DECOR_RU] = DECOR_UP | DECOR_RIGHT | DECOR_CLOSED;
+		decor[SETUP_DECOR_RD]
+			= DECOR_DOWN | DECOR_RIGHT | DECOR_OPEN | DECOR_BELOW;
+		decor[SETUP_DECOR_LU] = DECOR_UP | DECOR_LEFT | DECOR_OPEN;
+		decor[SETUP_DECOR_LD]
+			= DECOR_LEFT | DECOR_DOWN | DECOR_CLOSED | DECOR_BELOW;
+    }
+
+    mask = decor[type];
+
+    set_alphacolor(decorColorRGBA);
+    glBegin(GL_LINES);
+
+    if (mask & DECOR_LEFT) {
+		glVertex2i(x, y);
+		glVertex2i(x, y + BLOCK_SZ);
+    }
+    if (mask & DECOR_DOWN) {
+		glVertex2i(x, y);
+		glVertex2i(x + BLOCK_SZ, y);
+    }
+    if (mask & DECOR_RIGHT) {
+		glVertex2i(x + BLOCK_SZ, y);
+		glVertex2i(x + BLOCK_SZ, y + BLOCK_SZ);
+    }
+    if (mask & DECOR_UP) {
+		glVertex2i(x, y + BLOCK_SZ);
+		glVertex2i(x + BLOCK_SZ, y + BLOCK_SZ);
+    }
+	if (mask & DECOR_OPEN) {
+		glVertex2i(x, y);
+		glVertex2i(x + BLOCK_SZ, y + BLOCK_SZ);
+    } else if (mask & DECOR_CLOSED) {
+		glVertex2i(x, y + BLOCK_SZ);
+		glVertex2i(x + BLOCK_SZ, y);
+    }
+    glEnd();
 }
 
 void Gui_paint_border(int x, int y, int xi, int yi)
@@ -635,10 +729,43 @@ void Gui_paint_setup_asteroid_concentrator(int x, int y)
 
 void Gui_paint_decor_dot(int x, int y, int size)
 {
+	set_alphacolor(wallColorRGBA);
+	glBegin(GL_QUADS);
+	glVertex2i(x + ((BLOCK_SZ - size) >> 1),
+			   y + ((BLOCK_SZ - size) >> 1));
+	glVertex2i(x + ((BLOCK_SZ - size) >> 1),
+			   y + ((BLOCK_SZ + size) >> 1));
+	glVertex2i(x + ((BLOCK_SZ + size) >> 1),
+			   y + ((BLOCK_SZ + size) >> 1));
+	glVertex2i(x + ((BLOCK_SZ + size) >> 1),
+			   y + ((BLOCK_SZ - size) >> 1));
+	glEnd();
 }
 
 void Gui_paint_setup_target(int x, int y, int team, double damage, bool own)
 {
+	int damage_y;
+
+	Image_paint(IMG_TARGET, x, y, 0, whiteRGBA);
+	if (BIT(Setup->mode, TEAM_PLAY)) {
+		mapprint(&mapfont, whiteRGBA, RIGHT, UP, x + BLOCK_SZ, y, "%d", team);
+	}
+	if (damage != TARGET_DAMAGE) {
+		damage_y = y + (int)((BLOCK_SZ - 3) * (damage / TARGET_DAMAGE));
+		set_alphacolor(own ? blueRGBA : redRGBA);
+		glBegin(GL_LINE_LOOP);
+		glVertex2i(x, y + 3);
+		glVertex2i(x, y + BLOCK_SZ);
+		glVertex2i(x + 5, y + BLOCK_SZ);
+		glVertex2i(x + 5, y + 3);
+		glEnd();
+		glBegin(GL_QUADS);
+		glVertex2i(x, y + 3);
+		glVertex2i(x, damage_y);
+		glVertex2i(x + 5, damage_y);
+		glVertex2i(x + 5, y + 3);	
+		glEnd();
+	}
 }
 
 void Gui_paint_setup_treasure(int x, int y, int team, bool own)
@@ -692,26 +819,30 @@ void Gui_paint_filled_slice(int bl, int tl, int tr, int br, int y)
 
 void Gui_paint_polygon(int i, int xoff, int yoff)
 {
-    xp_polygon_t    polygon;
+    xp_polygon_t polygon;
     polygon_style_t p_style;
-    edge_style_t    e_style;
+    edge_style_t e_style;
+    int width;
+    bool did_fill = false;
 
     polygon = polygons[i];
     p_style = polygon_styles[polygon.style];
     e_style = edge_styles[p_style.def_edge_style];
 
-    if (BIT(p_style.flags, STYLE_INVISIBLE)) return;
+    if (BIT(p_style.flags, STYLE_INVISIBLE))
+	return;
 
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
     glLoadIdentity();
 
-    glTranslatef(polygon.points[0].x * scale +
-		 rint((xoff * Setup->width - world.x) * scale),
-		 polygon.points[0].y * scale +
-		 rint((yoff * Setup->height - world.y) * scale), 0);
-    glScalef(scale, scale, 0);
+    glTranslatef(polygon.points[0].x * clData.scale +
+		 rint((xoff * Setup->width - world.x) * clData.scale),
+		 polygon.points[0].y * clData.scale +
+		 rint((yoff * Setup->height - world.y) * clData.scale), 0);
+    glScalef(clData.scale, clData.scale, 0);
 
+    /* possibly paint the polygon as filled or textured */
     if ((instruments.texturedWalls || instruments.filledWorld) &&
 	    BIT(p_style.flags, STYLE_TEXTURED | STYLE_FILLED)) {
 	if (BIT(p_style.flags, STYLE_TEXTURED)
@@ -719,25 +850,34 @@ void Gui_paint_polygon(int i, int xoff, int yoff)
 	    Image_use_texture(p_style.texture);
 	    glCallList(polyListBase + i);
 	    Image_no_texture();
-	} else {
+	}
+	else {
 	    set_alphacolor((p_style.rgb << 8) | 0xff);
 	    glCallList(polyListBase + i);
 	}
+	did_fill = true;
     }
 
-    set_alphacolor((e_style.rgb << 8) | 0xff);
-    glLineWidth(e_style.width * scale);
-    if (smoothLines) {
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glEnable(GL_LINE_SMOOTH);
+    width = e_style.width;
+    if (!did_fill && width == -1)
+	width = 1;
+
+    /* possibly paint the edges around the polygon */
+    if (width != -1) {
+	set_alphacolor((e_style.rgb << 8) | 0xff);
+	glLineWidth(width * clData.scale);
+	if (smoothLines) {
+	    glEnable(GL_BLEND);
+	    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	    glEnable(GL_LINE_SMOOTH);
+	}
+	glCallList(polyEdgeListBase + i);
+	if (smoothLines) {
+	    glDisable(GL_LINE_SMOOTH);
+	    glDisable(GL_BLEND);
+	}
+	glLineWidth(1);
     }
-    glCallList(polyEdgeListBase + i);
-    if (smoothLines) {
-	glDisable(GL_LINE_SMOOTH);
-	glDisable(GL_BLEND);
-    }
-    glLineWidth(1);
     glPopMatrix();
 }
 
@@ -903,21 +1043,21 @@ void Gui_paint_asteroid(int x, int y, int type, int rot, int size)
  */
 void Gui_paint_fastshot(int color, int x, int y)
 {
-    int size = MIN(shotSize, 8);
+    int size = MIN(shotSize, 16);
 
     Image_paint(IMG_BULLET,
 		x + world.x - size/2,
-		world.y - 6 + ext_view_height - y,
+		world.y - 16 + size/2 - 1 + ext_view_height - y,
 		size - 1, whiteRGBA);
 }
 
 void Gui_paint_teamshot(int x, int y)
 {
-    int size = MIN(teamShotSize, 8);
+    int size = MIN(teamShotSize, 16);
 
     Image_paint(IMG_BULLET_OWN,
 		x + world.x - size/2,
-		world.y - 6 + ext_view_height - y,
+		world.y - 16 + size/2 - 1 + ext_view_height - y,
 		size - 1, whiteRGBA);
 }
 
@@ -985,14 +1125,14 @@ void Gui_paint_appearing(int x, int y, int id, int count)
 {
     const unsigned hsize = 3 * BLOCK_SZ / 7;
     int minx,miny,maxx,maxy;
-    int color;
+    Uint32 color;
     other_t *other = Other_by_id(id);
 
     /* Make a note we are doing the base warning */
     if (version >= 0x4F12) {
 	homebase_t *base = Homebase_by_id(id);
 	if (base != NULL)
-	    base->appeartime = loops + (count * clientFPS) / 120;
+	    base->appeartime = (long)(loops + (count * clientFPS) / 120);
     }
 
     minx = x - (int)hsize;
@@ -1138,7 +1278,7 @@ static int Gui_is_my_tank(other_t *other)
 
 static int Gui_calculate_ship_color(int id, other_t *other)
 {
-    int ship_color = whiteRGBA;
+    Uint32 ship_color = whiteRGBA;
 
 #ifndef NO_BLUE_TEAM
     if (BIT(Setup->mode, TEAM_PLAY)
@@ -1150,7 +1290,7 @@ static int Gui_calculate_ship_color(int id, other_t *other)
 	    && (other->life == 0))
 	    ship_color = teamLWColorRGBA;
 	else
-	    ship_color = blueRGBA;
+	    ship_color = teamShipColorRGBA;
     }
 
     if (eyes != NULL
@@ -1163,7 +1303,7 @@ static int Gui_calculate_ship_color(int id, other_t *other)
 	    && (other->life == 0))
 	    ship_color = teamLWColorRGBA;
 	else
-	    ship_color = blueRGBA;
+	    ship_color = teamShipColorRGBA;
     }
 
     if (Gui_is_my_tank(other))
@@ -1229,41 +1369,61 @@ static void Gui_paint_ship_name(int x, int y, other_t *other)
 void Gui_paint_ship(int x, int y, int dir, int id, int cloak, int phased,
 		    int shield, int deflector, int eshield)
 {
-    int i, color;
+    int i, color, img;
     shipshape_t *ship;
-    shapepos_t    point;
-    other_t 	*other;
+    position_t point;
+    other_t *other;
 
     ship = Ship_by_id(id);
     if (!(other = Other_by_id(id))) return;
 
-    color = Gui_calculate_ship_color(id,other);
+    if (!(color = Gui_calculate_ship_color(id,other))) return;
     
     if (shield) {
     	Image_paint(IMG_SHIELD, x - 27, y - 27, 0, (color & 0xffffff00) + ((color & 0x000000ff)/2));
     }
-
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glEnable(GL_LINE_SMOOTH);
-    glLineWidth(shipLineWidth);
-    set_alphacolor(color);
-
-    glBegin(GL_LINE_LOOP);
-    for (i = 0; i < ship->num_points; i++) {
-	point = Ship_get_point(ship, i, dir);
-	glVertex2i(x + point.pxl.x, y + point.pxl.y);
-    }
-    glEnd();
-
-    glLineWidth(1);
-    glDisable(GL_LINE_SMOOTH);
-    glDisable(GL_BLEND);
-
+	if (texturedShips) {
+    	    if (BIT(Setup->mode, TEAM_PLAY)
+			&& other != NULL
+			&& self != NULL
+			&& self->team == other->team) {
+			img = IMG_SHIP_FRIEND;
+    	    } else if (self != NULL && self->id != id) {
+			img = IMG_SHIP_ENEMY;
+    	    } else {
+			img = IMG_SHIP_SELF;
+    	    }
+    	    if (cloak || phased ) Image_paint(img, x - 16, y - 16, dir>>1, (color & 0xffffff00) + ((color & 0x000000ff)/2));
+	    else Image_paint(img, x - 16, y - 16, dir>>1, color);
+	} else {
+    	    glEnable(GL_BLEND);
+    	    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    	    glEnable(GL_LINE_SMOOTH);
+    	    glLineWidth(shipLineWidth);
+    	    set_alphacolor(color);
+		
+    	    if (cloak || phased ) {
+    	    	glEnable(GL_LINE_STIPPLE);
+    	    	glLineStipple( 3, 0xAAAA );
+	    }
+	    
+    	    glBegin(GL_LINE_LOOP);
+    	    	for (i = 0; i < ship->num_points; i++) {
+    	    	    point = Ship_get_point_position(ship, i, dir);
+    	    	    glVertex2d(x + point.x, y + point.y);
+    	    	}
+    	    glEnd();
+	    
+    	    if (cloak || phased ) glDisable(GL_LINE_STIPPLE);
+	
+    	    glLineWidth(1);
+    	    glDisable(GL_LINE_SMOOTH);
+    	    glDisable(GL_BLEND);
+	}
     if (self != NULL
     	&& self->id != id
     	&& other != NULL)
-    	    Gui_paint_ship_name(x,y,other);
+		Gui_paint_ship_name(x,y,other);
 }
 
 void Paint_score_objects(void)
@@ -1281,7 +1441,7 @@ void Paint_score_objects(void)
 		x = sobj->x * BLOCK_SZ + BLOCK_SZ/2;
 		y = sobj->y * BLOCK_SZ + BLOCK_SZ/2;
   		if (wrap(&x, &y)) {
-		    /*mapprint(&mapfont,scoreObjectColorRGBA,CENTER,CENTER,x,y,sobj->msg);*/
+		    /*mapprint(&mapfont,scoreObjectColorRGBA,CENTER,CENTER,x,y,"%s",sobj->msg);*/
 		    if (!score_object_texs[i].texture)
 		    	draw_text(&mapfont, scoreObjectColorRGBA
 			    	    ,CENTER,CENTER, x, y, sobj->msg, true
@@ -1312,18 +1472,19 @@ void Paint_select(void)
     glEnd();
 }
 
-void Paint_client_fps(void)
+void Paint_HUD_values(void)
 {
-    int			x, y;
+    int x, y;
 
     if (!hudColorRGBA)
 	return;
 
     x = draw_width - 20;
     /* Better make sure it's below the meters */
-    y = draw_height - 9*(MAX(meterHeight,gamefont.h) + 6);
-;
-    HUDprint(&gamefont,hudColorRGBA,RIGHT,DOWN,x,y,"FPS: %d",clientFPS);
+    y = draw_height - 9*(MAX((GLuint)meterHeight,gamefont.h) + 6);
+
+    HUDprint(&gamefont,hudColorRGBA,RIGHT,DOWN,x,y,"FPS: %.3f",clientFPS);
+    HUDprint(&gamefont,hudColorRGBA,RIGHT,DOWN,x,y-20,"CL.LAG : %.1f ms", clData.clientLag);
 }
 
 static void Paint_meter(int xoff, int y, string_tex_t *tex, int val, int max,
@@ -1382,13 +1543,13 @@ static void Paint_meter(int xoff, int y, string_tex_t *tex, int val, int max,
     if (!meterBorderColorRGBA)
 	color = meter_color;
 
-    /*HUDprint(&gamefont,color,x_alignment,UP,xstr,draw_height - y - meterHeight,title);*/
+    /*HUDprint(&gamefont,color,x_alignment,UP,xstr,draw_height - y - meterHeight,"%s",title);*/
     disp_text(tex,color,x_alignment,CENTER,xstr,draw_height - y - meterHeight/2,true);
 }
 
 void Paint_meters(void)
 {
-    int spacing = MAX(meterHeight,gamefont.h) + 6;
+    int spacing = MAX((GLuint)meterHeight,gamefont.h) + 6;
     int y = spacing, color;
     static bool setup_texs = true;
 
@@ -1509,7 +1670,7 @@ static void Paint_lock(int hud_pos_x, int hud_pos_y)
 		  color,CENTER,CENTER,
 		  hud_pos_x,
 		  hud_pos_y -(- hudSize + HUD_OFFSET - BORDER),
-		  strlen(target->id_string),target->id_string);
+		  strlen(target->id_string),"%s",target->id_string);
 
     }
 
@@ -1550,16 +1711,16 @@ static void Paint_hudradar(double hrscale, double xlimit, double ylimit, int sz)
 {
     Uint32 c;
     int i, x, y, shape, size;
-    int hrw = hrscale * 256;
-    int hrh = hrscale * RadarHeight;
+    int hrw = (int)(hrscale * 256);
+    int hrh = (int)(hrscale * RadarHeight);
     double xf = (double) hrw / (double) Setup->width;
     double yf = (double) hrh / (double) Setup->height;
 
     for (i = 0; i < num_radar; i++) {
-	x = radar_ptr[i].x * hrscale
-	    - (world.x + ext_view_width / 2) * xf;
-	y = radar_ptr[i].y * hrscale
-	    - (world.y + ext_view_height / 2) * yf;
+	x = (int)(radar_ptr[i].x * hrscale
+		  - (world.x + ext_view_width / 2) * xf);
+	y = (int)(radar_ptr[i].y * hrscale
+		  - (world.y + ext_view_height / 2) * yf);
 
 	if (x < -hrw / 2)
 	    x += hrw;
@@ -1599,6 +1760,102 @@ static void Paint_hudradar(double hrscale, double xlimit, double ylimit, int sz)
 
 static void Paint_HUD_items(int hud_pos_x, int hud_pos_y)
 {
+    const int		BORDER = 3;
+    char		str[50];
+    int     	    	vert_pos, horiz_pos, minx, miny, maxx, maxy;
+    int     	    	i, maxWidth = -1,
+			rect_x, rect_y, rect_width = 0, rect_height = 0;
+    static int		vertSpacing = -1;
+    static fontbounds	fb;
+
+
+    /* Special itemtypes */
+    if (vertSpacing < 0)
+	vertSpacing = MAX(ITEM_SIZE, gamefont.h) + 1;
+    /* find the scaled location, then work in pixels */
+    vert_pos = hud_pos_y - hudSize+HUD_OFFSET + BORDER;
+    horiz_pos = hud_pos_x - hudSize+HUD_OFFSET - BORDER;
+    rect_width = 0;
+    rect_height = 0;
+    rect_x = horiz_pos;
+    rect_y = vert_pos;
+
+    for (i = 0; i < NUM_ITEMS; i++) {
+	int num = numItems[i];
+
+	if (i == ITEM_FUEL)
+	    continue;
+
+	if (instruments.showItems) {
+	    lastNumItems[i] = num;
+	    if (num <= 0)
+		num = -1;
+	} else {
+	    if (num != lastNumItems[i]) {
+		numItemsTime[i] = (int)(showItemsTime * (double)FPS);
+		lastNumItems[i] = num;
+	    }
+	    if (numItemsTime[i]-- <= 0) {
+		numItemsTime[i] = 0;
+		num = -1;
+	    }
+	}
+
+	if (num >= 0) {
+
+    	    Image_paint(IMG_HUD_ITEMS, 
+			horiz_pos - ITEM_SIZE, 
+			vert_pos, (u_byte)i, 
+			hudItemsColorRGBA);
+
+	    if (i == lose_item) {
+		if (lose_item_active != 0) {
+		    if (lose_item_active < 0)
+			lose_item_active++;
+			minx = horiz_pos-ITEM_SIZE-2;
+			maxx = horiz_pos;
+			miny = vert_pos-2;
+			maxy = vert_pos + ITEM_SIZE;
+			
+    	    	    	glBegin(GL_LINE_LOOP);
+    	    	    	    glVertex2i(minx , miny);
+    	    	    	    glVertex2i(maxx , miny);
+    	    	    	    glVertex2i(maxx , maxy);
+    	    	    	    glVertex2i(minx , maxy);
+    	    	    	glEnd();
+		}
+	    }
+
+	    /* Paint item count */
+	    sprintf(str, "%d", num);
+	    fb = printsize(&gamefont,"%s",str);
+
+	    maxWidth = MAX(maxWidth, fb.width + BORDER + ITEM_SIZE);
+	    
+	    HUDprint(&gamefont,hudItemsColorRGBA,RIGHT,UP,horiz_pos - ITEM_SIZE - BORDER
+	    	    ,draw_height - vert_pos - ITEM_SIZE,"%s",str);
+
+	    vert_pos += vertSpacing;
+
+	    if (vert_pos+vertSpacing
+		> hud_pos_y+hudSize-HUD_OFFSET-BORDER) {
+		rect_width += maxWidth + 2*BORDER;
+		rect_height = MAX(rect_height, vert_pos - rect_y);
+		horiz_pos -= maxWidth + 2*BORDER;
+		vert_pos = hud_pos_y - hudSize+HUD_OFFSET + BORDER;
+		maxWidth = -1;
+	    }
+	}
+    }
+    if (maxWidth != -1)
+	rect_width += maxWidth + BORDER;
+
+    if (rect_width > 0) {
+	if (rect_height == 0)
+	    rect_height = vert_pos - rect_y;
+	rect_x -= rect_width;
+    }
+
 }
 
 typedef char hud_text_t[50];
@@ -1656,9 +1913,9 @@ void Paint_HUD(void)
 		  * hudRadarScale / hudRadarMapScale),
 	    hudRadarDotSize);
 
-	Paint_hudradar(hudRadarMapScale*scale,
-		       (active_view_width / 2)*scale,
-		       (active_view_height / 2)*scale,
+	Paint_hudradar(hudRadarMapScale*clData.scale,
+		       (active_view_width / 2)*clData.scale,
+		       (active_view_height / 2)*clData.scale,
 		       SHIP_SZ);
     }
 
@@ -1667,10 +1924,10 @@ void Paint_HUD(void)
     /* message scan hack by mara*/
     if (ball_shout && msgScanBallColorRGBA)
 	Circle(msgScanBallColorRGBA, draw_width / 2,
-	       draw_height / 2, 8*scale,0);
+	       draw_height / 2, (int)(8*clData.scale),0);
     if (need_cover && msgScanCoverColorRGBA)
 	Circle(msgScanCoverColorRGBA, draw_width / 2,
-	       draw_height / 2, 6*scale,0);
+	       draw_height / 2, (int)(6*clData.scale),0);
 
     glEnable(GL_BLEND);
 
@@ -1757,9 +2014,9 @@ void Paint_HUD(void)
 	for (i = 0, j = 0; i < MAX_SCORE_OBJECTS; i++) {
 	    score_object_t*	sobj = &score_objects[(i+score_object)%MAX_SCORE_OBJECTS];
 	    if (sobj->hud_msg_len > 0) {
-	    	dummy = printsize(&gamefont,sobj->hud_msg);
+	    	dummy = printsize(&gamefont,"%s",sobj->hud_msg);
 		if (sobj->hud_msg_width == -1)
-		    sobj->hud_msg_width = dummy.width;
+		    sobj->hud_msg_width = (int)dummy.width;
 		if (j == 0 &&
 		    sobj->hud_msg_width > 2*hudSize-HUD_OFFSET*2 &&
 		    (did_fuel || hudVLineColorRGBA))
@@ -1813,11 +2070,7 @@ void Paint_HUD(void)
 		    	,hud_pos_x - hudSize+HUD_OFFSET-BORDER
 	    	    	,hud_pos_y - hudSize+HUD_OFFSET-BORDER
 	    	    	,true	);    
-	    } else
-    	    	HUDprint(&gamefont,hudColorRGBA,RIGHT,UP,
-		    	hud_pos_x - hudSize+HUD_OFFSET-BORDER,
-		    	hud_pos_y - hudSize+HUD_OFFSET-BORDER,
-		    	mods);
+    	}
 
 	if (autopilotLight) {
 	    tex_index=5;
@@ -1863,7 +2116,7 @@ void Paint_HUD(void)
 	    glVertex2i(tempx+tempw,tempy);
 	glEnd();
 
-	size = (HUD_FUEL_GAUGE_SIZE * fuelSum) / fuelMax;
+	size = (int)((HUD_FUEL_GAUGE_SIZE * fuelSum) / fuelMax);
 	tempx = hud_pos_x + hudSize - HUD_OFFSET + FUEL_GAUGE_OFFSET + 1;
     	tempy = hud_pos_y - hudSize + HUD_OFFSET + FUEL_GAUGE_OFFSET + HUD_FUEL_GAUGE_SIZE - size + 1;
     	tempw = HUD_OFFSET - (2*FUEL_GAUGE_OFFSET);
@@ -1876,6 +2129,54 @@ void Paint_HUD(void)
 	glEnd();
     }
     glDisable(GL_BLEND);
+}
+
+typedef struct alert_timeout_struct alert_timeout;
+struct alert_timeout_struct {
+    GLWidget	    *msg;   /* use to build widget lists */
+    double     	    timeout;
+    alert_timeout   *next;
+};
+static alert_timeout *alert_timeout_list = NULL;
+
+void Add_alert_message(const char *message, double timeout)
+{
+    GLWidget *tmp = NULL;
+    alert_timeout *tol;
+    
+    tmp = Init_LabelWidget(message,&whiteRGBA,&nullRGBA,CENTER,CENTER);
+    if (tmp) {
+    	ListWidget_Prepend(((WrapperWidget *)(MainWidget->wid_info))->alert_msgs,tmp);
+    } else {
+    	error("Add_alert_message: Failed to create LabelWidget");
+	return;
+    }
+    
+    tol = alert_timeout_list;
+    alert_timeout_list = (alert_timeout *)malloc(sizeof(alert_timeout));
+    alert_timeout_list->next = tol;
+    alert_timeout_list->timeout = timeout;
+    alert_timeout_list->msg = tmp;
+}
+
+void Clear_alert_messages(void)
+{
+    GLWidget *tmp,*list;
+    bool dummy;
+    alert_timeout *tol;
+    
+    while ((tol = alert_timeout_list)) {
+    	alert_timeout_list = alert_timeout_list->next;
+	free(tol);
+    }
+    
+    list = ((WrapperWidget *)(MainWidget->wid_info))->alert_msgs;
+    dummy = true;
+    while (dummy) {
+    	tmp = ListWidget_GetItemByIndex( list, 0 );
+	if (tmp == NULL) break;
+    	dummy = ListWidget_Remove( list, tmp );
+    }
 }
 
 void Paint_messages(void)
@@ -1891,6 +2192,9 @@ void Paint_messages(void)
     GLWidget *tmp = NULL,*tmp2 = NULL;
     LabelWidget *wi;
     message_t	*msg;
+
+    alert_timeout *garbage, **tol = &alert_timeout_list;
+    static int lastloops;
     
     msgs[0] = TalkMsg;
     msgs[1] = GameMsg;
@@ -1914,6 +2218,22 @@ void Paint_messages(void)
 	    	Close_Widget(&tmp);
     	    }
     }
+    
+    /* Check if any alert message has timed out, if so remove it */
+    while ((*tol)) {
+	if ((*tol)->timeout != 0.0) {
+	    (*tol)->timeout -= (loops - lastloops)/(double)FPS;
+	    if ((*tol)->timeout <= 0.0) {
+	    	garbage = (*tol);
+		*tol = (*tol)->next;
+    	    	ListWidget_Remove( ((WrapperWidget *)(MainWidget->wid_info))->alert_msgs, garbage->msg );
+	    	free(garbage);
+		continue;
+	    }
+	}
+    	tol = &((*tol)->next);
+    }
+    lastloops = loops;
     
     /* TODO: check whether there is a more efficient way to do this!
      * i.e. add labelwidgets as messages are added/removed
@@ -2022,36 +2342,37 @@ static const char *get_rgba_color_option(xp_option_t *opt)
 
 static xp_option_t sdlgui_options[] = {
 
-    COLOR(messagesColorRGBA, "#00aaaa88", "messages"),
-    COLOR(oldmessagesColorRGBA, "#00888888", "old messages"),
+    COLOR(messagesColorRGBA, "#00aaaaff", "messages"),
+    COLOR(oldmessagesColorRGBA, "#008888ff", "old messages"),
     COLOR(msgScanBallColorRGBA, "#ff0000ff", "ball warning"),
     COLOR(msgScanSafeColorRGBA, "#00ff00ff", "ball safe announcement"),
     COLOR(msgScanCoverColorRGBA, "#4e7cffff", "cover request"),
     COLOR(msgScanPopColorRGBA, "#ffbb11ff", "ball pop announcement"),
 
-    COLOR(meterBorderColorRGBA, "#0000ff55", "meter borders"),
-    COLOR(fuelMeterColorRGBA, "#ff000055", "fuel meter"),
+    COLOR(meterBorderColorRGBA, "#0000ffaa", "meter borders"),
+    COLOR(fuelMeterColorRGBA, "#ff0000aa", "fuel meter"),
     COLOR(fuelGaugeColorRGBA, "#0000ff44", "fuel gauge"),
-    COLOR(powerMeterColorRGBA, "#ff000055", "power meter"),
-    COLOR(turnSpeedMeterColorRGBA, "#ff000055", "turn speed meter"),
-    COLOR(packetSizeMeterColorRGBA, "#ff000055", "packet size meter"),
-    COLOR(packetLossMeterColorRGBA, "#ff000055", "packet loss meter"),
-    COLOR(packetDropMeterColorRGBA, "#ff000055", "drop meter"),
-    COLOR(packetLagMeterColorRGBA, "#ff000055", "lag meter"),
-    COLOR(temporaryMeterColorRGBA, "#ff000055", "time meter"),
+    COLOR(powerMeterColorRGBA, "#ff0000aa", "power meter"),
+    COLOR(turnSpeedMeterColorRGBA, "#ff0000aa", "turn speed meter"),
+    COLOR(packetSizeMeterColorRGBA, "#ff0000aa", "packet size meter"),
+    COLOR(packetLossMeterColorRGBA, "#ff0000aa", "packet loss meter"),
+    COLOR(packetDropMeterColorRGBA, "#ff0000aa", "drop meter"),
+    COLOR(packetLagMeterColorRGBA, "#ff0000aa", "lag meter"),
+    COLOR(temporaryMeterColorRGBA, "#ff0000aa", "time meter"),
 
     COLOR(ballColorRGBA, "#00ff00ff", "balls"),
     COLOR(connColorRGBA, "#00ff0088", "the ball connector"),
     COLOR(fuelColorRGBA, "#ffffff7f", "fuel cells"),
     COLOR(wallColorRGBA, "#0000ffff", "walls on blockmaps"),
-    COLOR(baseNameColorRGBA, "#0000ff88", "base name"),
-    COLOR(shipNameColorRGBA, "#0000ff88", "ship name"),
+    COLOR(decorColorRGBA, "#bb7700ff", "decorations on blockmaps"),
+    COLOR(baseNameColorRGBA, "#77bbffff", "base name"),
+    COLOR(shipNameColorRGBA, "#77bbffff", "ship name"),
     COLOR(scoreObjectColorRGBA, "#00ff0088", "score objects"),
 
     COLOR(hudColorRGBA, "#ff000088", "the HUD"),
     COLOR(hudHLineColorRGBA, "#0000ff44", "horizontal HUD line"),
     COLOR(hudVLineColorRGBA, "#0000ff44", "vertical HUD line"),
-    COLOR(hudItemsColorRGBA, "#0000ff44", "hud items"),
+    COLOR(hudItemsColorRGBA, "#0080ffaa", "hud items"),
     COLOR(hudRadarEnemyColorRGBA, "#ff000088", "enemy on HUD radar"),
     COLOR(hudRadarOtherColorRGBA, "#0000ff88", "friend on HUD radar"),
     COLOR(hudRadarObjectColorRGBA, "#00000000", "small object on HUD radar"),
@@ -2066,6 +2387,7 @@ static xp_option_t sdlgui_options[] = {
     COLOR(scoreOwnTeamColorRGBA, "#0000ffff", "my team score"),
     COLOR(scoreEnemyTeamColorRGBA, "#ff0000ff", "enemy team score"),
 
+    COLOR(teamShipColorRGBA, "#0000ffff", "teammate color"),
     COLOR(team0ColorRGBA, "#00000000", "team 0"),
     COLOR(team1ColorRGBA, "#00000000", "team 1"),
     COLOR(team2ColorRGBA, "#00000000", "team 2"),
@@ -2124,6 +2446,14 @@ static xp_option_t sdlgui_options[] = {
 	NULL,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"Draw balls with textures.\n"),
+
+    XP_BOOL_OPTION(
+        "texturedShips",
+        true,
+	&texturedShips,
+	NULL,
+	XP_OPTFLAG_CONFIG_DEFAULT,
+	"Draw ships with textures.\n"),
 
     XP_INT_OPTION(
         "hudRadarEnemyShape",

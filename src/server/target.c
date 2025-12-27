@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -25,23 +25,23 @@
 
 #include "xpserver.h"
 
-void Target_update(world_t *world)
+void Target_update(void)
 {
     int i, j;
 
-    for (i = 0; i < world->NumTargets; i++) {
-	target_t *targ = Target_by_index(world, i);
+    for (i = 0; i < Num_targets(); i++) {
+	target_t *targ = Target_by_index(i);
 
 	if (targ->dead_ticks > 0) {
 	    if ((targ->dead_ticks -= timeStep) <= 0) {
-		World_restore_target(world, targ);
+		World_restore_target(targ);
 
 		if (options.targetSync) {
-		    for (j = 0; j < world->NumTargets; j++) {
-			target_t *t = Target_by_index(world, j);
+		    for (j = 0; j < Num_targets(); j++) {
+			target_t *t = Target_by_index(j);
 
 			if (t->team == targ->team)
-			    World_restore_target(world, t);
+			    World_restore_target(t);
 		    }
 		}
 	    }
@@ -67,24 +67,19 @@ void Target_update(world_t *world)
 
 void Object_hits_target(object_t *obj, target_t *targ, double player_cost)
 {
-    int			j;
-    player_t		*kp;
-    double		sc, por,
-			win_score = 0.0,
-			lose_score = 0.0;
-    int			win_team_members = 0,
-			lose_team_members = 0,
-			somebody_flag = 0,
-			targets_remaining = 0,
-			targets_total = 0;
-    double 		drainfactor;
-    vector_t 		zero_vel = {0.0, 0.0};
-    world_t *world = &World;
+    int j;
+    player_t *kp;
+    double win_score = 0.0, lose_score = 0.0, drainfactor;
+    int win_team_members = 0, lose_team_members = 0,
+	targets_remaining = 0, targets_total = 0;
+    vector_t zero_vel = {0.0, 0.0};
+    bool somebody = false;
 
     /* a normal shot or a direct mine hit work, cannons don't */
     /* KK: should shots/mines by cannons of opposing teams work? */
     /* also players suiciding on target will cause damage */
-    if (!BIT(obj->type, KILLING_SHOTS|OBJ_MINE|OBJ_PULSE|OBJ_PLAYER))
+    if (!BIT(OBJ_TYPEBIT(obj->type),
+	     KILLING_SHOTS|OBJ_MINE_BIT|OBJ_PULSE_BIT|OBJ_PLAYER_BIT))
 	return;
 
     if (obj->id == NO_ID)
@@ -116,16 +111,17 @@ void Object_hits_target(object_t *obj, target_t *targ, double player_cost)
 	if (!obj->mass)
 	    /* happens at end of round reset. */
 	    return;
-	if (BIT(obj->mods.nuclear, NUCLEAR))
+	if (Mods_get(obj->mods, ModsNuclear))
 	    targ->damage = 0.0;
 	else
-	    targ->damage += ED_SMART_SHOT_HIT / (obj->mods.mini + 1);
+	    targ->damage += ED_SMART_SHOT_HIT /
+		(Mods_get(obj->mods, ModsMini) + 1);
 	break;
     case OBJ_MINE:
 	if (!obj->mass)
 	    /* happens at end of round reset. */
 	    return;
-	targ->damage -= TARGET_DAMAGE / (obj->mods.mini + 1);
+	targ->damage -= TARGET_DAMAGE / (Mods_get(obj->mods, ModsMini) + 1);
 	break;
     case OBJ_PLAYER:
 	if (player_cost <= 0.0 || player_cost > TARGET_DAMAGE / 4.0)
@@ -143,10 +139,9 @@ void Object_hits_target(object_t *obj, target_t *targ, double player_cost)
     if (targ->damage > 0.0)
 	return;
 
-    World_remove_target(world, targ);
+    World_remove_target(targ);
 
-    Make_debris(world,
-		targ->pos,
+    Make_debris(targ->pos,
 		zero_vel,
 		NO_ID,
 		targ->team,
@@ -162,28 +157,28 @@ void Object_hits_target(object_t *obj, target_t *targ, double player_cost)
 
     if (BIT(world->rules->mode, TEAM_PLAY)) {
 	for (j = 0; j < NumPlayers; j++) {
-	    player_t *pl_j = Player_by_index(j);
+	    player_t *pl = Player_by_index(j);
 
-	    if (Player_is_tank(pl_j)
-		|| (BIT(pl_j->status, PAUSE) && pl_j->pause_count <= 0)
-		|| Player_is_waiting(pl_j))
+	    if (Player_is_tank(pl)
+		|| (Player_is_paused(pl) && pl->pause_count <= 0)
+		|| Player_is_waiting(pl))
 		continue;
 
-	    if (pl_j->team == targ->team) {
-		lose_score += pl_j->score;
+	    if (pl->team == targ->team) {
+		lose_score +=  Get_Score(pl);
 		lose_team_members++;
-		if (BIT(pl_j->status, GAME_OVER) == 0)
-		    somebody_flag = 1;
+		if (!Player_is_dead(pl))
+		    somebody = true;
 	    }
-	    else if (pl_j->team == kp->team) {
-		win_score += pl_j->score;
+	    else if (pl->team == kp->team) {
+		win_score +=  Get_Score(pl);
 		win_team_members++;
 	    }
 	}
     }
-    if (somebody_flag) {
-	for (j = 0; j < world->NumTargets; j++) {
-	    target_t *t = Target_by_index(world, j);
+    if (somebody) {
+	for (j = 0; j < Num_targets(); j++) {
+	    target_t *t = Target_by_index(j);
 
 	    if (t->team == targ->team) {
 		targets_total++;
@@ -192,16 +187,14 @@ void Object_hits_target(object_t *obj, target_t *targ, double player_cost)
 	    }
 	}
     }
-    if (!somebody_flag)
+    if (!somebody)
 	return;
+	
+    Handle_Scoring(SCORE_TARGET,kp,NULL,targ,NULL);
 
     sound_play_sensors(targ->pos, DESTROY_TARGET_SOUND);
 
     if (targets_remaining > 0) {
-	sc = Rate(kp->score, CANNON_SCORE)/4;
-	sc = sc * (targets_total - targets_remaining) / (targets_total + 1);
-	if (sc >= 0.01)
-	    Score(kp, sc, targ->pos, "Target: ");
 	/*
 	 * If players can't collide with their own targets, we
 	 * assume there are many used as shields.  Don't litter
@@ -215,32 +208,6 @@ void Object_hits_target(object_t *obj, target_t *targ, double player_cost)
 
     Set_message_f("%s blew up team %d's %starget.",
 		  kp->name, targ->team, (targets_total > 1) ? "last " : "");
-
-    if (options.targetKillTeam)
-	Rank_add_target_kill(kp);
-
-    sc  = Rate(win_score, lose_score);
-    por = (sc * lose_team_members) /win_team_members;
-
-    for (j = 0; j < NumPlayers; j++) {
-	player_t *pl = Player_by_index(j);
-
-	if (Player_is_tank(pl)
-	    || (BIT(pl->status, PAUSE) && pl->pause_count <= 0)
-	    || Player_is_waiting(pl))
-	    continue;
-
-	if (pl->team == targ->team) {
-	    if (options.targetKillTeam
-		&& targets_remaining == 0
-		&& !BIT(pl->status, KILLED|PAUSE|GAME_OVER))
-		SET_BIT(pl->status, KILLED);
-	    Score(pl, -sc, targ->pos, "Target: ");
-	}
-	else if (pl->team == kp->team &&
-		 (pl->team != TEAM_NOT_SET || pl->id == kp->id))
-	    Score(pl, por, targ->pos, "Target: ");
-    }
 }
 
 hitmask_t Target_hitmask(target_t *targ)
@@ -267,7 +234,7 @@ void Target_set_hitmask(int group, target_t *targ)
     P_set_hitmask(targ->group, Target_hitmask(targ));
 }
 
-void Target_init(world_t *world)
+void Target_init(void)
 {
     int group;
 
@@ -275,7 +242,7 @@ void Target_init(world_t *world)
 	group_t *gp = groupptr_by_id(group);
 
 	if (gp->type == TARGET)
-	    Target_set_hitmask(group, Target_by_index(world, gp->mapobj_ind));
+	    Target_set_hitmask(group, Target_by_index(gp->mapobj_ind));
     }
 
 #if 0
@@ -283,16 +250,17 @@ void Target_init(world_t *world)
 #endif
 }
 
-void World_restore_target(world_t *world, target_t *targ)
+void World_restore_target(target_t *targ)
 {
     blkpos_t blk = Clpos_to_blkpos(targ->pos);
+    int i;
 
 #if 0
     object_t *obj, **obj_list;
     int obj_count, i;
 
     /* check for objects that are where the target appears */
-    Cell_get_objects(world, targ->pos, 4, /* should depend on target size */
+    Cell_get_objects(targ->pos, 4, /* should depend on target size */
 		     300, &obj_list, &obj_count);
     warn("obj_count = %d", obj_count);
     for (i = 0; i < obj_count; i++) {
@@ -300,10 +268,20 @@ void World_restore_target(world_t *world, target_t *targ)
     }
 #endif
 
-    World_set_block(world, blk, TARGET);
+    World_set_block(blk, TARGET);
+
+    for (i = 0; i < num_polys; i++) {
+	poly_t *poly = &pdata[i];
+
+	if (poly->group == targ->group) {
+	    poly->current_style = poly->style;
+	    poly->update_mask = ~0;
+	    poly->last_change = frame_loops;
+	}
+    }
 
     targ->conn_mask = 0;
-    targ->update_mask = (unsigned)-1;
+    targ->update_mask = ~0;
     targ->last_change = frame_loops;
     targ->dead_ticks = 0;
     targ->damage = TARGET_DAMAGE;
@@ -311,11 +289,12 @@ void World_restore_target(world_t *world, target_t *targ)
     P_set_hitmask(targ->group, Target_hitmask(targ));
 }
 
-void World_remove_target(world_t *world, target_t *targ)
+void World_remove_target(target_t *targ)
 {
     blkpos_t blk = Clpos_to_blkpos(targ->pos);
+    int i;
 
-    targ->update_mask = (unsigned) -1;
+    targ->update_mask = ~0;
     /* is this necessary? (done also in Target_restore_on_map() ) */
     targ->damage = TARGET_DAMAGE;
     targ->dead_ticks = options.targetDeadTicks;
@@ -324,8 +303,19 @@ void World_remove_target(world_t *world, target_t *targ)
      * Destroy target.
      * Turn it into a space to simplify other calculations.
      */
-    World_set_block(world, blk, SPACE);
+    World_set_block(blk, SPACE);
+
+    for (i = 0; i < num_polys; i++) {
+	poly_t *poly = &pdata[i];
+
+	if (poly->group == targ->group) {
+	    poly->current_style = poly->destroyed_style;
+	    poly->update_mask = ~0;
+	    poly->last_change = frame_loops;
+	}
+    }
 
     /*P_set_hitmask(targ->group, ALL_BITS);*/
     P_set_hitmask(targ->group, Target_hitmask(targ));
 }
+

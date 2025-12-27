@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -25,13 +25,11 @@
 
 #include "xpcommon.h"
 
-char net_version[] = VERSION;
-
 int last_packet_of_frame;
 
 int Sockbuf_init(sockbuf_t *sbuf, sock_t *sock, size_t size, int state)
 {
-    if ((sbuf->buf = sbuf->ptr = malloc(size)) == NULL)
+    if ((sbuf->buf = sbuf->ptr = XMALLOC(char, size)) == NULL)
 	return -1;
 
     if (sock != NULL)
@@ -49,8 +47,7 @@ int Sockbuf_init(sockbuf_t *sbuf, sock_t *sock, size_t size, int state)
 
 int Sockbuf_cleanup(sockbuf_t *sbuf)
 {
-    if (sbuf->buf != NULL)
-	free(sbuf->buf);
+    XFREE(sbuf->buf);
 
     sbuf->buf = sbuf->ptr = NULL;
     sbuf->size = sbuf->len = 0;

@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game. 
+ * XPilot NG, a multiplayer space war game. 
  *
  * Copyright (C) 1991-2001 by
  *
@@ -25,8 +25,6 @@
 
 #include "xpclient_x11.h"
 
-char bitmaps_version[] = VERSION;
-
 /* this gets rid of missing initializer warnings */
 #define XP_PIXMAP_INITIALIZER(f, c) { f,c,0,0,0,false,NULL,{0,0,0,NULL,NULL} }
 
@@ -37,8 +35,8 @@ xp_pixmap_t object_pixmaps[] = {
     XP_PIXMAP_INITIALIZER("ship_red.ppm", 128),
     XP_PIXMAP_INITIALIZER("ship_blue.ppm", 128),
     XP_PIXMAP_INITIALIZER("ship_red2.ppm", 128),
-    XP_PIXMAP_INITIALIZER("bullet.ppm", -8),
-    XP_PIXMAP_INITIALIZER("bullet_blue.ppm", -8),
+    XP_PIXMAP_INITIALIZER("bullet.ppm", -16),
+    XP_PIXMAP_INITIALIZER("bullet_blue.ppm", -16),
     XP_PIXMAP_INITIALIZER("base_down.ppm", 1),
     XP_PIXMAP_INITIALIZER("base_left.ppm", 1),
     XP_PIXMAP_INITIALIZER("base_up.ppm", 1),
@@ -120,7 +118,7 @@ void Bitmaps_cleanup(void)
  * Adds a new bitmap needed by the current map into global pixmaps.
  * Returns the index of the newly added bitmap in the array.
  */
-int Bitmap_add(char *filename, int count, bool scalable)
+int Bitmap_add(const char *filename, int count, bool scalable)
 {
     xp_pixmap_t pixmap;
 
@@ -299,7 +297,7 @@ static int Bitmap_init(int img)
 
     count = ABS(pixmaps[img].count);
 
-    if (!(pixmaps[img].bitmaps = malloc(count * sizeof(xp_bitmap_t)))) {
+    if (!(pixmaps[img].bitmaps = XMALLOC(xp_bitmap_t, count))) {
 	error("not enough memory for bitmaps");
 	pixmaps[img].state = BMS_ERROR;
 	return -1;
@@ -311,9 +309,7 @@ static int Bitmap_init(int img)
 	pixmaps[img].bitmaps[j].rgb = -1;
     }
 
-    if (Picture_init
-	(&pixmaps[img].picture,
-	 pixmaps[img].filename, pixmaps[img].count) == -1) {
+    if (Picture_init (&pixmaps[img].picture, pixmaps[img].filename, pixmaps[img].count) == -1) {
 	pixmaps[img].state = BMS_ERROR;
 	return -1;
     }

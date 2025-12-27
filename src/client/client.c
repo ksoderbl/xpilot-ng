@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -23,13 +23,9 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-
 #include "xpclient.h"
 
-/* kps - move to some header */
-extern int Bitmap_add(char *filename, int count, bool scalable);
-
-char client_version[] = VERSION;
+client_data_t	clData = { 0, };
 
 char	*geometry;
 xp_args_t xpArgs;
@@ -143,12 +139,12 @@ bool	shields = true;		/* When shields are considered up */
 bool	auto_shield = true;	/* shield drops for fire */
 char	modBankStr[NUM_MODBANKS][MAX_CHARS]; /* modifier banks */
 
-int	maxFPS;			/* Maximum FPS player wants from server */
+int	maxFPS;			/* Max FPS player wants from server */
 int	oldMaxFPS = 0;
-int	clientFPS = 1;	        /* How many fps we actually get */
-int	recordFPS = 0;		/* Optimal FPS to record at. */
-time_t	currentTime;	        /* Current value of time() */
-bool	newSecond = false;      /* True if time() incremented this frame */
+double	clientFPS = 1.0;	/* FPS client is drawing at */
+int	recordFPS = 0;		/* What FPS to record at */
+time_t	currentTime = 0;	/* Current value of time() */
+bool	newSecond = false;	/* Did time() increment this frame? */
 
 int	maxMouseTurnsPS = 0;
 int	mouseMovementInterval = 0;
@@ -159,9 +155,6 @@ int	clientPortEnd = 0;	/* Last one (these are for firewalls) */
 
 byte	lose_item;		/* index for dropping owned item */
 int	lose_item_active;	/* one of the lose keys is pressed */
-
-double	scaleFactor;
-double	scaleFactor_s;
 
 #ifdef SOUND
 char 	sounds[PATH_MAX];	/* audio mappings */
@@ -455,7 +448,7 @@ int Check_index_by_pos(int x, int y)
 }
 
 /*
- * Convert a `space' map block into a dot.
+ * Convert a 'space' map block into a dot.
  */
 static void Map_make_dot(unsigned char *data)
 {
@@ -849,18 +842,17 @@ static void parse_styles(char **callptr)
     char *ptr;
 
     ptr = *callptr;
-    num_polygon_styles = *ptr++;
-    num_edge_styles = *ptr++;
-    num_bmaps = *ptr++;
+    num_polygon_styles = *ptr++ & 0xff;
+    num_edge_styles = *ptr++ & 0xff;
+    num_bmaps = *ptr++ & 0xff;
 
-    polygon_styles =
-	malloc(MAX(1, num_polygon_styles) * sizeof(polygon_style_t));
+    polygon_styles = XMALLOC(polygon_style_t, MAX(1, num_polygon_styles));
     if (polygon_styles == NULL) {
 	error("no memory for polygon styles");
 	exit(1);
     }
 
-    edge_styles = malloc(MAX(1, num_edge_styles) * sizeof(edge_style_t));
+    edge_styles = XMALLOC(edge_style_t, MAX(1, num_edge_styles));
     if (edge_styles == NULL) {
 	error("no memory for edge styles");
 	exit(1);
@@ -868,9 +860,9 @@ static void parse_styles(char **callptr)
 
     for (i = 0; i < num_polygon_styles; i++) {
 	polygon_styles[i].rgb = get_32bit(&ptr);
-	polygon_styles[i].texture = (*ptr++);
-	polygon_styles[i].def_edge_style = *ptr++;
-	polygon_styles[i].flags = *ptr++;
+	polygon_styles[i].texture = *ptr++ & 0xff;
+	polygon_styles[i].def_edge_style = *ptr++ & 0xff;
+	polygon_styles[i].flags = *ptr++ & 0xff;
     }
 
     if (num_polygon_styles == 0) {
@@ -881,8 +873,11 @@ static void parse_styles(char **callptr)
     }
 
     for (i = 0; i < num_edge_styles; i++) {
-	edge_styles[i].width = *ptr++;
+	edge_styles[i].width = *ptr++; /* -1 means hidden */
 	edge_styles[i].rgb = get_32bit(&ptr);
+	/* kps - what the **** is this ? */
+	/* baron - it's line style from XSetLineAttributes */
+	/* 0 = LineSolid, 1 = LineOnOffDash, 2 = LineDoubleDash */
 	edge_styles[i].style =
 	    (*ptr == 1) ? 1 :
 	    (*ptr == 2) ? 2 : 0;
@@ -895,7 +890,7 @@ static void parse_styles(char **callptr)
 
 	strlcpy(fname, ptr, 30);
 	ptr += strlen(fname) + 1;
-	flags = *ptr++;
+	flags = *ptr++ & 0xff;
 	Bitmap_add(fname, 1, flags);
     }
     *callptr = ptr;
@@ -916,7 +911,7 @@ static int init_polymap(void)
     parse_styles(&ptr);
 
     num_polygons = get_ushort(&ptr);
-    polygons = malloc(num_polygons * sizeof(xp_polygon_t));
+    polygons = XMALLOC(xp_polygon_t, num_polygons);
     if (polygons == NULL) {
 	error("no memory for polygons");
 	exit(1);
@@ -924,7 +919,7 @@ static int init_polymap(void)
 
     for (i = 0; i < num_polygons; i++) {
 	poly = &polygons[i];
-	poly->style = *ptr++;
+	poly->style = *ptr++ & 0xff;
 	current_estyle = polygon_styles[poly->style].def_edge_style;
 	dx = 0;
 	dy = 0;
@@ -936,12 +931,12 @@ static int init_polymap(void)
 	    edgechange = INT_MAX;
 	ptr += ecount * 2;
 	pc = get_ushort(&ptr);
-	if ((points = malloc(pc * sizeof(ipos_t))) == NULL) {
+	if ((points = XMALLOC(ipos_t, pc)) == NULL) {
 	    error("no memory for points");
 	    exit(1);
 	}
 	if (ecount) {
-	    if ((styles = malloc(pc * sizeof(int))) == NULL) {
+	    if ((styles = XMALLOC(int, pc)) == NULL) {
 		error("no memory for special edges");
 		exit(1);
 	    }
@@ -994,8 +989,8 @@ static int init_polymap(void)
 	poly->bounds.w = max.x - min.x;
 	poly->bounds.h = max.y - min.y;
     }
-    num_bases = *ptr++;
-    bases = malloc(num_bases * sizeof(homebase_t));
+    num_bases = *ptr++ & 0xff;
+    bases = XMALLOC(homebase_t, num_bases);
     if (bases == NULL) {
 	error("No memory for Map bases (%d)", num_bases);
 	exit(1);
@@ -1003,7 +998,7 @@ static int init_polymap(void)
     for (i = 0; i < num_bases; i++) {
 	/* base.pos is not used */
 	bases[i].id = -1;
-	bases[i].team = *ptr++;
+	bases[i].team = *ptr++ & 0xff;
 	cx = get_ushort(&ptr);
 	cy = get_ushort(&ptr);
 	bases[i].bounds.x = cx - BLOCK_SZ / 2;
@@ -1025,7 +1020,7 @@ static int init_polymap(void)
     }
     num_fuels = get_ushort(&ptr);
     if (num_fuels != 0) {
-	fuels = malloc(num_fuels * sizeof(fuelstation_t));
+	fuels = XMALLOC(fuelstation_t, num_fuels);
 	if (fuels == NULL) {
 	    error("No memory for Map fuels (%d)", num_fuels);
 	    exit(1);
@@ -1040,10 +1035,10 @@ static int init_polymap(void)
 	fuels[i].bounds.w = BLOCK_SZ;
 	fuels[i].bounds.h = BLOCK_SZ;
     }
-    num_checks = *ptr++;
+    num_checks = *ptr++ & 0xff;
     if (num_checks != 0) {
 
-	checks = malloc(num_checks * sizeof(checkpoint_t));
+	checks = XMALLOC(checkpoint_t, num_checks);
 	if (checks == NULL) {
 	    error("No memory for checkpoints (%d)", num_checks);
 	    exit(1);
@@ -1110,7 +1105,7 @@ static int init_blockmap(void)
 	}
     }
     if (num_bases != 0) {
-	bases = malloc(num_bases * sizeof(homebase_t));
+	bases = XMALLOC(homebase_t, num_bases);
 	if (bases == NULL) {
 	    error("No memory for Map bases (%d)", num_bases);
 	    return -1;
@@ -1118,7 +1113,7 @@ static int init_blockmap(void)
 	num_bases = 0;
     }
     if (num_fuels != 0) {
-	fuels = malloc(num_fuels * sizeof(fuelstation_t));
+	fuels = XMALLOC(fuelstation_t, num_fuels);
 	if (fuels == NULL) {
 	    error("No memory for Map fuels (%d)", num_fuels);
 	    return -1;
@@ -1126,7 +1121,7 @@ static int init_blockmap(void)
 	num_fuels = 0;
     }
     if (num_targets != 0) {
-	targets = malloc(num_targets * sizeof(target_t));
+	targets = XMALLOC(target_t, num_targets);
 	if (targets == NULL) {
 	    error("No memory for Map targets (%d)", num_targets);
 	    return -1;
@@ -1134,7 +1129,7 @@ static int init_blockmap(void)
 	num_targets = 0;
     }
     if (num_cannons != 0) {
-	cannons = malloc(num_cannons * sizeof(cannontime_t));
+	cannons = XMALLOC(cannontime_t, num_cannons);
 	if (cannons == NULL) {
 	    error("No memory for Map cannons (%d)", num_cannons);
 	    return -1;
@@ -1142,7 +1137,7 @@ static int init_blockmap(void)
 	num_cannons = 0;
     }
     if (num_checks != 0) {
-	checks = (checkpoint_t *)malloc(num_checks * sizeof(checkpoint_t));
+	checks = XMALLOC(checkpoint_t, num_checks);
 	if (checks == NULL) {
 	    error("No memory for Map checks (%d)", num_checks);
 	    return -1;
@@ -1307,22 +1302,6 @@ other_t *Other_by_name(const char *name, bool show_error_msg)
     }
 }
 
-#if 0
-other_t *Other_by_name(char *name)
-{
-    int i;
-
-    if (name == NULL)
-	return NULL;
-
-    for (i = 0; i < num_others; i++) {
-	if (!strcmp(name, Others[i].nick_name))
-	    return &Others[i];
-    }
-    return NULL;
-}
-#endif
-
 shipshape_t *Ship_by_id(int id)
 {
     other_t		*other;
@@ -1335,7 +1314,6 @@ shipshape_t *Ship_by_id(int id)
 int Handle_leave(int id)
 {
     other_t		*other;
-    int			i;
     char		msg[MSG_LEN];
 
     if ((other = Other_by_id(id)) != NULL) {
@@ -1359,13 +1337,6 @@ int Handle_leave(int id)
 	}
 	scoresChanged = true;
     }
-    for (i = 0; i < num_others; i++) {
-	other = &Others[i];
-	if (other->war_id == id) {
-	    other->war_id = -1;
-	    scoresChanged = true;
-	}
-    }
     return 0;
 }
 
@@ -1384,13 +1355,13 @@ int Handle_player(int id, int player_team, int mychar,
 	if (num_others >= max_others) {
 	    max_others += 5;
 	    if (num_others == 0)
-		Others = malloc(max_others * sizeof(other_t));
+		Others = XMALLOC(other_t, max_others);
 	    else
-		Others = realloc(Others, max_others * sizeof(other_t));
+		Others = XREALLOC(other_t, Others, max_others);
 	    if (Others == NULL)
 		fatal("Not enough memory for player info");
 	    if (self != NULL)
-		/* We've made `self' the first member of Others[]. */
+		/* We've made 'self' the first member of Others[]. */
 		self = &Others[0];
 	}
 	other = &Others[num_others++];
@@ -1400,7 +1371,7 @@ int Handle_player(int id, int player_team, int mychar,
 	    || (version < 0x4F10
 		&& strcmp(connectParam.nick_name, nick_name) == 0))) {
 	if (other != &Others[0]) {
-	    /* Make `self' the first member of Others[]. */
+	    /* Make 'self' the first member of Others[]. */
 	    *other = Others[0];
 	    other = &Others[0];
 	}
@@ -1410,7 +1381,6 @@ int Handle_player(int id, int player_team, int mychar,
     other->id = id;
     other->team = player_team;
     other->mychar = mychar;
-    other->war_id = -1;
     strlcpy(other->nick_name, nick_name, sizeof(other->nick_name));
     strlcpy(other->user_name, user_name, sizeof(other->user_name));
     strlcpy(other->host_name, host_name, sizeof(other->host_name));
@@ -1437,60 +1407,6 @@ int Handle_team(int id, int pl_team)
 	return 0;
     }
     other->team = pl_team;
-
-    return 0;
-}
-
-int Handle_war(int robot_id, int killer_id)
-{
-    other_t		*robot,
-			*killer;
-    char		msg[MSG_LEN];
-
-    if ((robot = Other_by_id(robot_id)) == NULL) {
-	warn("Can't update war for non-existing player (%d,%d)",
-	      robot_id, killer_id);
-	return 0;
-    }
-    if (killer_id == -1) {
-	/*
-	 * Robot is no longer in war mode.
-	 */
-	robot->war_id = -1;
-	return 0;
-    }
-    if ((killer = Other_by_id(killer_id)) == NULL) {
-	warn("Can't update war against non-existing player (%d,%d)",
-	      robot_id, killer_id);
-	return 0;
-    }
-    robot->war_id = killer_id;
-    sprintf(msg, "%s declares war on %s.",
-	    robot->nick_name, killer->nick_name);
-    Add_message(msg);
-    scoresChanged = true;
-
-    return 0;
-}
-
-int Handle_seek(int programmer_id, int robot_id, int sought_id)
-{
-    other_t		*programmer,
-			*robot,
-			*sought;
-    char		msg[MSG_LEN];
-
-    if ((programmer = Other_by_id(programmer_id)) == NULL
-	|| (robot = Other_by_id(robot_id)) == NULL
-	|| (sought = Other_by_id(sought_id)) == NULL) {
-	warn("Bad player seek (%d,%d,%d)",
-	      programmer_id, robot_id, sought_id);
-	return 0;
-    }
-    robot->war_id = sought_id;
-    sprintf(msg, "%s has programmed %s to seek %s.",
-	    programmer->nick_name, robot->nick_name, sought->nick_name);
-    Add_message(msg);
     scoresChanged = true;
 
     return 0;
@@ -1564,7 +1480,7 @@ int Handle_score_object(double score, int x, int y, char *msg)
 	if (Using_score_decimals())
 	    sprintf(sobj->hud_msg, "%s %.*f", msg, showScoreDecimals, score);
 	else {
-	    int sc = rint(score);
+	    int sc = (int)(score >= 0.0 ? score + 0.5 : score - 0.5);
 	    sprintf(sobj->hud_msg, "%s %d", msg, sc);
 	}
 	sobj->hud_msg_len = strlen(sobj->hud_msg);
@@ -1576,7 +1492,7 @@ int Handle_score_object(double score, int x, int y, char *msg)
     if (Using_score_decimals())
 	sprintf(sobj->msg, "%.*f", showScoreDecimals, score);
     else {
-	int sc = rint(score);
+	int sc = (int)(score >= 0.0 ? score + 0.5 : score - 0.5);
 	sprintf(sobj->msg, "%d", sc);
     }
     sobj->msg_len = strlen(sobj->msg);
@@ -1626,15 +1542,21 @@ int Handle_start(long server_loops)
 
 static void update_timing(void)
 {
-    static int    frame_counter = 0;
-    static time_t old_time = 0;
-    
+    static int frame_counter = 0;
+    static struct timeval old_tv = {0, 0};
+    struct timeval now;
+
     frame_counter++;
-    currentTime = time(NULL);
-    if (currentTime != old_time) {
-	old_time = currentTime;
+    gettimeofday(&now, NULL);
+    if (now.tv_sec != old_tv.tv_sec) {
+	double usecs, fps;
+
+	currentTime = time(NULL);
+	usecs = 1e6 + (now.tv_usec - old_tv.tv_usec);
+	fps = (1e6 * frame_counter) / usecs;
+	old_tv = now;
 	newSecond = true;
-	clientFPS = frame_counter > 1 ? frame_counter : 1;
+	clientFPS = MAX(1.0, fps);
 	frame_counter = 0;
     } else
 	newSecond = false;
@@ -1662,13 +1584,13 @@ static void update_status(int status)
 {
     static int old_status = 0;
 
-    if (BIT(old_status, GAME_OVER) && !BIT(status, GAME_OVER)
-	&& !BIT(status,PAUSE))
+    if (BIT(old_status, OLD_GAME_OVER) && !BIT(status, OLD_GAME_OVER)
+	&& !BIT(status, OLD_PAUSE))
 	Raise_window();
 
-    /* GAME_OVER -> PLAYING */
-    if (BIT(old_status, PLAYING|PAUSE|GAME_OVER) != PLAYING) {
-	if (BIT(status, PLAYING|PAUSE|GAME_OVER) == PLAYING)
+    /* Player appeared? */
+    if (BIT(old_status, OLD_PLAYING|OLD_PAUSE|OLD_GAME_OVER) != OLD_PLAYING) {
+	if (BIT(status, OLD_PLAYING|OLD_PAUSE|OLD_GAME_OVER) == OLD_PLAYING)
 	    Reset_shields();
     }
 
@@ -1835,6 +1757,38 @@ int Handle_ball(int x, int y, int id, int style)
     return 0;
 }
 
+static int predict_self_dir(int received_dir)
+{
+    double pointer_delta = 0, dir_delta, new_dir;
+    int ind = pointer_move_next - 1;
+    int count = 0, int_new_dir;
+
+    if (ind < 0)
+	ind = MAX_POINTER_MOVES - 1;
+    
+    while (pointer_moves[ind].id > last_keyboard_ack && count < 50) {
+        pointer_delta += pointer_moves[ind].movement
+	    * pointer_moves[ind].turnspeed;
+	ind--;
+	if (ind < 0)
+	    ind = MAX_POINTER_MOVES - 1;
+	count++;
+    }
+    
+    dir_delta = pointer_delta / (RES/2);
+    new_dir = (received_dir - dir_delta);
+    while (new_dir < 0)
+	new_dir += RES;
+    while (new_dir >= RES)
+	new_dir -= RES;
+    int_new_dir = (int)(new_dir + 0.5);
+    while (int_new_dir >= RES)
+	/* might be == RES */
+	int_new_dir -= RES;
+
+    return int_new_dir;
+}
+
 int Handle_ship(int x, int y, int id, int dir, int shield, int cloak,
 		int eshield, int phased, int deflector)
 {
@@ -1843,7 +1797,10 @@ int Handle_ship(int x, int y, int id, int dir, int shield, int cloak,
     t.x = x;
     t.y = y;
     t.id = id;
-    t.dir = dir;
+    if (dirPrediction && self && self->id == id)
+        t.dir = predict_self_dir(dir);
+    else
+        t.dir = dir;
     t.shield = shield;
     t.cloak = cloak;
     t.eshield = eshield;
@@ -1975,6 +1932,17 @@ int Handle_wormhole(int x, int y)
     return 0;
 }
 
+int Handle_polystyle(int polyind, int newstyle)
+{
+    xp_polygon_t *poly;
+
+    poly = &polygons[polyind];
+    poly->style = newstyle;
+    /*warn("polygon %d style set to %d", polyind, newstyle);*/
+
+    return 0;
+}
+
 int Handle_ecm(int x, int y, int size)
 {
     ecm_t	t;
@@ -2030,7 +1998,7 @@ int Handle_fastradar(int x, int y, int size)
     t.type = normal;
     
     if ((size & 0x80) != 0) {
-	t.type = friend;
+	t.type = friendly;
 	size &= ~0x80;
     }
     
@@ -2257,9 +2225,10 @@ int Client_start(void)
 
 void Client_cleanup(void)
 {
-    int		i;
+    int i;
 
-    Quit();
+    Pointer_control_set_state(false);
+    Platform_specific_cleanup();
     Free_selectionAndHistory();
     Free_msgs();
     if (max_others > 0) {
@@ -2402,4 +2371,14 @@ int Client_check_pointer_move_interval(void)
     }
 
     return 1000000;
+}
+
+/*
+ * Exit the entire client.
+ */
+void Client_exit(int status)
+{
+    Net_cleanup();
+    Client_cleanup();
+    exit(status);
 }

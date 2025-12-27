@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -24,9 +24,6 @@
  */
 
 #include "xpclient.h"
-
-char paintobjects_version[] = VERSION;
-
 
 #define COLOR(i)	(i / areas)
 #define BASE_X(i)	(((i % x_areas) << 8) + ext_view_x_offset)

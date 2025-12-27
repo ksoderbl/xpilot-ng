@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -24,9 +24,6 @@
  */
 
 #include "xpclient_x11.h"
-
-
-char guimap_version[] = VERSION;
 
 static int baseNameColor;		/* Color index for base name drawing */
 static int backgroundPointColor;	/* background point drawing */
@@ -208,8 +205,8 @@ void Gui_paint_fuel(int x, int y, double fuel)
 	static int		text_is_bigger;
 	static double		lastScaleFactor;
 
-	if (!text_width || lastScaleFactor != scaleFactor) {
-	    lastScaleFactor = scaleFactor;
+	if (!text_width || lastScaleFactor != clData.scaleFactor) {
+	    lastScaleFactor = clData.scaleFactor;
 	    text_width = XTextWidth(gameFont, s, 1);
 	    text_is_bigger = (text_width + 4 > WINSCALE(BLOCK_SZ) + 1)
 		|| (gameFont->ascent + gameFont->descent)
@@ -255,7 +252,8 @@ void Gui_paint_fuel(int x, int y, double fuel)
 	    image = (2 * fuel_images - 1) - image;
 
 
-	size = (BLOCK_SZ - 2 * BITMAP_FUEL_BORDER) * fuel / MAX_STATION_FUEL;
+	size = (int)((BLOCK_SZ - 2 * BITMAP_FUEL_BORDER)
+		     * fuel / MAX_STATION_FUEL);
 
 	Bitmap_paint(drawPixmap, BM_FUELCELL,
 		     SCALEX(x), SCALEY(y + BLOCK_SZ), 0);
@@ -299,8 +297,7 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
 
     if (base != NULL) {
 	/*
-	 * Hacks to support Mara's base warning on new servers and
-	 * the red "meter" basewarning on old servers.
+	 * Hacks to support base warnings.
 	 */
 	if (loops < base->appeartime)
 	    do_basewarning = true;
@@ -308,7 +305,8 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
 	if (version < 0x4F12 && do_basewarning) {
 	    if (baseWarningType & 1) {
 		/* We assume the ship will appear after 3 seconds. */
-		int count = 360 * (base->appeartime - loops) / (3 * clientFPS);
+		int count = (int)(360 * (base->appeartime - loops)
+				  / (3 * clientFPS));
 		LIMIT(count, 0, 360);
 		/* red box basewarning */
 		if (count > 0 && (baseWarningType & 1))
@@ -1073,7 +1071,7 @@ void Gui_paint_setup_target(int x, int y, int team, double damage, bool own)
     }
 
     if (damage != TARGET_DAMAGE) {
-	size = (damage * BLOCK_SZ) / (TARGET_DAMAGE * 2);
+	size = (int)((damage * BLOCK_SZ) / (TARGET_DAMAGE * 2));
 	a1 = x + size;
 	a2 = y + size;
 	b1 = x + (BLOCK_SZ - size);

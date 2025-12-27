@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -25,10 +25,8 @@
 
 #include "xpclient.h"
 
-
-char gfx2d_version[] = VERSION;
-
-char	*texturePath = NULL;		/* Path list of texture directories */
+char	*texturePath = NULL;    /* Configured list of texture directories */
+char    *realTexturePath = NULL; /* Real texture lookup path */
 
 /*
  *   Purpose: initialize xp_picture structure and load it from file.
@@ -41,7 +39,7 @@ char	*texturePath = NULL;		/* Path list of texture directories */
 int Picture_init (xp_picture_t *picture, const char *filename, int count)
 {
     picture->count = count;
-    picture->data = (RGB_COLOR **) malloc(ABS(count) * sizeof(RGB_COLOR*));
+    picture->data = XMALLOC(RGB_COLOR *, ABS(count));
     if (!picture->data) {
 	error("Not enough memory.");
 	return -1;
@@ -54,7 +52,7 @@ int Picture_init (xp_picture_t *picture, const char *filename, int count)
         if (Picture_rotate(picture) == -1)
 	    return -1;
 
-    picture->bbox = malloc(ABS(count) * sizeof(bbox_t));
+    picture->bbox = XMALLOC(bbox_t, ABS(count));
     if (!picture->bbox) {
 	error("Not enough memory.");
 	return -1;
@@ -78,20 +76,11 @@ static int Picture_find_path(const char *filename, char *path,
 	return false;
 
     /*
-     * Always try the plain filename first,
-     * without using the texturePath.
-     */
-    if (access(filename, 4) == 0) {
-	strlcpy(path, filename, path_size);
-	return true;
-    }
-
-    /*
      * If filename doesn't contain a slash
-     * then we also try the texturePath, if it exists.
+     * then we also try the realTexturePath, if it exists.
      */
-    if (!strchr(filename, PATHNAME_SEP) && texturePath != NULL) {
-	for (dir = texturePath; *dir; dir = colon) {
+    if (!strchr(filename, PATHNAME_SEP) && realTexturePath != NULL) {
+	for (dir = realTexturePath; *dir; dir = colon) {
 	    if (!(colon = strchr(dir, ':'))) {
 		len = strlen(dir);
 		colon = &dir[len];
@@ -104,7 +93,8 @@ static int Picture_find_path(const char *filename, char *path,
 		if (path[len - 1] != PATHNAME_SEP)
 		    path[len++] = PATHNAME_SEP;
 		strlcpy(&path[len], filename, path_size - len);
-		if (access(path, 4) == 0)
+		/* kps - #ifndef R_OK #define R_OK 4 #endif */
+		if (access(path, R_OK) == 0)
 		    return true;
 	    }
 	}
@@ -226,8 +216,7 @@ int Picture_load(xp_picture_t *picture, const char *filename)
 
     for (p = 0; p < count; p++) {
 	if (!(picture->data[p] =
-	      malloc(picture->width * picture->height *
-		     sizeof(RGB_COLOR)))) {
+	      XMALLOC(RGB_COLOR, picture->width * picture->height))) {
 	    error("Not enough memory.");
 	    return -1;
 	}
@@ -269,7 +258,7 @@ int Picture_rotate(xp_picture_t *picture)
     size = picture->height;
     for (image = 1; image < picture->count; image++) {
         if (!(picture->data[image] =
-              malloc(picture->width * picture->height * sizeof(RGB_COLOR)))) {
+              XMALLOC(RGB_COLOR, picture->width * picture->height))) {
             error("Not enough memory.");
             return -1;
         }

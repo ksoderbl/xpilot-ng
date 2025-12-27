@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -25,10 +25,7 @@
 
 #include "xpserver.h"
 
-#define META_VERSION	VERSION "ng"
-
-char metaserver_version[] = VERSION;
-
+#define META_VERSION	VERSION
 
 struct MetaServer {
     char name[64];
@@ -91,26 +88,22 @@ void Meta_init(void)
     if (!options.reportToMetaServer)
 	return;
 
-    if (!options.silent) {
-	xpprintf("%s Locating Internet Meta server... ", showtime());
-	fflush(stdout);
-    }
+    xpprintf("%s Locating Internet Meta server... ", showtime());
+    fflush(stdout);
 
     for (i = 0; i < NELEM(meta_servers); i++) {
 	addr = sock_get_addr_by_name(meta_servers[i].name);
 	if (addr)
 	    strlcpy(meta_servers[i].addr, addr, sizeof(meta_servers[i].addr));
-	if (!options.silent) {
-	    if (addr)
-		xpprintf("found %d", i + 1);
-	    else
-		xpprintf("%d not found", i + 1);
-	    if (i + 1 == NELEM(meta_servers))
-		xpprintf("\n");
-	    else
-		xpprintf("... ");
-	    fflush(stdout);
-	}
+	if (addr)
+	    xpprintf("found %d", i + 1);
+	else
+	    xpprintf("%d not found", i + 1);
+	if (i + 1 == NELEM(meta_servers))
+	    xpprintf("\n");
+	else
+	    xpprintf("... ");
+	fflush(stdout);
     }
 }
 
@@ -136,11 +129,9 @@ static void asciidump(void *p, size_t size)
 
 static char meta_update_string[MAX_STR_LEN];
 
-void Meta_update_max_size_tuner(world_t *world)
+void Meta_update_max_size_tuner(void)
 {
-    UNUSED_PARAM(world);
-
-    LIMIT(options.metaUpdateMaxSize, 1, sizeof(meta_update_string));
+    LIMIT(options.metaUpdateMaxSize, 1, (int) sizeof(meta_update_string));
 }
 
 void Meta_update(bool change)
@@ -154,7 +145,6 @@ void Meta_update(bool change)
     const char *game_mode;
     static time_t lastMetaSendTime = 0;
     static int queue_length = 0;
-    world_t *world = &World;
     bool first;
 
     if (!options.reportToMetaServer)
@@ -169,7 +159,7 @@ void Meta_update(bool change)
 	}
     }
 
-    Meta_update_max_size_tuner(world);
+    Meta_update_max_size_tuner();
     max_size = options.metaUpdateMaxSize;
 
     lastMetaSendTime = currentTime;
@@ -182,7 +172,8 @@ void Meta_update(bool change)
     for (i = 0; i < NumPlayers; i++) {
 	player_t *pl = Player_by_index(i);
 
-	if (!Player_is_human(pl) || BIT(pl->status, PAUSE))
+	if (!Player_is_human(pl)
+	    || Player_is_paused(pl))
 	    continue;
 
 	num_active_players++;
@@ -198,7 +189,7 @@ void Meta_update(bool change)
 	bool firstteam = true;
 
 	for (i = 0; i < MAX_TEAMS; i++) {
-	    team_t *team = Team_by_index(world, i);
+	    team_t *team = Team_by_index(i);
 
 	    if (i == options.robotTeam && options.reserveRobotTeam)
 		continue;
@@ -216,7 +207,7 @@ void Meta_update(bool change)
     }
     else
 	snprintf(freebases, sizeof(freebases), "=%d",
-		 world->NumBases - num_active_players - login_in_progress);
+		 Num_bases() - num_active_players - login_in_progress);
 
     snprintf(string, max_size,
 	     "add server %s\n"
@@ -237,7 +228,7 @@ void Meta_update(bool change)
 	     "add sound %s\n",
 	     Server.host, num_active_players,
 	     META_VERSION, world->name, world->x, world->y, world->author,
-	     world->NumBases, FPS, options.contactPort,
+	     Num_bases(), FPS, options.contactPort,
 	     game_mode, world->NumTeamBases, freebases,
 	     BIT(world->rules->mode, TIMING) ? 1:0,
 	     (long)(time(NULL) - serverStartTime),
@@ -256,7 +247,8 @@ void Meta_update(bool change)
 	char str[4 * MAX_CHARS];
 	char tstr[32];
 
-	if (!Player_is_human(pl) || BIT(pl->status, PAUSE))
+	if (!Player_is_human(pl)
+	    || Player_is_paused(pl))
 	    continue;
 
 	snprintf(str, sizeof(str),

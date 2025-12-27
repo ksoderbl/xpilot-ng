@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -24,8 +24,6 @@
  */
 
 #include "xpclient_x11.h"
-
-char record_version[] = VERSION;
 
 /*
  * GC elements for line drawing operations.
@@ -75,7 +73,7 @@ static void Dummy_paintItemSymbol(int type, Drawable drawable,
 
 /*
  * Miscellaneous recording functions.
- * These are only called when (recording == true).
+ * These are only called when (recording).
  */
 static void RWriteByte(int value)
 {
@@ -771,9 +769,9 @@ static int RSetDashes(Display *display, GC gc,
 
 
 /*
- * The `_Xconst' trick from <X11/Xfuncproto.h> doesn't work
+ * The '_Xconst' trick from <X11/Xfuncproto.h> doesn't work
  * on Suns when not compiling under full ANSI mode.
- * So we force the prototypes to use `const' instead of `_Xconst'
+ * So we force the prototypes to use 'const' instead of '_Xconst'
  * by means of defining function types and casting with them.
  */
 typedef int (*draw_string_proto_t)(Display *, Drawable, GC,
@@ -906,8 +904,7 @@ void Record_init(const char *filename)
 {
     rd = Xdrawing;
     assert(filename != NULL);
-    if (record_filename)
-	xp_free(record_filename);
+    XFREE(record_filename);
     record_filename = xp_safe_strdup(filename);
 }
 

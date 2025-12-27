@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 2000-2004 by
  *
@@ -30,11 +30,9 @@
 
 #include "xpserver.h"
 
-char collision_version[] = VERSION;
-
 /* new acd functions */
 /* doubles because the multiplies might overflow ints */
-static inline bool in_range_acd(double dx, double dy, double dvx, double dvy,
+static bool in_range_acd(double dx, double dy, double dvx, double dvy,
 				double r)
 {
     double tmin, fminx, fminy;
@@ -58,7 +56,7 @@ static inline bool in_range_acd(double dx, double dy, double dvx, double dvy,
 	return false;
 }
 
-static inline bool in_range_simple(int px, int py, int qx, int qy, double r)
+static bool in_range_simple(int px, int py, int qx, int qy, double r)
 {
     int dx = px - qx, dy = py - qy;
 
@@ -71,7 +69,7 @@ static inline bool in_range_simple(int px, int py, int qx, int qy, double r)
 	return false;
 }
 
-static inline bool in_range_partial(double dx, double dy,
+static bool in_range_partial(double dx, double dy,
 				    double dvx, double dvy,
 				    double r, double wall_time)
 {
@@ -127,7 +125,7 @@ static inline bool in_range_partial(double dx, double dy,
        yet. It's supposed that they move in a straight line from
        prevpos to pos. This can lead to some erroneous hits.
 */
-static bool in_range(object_t *obj1, object_t *obj2, double range)
+static inline bool in_range(object_t *obj1, object_t *obj2, double range)
 {
     bool hit;
 
@@ -161,51 +159,47 @@ static bool in_range(object_t *obj1, object_t *obj2, double range)
     return hit;
 }
 
-static void PlayerCollision(world_t *world);
+static void PlayerCollision(void);
 static void PlayerObjectCollision(player_t *pl);
-static void PlayerCheckpointCollision(player_t *pl);
-static void AsteroidCollision(world_t *world);
-static void BallCollision(world_t *world);
-static void MineCollision(world_t *world);
-static void Player_collides_with_ball(player_t *pl, object_t *obj);
-static void Player_collides_with_item(player_t *pl, object_t *obj);
-static void Player_collides_with_mine(player_t *pl, object_t *obj);
+static void AsteroidCollision(void);
+static void BallCollision(void);
+static void MineCollision(void);
+static void Player_collides_with_ball(player_t *pl, ballobject_t *ball);
+static void Player_collides_with_item(player_t *pl, itemobject_t *item);
+static void Player_collides_with_mine(player_t *pl, mineobject_t *mine);
 static void Player_collides_with_debris(player_t *pl, object_t *obj);
 static void Player_collides_with_asteroid(player_t *pl, wireobject_t *obj);
 static void Player_collides_with_killing_shot(player_t *pl, object_t *obj);
-static void Player_pass_checkpoint(player_t *pl);
 
 
-void Check_collision(world_t *world)
+void Check_collision(void)
 {
-    BallCollision(world);
-    MineCollision(world);
-    PlayerCollision(world);
-    AsteroidCollision(world);
+    BallCollision();
+    MineCollision();
+    PlayerCollision();
+    AsteroidCollision();
 }
 
 
-static void PlayerCollision(world_t *world)
+static void PlayerCollision(void)
 {
     int i, j;
-    double sc, sc2;
     player_t *pl;
 
     /* Player - player, checkpoint, treasure, object and wall */
     for (i = 0; i < NumPlayers; i++) {
 	pl = Player_by_index(i);
-	if (!Player_is_playing(pl))
+	if (!Player_is_alive(pl))
 	    continue;
 
-	if (!World_contains_clpos(world, pl->pos)) {
-	    SET_BIT(pl->status, KILLED);
+	if (!World_contains_clpos(pl->pos)) {
+	    Player_set_state(pl, PL_STATE_KILLED);
 	    Set_message_f("%s left the known universe.", pl->name);
-	    sc = Rate(WALL_SCORE, pl->score);
-	    Score(pl, -sc, pl->pos, pl->name);
+	    Handle_Scoring(SCORE_WALL_DEATH,NULL,pl,NULL,NULL);
 	    continue;
 	}
 
-	if (BIT(pl->used, HAS_PHASING_DEVICE))
+	if (Player_is_phasing(pl))
 	    continue;
 
 	/* Player - player */
@@ -214,9 +208,9 @@ static void PlayerCollision(world_t *world)
 		player_t *pl_j = Player_by_index(j);
 		double range;
 
-		if (!Player_is_playing(pl_j))
+		if (!Player_is_alive(pl_j))
 		    continue;
-		if (BIT(pl_j->used, HAS_PHASING_DEVICE))
+		if (Player_is_phasing(pl_j))
 		    continue;
 
 		range = (2*SHIP_SZ-6) * CLICK;
@@ -239,22 +233,23 @@ static void PlayerCollision(world_t *world)
 		 * The choosing of the first line may not be easy however.
 		 */
 
-		if (Team_immune(pl->id, pl_j->id) || PSEUDO_TEAM(pl, pl_j))
+		if (Team_immune(pl->id, pl_j->id)
+		    || PSEUDO_TEAM(pl, pl_j))
 		    continue;
 
 		sound_play_sensors(pl->pos, PLAYER_HIT_PLAYER_SOUND);
 		if (BIT(world->rules->mode, BOUNCE_WITH_PLAYER)) {
-		    if (!Player_used_emergency_shield(pl)) {
+		    if (!Player_uses_emergency_shield(pl)) {
 			Player_add_fuel(pl, ED_PL_CRASH);
 			Item_damage(pl, options.destroyItemInCollisionProb);
 		    }
-		    if (!Player_used_emergency_shield(pl_j)) {
+		    if (!Player_uses_emergency_shield(pl_j)) {
 			Player_add_fuel(pl_j, ED_PL_CRASH);
 			Item_damage(pl_j, options.destroyItemInCollisionProb);
 		    }
 		    pl->forceVisible = 20;
 		    pl_j->forceVisible = 20;
-		    Obj_repel((object_t *)pl, (object_t *)pl_j,
+		    Obj_repel(OBJ_PTR(pl), OBJ_PTR(pl_j),
 			      PIXEL_TO_CLICK(2*SHIP_SZ));
 		}
 		if (!BIT(world->rules->mode, CRASH_WITH_PLAYER))
@@ -262,114 +257,48 @@ static void PlayerCollision(world_t *world)
 
 		if (pl->fuel.sum <= 0.0
 		    || (!BIT(pl->used, HAS_SHIELD)
-			&& !BIT(pl->have, HAS_ARMOR)))
-		    SET_BIT(pl->status, KILLED);
+			&& !Player_has_armor(pl)))
+		    Player_set_state(pl, PL_STATE_KILLED);
 
 		if (pl_j->fuel.sum <= 0.0
 		    || (!BIT(pl_j->used, HAS_SHIELD)
-			&& !BIT(pl_j->have, HAS_ARMOR)))
-		    SET_BIT(pl_j->status, KILLED);
+			&& !Player_has_armor(pl_j)))
+		    Player_set_state(pl_j, PL_STATE_KILLED);
 
 		if (!BIT(pl->used, HAS_SHIELD)
-		    && BIT(pl->have, HAS_ARMOR))
+		    && Player_has_armor(pl))
 		    Player_hit_armor(pl);
 
 		if (!BIT(pl_j->used, HAS_SHIELD)
-		    && BIT(pl_j->have, HAS_ARMOR))
+		    && Player_has_armor(pl_j))
 		    Player_hit_armor(pl_j);
 
-		if (BIT(pl_j->status, KILLED)) {
-		    if (BIT(pl->status, KILLED)) {
+		if (Player_is_killed(pl_j)) {
+		    if (Player_is_killed(pl)) {
 			Set_message_f("%s and %s crashed.",
 				      pl->name, pl_j->name);
-			if (!Player_is_tank(pl) && !Player_is_tank(pl_j)) {
-			    sc = Rate(pl_j->score, pl->score)
-				* options.crashScoreMult;
-			    sc2 = Rate(pl->score, pl_j->score)
-				* options.crashScoreMult;
-			    Score_players(pl, -sc, pl_j->name,
-					  pl_j, -sc2, pl->name, false);
-			}
-			else if (Player_is_tank(pl)) {
-			    player_t *i_tank_owner_pl
-				= Player_by_id(pl->lock.pl_id);
-
-			    sc = Rate(i_tank_owner_pl->score, pl_j->score)
-				* options.tankKillScoreMult;
-			    Score_players(i_tank_owner_pl, sc, pl_j->name,
-					  pl_j, -sc, pl->name, true);
-			}
-			else if (Player_is_tank(pl_j)) {
-			    player_t *j_tank_owner_pl
-
-				= Player_by_id(pl_j->lock.pl_id);
-			    sc = Rate(j_tank_owner_pl->score, pl->score)
-				* options.tankKillScoreMult;
-			    Score_players(j_tank_owner_pl, sc, pl->name,
-					  pl, -sc, pl_j->name, true);
-			} /* don't bother scoring two tanks */
+			Handle_Scoring(SCORE_COLLISION,pl,pl_j,NULL,NULL);
 		    } else {
-			int i_tank_owner = i;
-			player_t *i_tank_owner_pl;
-
-			if (Player_is_tank(pl)) {
-			    i_tank_owner = GetInd(pl->lock.pl_id);
-			    if (i_tank_owner == j)
-				i_tank_owner = i;
-			}
-			i_tank_owner_pl = Player_by_index(i_tank_owner);
 			Set_message_f("%s ran over %s.", pl->name, pl_j->name);
-			sound_play_sensors(pl_j->pos,
-					   PLAYER_RAN_OVER_PLAYER_SOUND);
-			if (Player_is_tank(pl)) {
-			    Rank_add_tank_kill(i_tank_owner_pl);
-			    sc = Rate(i_tank_owner_pl->score, pl_j->score)
-				* options.tankKillScoreMult;
-			} else {
-			    Rank_add_runover_kill(pl);
-			    sc = Rate(pl->score, pl_j->score)
-				* options.runoverKillScoreMult;
-			}
-			Score_players(i_tank_owner_pl, sc, pl_j->name,
-				      pl_j, -sc, pl->name, true);
+			sound_play_sensors(pl_j->pos, PLAYER_RAN_OVER_PLAYER_SOUND);
+			Handle_Scoring(SCORE_ROADKILL,pl,pl_j,NULL,NULL);
 		    }
 
 		} else {
-		    if (BIT(pl->status, KILLED)) {
-			int j_tank_owner = j;
-			player_t *j_tank_owner_pl;
-
-			if (Player_is_tank(pl_j)) {
-			    j_tank_owner = GetInd(pl_j->lock.pl_id);
-			    if (j_tank_owner == i)
-				j_tank_owner = j;
-			}
-			j_tank_owner_pl = Player_by_index(j_tank_owner);
+		    if (Player_is_killed(pl)) {
 			Set_message_f("%s ran over %s.", pl_j->name, pl->name);
-			sound_play_sensors(pl->pos,
-					   PLAYER_RAN_OVER_PLAYER_SOUND);
-			if (Player_is_tank(pl_j)) {
-			    Rank_add_tank_kill(j_tank_owner_pl);
-			    sc = Rate(j_tank_owner_pl->score, pl->score)
-				* options.tankKillScoreMult;
-			} else {
-			    Rank_add_runover_kill(pl_j);
-			    sc = Rate(pl_j->score, pl->score)
-				* options.runoverKillScoreMult;
-			}
-
-			Score_players(j_tank_owner_pl, sc, pl->name,
-				      pl, -sc, pl_j->name, true);
+			sound_play_sensors(pl->pos, PLAYER_RAN_OVER_PLAYER_SOUND);
+			Handle_Scoring(SCORE_ROADKILL,pl_j,pl,NULL,NULL);
 		    }
 		}
 
-		if (BIT(pl_j->status, KILLED)) {
+		if (Player_is_killed(pl_j)) {
 		    if (Player_is_robot(pl_j)
 			&& Robot_war_on_player(pl_j) == pl->id)
 			Robot_reset_war(pl_j);
 		}
 
-		if (BIT(pl->status, KILLED)) {
+		if (Player_is_killed(pl)) {
 		    if (Player_is_robot(pl)
 			&& Robot_war_on_player(pl) == pl_j->id)
 			Robot_reset_war(pl);
@@ -384,7 +313,7 @@ static void PlayerCollision(world_t *world)
 
 	/* Player picking up ball/treasure */
 	if (!BIT(pl->used, HAS_CONNECTOR)
-	    || BIT(pl->used, HAS_PHASING_DEVICE))
+	    || Player_is_phasing(pl))
 	    pl->ball = NULL;
 	else if (pl->ball != NULL) {
 	    ballobject_t *ball = pl->ball;
@@ -402,11 +331,11 @@ static void PlayerCollision(world_t *world)
 		     * not the team the ball belongs to. the latter is
 		     * found through the ball's treasure */
 		    ball->team = pl->team;
-		    if (ball->treasure->have)
-			ball->life = 1e6;  /* for frame counter */
-		    ball->owner = pl->id;
-		    SET_BIT(ball->status, GRAVITY);
-		    ball->treasure->have = false;
+		    if (ball->ball_treasure->have)
+			ball->ball_loose_ticks = 0;
+		    ball->ball_owner = pl->id;
+		    SET_BIT(ball->obj_status, GRAVITY);
+		    ball->ball_treasure->have = false;
 		    SET_BIT(pl->have, HAS_BALL);
 		    pl->ball = NULL;
 		    sound_play_sensors(pl->pos, CONNECT_BALL_SOUND);
@@ -430,12 +359,13 @@ static void PlayerCollision(world_t *world)
 	     * We want a separate list of balls to avoid searching
 	     * the object list for balls.
 	     */
-	    int dist, mindist = options.ballConnectorLength * CLICK;
+	    double dist, mindist = options.ballConnectorLength * CLICK;
 
 	    for (j = 0; j < NumObjs; j++) {
 		object_t *obj = Obj[j];
 
-		if (BIT(obj->type, OBJ_BALL) && obj->id == NO_ID) {
+		if (obj->type == OBJ_BALL
+		    && obj->id == NO_ID) {
 		    dist = Wrap_length(pl->pos.cx - obj->pos.cx,
 				       pl->pos.cy - obj->pos.cy);
 		    if (dist < mindist) {
@@ -449,8 +379,8 @@ static void PlayerCollision(world_t *world)
 			 * considered bad gamesmanship.
 			 */
 			if (BIT(world->rules->mode, TEAM_PLAY)
-			    && ball->treasure->have
-			    && pl->team == ball->treasure->team)
+			    && ball->ball_treasure->have
+			    && pl->team == ball->ball_treasure->team)
 			    continue;
 			pl->ball = ball;
 			mindist = dist;
@@ -531,16 +461,20 @@ static void PlayerObjectCollision(player_t *pl)
     int j, obj_count;
     double range, radius;
     object_t *obj, **obj_list;
-    world_t *world = pl->world;
 
     /*
      * Collision between a player and an object.
      */
-    if (!Player_is_playing(pl))
+    if (!Player_is_alive(pl))
 	return;
 
-    Cell_get_objects(world, pl->pos, 4, 500, &obj_list, &obj_count);
-
+    if (NumObjs >= options.cellGetObjectsThreshold)
+	Cell_get_objects(pl->pos, 4, 500, &obj_list, &obj_count);
+    else {
+	obj_list = Obj;
+	obj_count = NumObjs;
+    }
+   
     for (j = 0; j < obj_count; j++) {
 	bool hit;
 
@@ -552,8 +486,9 @@ static void PlayerObjectCollision(player_t *pl)
 
 	if (obj->id != NO_ID) {
 	    if (obj->id == pl->id) {
-		if (BIT(obj->type, OBJ_SPARK|OBJ_MINE)
-		    && BIT(obj->status, OWNERIMMUNE))
+		if ((obj->type == OBJ_SPARK
+		     || obj->type == OBJ_MINE)
+		    && BIT(obj->obj_status, OWNERIMMUNE))
 		    continue;
 		else if (options.selfImmunity)
 		    continue;
@@ -563,7 +498,7 @@ static void PlayerObjectCollision(player_t *pl)
 		continue;
 	    else if (Team_immune(obj->id, pl->id))
 		continue;
-	    else if (BIT(Player_by_id(obj->id)->status, PAUSE))
+	    else if (Player_is_paused(Player_by_id(obj->id)))
 		continue;
 	} else if (BIT(world->rules->mode, TEAM_PLAY)
 		   && options.teamImmunity
@@ -574,28 +509,32 @@ static void PlayerObjectCollision(player_t *pl)
 
 	if (obj->type == OBJ_ITEM) {
 	    if (BIT(pl->used, HAS_SHIELD) && !options.shieldedItemPickup) {
-		SET_BIT(obj->status, GRAVITY);
-		Delta_mv((object_t *)pl, obj);
+		SET_BIT(obj->obj_status, GRAVITY);
+		Delta_mv(OBJ_PTR(pl), obj);
 		continue;
 	    }
 	}
-	else if (BIT(obj->type, OBJ_HEAT_SHOT | OBJ_SMART_SHOT | OBJ_TORPEDO
-				| OBJ_SHOT | OBJ_CANNON_SHOT)) {
-	    if (pl->id == obj->id && frame_time < obj->fusetime)
+	else if (obj->type == OBJ_HEAT_SHOT
+		 || obj->type == OBJ_SMART_SHOT
+		 || obj->type == OBJ_TORPEDO
+		 || obj->type == OBJ_SHOT
+		 || obj->type == OBJ_CANNON_SHOT) {
+	    if (pl->id == obj->id && obj->fuse > 0)
 		continue;
 	}
-	else if (BIT(obj->type, OBJ_MINE)) {
-	    if (BIT(obj->status, CONFUSED))
+	else if (obj->type == OBJ_MINE) {
+	    if (BIT(obj->obj_status, CONFUSED))
 		continue;
 	}
-	else if (BIT(obj->type, OBJ_BALL) && obj->id != NO_ID) {
-	    if (BIT(Player_by_id(obj->id)->used, HAS_PHASING_DEVICE))
+	else if (obj->type == OBJ_BALL
+		 && obj->id != NO_ID) {
+	    if (Player_is_phasing(Player_by_id(obj->id)))
 		continue;
 	}
-	else if (BIT(obj->type, OBJ_PULSE)) {
+	else if (obj->type == OBJ_PULSE) {
 	    pulseobject_t *pulse = PULSE_PTR(obj);
 
-	    if (pl->id == pulse->id && !pulse->refl)
+	    if (pl->id == pulse->id && !pulse->pulse_refl)
 		continue;
 	}
 	/*
@@ -628,162 +567,167 @@ static void PlayerObjectCollision(player_t *pl)
 	case OBJ_BALL:
 	    if (!hit)
 		continue;
-	    Player_collides_with_ball(pl, obj);
-	    if (BIT(pl->status, KILLED))
+	    Player_collides_with_ball(pl, BALL_PTR(obj));
+	    if (Player_is_killed(pl))
 		return;
 	    continue;
 
 	case OBJ_ITEM:
-	    Player_collides_with_item(pl, obj);
+	    Player_collides_with_item(pl, ITEM_PTR(obj));
 	    /* if life is non-zero then no collision occurred */
 	    if (obj->life != 0)
 		continue;
 	    break;
 
 	case OBJ_MINE:
-	    Player_collides_with_mine(pl, obj);
+	    Player_collides_with_mine(pl, MINE_PTR(obj));
 	    break;
 
 	case OBJ_WRECKAGE:
 	case OBJ_DEBRIS:
 	    Player_collides_with_debris(pl, obj);
-	    if (BIT(pl->status, KILLED))
+	    if (Player_is_killed(pl))
 		return;
 	    break;
 
 	case OBJ_ASTEROID:
 	    if (hit) {
 		Player_collides_with_asteroid(pl, WIRE_PTR(obj));
-		Delta_mv_elastic((object_t *)pl, (object_t *)obj);
+		Delta_mv_elastic(OBJ_PTR(pl), obj);
 	    }
-	    if (BIT(pl->status, KILLED))
+	    if (Player_is_killed(pl))
 		return;
 	    continue;
 
 	case OBJ_CANNON_SHOT:
-	    /* don't explode cannon flak if it hits directly*/
-	    CLR_BIT(obj->mods.warhead, CLUSTER);
+	    /* don't explode cannon flak if it hits directly */
+	    Mods_set(&obj->mods, ModsCluster, 0);
 	    break;
 
 	case OBJ_PULSE:
 	    Laser_pulse_hits_player(pl, PULSE_PTR(obj));
-	    if (BIT(pl->status, KILLED))
+	    if (Player_is_killed(pl))
 		return;
 	    continue;
 
 	default:
 	    break;
 	}
+	/* KHS Let cannon dodgers shots survive collision */
+	if (obj->type != OBJ_CANNON_SHOT
+	    || options.survivalScore == 0.0)
+	    obj->life = 0;
 
-	obj->life = 0;
-
-	if (BIT(obj->type, KILLING_SHOTS)) {
+	if (BIT(OBJ_TYPEBIT(obj->type), KILLING_SHOTS)) {
 	    Player_collides_with_killing_shot(pl, obj);
-	    if (BIT(pl->status, KILLED))
+	    if (Player_is_killed(pl))
 		return;
+	    else
+		obj->life = 0;
+	    /* KHS except when player is shielded - shot would */
+            /* stay with player and kill him anyways, then */
 	}
 
 	if (hit)
-	    Delta_mv((object_t *)pl, (object_t *)obj);
+	    Delta_mv(OBJ_PTR(pl), obj);
     }
 }
 
 
-static void Player_collides_with_ball(player_t *pl, object_t *obj)
+static void Player_collides_with_ball(player_t *pl, ballobject_t *ball)
 {
-    double sc;
-    ballobject_t *ball = BALL_PTR(obj);
-
     /*
      * The ball is special, usually players bounce off of it with
      * shields up, or die with shields down.  The treasure may
      * be destroyed.
      */
-    Delta_mv((object_t *)pl, obj);
-    if (!Player_used_emergency_shield(pl)) {
+    Delta_mv(OBJ_PTR(pl), OBJ_PTR(ball));
+    if (!Player_uses_emergency_shield(pl))
 	Player_add_fuel(pl, ED_BALL_HIT);
-	if (options.treasureCollisionDestroys)
-	    ball->life = 0;
+
+    if (options.treasureCollisionDestroys) {
+	if (BIT(world->rules->mode, TEAM_PLAY)
+	    && pl->team == ball->ball_treasure->team)
+	    Rank_saved_ball(pl);
+	ball->life = 0;
     }
+
     if (pl->fuel.sum > 0) {
-	if (!options.treasureCollisionMayKill || BIT(pl->used, HAS_SHIELD))
+	if (!options.treasureCollisionMayKill
+	    || BIT(pl->used, HAS_SHIELD)){
+	    if(!options.treasureCollisionDestroys)
+		Obj_repel(OBJ_PTR(ball), OBJ_PTR(pl), 
+			  ( ball->pl_radius + SHIP_SZ) * 1.3 *CLICK);
 	    return;
-	if (!BIT(pl->used, HAS_SHIELD) && BIT(pl->have, HAS_ARMOR)) {
+	}
+	if (!BIT(pl->used, HAS_SHIELD)
+	    && Player_has_armor(pl)) {
+	    if(!options.treasureCollisionDestroys)
+		Obj_repel(OBJ_PTR(ball), OBJ_PTR(pl), 
+			  ( ball->pl_radius + SHIP_SZ) * 1.3 * CLICK);
 	    Player_hit_armor(pl);
 	    return;
 	}
     }
-    if (ball->owner == NO_ID) {
+    if (ball->ball_owner == NO_ID) {
 	Set_message_f("%s was killed by a ball.", pl->name);
-	sc = Rate(0.0, pl->score)
-		* options.ballKillScoreMult
-		* options.unownedKillScoreMult;
-	Score(pl, -sc, pl->pos, "Ball");
+	Handle_Scoring(SCORE_BALL_KILL,NULL,pl,NULL,NULL);
     } else {
-	player_t *kp = Player_by_id(ball->owner);
+	player_t *kp = Player_by_id(ball->ball_owner);
 
 	Set_message_f("%s was killed by a ball owned by %s.%s",
 		      pl->name, kp->name,
 		      kp->id == pl->id ? "  How strange!" : "");
+	
+	Handle_Scoring(SCORE_BALL_KILL,kp,pl,NULL,NULL);
 
-	if (kp->id == pl->id) {
-	    sc = Rate(0.0, pl->score)
-		   * options.ballKillScoreMult
-		   * options.selfKillScoreMult;
-	    Score(pl, -sc, pl->pos, kp->name);
-	} else {
-	    Rank_add_ball_kill(kp);
-	    sc = Rate(kp->score, pl->score) * options.ballKillScoreMult;
-	    Score_players(kp, sc, pl->name, pl, -sc, kp->name, true);
+	if (kp->id != pl->id) {
 	    Robot_war(pl, kp);
 	}
     }
-    SET_BIT(pl->status, KILLED);
+    Player_set_state(pl, PL_STATE_KILLED);
 }
 
 
-static void Player_collides_with_item(player_t *pl, object_t *obj)
+static void Player_collides_with_item(player_t *pl, itemobject_t *item)
 {
     int old_have;
-    enum Item item_index;
-    world_t *world = pl->world;
+    enum Item item_index = (enum Item) item->item_type;
 
-    if (IsOffensiveItem((enum Item) obj->info)) {
+    if (IsOffensiveItem(item_index)) {
 	int off_items = CountOffensiveItems(pl);
 
 	if (off_items >= options.maxOffensiveItems) {
 	    /* Set_player_message(pl, "No space left for offensive items."); */
-	    Delta_mv((object_t *)pl, obj);
+	    Delta_mv(OBJ_PTR(pl), OBJ_PTR(item));
 	    return;
 	}
-	else if (obj->count > 1
-		 && off_items + obj->count > options.maxOffensiveItems)
-	    obj->count = options.maxOffensiveItems - off_items;
+	else if (item->item_count > 1
+		 && off_items + item->item_count > options.maxOffensiveItems)
+	    item->item_count = options.maxOffensiveItems - off_items;
     }
-    else if (IsDefensiveItem((enum Item) obj->info)) {
+    else if (IsDefensiveItem(item_index)) {
 	int def_items = CountDefensiveItems(pl);
 
 	if (def_items >= options.maxDefensiveItems) {
 	    /* Set_player_message(pl,
 	       "No space for left for defensive items."); */
-	    Delta_mv((object_t *)pl, obj);
+	    Delta_mv(OBJ_PTR(pl), OBJ_PTR(item));
 	    return;
 	}
-	else if (obj->count > 1
-		 && def_items + obj->count > options.maxDefensiveItems)
-	    obj->count = options.maxDefensiveItems - def_items;
+	else if (item->item_count > 1
+		 && def_items + item->item_count > options.maxDefensiveItems)
+	    item->item_count = options.maxDefensiveItems - def_items;
     }
-
-    item_index = (enum Item) obj->info;
 
     switch (item_index) {
     case ITEM_WIDEANGLE:
-	pl->item[item_index] += obj->count;
+	pl->item[item_index] += item->item_count;
 	LIMIT(pl->item[item_index], 0, world->items[item_index].limit);
 	sound_play_sensors(pl->pos, WIDEANGLE_SHOT_PICKUP_SOUND);
 	break;
     case ITEM_ECM:
-	pl->item[item_index] += obj->count;
+	pl->item[item_index] += item->item_count;
 	LIMIT(pl->item[item_index], 0, world->items[item_index].limit);
 	sound_play_sensors(pl->pos, ECM_PICKUP_SOUND);
 	break;
@@ -795,65 +739,65 @@ static void Player_collides_with_item(player_t *pl, object_t *obj)
 	sound_play_sensors(pl->pos, ARMOR_PICKUP_SOUND);
 	break;
     case ITEM_TRANSPORTER:
-	pl->item[item_index] += obj->count;
+	pl->item[item_index] += item->item_count;
 	LIMIT(pl->item[item_index], 0, world->items[item_index].limit);
 	sound_play_sensors(pl->pos, TRANSPORTER_PICKUP_SOUND);
 	break;
     case ITEM_MIRROR:
-	pl->item[ITEM_MIRROR] += obj->count;
+	pl->item[ITEM_MIRROR] += item->item_count;
 	LIMIT(pl->item[item_index], 0, world->items[item_index].limit);
 	if (pl->item[item_index] > 0)
 	    SET_BIT(pl->have, HAS_MIRROR);
 	sound_play_sensors(pl->pos, MIRROR_PICKUP_SOUND);
 	break;
     case ITEM_DEFLECTOR:
-	pl->item[ITEM_DEFLECTOR] += obj->count;
+	pl->item[ITEM_DEFLECTOR] += item->item_count;
 	LIMIT(pl->item[item_index], 0, world->items[item_index].limit);
 	if (pl->item[item_index] > 0)
 	    SET_BIT(pl->have, HAS_DEFLECTOR);
 	sound_play_sensors(pl->pos, DEFLECTOR_PICKUP_SOUND);
 	break;
     case ITEM_HYPERJUMP:
-	pl->item[item_index] += obj->count;
+	pl->item[item_index] += item->item_count;
 	LIMIT(pl->item[item_index], 0, world->items[item_index].limit);
 	sound_play_sensors(pl->pos, HYPERJUMP_PICKUP_SOUND);
 	break;
     case ITEM_PHASING:
-	pl->item[item_index] += obj->count;
+	pl->item[item_index] += item->item_count;
 	LIMIT(pl->item[item_index], 0, world->items[item_index].limit);
 	if (pl->item[item_index] > 0)
 	    SET_BIT(pl->have, HAS_PHASING_DEVICE);
 	sound_play_sensors(pl->pos, PHASING_DEVICE_PICKUP_SOUND);
 	break;
     case ITEM_SENSOR:
-	pl->item[item_index] += obj->count;
+	pl->item[item_index] += item->item_count;
 	LIMIT(pl->item[item_index], 0, world->items[item_index].limit);
-	pl->updateVisibility = 1;
+	pl->updateVisibility = true;
 	sound_play_sensors(pl->pos, SENSOR_PACK_PICKUP_SOUND);
 	break;
     case ITEM_AFTERBURNER:
-	pl->item[item_index] += obj->count;
+	pl->item[item_index] += item->item_count;
 	LIMIT(pl->item[item_index], 0, world->items[item_index].limit);
 	if (pl->item[item_index] > 0)
 	    SET_BIT(pl->have, HAS_AFTERBURNER);
 	sound_play_sensors(pl->pos, AFTERBURNER_PICKUP_SOUND);
 	break;
     case ITEM_REARSHOT:
-	pl->item[item_index] += obj->count;
+	pl->item[item_index] += item->item_count;
 	LIMIT(pl->item[item_index], 0, world->items[item_index].limit);
 	sound_play_sensors(pl->pos, BACK_SHOT_PICKUP_SOUND);
 	break;
     case ITEM_MISSILE:
-	pl->item[item_index] += obj->count;
+	pl->item[item_index] += item->item_count;
 	LIMIT(pl->item[item_index], 0, world->items[item_index].limit);
 	sound_play_sensors(pl->pos, ROCKET_PACK_PICKUP_SOUND);
 	break;
     case ITEM_CLOAK:
-	pl->item[item_index] += obj->count;
+	pl->item[item_index] += item->item_count;
 	LIMIT(pl->item[item_index], 0, world->items[item_index].limit);
 	if (pl->item[item_index] > 0)
 	    SET_BIT(pl->have, HAS_CLOAKING_DEVICE);
-	pl->updateVisibility = 1;
+	pl->updateVisibility = true;
 	sound_play_sensors(pl->pos, CLOAKING_DEVICE_PICKUP_SOUND);
 	break;
     case ITEM_FUEL:
@@ -861,17 +805,17 @@ static void Player_collides_with_item(player_t *pl, object_t *obj)
 	sound_play_sensors(pl->pos, ENERGY_PACK_PICKUP_SOUND);
 	break;
     case ITEM_MINE:
-	pl->item[item_index] += obj->count;
+	pl->item[item_index] += item->item_count;
 	LIMIT(pl->item[item_index], 0, world->items[item_index].limit);
 	sound_play_sensors(pl->pos, MINE_PACK_PICKUP_SOUND);
 	break;
     case ITEM_LASER:
-	pl->item[item_index] += obj->count;
+	pl->item[item_index] += item->item_count;
 	LIMIT(pl->item[item_index], 0, world->items[item_index].limit);
 	sound_play_sensors(pl->pos, LASER_PICKUP_SOUND);
 	break;
     case ITEM_EMERGENCY_THRUST:
-	pl->item[item_index] += obj->count;
+	pl->item[item_index] += item->item_count;
 	LIMIT(pl->item[item_index], 0, world->items[item_index].limit);
 	if (pl->item[item_index] > 0)
 	    SET_BIT(pl->have, HAS_EMERGENCY_THRUST);
@@ -879,7 +823,7 @@ static void Player_collides_with_item(player_t *pl, object_t *obj)
 	break;
     case ITEM_EMERGENCY_SHIELD:
 	old_have = pl->have;
-	pl->item[item_index] += obj->count;
+	pl->item[item_index] += item->item_count;
 	LIMIT(pl->item[item_index], 0, world->items[item_index].limit);
 	if (pl->item[item_index] > 0)
 	    SET_BIT(pl->have, HAS_EMERGENCY_SHIELD);
@@ -895,14 +839,14 @@ static void Player_collides_with_item(player_t *pl, object_t *obj)
 	    Emergency_shield(pl, true);
 	break;
     case ITEM_TRACTOR_BEAM:
-	pl->item[item_index] += obj->count;
+	pl->item[item_index] += item->item_count;
 	LIMIT(pl->item[item_index], 0, world->items[item_index].limit);
 	if (pl->item[item_index] > 0)
 	    SET_BIT(pl->have, HAS_TRACTOR_BEAM);
 	sound_play_sensors(pl->pos, TRACTOR_BEAM_PICKUP_SOUND);
 	break;
     case ITEM_AUTOPILOT:
-	pl->item[item_index] += obj->count;
+	pl->item[item_index] += item->item_count;
 	LIMIT(pl->item[item_index], 0, world->items[item_index].limit);
 	if (pl->item[item_index] > 0)
 	    SET_BIT(pl->have, HAS_AUTOPILOT);
@@ -924,29 +868,28 @@ static void Player_collides_with_item(player_t *pl, object_t *obj)
 	break;
     }
 
-    obj->life = 0.0;
+    item->life = 0.0;
 }
 
 
-static void Player_collides_with_mine(player_t *pl, object_t *obj)
+static void Player_collides_with_mine(player_t *pl, mineobject_t *mine)
 {
     player_t *kp = NULL;
-    double sc;
-    mineobject_t *mine = MINE_PTR(obj);
 
     sound_play_sensors(pl->pos, PLAYER_HIT_MINE_SOUND);
-    if (mine->id == NO_ID && mine->owner == NO_ID)
+    if (mine->id == NO_ID && mine->mine_owner == NO_ID)
 	Set_message_f("%s hit %s.",
 		      pl->name,
-		      Describe_shot(mine->type, mine->status, mine->mods, 1));
-    else if (mine->owner == mine->id) {
-	kp = Player_by_id(mine->owner);
+		      Describe_shot(mine->type, mine->obj_status,
+				    mine->mods, 1));
+    else if (mine->mine_owner == mine->id) {
+	kp = Player_by_id(mine->mine_owner);
 	Set_message_f("%s hit %s %s by %s.", pl->name,
-		      Describe_shot(mine->type, mine->status, mine->mods,1),
-		      BIT(mine->status, GRAVITY) ? "thrown " : "dropped ",
+		      Describe_shot(mine->type, mine->obj_status, mine->mods, 1),
+		      BIT(mine->obj_status, GRAVITY) ? "thrown " : "dropped ",
 		      kp->name);
     }
-    else if (mine->owner == NO_ID) {
+    else if (mine->mine_owner == NO_ID) {
 	const char *reprogrammer_name = "some jerk";
 
 	if (mine->id != NO_ID) {
@@ -955,7 +898,7 @@ static void Player_collides_with_mine(player_t *pl, object_t *obj)
 	}
 	Set_message_f("%s hit %s reprogrammed by %s.",
 		      pl->name,
-		      Describe_shot(mine->type, mine->status, mine->mods, 1),
+		      Describe_shot(mine->type, mine->obj_status, mine->mods, 1),
 		      reprogrammer_name);
     }
     else {
@@ -967,9 +910,10 @@ static void Player_collides_with_mine(player_t *pl, object_t *obj)
 	}
 	Set_message_f("%s hit %s %s by %s and reprogrammed by %s.",
 		      pl->name,
-		      Describe_shot(mine->type, mine->status, mine->mods,1),
-		      BIT(mine->status, GRAVITY) ? "thrown " : "dropped ",
-		      Player_by_id(mine->owner)->name,
+		      Describe_shot(mine->type, mine->obj_status,
+				    mine->mods, 1),
+		      BIT(mine->obj_status, GRAVITY) ? "thrown " : "dropped ",
+		      Player_by_id(mine->mine_owner)->name,
 		      reprogrammer_name);
     }
     if (kp) {
@@ -979,8 +923,7 @@ static void Player_collides_with_mine(player_t *pl, object_t *obj)
 	 * for a low-scored-player hitting a high-scored-player's mine.
 	 * Maybe not.
 	 */
-	sc = Rate(kp->score, pl->score) * options.mineScoreMult;
-	Score_players(kp, sc, pl->name, pl, -sc, kp->name, false);
+	Handle_Scoring(SCORE_HIT_MINE,kp,pl,NULL,NULL);
     }
 }
 
@@ -988,19 +931,19 @@ static void Player_collides_with_mine(player_t *pl, object_t *obj)
 static void Player_collides_with_debris(player_t *pl, object_t *obj)
 {
     player_t *kp = NULL;
-    double cost, sc;
+    double cost;
     char msg[MSG_LEN];
 
     cost = collision_cost(obj->mass, VECTOR_LENGTH(obj->vel));
 
-    if (!Player_used_emergency_shield(pl))
+    if (!Player_uses_emergency_shield(pl))
 	Player_add_fuel(pl, -cost);
     if (pl->fuel.sum == 0.0
 	|| (obj->type == OBJ_WRECKAGE
 	    && options.wreckageCollisionMayKill
 	    && !BIT(pl->used, HAS_SHIELD)
-	    && !BIT(pl->have, HAS_ARMOR))) {
-	SET_BIT(pl->status, KILLED);
+	    && !Player_has_armor(pl))) {
+	Player_set_state(pl, PL_STATE_KILLED);
 	sprintf(msg, "%s succumbed to an explosion.", pl->name);
 	if (obj->id != NO_ID) {
 	    kp = Player_by_id(obj->id);
@@ -1009,22 +952,14 @@ static void Player_collides_with_debris(player_t *pl, object_t *obj)
 		sprintf(msg + strlen(msg), "  How strange!");
 	}
 	Set_message(msg);
-	if (!kp || kp->id == pl->id) {
-	    sc = Rate(0.0, pl->score)
-		* options.explosionKillScoreMult * options.selfKillScoreMult;
-	    Score(pl, -sc, pl->pos, (kp == NULL) ? "[Explosion]" : pl->name);
-	} else {
-	    Rank_add_explosion_kill(kp);
-	    sc = Rate(kp->score, pl->score) * options.explosionKillScoreMult;
-	    Score_players(kp, sc, pl->name, pl, -sc, kp->name, true);
-	}
+	Handle_Scoring(SCORE_EXPLOSION,kp,pl,NULL,NULL);
 	obj->life = 0.0;
 	return;
     }
     if (obj->type == OBJ_WRECKAGE
 	&& options.wreckageCollisionMayKill
 	&& !BIT(pl->used, HAS_SHIELD)
-	&& BIT(pl->have, HAS_ARMOR))
+	&& Player_has_armor(pl))
 	Player_hit_armor(pl);
 }
 
@@ -1034,57 +969,57 @@ static void Player_collides_with_asteroid(player_t *pl, wireobject_t *ast)
     double v = VECTOR_LENGTH(ast->vel);
     double cost = collision_cost(ast->mass, v);
 
-    ast->life += ASTEROID_FUEL_HIT(ED_PL_CRASH, ast->size);
+    ast->life += ASTEROID_FUEL_HIT(ED_PL_CRASH, ast->wire_size);
     if (ast->life < 0.0)
 	ast->life = 0.0;
-    if (ast->life == 0.0
-	&& options.asteroidPoints > 0.0
-	&& pl->score <= options.asteroidMaxScore)
-	Score(pl, options.asteroidPoints, ast->pos, "");
+    if (ast->life == 0.0) {
+    	Handle_Scoring(SCORE_ASTEROID_KILL,pl,NULL,ast,NULL);
+    }
 
-    if (!Player_used_emergency_shield(pl))
+    if (!Player_uses_emergency_shield(pl))
 	Player_add_fuel(pl, -cost);
 
     if (options.asteroidCollisionMayKill
 	&& (pl->fuel.sum == 0.0
 	    || (!BIT(pl->used, HAS_SHIELD)
-		&& !BIT(pl->have, HAS_ARMOR)))) {
-	double sc;
-
-	SET_BIT(pl->status, KILLED);
+		&& !Player_has_armor(pl)))) {
+	Player_set_state(pl, PL_STATE_KILLED);
 	if (pl->velocity > v)
 	    /* player moves faster than asteroid */
 	    Set_message_f("%s smashed into an asteroid.", pl->name);
 	else
 	    Set_message_f("%s was hit by an asteroid.", pl->name);
-	sc = Rate(0.0, pl->score) * options.unownedKillScoreMult;
-	Score(pl, -sc, pl->pos, "[Asteroid]");
-	if (Player_is_tank(pl) && options.asteroidPoints > 0) {
+	Handle_Scoring(SCORE_ASTEROID_DEATH,NULL,pl,NULL,NULL);
+	if (Player_is_tank(pl)) {
 	    player_t *owner_pl = Player_by_id(pl->lock.pl_id);
-
-	    if (owner_pl->score <= options.asteroidMaxScore)
-		Score(owner_pl, options.asteroidPoints, ast->pos, "");
+	    Handle_Scoring(SCORE_ASTEROID_KILL,owner_pl,NULL,ast,NULL);
 	}
 	return;
     }
     if (options.asteroidCollisionMayKill
 	&& !BIT(pl->used, HAS_SHIELD)
-	&& BIT(pl->have, HAS_ARMOR))
+	&& Player_has_armor(pl))
 	Player_hit_armor(pl);
 }
 
+static inline double Missile_hit_drain(missileobject_t *missile)
+{
+    return (ED_SMART_SHOT_HIT /
+	    ((Mods_get(missile->mods, ModsMini) + 1)
+	     * (Mods_get(missile->mods, ModsPower) + 1)));
+}
 
 static void Player_collides_with_killing_shot(player_t *pl, object_t *obj)
 {
     player_t *kp = NULL;
-    double sc, drainfactor, drain;
-    world_t *world = pl->world;
+    cannon_t *cannon = NULL; 
+    double drainfactor, drain;
 
     /*
      * Player got hit by a potentially deadly object.
      *
      * When a player has shields up, and not enough fuel
-     * to `absorb' the shot then shields are lowered.
+     * to 'absorb' the shot then shields are lowered.
      * This is not very logical, rather in this case
      * the shot should be considered to be deadly too.
      *
@@ -1092,9 +1027,9 @@ static void Player_collides_with_killing_shot(player_t *pl, object_t *obj)
      */
 
     if (BIT(pl->used, HAS_SHIELD)
-	|| BIT(pl->have, HAS_ARMOR)
+	|| Player_has_armor(pl)
 	|| (obj->type == OBJ_TORPEDO
-	    && BIT(obj->mods.nuclear, NUCLEAR)
+	    && Mods_get(obj->mods, ModsNuclear)
 	    && (rfrac() >= 0.25))) {
 	switch (obj->type) {
 	case OBJ_TORPEDO:
@@ -1116,18 +1051,17 @@ static void Player_collides_with_killing_shot(player_t *pl, object_t *obj)
 	case OBJ_SMART_SHOT:
 	    if (obj->id == NO_ID)
 		Set_message_f("%s ate %s.", pl->name,
-			      Describe_shot(obj->type, obj->status,
+			      Describe_shot(obj->type, obj->obj_status,
 					    obj->mods, 1));
 	    else {
 		kp = Player_by_id(obj->id);
 		Set_message_f("%s ate %s from %s.", pl->name,
-			      Describe_shot(obj->type, obj->status,
+			      Describe_shot(obj->type, obj->obj_status,
 					    obj->mods, 1),
 			      kp->name);
 	    }
-	    drain = (ED_SMART_SHOT_HIT /
-		((obj->mods.mini + 1) * (obj->mods.power + 1)));
-	    if (!Player_used_emergency_shield(pl))
+	    drain = Missile_hit_drain(MISSILE_PTR(obj));
+	    if (!Player_uses_emergency_shield(pl))
 		Player_add_fuel(pl, drain);
 	    pl->forceVisible += 2;
 	    break;
@@ -1135,7 +1069,7 @@ static void Player_collides_with_killing_shot(player_t *pl, object_t *obj)
 	case OBJ_SHOT:
 	case OBJ_CANNON_SHOT:
 	    sound_play_sensors(pl->pos, PLAYER_EAT_SHOT_SOUND);
-	    if (!Player_used_emergency_shield(pl)) {
+	    if (!Player_uses_emergency_shield(pl)) {
 		if (options.shotHitFuelDrainUsesKineticEnergy) {
 		    double rel_velocity = LENGTH(pl->vel.x - obj->vel.x,
 						 pl->vel.y - obj->vel.y);
@@ -1158,77 +1092,68 @@ static void Player_collides_with_killing_shot(player_t *pl, object_t *obj)
 
 	if (pl->fuel.sum <= 0)
 	    CLR_BIT(pl->used, HAS_SHIELD);
-	if (!BIT(pl->used, HAS_SHIELD) && BIT(pl->have, HAS_ARMOR))
+	if (!BIT(pl->used, HAS_SHIELD)
+	    && Player_has_armor(pl))
 	    Player_hit_armor(pl);
 
     } else {
-	double factor;
-
 	switch (obj->type) {
 	case OBJ_TORPEDO:
 	case OBJ_SMART_SHOT:
 	case OBJ_HEAT_SHOT:
 	case OBJ_SHOT:
 	case OBJ_CANNON_SHOT:
-	    if (BIT(obj->status, FROMCANNON)) {
+	    if (BIT(obj->obj_status, FROMCANNON)) {
+		cannon = Cannon_by_id(obj->id);
+
 		sound_play_sensors(pl->pos, PLAYER_HIT_CANNONFIRE_SOUND);
 		Set_message_f("%s was hit by cannonfire.", pl->name);
-		sc = Rate(CANNON_SCORE, pl->score)/4;
 	    } else if (obj->id == NO_ID) {
 		Set_message_f("%s was killed by %s.", pl->name,
-			      Describe_shot(obj->type, obj->status,
+			      Describe_shot(obj->type, obj->obj_status,
 					    obj->mods, 1));
-		sc = Rate(0.0, pl->score) * options.unownedKillScoreMult;
 	    } else {
 		kp = Player_by_id(obj->id);
 		Set_message_f("%s was killed by %s from %s.%s", pl->name,
-			      Describe_shot(obj->type, obj->status,
+			      Describe_shot(obj->type, obj->obj_status,
 					    obj->mods, 1),
 			      kp->name,
 			      kp->id == pl->id ? "  How strange!" : "");
 		if (kp->id == pl->id) {
 		    sound_play_sensors(pl->pos, PLAYER_SHOT_THEMSELF_SOUND);
-		    sc = Rate(0.0, pl->score) * options.selfKillScoreMult;
-		} else {
-		    Rank_add_shot_kill(kp);
-		    sc = Rate(kp->score, pl->score);
 		}
 	    }
+    	    
+	    Handle_Scoring(SCORE_SHOT_DEATH,kp,pl,obj,NULL);
 
-	    switch (obj->type) {
-	    case OBJ_SHOT:
-		if (BIT(obj->mods.warhead, CLUSTER))
-		    factor = options.clusterKillScoreMult;
-		else
-		    factor = options.shotKillScoreMult;
-		break;
-	    case OBJ_TORPEDO:
-		factor = options.torpedoKillScoreMult;
-		break;
-	    case OBJ_SMART_SHOT:
-		factor = options.smartKillScoreMult;
-		break;
-	    case OBJ_HEAT_SHOT:
-		factor = options.heatKillScoreMult;
-		break;
-	    default:
-		factor = options.shotKillScoreMult;
-		break;
-	    }
-
-	    sc *= factor;
-	    if (BIT(obj->status, FROMCANNON)) {
-		Score(pl, -sc, pl->pos, "Cannon");
-		if (BIT(world->rules->mode, TEAM_PLAY)
-		    && pl->team != obj->team)
-		    Team_score(world, obj->team, sc);
-	    } else if (obj->id == NO_ID || kp->id == pl->id)
-		Score(pl, -sc, pl->pos, (obj->id == NO_ID ? "" : pl->name));
-	    else {
-		Score_players(kp, sc, pl->name, pl, -sc, kp->name, true);
+	    if ((!BIT(obj->obj_status, FROMCANNON)) && (!(obj->id == NO_ID || kp->id == pl->id))) {
 		Robot_war(pl, kp);
 	    }
-	    SET_BIT(pl->status, KILLED);
+
+	    /* survival */
+	    if (options.survivalScore != 0.0 && (pl->survival_time > 10 
+    	    	|| pl->survival_time > Rank_get_max_survival_time(pl))) {
+
+		Set_message_f(" < %s has survived %.1f seconds (%.1f)>",
+			      pl->name, 
+			      pl->survival_time,
+			      Rank_get_max_survival_time(pl));
+
+		Rank_survival(pl, pl->survival_time);
+
+		/* if there are no rounds in survival mode */
+		/* deaths act like rounds                  */
+		if (!BIT(world->rules->mode, LIMITED_LIVES))
+		    Rank_add_round(pl); 
+
+		Rank_write_webpage();
+		Rank_write_rankfile();
+		Rank_show_ranks();
+	    }
+	    pl->survival_time = 0;
+	    /* survival */
+
+	    Player_set_state(pl, PL_STATE_KILLED);
 	    return;
 
 	default:
@@ -1237,88 +1162,7 @@ static void Player_collides_with_killing_shot(player_t *pl, object_t *obj)
     }
 }
 
-static void Player_pass_checkpoint(player_t *pl)
-{
-    int j;
-    world_t *world = pl->world;
-
-    if (pl->check == 0) {
-	pl->round++;
-#if 1
-	pl->last_lap_time = pl->time - pl->last_lap;
-	if ((pl->best_lap > pl->last_lap_time
-	     || pl->best_lap == 0)
-	    && pl->time != 0
-	    && pl->round != 1) {
-	    pl->best_lap = pl->last_lap_time;
-	}
-	pl->last_lap = pl->time;
-	if (pl->round > options.raceLaps) {
-	    if (options.ballrace) {
-		/* Balls are made unowned when their owner finishes the race
-		   This way, they can be reused by other players */
-		for (j = 0; j < NumObjs; j++) {
-		    if (Obj[j]->type == OBJ_BALL) {
-			ballobject_t *ball = BALL_PTR(Obj[j]);
-
-			if (ball->owner == pl->id)
-			    ball->owner = NO_ID;
-		    }
-		}
-	    }
-	    Player_death_reset(pl, false);
-	    pl->mychar = 'D';
-	    SET_BIT(pl->status, GAME_OVER|FINISH);
-	    Set_message_f("%s finished the race. Last lap time: %.2fs. "
-			  "Personal race best lap time: %.2fs.",
-			  pl->name,
-			  (double) pl->last_lap_time / FPS,
-			  (double) pl->best_lap / FPS);
-	} else if (pl->round > 1) {
-	    Set_message_f("%s completes lap %d in %.2fs. "
-			  "Personal race best lap time: %.2fs.",
-			  pl->name,
-			  pl->round-1,
-			  (double) pl->last_lap_time / FPS,
-			  (double) pl->best_lap / FPS);
-	} else
-	    Set_message_f("%s starts lap 1 of %d.",
-			  pl->name, options.raceLaps);
-#else
-	/* this is how 4.3.1X did this */
-	SET_BIT(pl->status, FINISH);
-	/* Rest done in Compute_game_status() */
-#endif
-    }
-
-    if (++pl->check == world->NumChecks)
-	pl->check = 0;
-    pl->last_check_dir = pl->dir;
-
-    updateScores = true;
-}
-
-static void PlayerCheckpointCollision(player_t *pl)
-{
-    world_t *world = pl->world;
-
-    if (BIT(world->rules->mode, TIMING)
-	&& BIT(pl->status, PAUSE|GAME_OVER) == 0) {
-	check_t *check = Check_by_index(world, pl->check);
-
-	if (pl->round != 0)
-	    pl->time++;
-	if (BIT(pl->status, PLAYING|KILLED) == PLAYING
-	    && Wrap_length(pl->pos.cx - check->pos.cx,
-			   pl->pos.cy - check->pos.cy)
-	    < options.checkpointRadius * BLOCK_CLICKS
-	    && !Player_is_tank(pl)
-	    && !options.ballrace)
-	    Player_pass_checkpoint(pl);
-    }
-}
-
-static void AsteroidCollision(world_t *world)
+static void AsteroidCollision(void)
 {
     int j, radius, obj_count;
     object_t *ast;
@@ -1333,37 +1177,45 @@ static void AsteroidCollision(world_t *world)
 	return;
 
     for (iter = List_begin(list); iter != List_end(list); LI_FORWARD(iter)) {
-	ast = LI_DATA(iter);
+	ast = (object_t *)LI_DATA(iter);
 
-	assert(BIT(ast->type, OBJ_ASTEROID));
+	assert(ast->type == OBJ_ASTEROID);
 
 	if (ast->life <= 0.0)
 	    continue;
 
-	assert(World_contains_clpos(world, ast->pos));
+	assert(World_contains_clpos(ast->pos));
 
-	Cell_get_objects(world, ast->pos, ast->pl_radius / BLOCK_SZ + 1, 300,
-			 &obj_list, &obj_count);
+	if (NumObjs >= options.cellGetObjectsThreshold)
+	    Cell_get_objects(ast->pos, ast->pl_radius / BLOCK_SZ + 1,
+			     300, &obj_list, &obj_count);
+	else {
+	    obj_list = Obj;
+	    obj_count = NumObjs;
+	}
 
 	for (j = 0; j < obj_count; j++) {
 	    obj = obj_list[j];
 	    assert(obj != NULL);
 
 	    /* asteroids don't hit these objects */
-	    if (BIT(obj->type, OBJ_ITEM|OBJ_DEBRIS|OBJ_SPARK|OBJ_WRECKAGE)
+	    if ((obj->type == OBJ_ITEM
+		 || obj->type == OBJ_DEBRIS
+		 || obj->type == OBJ_SPARK
+		 || obj->type == OBJ_WRECKAGE)
 		&& obj->id == NO_ID
-		&& !BIT(obj->status, FROMCANNON))
+		&& !BIT(obj->obj_status, FROMCANNON))
 		continue;
 	    /* don't collide while still overlapping  after breaking */
-	    if (obj->type == OBJ_ASTEROID && frame_time < ast->fusetime)
+	    if (obj->type == OBJ_ASTEROID && ast->fuse > 0)
 		continue;
 	    /* don't collide with self */
 	    if (obj == ast)
 		continue;
 	    /* don't collide with phased balls */
-	    if (BIT(obj->type, OBJ_BALL)
+	    if (obj->type == OBJ_BALL
 		&& obj->id != NO_ID
-		&& BIT(Player_by_id(obj->id)->used, HAS_PHASING_DEVICE))
+		&& Player_is_phasing(Player_by_id(obj->id)))
 		continue;
 
 	    radius = (ast->pl_radius + obj->pl_radius) * CLICK;
@@ -1381,11 +1233,11 @@ static void AsteroidCollision(world_t *world)
 	    case OBJ_ASTEROID:
 		obj->life -= ASTEROID_FUEL_HIT(
 		    collision_cost(ast->mass, VECTOR_LENGTH(ast->vel)),
-		    WIRE_PTR(obj)->size);
+		    WIRE_PTR(obj)->wire_size);
 		damage = -collision_cost(obj->mass, VECTOR_LENGTH(obj->vel));
 		Delta_mv_elastic(ast, obj);
 		/* avoid doing collision twice */
-		obj->fusetime = frame_time + timeStep;
+		obj->fuse = timeStep;
 		sound = true;
 		break;
 	    case OBJ_SPARK:
@@ -1400,7 +1252,7 @@ static void AsteroidCollision(world_t *world)
 		Delta_mv(ast, obj);
 		break;
 	    case OBJ_MINE:
-		if (!BIT(obj->status, CONFUSED))
+		if (!BIT(obj->obj_status, CONFUSED))
 		    obj->life = 0.0;
 		break;
 	    case OBJ_SHOT:
@@ -1415,8 +1267,7 @@ static void AsteroidCollision(world_t *world)
 	    case OBJ_HEAT_SHOT:
 		obj->life = 0.0;
 		Delta_mv(ast, obj);
-		damage = ED_SMART_SHOT_HIT
-			 / ((obj->mods.mini + 1) * (obj->mods.power + 1));
+		damage = Missile_hit_drain(MISSILE_PTR(obj));
 		sound = true;
 		break;
 	    case OBJ_PULSE:
@@ -1433,23 +1284,22 @@ static void AsteroidCollision(world_t *world)
 	    if (ast->life > 0.0) {
 		/* kps - this is some strange sort of hack - fix it*/
 		/*if (ast->life <= ast->fuselife) {*/
-		ast->life += ASTEROID_FUEL_HIT(damage, WIRE_PTR(ast)->size);
+		ast->life += ASTEROID_FUEL_HIT(damage,
+					       WIRE_PTR(ast)->wire_size);
 		/*}*/
 		if (sound)
 		    sound_play_sensors(ast->pos, ASTEROID_HIT_SOUND);
 		if (ast->life < 0.0)
 		    ast->life = 0.0;
 		if (ast->life == 0.0) {
-		    if (options.asteroidPoints > 0.0
-			&& (obj->id != NO_ID
-			    || (obj->type == OBJ_BALL
-				&& BALL_PTR(obj)->owner != NO_ID))) {
+		    if ((obj->id != NO_ID
+			 || (obj->type == OBJ_BALL
+			     && BALL_PTR(obj)->ball_owner != NO_ID))) {
 			int owner_id = ((obj->type == OBJ_BALL)
-					? BALL_PTR(obj)->owner
+					? BALL_PTR(obj)->ball_owner
 					: obj->id);
 			player_t *pl = Player_by_id(owner_id);
-			if (pl->score <= options.asteroidMaxScore)
-			    Score(pl, options.asteroidPoints, ast->pos, "");
+			Handle_Scoring(SCORE_ASTEROID_KILL,pl,NULL,ast,NULL);
 		    }
 
 		    /* break; */
@@ -1461,7 +1311,7 @@ static void AsteroidCollision(world_t *world)
 
 
 /* do ball - object and ball - checkpoint collisions */
-static void BallCollision(world_t *world)
+static void BallCollision(void)
 {
     int i, j, obj_count;
     int	ignored_object_types;
@@ -1485,19 +1335,19 @@ static void BallCollision(world_t *world)
 	if (ball->type != OBJ_BALL ||	/* not a ball */
 	    ball->life <= 0.0 ||	/* dying ball */
 	    (ball->id != NO_ID
-	     && BIT(Player_by_id(ball->id)->used, HAS_PHASING_DEVICE)) ||
+	     && Player_is_phasing(Player_by_id(ball->id))) ||
 					/* phased ball */
-	    ball->treasure->have)	/* safe in a treasure */
+	    ball->ball_treasure->have)	/* safe in a treasure */
 	    continue;
 
 	/* Ball - checkpoint */
 	if (BIT(world->rules->mode, TIMING)
 	    && options.ballrace
-	    && ball->owner != NO_ID) {
-	    player_t *owner = Player_by_id(ball->owner);
+	    && ball->ball_owner != NO_ID) {
+	    player_t *owner = Player_by_id(ball->ball_owner);
 
 	    if (!options.ballrace_connect || ball->id == owner->id) {
-		clpos_t cpos = Check_by_index(world, owner->check)->pos;
+		clpos_t cpos = Check_by_index(owner->check)->pos;
 
 		if (Wrap_length(ball->pos.cx - cpos.cx,
 				ball->pos.cy - cpos.cy)
@@ -1510,14 +1360,19 @@ static void BallCollision(world_t *world)
 	if (!options.ballCollisions)
 	    continue;
 
-	Cell_get_objects(world, ball->pos, 4, 300, &obj_list, &obj_count);
-
+	if (NumObjs >= options.cellGetObjectsThreshold)
+	    Cell_get_objects(ball->pos, 4, 300, &obj_list, &obj_count);
+	else {
+	    obj_list = Obj;
+	    obj_count = NumObjs;
+	}
+	    
 	for (j = 0; j < obj_count; j++) {
 	    int radius;
 
 	    obj = obj_list[j];
 
-	    if (BIT(obj->type, ignored_object_types))
+	    if (BIT(OBJ_TYPEBIT(obj->type), ignored_object_types))
 		continue;
 
 	    /* have we already done this ball pair? */
@@ -1536,11 +1391,11 @@ static void BallCollision(world_t *world)
 		 * the treasure: */
 		{
 		    ballobject_t *b2 = BALL_PTR(obj);
-		    if (b2->treasure->have)
+		    if (b2->ball_treasure->have)
 			break;
 
 		    if (b2->id != NO_ID
-			&& BIT(Player_by_id(b2->id)->used, HAS_PHASING_DEVICE))
+			&& Player_is_phasing(Player_by_id(b2->id)))
 			break;
 		}
 
@@ -1576,27 +1431,15 @@ static void BallCollision(world_t *world)
 
 
 /* do mine - object collisions */
-static void MineCollision(world_t *world)
+static void MineCollision(void)
 {
     int i, j, obj_count;
     object_t **obj_list;
     object_t *obj;
     mineobject_t *mine;
-    int collide_object_types;
 
     if (!options.mineShotDetonateDistance)
 	return;
-
-    /*
-     * These object types ignored;
-     * some are handled by other code,
-     * some don't interact.
-     */
-    collide_object_types = OBJ_SHOT |
-			   OBJ_TORPEDO |
-			   OBJ_SMART_SHOT |
-			   OBJ_HEAT_SHOT |
-			   OBJ_CANNON_SHOT;
 
     for (i = 0; i < NumObjs; i++) {
 	mine = MINE_IND(i);
@@ -1606,14 +1449,28 @@ static void MineCollision(world_t *world)
 	    mine->life <= 0.0)		/* dying mine */
 	    continue;
 
-	Cell_get_objects(world, mine->pos, 4, 300, &obj_list, &obj_count);
+	if (NumObjs >= options.cellGetObjectsThreshold)
+	    Cell_get_objects(mine->pos, 4, 300, &obj_list, &obj_count);
+	else {
+	    obj_list = Obj;
+	    obj_count = NumObjs;
+	}
 
 	for (j = 0; j < obj_count; j++) {
 	    double radius;
 
 	    obj = obj_list[j];
 
-	    if (!BIT(obj->type, collide_object_types))
+	    /*
+	     * These object types ignored;
+	     * some are handled by other code,
+	     * some don't interact.
+	     */
+	    if (!(obj->type == OBJ_SHOT
+		  || obj->type == OBJ_TORPEDO
+		  || obj->type == OBJ_SMART_SHOT
+		  || obj->type == OBJ_HEAT_SHOT
+		  || obj->type == OBJ_CANNON_SHOT))
 		continue;
 
 	    radius = (options.mineShotDetonateDistance + obj->pl_radius)

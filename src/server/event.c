@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 2000-2004 by
  *
@@ -30,74 +30,19 @@
 
 #include "xpserver.h"
 
-char event_version[] = VERSION;
-
-
-#define SWAP(a, b)	    {double tmp = a; a = b; b = tmp;}
-
-/*
- * Globals.
- */
-static char		msg[MSG_LEN];
-
-
-static void Refuel(player_t *pl)
-{
-    int i;
-    double l, dist = 1e19;
-    fuel_t *fs;
-    world_t *world = pl->world;
-
-    if (!BIT(pl->have, HAS_REFUEL))
-	return;
-
-    CLR_BIT(pl->used, HAS_REFUEL);
-    for (i = 0; i < world->NumFuels; i++) {
-	fs = Fuel_by_index(world, i);
-	l = Wrap_length(pl->pos.cx - fs->pos.cx,
-			pl->pos.cy - fs->pos.cy);
-	if (BIT(pl->used, HAS_REFUEL) == 0 || l < dist) {
-	    SET_BIT(pl->used, HAS_REFUEL);
-	    pl->fs = i;
-	    dist = l;
-	}
-    }
-}
-
-
-static void Repair(player_t *pl)
-{
-    int i;
-    double l, dist = 1e19;
-    target_t *targ;
-    world_t *world = pl->world;
-
-    if (!BIT(pl->have, HAS_REPAIR))
-	return;
-
-    CLR_BIT(pl->used, HAS_REPAIR);
-    for (i = 0; i < world->NumTargets; i++) {
-	targ = Target_by_index(world, i);
-	if (targ->team == pl->team
-	    && targ->dead_ticks <= 0) {
-	    l = Wrap_length(pl->pos.cx - targ->pos.cx,
-			    pl->pos.cy - targ->pos.cy);
-	    if (BIT(pl->used, HAS_REPAIR) == 0 || l < dist) {
-		SET_BIT(pl->used, HAS_REPAIR);
-		pl->repair_target = i;
-		dist = l;
-	    }
-	}
-    }
-}
-
 bool team_dead(int team)
 {
     int i;
 
     for (i = 0; i < NumPlayers; i++) {
 	player_t *pl = Player_by_index(i);
-	if (pl->team == team && !BIT(pl->status, PAUSE|GAME_OVER))
+
+	if (pl->team != team)
+	    continue;
+
+	if (Player_is_alive(pl)
+	    || Player_is_appearing(pl)
+	    || Player_is_killed(pl))
 	    return false;
     }
     return true;
@@ -108,8 +53,6 @@ bool team_dead(int team)
  */
 static bool Player_lock_allowed(player_t *pl, player_t *lock_pl)
 {
-    world_t *world = pl->world;
-
     /* we can never lock on ourselves, nor on NULL. */
     if (lock_pl == NULL || pl->id == lock_pl->id)
 	return false;
@@ -130,7 +73,7 @@ static bool Player_lock_allowed(player_t *pl, player_t *lock_pl)
     if (Players_are_teammates(pl, lock_pl))
 	return true;
 
-    /* if options.lockOtherTeam is true then we can always lock on other teams. */
+    /* if lockOtherTeam is true then we can always lock on other teams. */
     if (options.lockOtherTeam)
 	return true;
 
@@ -140,6 +83,47 @@ static bool Player_lock_allowed(player_t *pl, player_t *lock_pl)
 
     /* can't find any reason why this lock should be allowed. */
     return false;
+}
+
+static void Player_lock_next_or_prev(player_t *pl, int key)
+{
+    int i, j, ind = GetInd(pl->id);
+    player_t *pl_i;
+
+    if (NumPlayers == 0) /* Spectator? */
+	return;
+
+    j = i = GetInd(pl->lock.pl_id);
+    if (!BIT(pl->lock.tagged, LOCK_PLAYER))
+	i = j = 0;
+    if (j < 0 || j >= NumPlayers)
+	/* kps - handle this some other way */
+	fatal("Illegal player lock target");
+
+    do {
+	if (key == KEY_LOCK_PREV) {
+	    if (--i < 0)
+		i = NumPlayers - 1;
+	} else {
+	    if (++i >= NumPlayers)
+		i = 0;
+	}
+	if (i == j)
+	    return;
+
+	pl_i = Player_by_index(i);
+    } while (i == ind
+	     || Player_is_paused(pl_i)
+	     || Player_is_dead(pl_i)
+	     || Player_is_waiting(pl_i)
+	     || !Player_lock_allowed(pl, pl_i));
+
+    if (i == ind)
+	CLR_BIT(pl->lock.tagged, LOCK_PLAYER);
+    else {
+	pl->lock.pl_id = pl_i->id;
+	SET_BIT(pl->lock.tagged, LOCK_PLAYER);
+    }
 }
 
 int Player_lock_closest(player_t *pl, bool next)
@@ -159,6 +143,7 @@ int Player_lock_closest(player_t *pl, bool next)
     best = FLT_MAX;
     for (i = 0; i < NumPlayers; i++) {
 	player_t *pl_i = Player_by_index(i);
+
 	if (pl_i == lock_pl
 	    || !Player_is_active(pl_i)
 	    || !Player_lock_allowed(pl, pl_i)
@@ -183,87 +168,381 @@ int Player_lock_closest(player_t *pl, bool next)
     return 1;
 }
 
+static void Player_change_home(player_t *pl)
+{
+    player_t *pl2 = NULL;
+    base_t *base2 = NULL;
+    base_t *enemybase = NULL;
+    double l, dist = 1e19;
+    int i;
+
+    for (i = 0; i < Num_bases(); i++) {
+	base_t *base = Base_by_index(i);
+
+	l = Wrap_length(pl->pos.cx - base->pos.cx,
+			pl->pos.cy - base->pos.cy);
+	if (l < dist
+	    && l < 1.5 * BLOCK_CLICKS) {
+	    if (base->team != TEAM_NOT_SET
+		&& base->team != pl->team) {
+		enemybase = base;
+		continue;
+	    }
+	    base2 = base;
+	    dist = l;
+	}
+    }
+
+    if (base2 == NULL) {
+	if (enemybase)
+	    Set_player_message_f(pl, "Base belongs to team %d. "
+				 "Enemy home bases can't be occupied. "
+				 "[*Server notice*]", enemybase->team);
+	else
+	    Set_player_message(pl, "You are too far away from "
+			       "a suitable base to change home. "
+			       "[*Server notice*]");
+	return;
+    }
+
+    /* Maybe the base is our own base? */
+    if (base2 == pl->home_base)
+	return;
+
+    /* Let's see if someone else in our has this base. */
+    for (i = 0; i < NumPlayers; i++) {
+	player_t *pl_i = Player_by_index(i);
+
+	if (pl_i->id != pl->id
+	    && !Player_is_tank(pl_i)
+	    && base2 == pl_i->home_base) {
+	    pl2 = pl_i;
+	    break;
+	}
+    }
+
+    if (pl2 != NULL
+	&& Players_are_teammates(pl, pl2)
+	&& Get_Score(pl) <= Get_Score(pl2)) {
+	Set_player_message(pl, "You must have a higher score than your "
+			   "teammate to take over their base. "
+			   "[*Server notice*]");
+	return;
+    }
+
+    pl->home_base = base2;
+    sound_play_all(CHANGE_HOME_SOUND);
+
+    if (pl2 != NULL) {
+	Pick_startpos(pl2);
+	Set_message_f("%s has taken over %s's home base.",
+		      pl->name, pl2->name);
+    } else
+	Set_message_f("%s has changed home base.", pl->name);
+
+    /*
+     * Send info about new bases.
+     */
+    for (i = 0; i < NumPlayers; i++) {
+	player_t *pl_i = Player_by_index(i);
+
+	if (pl_i->conn != NULL)
+	    Send_base(pl_i->conn, pl->id, pl->home_base->ind);
+    }
+    for (i = 0; i < NumSpectators; i++)
+	Send_base(Player_by_index(i + spectatorStart)->conn,
+		  pl->id, pl->home_base->ind);
+
+    if (pl2) {
+	for (i = 0; i < NumPlayers; i++) {
+	    player_t *pl_i = Player_by_index(i);
+
+	    if (pl_i->conn != NULL)
+		Send_base(pl_i->conn, pl2->id, pl2->home_base->ind);
+	}
+	for (i = 0; i < NumSpectators; i++)
+	    Send_base(Player_by_index(i + spectatorStart)->conn,
+		      pl2->id, pl2->home_base->ind);
+    }
+}
+
+static void Player_refuel(player_t *pl)
+{
+    int i;
+    double l, dist = 1e19;
+
+    if (!BIT(pl->have, HAS_REFUEL))
+	return;
+
+    CLR_BIT(pl->used, USES_REFUEL);
+    for (i = 0; i < Num_fuels(); i++) {
+	fuel_t *fs = Fuel_by_index(i);
+
+	l = Wrap_length(pl->pos.cx - fs->pos.cx,
+			pl->pos.cy - fs->pos.cy);
+	if (!Player_is_refueling(pl)
+	    || l < dist) {
+	    SET_BIT(pl->used, USES_REFUEL);
+	    pl->fs = i;
+	    dist = l;
+	}
+    }
+}
+
+/* Repair target or possibly something else. */
+static void Player_repair(player_t *pl)
+{
+    int i;
+    double l, dist = 1e19;
+
+    if (!BIT(pl->have, HAS_REPAIR))
+	return;
+
+    CLR_BIT(pl->used, USES_REPAIR);
+    for (i = 0; i < Num_targets(); i++) {
+	target_t *targ = Target_by_index(i);
+
+	if (targ->team == pl->team
+	    && targ->dead_ticks <= 0) {
+	    l = Wrap_length(pl->pos.cx - targ->pos.cx,
+			    pl->pos.cy - targ->pos.cy);
+	    if (!Player_is_repairing(pl)
+		|| l < dist) {
+		SET_BIT(pl->used, USES_REPAIR);
+		pl->repair_target = i;
+		dist = l;
+	    }
+	}
+    }
+}
+
+/* Player pressed pause key. */
+static void Player_toggle_pause(player_t *pl)
+{
+    enum pausetype {
+	unknown, paused, hoverpaused
+    } pausetype = unknown;
+
+    if (Player_is_paused(pl))
+	pausetype = paused;
+    else if (Player_is_hoverpaused(pl))
+	pausetype = hoverpaused;
+    else if (Player_is_appearing(pl))
+	pausetype = paused;
+    else {
+	base_t *base = pl->home_base;
+	double dist = Wrap_length(pl->pos.cx - base->pos.cx,
+				  pl->pos.cy - base->pos.cy);
+	double minv;
+
+	if (dist < 1.5 * BLOCK_CLICKS) {
+	    minv = 3.0;
+	    pausetype = paused;
+	} else {
+	    minv = 5.0;
+	    pausetype = hoverpaused;
+	}
+	minv += VECTOR_LENGTH(World_gravity(pl->pos));
+	if (pl->velocity > minv) {
+	    Set_player_message(pl,
+		       "You need to slow down to pause. [*Server notice*]");
+	    return;
+	}
+    }
+
+    switch (pausetype) {
+    case paused:
+	if (Player_is_hoverpaused(pl))
+	    break;
+
+	if (Player_uses_autopilot(pl))
+	    Autopilot(pl, false);
+
+	Pause_player(pl, !Player_is_paused(pl));
+	break;
+
+    case hoverpaused:
+	if (Player_is_paused(pl))
+	    break;
+
+	if (!Player_is_hoverpaused(pl)) {
+	    /*
+	     * Turn hover pause on, together with shields.
+	     */
+	    pl->pause_count = 5 * 12;
+	    Player_self_destruct(pl, false);
+	    SET_BIT(pl->pl_status, HOVERPAUSE);
+
+	    if (Player_uses_emergency_thrust(pl))
+		Emergency_thrust(pl, false);
+
+	    if (BIT(pl->used, HAS_EMERGENCY_SHIELD))
+		Emergency_shield(pl, false);
+
+	    if (!Player_uses_autopilot(pl))
+		Autopilot(pl, true);
+
+	    if (Player_is_phasing(pl))
+		Phasing(pl, false);
+
+	    /*
+	     * Don't allow firing while paused. Similar
+	     * reasons exist for refueling, connector and
+	     * tractor beams.  Other items are allowed (esp.
+	     * cloaking).
+	     */
+	    Player_used_kill(pl);
+	    if (BIT(pl->have, HAS_SHIELD))
+		SET_BIT(pl->used, HAS_SHIELD);
+	} else if (pl->pause_count <= 0) {
+	    Autopilot(pl, false);
+	    CLR_BIT(pl->pl_status, HOVERPAUSE);
+	    if (!BIT(pl->have, HAS_SHIELD))
+		CLR_BIT(pl->used, HAS_SHIELD);
+	}
+	break;
+    default:
+	warn("Player_toggle_pause: BUG: unknown pause type.");
+	break;
+    }
+}
+
+#define FOOBARSWAP(a, b)	    {double tmp = a; a = b; b = tmp;}
+
+static void Player_swap_settings(player_t *pl)
+{
+    if (Player_is_hoverpaused(pl)
+	|| Player_uses_autopilot(pl))
+	return;
+
+    /* kps - turnacc == 0.0 ? */
+    if (pl->turnacc == 0.0) {
+	FOOBARSWAP(pl->power, pl->power_s);
+	FOOBARSWAP(pl->turnspeed, pl->turnspeed_s);
+	FOOBARSWAP(pl->turnresistance, pl->turnresistance_s);
+    }
+}
+#undef FOOBARSWAP
+
+
+static void Player_toggle_compass(player_t *pl)
+{
+    int i, k, ind = GetInd(pl->id);
+
+    if (!BIT(pl->have, HAS_COMPASS))
+	return;
+    TOGGLE_BIT(pl->used, USES_COMPASS);
+
+    if (!Player_uses_compass(pl))
+	return;
+
+    /*
+     * Verify if the lock has ever been initialized at all
+     * and if the lock is still valid.
+     */
+    if (BIT(pl->lock.tagged, LOCK_PLAYER)
+	&& NumPlayers > 1
+	&& (k = pl->lock.pl_id) > 0
+	&& (i = GetInd(k)) > 0
+	&& i < NumPlayers
+	&& Player_by_index(i)->id == k
+	&& i != ind)
+	return;
+
+    Player_lock_closest(pl, false);
+}
+
 
 void Pause_player(player_t *pl, bool on)
 {
-    world_t *world = pl->world;
     int i;
 
-    if (on && !BIT(pl->status, PAUSE)) { /* Turn pause mode on */
+    /* kps - add support for pausing robots ? */
+    if (!Player_is_human(pl))
+	return;
+
+    if (on && !Player_is_paused(pl)) { /* Turn pause mode on */
 	if (pl->team != TEAM_NOT_SET)
-	    world->teams[pl->team].SwapperId = -1;
+	    world->teams[pl->team].SwapperId = NO_ID;
 	/* Minimum pause time is 10 seconds at gamespeed 12. */
 	pl->pause_count = 10 * 12;
 	/* player might have paused when recovering */
 	pl->recovery_count = 0;
-	pl->updateVisibility = 1;
-	SET_BIT(pl->status, PAUSE);
-	/* kps - can this happen ??? */
-	if (pl->pauseTime != 0)
-	    warn("Pause_player: pl pausetime was != 0 (%.3f)", pl->pauseTime);
+	pl->updateVisibility = true;
+	Player_set_state(pl, PL_STATE_PAUSED);
 	pl->pauseTime = 0;
 	if (options.baselessPausing) {
-	    world->teams[pl->team].NumMembers--;
+	    if (pl->team != TEAM_NOT_SET)
+		world->teams[pl->team].NumMembers--;
 	    pl->team = 0;
 	    for (i = 0; i < NumPlayers; i++) {
 		player_t *pl_i = Player_by_index(i);
 
 		if (pl_i->conn != NULL) {
-		    Send_base(pl_i->conn, -1, pl->home_base->ind);
+		    Send_base(pl_i->conn, NO_ID, pl->home_base->ind);
 		    Send_team(pl_i->conn, pl->id, 0);
 		}
 	    }
 	    for (i = spectatorStart; i < spectatorStart + NumSpectators; i++) {
 		player_t *pl_i = Player_by_index(i);
 
-		Send_base(pl_i->conn, -1, pl->home_base->ind);
+		Send_base(pl_i->conn, NO_ID, pl->home_base->ind);
 		Send_team(pl_i->conn, pl->id, 0);
 	    }
 	    pl->home_base = NULL;
 	}
-	pl->mychar = 'P';
 	updateScores = true;
-	Player_pause_reset(pl);
+
+	Detach_ball(pl, NULL);
+	if (Player_uses_autopilot(pl)
+	    || Player_is_hoverpaused(pl)) {
+	    CLR_BIT(pl->pl_status, HOVERPAUSE);
+	    Autopilot(pl, false);
+	}
+
+	pl->vel.x		= pl->vel.y	= 0.0;
+	pl->acc.x		= pl->acc.y	= 0.0;
+
+	pl->obj_status	&= ~(KILL_OBJ_BITS);
+
+	/*
+	 * kps - possibly add option to make items reset
+	 * to initial when pausing
+	 */
+
+	pl->forceVisible	= 0;
+	pl->ecmcount		= 0;
+	pl->emergency_thrust_left = 0;
+	pl->emergency_shield_left = 0;
+	pl->phasing_left	= 0;
+	pl->self_destruct_count = 0;
+	pl->damaged 		= 0;
+	pl->stunned		= 0;
+	pl->lock.distance	= 0;
+	pl->used		= DEF_USED;
+
 	for (i = 0; i < MAX_TEAMS ; i++) {
 	    if (world->teams[i].SwapperId == pl->id)
-		world->teams[i].SwapperId = -1;
+		world->teams[i].SwapperId = NO_ID;
 	}
     }
-    else if (!on && BIT(pl->status, PAUSE)) { /* Turn pause mode off */
+    else if (!on && Player_is_paused(pl)) { /* Turn pause mode off */
 	if (pl->home_base == NULL) {
 	    Set_player_message(pl, "You don't have a base. "
 			       "Select team to unpause. [*Server notice*]");
 	    return;
 	}
 	if (pl->pause_count <= 0) {
-	    bool toolate = false;
-
 	    pl->idleTime = 0;
-	    CLR_BIT(pl->status, PAUSE);
 	    updateScores = true;
-	    if (BIT(world->rules->mode, LIMITED_LIVES))
-		/* Its always too late */
-		toolate = true;
-
-	    if (toolate) {
-		pl->life = 0;
-		pl->mychar = 'W';
-		SET_BIT(pl->status, GAME_OVER);
+	    if (BIT(world->rules->mode, LIMITED_LIVES)) {
+		/* too late, wait for next round */
+		Player_set_state(pl, PL_STATE_WAITING);
 	    } else {
-		pl->mychar = ' ';
+		Player_set_state(pl, PL_STATE_APPEARING);
 		Go_home(pl);
-		SET_BIT(pl->status, PLAYING);
-		if (BIT(world->rules->mode, LIMITED_LIVES))
-		    pl->life = world->rules->lives;
 	    }
-	    if (BIT(world->rules->mode, TIMING)) {
-		pl->round = 0;
-		pl->check = 0;
-		pl->time = 0;
-		pl->best_lap = 0;
-		pl->last_lap = 0;
-		pl->last_lap_time = 0;
-	    }
+	    Player_reset_timing(pl);
 	}
     }
 }
@@ -271,17 +550,19 @@ void Pause_player(player_t *pl, bool on)
 
 int Handle_keyboard(player_t *pl)
 {
-    int i, j, k, key, pressed, dx, dy;
-    clpos_t pos;
-    double minv;
-    int ind = GetInd(pl->id);
-    world_t *world = pl->world;
+    int i, key;
+    bool pressed;
+
+    /*assert(!Player_is_killed(pl));*/
 
     for (key = 0; key < NUM_KEYS; key++) {
+	/* Find first keyv element where last_keyv isn't equal to prev_keyv. */
 	if (pl->last_keyv[key / BITV_SIZE] == pl->prev_keyv[key / BITV_SIZE]) {
-	    key |= (BITV_SIZE - 1);	/* Skip to next keyv element */
+	    /* Skip to next keyv element. */
+	    key |= (BITV_SIZE - 1);
 	    continue;
 	}
+	/* Now check which specific key it is that has changed state. */
 	while (BITV_ISSET(pl->last_keyv, key)
 	       == BITV_ISSET(pl->prev_keyv, key)) {
 	    if (++key >= NUM_KEYS)
@@ -290,15 +571,20 @@ int Handle_keyboard(player_t *pl)
 	if (key >= NUM_KEYS)
 	    break;
 
-	pressed = BITV_ISSET(pl->last_keyv, key) != 0;
+	pressed = (BITV_ISSET(pl->last_keyv, key) != 0) ? true : false;
 	BITV_TOGGLE(pl->prev_keyv, key);
-	if (key != KEY_SHIELD)	/* would interfere with auto-idle-pause.. */
-	    pl->idleTime = 0;	/* due to client auto-shield */
+	/*
+	 * KEY_SHIELD would interfere with auto-idle-pause
+	 * due to client auto-shield hack.
+	 */
+	if (key != KEY_SHIELD)
+	    pl->idleTime = 0;
 
 	/*
 	 * Allow these functions while you're 'dead'.
 	 */
-	if (BIT(pl->status, PLAYING|GAME_OVER|PAUSE|HOVERPAUSE) != PLAYING) {
+	if (!Player_is_alive(pl)
+	    || Player_is_hoverpaused(pl)) {
 	    switch (key) {
 	    case KEY_PAUSE:
 	    case KEY_LOCK_NEXT:
@@ -336,7 +622,7 @@ int Handle_keyboard(player_t *pl)
 	}
 
 	/* allow these functions while you're phased */
-	if (BIT(pl->used, HAS_PHASING_DEVICE) && pressed) {
+	if (Player_is_phasing(pl) && pressed) {
 	    switch (key) {
 	    case KEY_LOCK_NEXT:
 	    case KEY_LOCK_PREV:
@@ -405,54 +691,11 @@ int Handle_keyboard(player_t *pl)
 
 	    case KEY_LOCK_NEXT:
 	    case KEY_LOCK_PREV:
-		if (NumPlayers == 0) /* Spectator? */
-		    break;
-		j = i = GetInd(pl->lock.pl_id);
-		if (!BIT(pl->lock.tagged, LOCK_PLAYER))
-		    i = j = 0;
-		if (j < 0 || j >= NumPlayers)
-		    fatal("Illegal player lock target");
-		do {
-		    if (key == KEY_LOCK_PREV) {
-			if (--i < 0)
-			    i = NumPlayers - 1;
-		    } else {
-			if (++i >= NumPlayers)
-			    i = 0;
-		    }
-		    if (i == j)
-			break;
-		} while (i == ind
-			 || BIT(Player_by_index(i)->status, GAME_OVER|PAUSE)
-			 || !Player_lock_allowed(pl, Player_by_index(i)));
-		if (i == ind)
-		    CLR_BIT(pl->lock.tagged, LOCK_PLAYER);
-		else {
-		    pl->lock.pl_id = Player_by_index(i)->id;
-		    SET_BIT(pl->lock.tagged, LOCK_PLAYER);
-		}
+		Player_lock_next_or_prev(pl, key);
 		break;
 
 	    case KEY_TOGGLE_COMPASS:
-		if (!BIT(pl->have, HAS_COMPASS))
-		    break;
-		TOGGLE_BIT(pl->used, HAS_COMPASS);
-		if (BIT(pl->used, HAS_COMPASS) == 0)
-		    break;
-		/*
-		 * Verify if the lock has ever been initialized at all
-		 * and if the lock is still valid.
-		 */
-		if (BIT(pl->lock.tagged, LOCK_PLAYER)
-		    && NumPlayers > 1
-		    && (k = pl->lock.pl_id) > 0
-		    && (i = GetInd(k)) > 0
-		    && i < NumPlayers
-		    && Player_by_index(i)->id == k
-		    && i != ind)
-		    break;
-
-		Player_lock_closest(pl, false);
+		Player_toggle_compass(pl);
 		break;
 
 	    case KEY_LOCK_NEXT_CLOSE:
@@ -465,49 +708,7 @@ int Handle_keyboard(player_t *pl)
 		break;
 
 	    case KEY_CHANGE_HOME:
-		msg[0] = '\0';
-		for (i = 0; i < world->NumBases; i++) {
-		    base_t *base = Base_by_index(world, i);
-
-		    dx = ABS(CENTER_XCLICK(base->pos.cx - pl->pos.cx));
-		    dy = ABS(CENTER_YCLICK(base->pos.cy - pl->pos.cy));
-		    if (dx < BLOCK_CLICKS / 2 && dy < BLOCK_CLICKS / 2) {
-			if (base == pl->home_base)
-			    break;
-			if (base->team != TEAM_NOT_SET
-			    && base->team != pl->team)
-			    break;
-			pl->home_base = base;
-			sprintf(msg, "%s has changed home base.",
-				pl->name);
-			break;
-		    }
-		}
-		for (i = 0; i < NumPlayers; i++) {
-		    player_t *pl_i = Player_by_index(i);
-
-		    if (pl_i->id != pl->id
-			&& !Player_is_tank(pl_i)
-			&& pl->home_base == pl_i->home_base) {
-			Pick_startpos(pl_i);
-			sprintf(msg, "%s has taken over %s's home base.",
-				pl->name, pl_i->name);
-		    }
-		}
-		if (msg[0]) {
-		    sound_play_all(CHANGE_HOME_SOUND);
-		    Set_message(msg);
-		}
-		for (i = 0; i < NumPlayers; i++) {
-		    player_t *pl_i = Player_by_index(i);
-
-		    if (pl_i->conn != NULL)
-			Send_base(pl_i->conn, pl->id, pl->home_base->ind);
-		}
-		for (i = 0; i < NumSpectators; i++) {
-		    Send_base(Player_by_index(i + spectatorStart)->conn,
-			      pl->id, pl->home_base->ind);
- 		}
+		Player_change_home(pl);
 		break;
 
 	    case KEY_SHIELD:
@@ -552,87 +753,103 @@ int Handle_keyboard(player_t *pl)
 		break;
 
 	    case KEY_TOGGLE_NUCLEAR:
-		if (BIT(world->rules->mode, ALLOW_NUKES)) {
-		    switch (pl->mods.nuclear) {
-		    case NUCLEAR:
-			pl->mods.nuclear |= FULLNUCLEAR;
-			break;
-		    case 0:
-			pl->mods.nuclear = NUCLEAR;
-			break;
-		    default:
-			pl->mods.nuclear = 0;
-			break;
-		    }
+		switch (Mods_get(pl->mods, ModsNuclear)) {
+		case MODS_NUCLEAR:
+		    Mods_set(&pl->mods, ModsNuclear,
+			     MODS_NUCLEAR|MODS_FULLNUCLEAR);
+		    break;
+		case 0:
+		    Mods_set(&pl->mods, ModsNuclear, MODS_NUCLEAR);
+		    break;
+		default:
+		    Mods_set(&pl->mods, ModsNuclear, 0);
+		    break;
 		}
+
 		break;
 
 	    case KEY_TOGGLE_CLUSTER:
-		if (BIT(world->rules->mode, ALLOW_CLUSTERS))
-		    TOGGLE_BIT(pl->mods.warhead, CLUSTER);
+		{
+		    int cluster = Mods_get(pl->mods, ModsCluster);
+
+		    Mods_set(&pl->mods, ModsCluster, !cluster);
+		}
 		break;
 
 	    case KEY_TOGGLE_IMPLOSION:
-		if (BIT(world->rules->mode, ALLOW_MODIFIERS))
-		    TOGGLE_BIT(pl->mods.warhead, IMPLOSION);
+		{
+		    int implosion = Mods_get(pl->mods, ModsImplosion);
+
+		    Mods_set(&pl->mods, ModsImplosion, !implosion);
+		}
 		break;
 
 	    case KEY_TOGGLE_VELOCITY:
-		if (BIT(world->rules->mode, ALLOW_MODIFIERS)) {
-		    /* NB. These may be bit fields, dont modify this code */
-		    if (pl->mods.velocity == MODS_VELOCITY_MAX)
-			pl->mods.velocity = 0;
+		{
+		    int velocity = Mods_get(pl->mods, ModsVelocity);
+
+		    if (velocity == MODS_VELOCITY_MAX)
+			velocity = 0;
 		    else
-			pl->mods.velocity++;
+			velocity++;
+		    Mods_set(&pl->mods, ModsVelocity, velocity);
 		}
 		break;
 
 	    case KEY_TOGGLE_MINI:
-		if (BIT(world->rules->mode, ALLOW_MODIFIERS)) {
-		    /* NB. These may be bit fields, dont modify this code */
-		    if (pl->mods.mini == MODS_MINI_MAX)
-			pl->mods.mini = 0;
+		{
+		    int mini = Mods_get(pl->mods, ModsMini);
+
+		    if (mini == MODS_MINI_MAX)
+			mini = 0;
 		    else
-			pl->mods.mini++;
+			mini++;
+		    Mods_set(&pl->mods, ModsMini, mini);
 		}
 		break;
 
 	    case KEY_TOGGLE_SPREAD:
-		if (BIT(world->rules->mode, ALLOW_MODIFIERS)) {
-		    /* NB. These may be bit fields, dont modify this code */
-		    if (pl->mods.spread == MODS_SPREAD_MAX)
-			pl->mods.spread = 0;
+		{
+		    int spread = Mods_get(pl->mods, ModsSpread);
+
+		    if (spread == MODS_SPREAD_MAX)
+			spread = 0;
 		    else
-			pl->mods.spread++;
+			spread++;
+		    Mods_set(&pl->mods, ModsSpread, spread);
 		}
 		break;
 
 	    case KEY_TOGGLE_LASER:
-		if (BIT(world->rules->mode, ALLOW_LASER_MODIFIERS)) {
-		    /* NB. These may be bit fields, dont modify this code */
-		    if (pl->mods.laser == MODS_LASER_MAX)
-			pl->mods.laser = 0;
+		{
+		    int laser = Mods_get(pl->mods, ModsLaser);
+
+		    if (laser == MODS_LASER_MAX)
+			laser = 0;
 		    else
-			pl->mods.laser++;
+			laser++;
+		    Mods_set(&pl->mods, ModsLaser, laser);
 		}
 		break;
 
 	    case KEY_TOGGLE_POWER:
-		if (BIT(world->rules->mode, ALLOW_MODIFIERS)) {
-		    /* NB. These may be bit fields, dont modify this code */
-		    if (pl->mods.power == MODS_POWER_MAX)
-			pl->mods.power = 0;
+		{
+		    int power = Mods_get(pl->mods, ModsPower);
+
+		    if (power == MODS_POWER_MAX)
+			power = 0;
 		    else
-			pl->mods.power++;
+			power++;
+		    Mods_set(&pl->mods, ModsPower, power);
 		}
 		break;
 
 	    case KEY_CLEAR_MODIFIERS:
-		CLEAR_MODS(pl->mods);
+		Mods_clear(&pl->mods);
 		break;
 
 	    case KEY_REPROGRAM:
-		SET_BIT(pl->status, REPROGRAM);
+		SET_BIT(pl->pl_status, REPROGRAM);
 		break;
 
 	    case KEY_LOAD_MODIFIERS_1:
@@ -641,11 +858,11 @@ int Handle_keyboard(player_t *pl)
 	    case KEY_LOAD_MODIFIERS_4: {
 		modifiers_t *m = &(pl->modbank[key - KEY_LOAD_MODIFIERS_1]);
 
-		if (BIT(pl->status, REPROGRAM))
+		if (BIT(pl->pl_status, REPROGRAM))
 		    *m = pl->mods;
 		else {
 		    pl->mods = *m;
-		    filter_mods(world, &pl->mods);
+		    Mods_filter(&pl->mods);
 		}
 		break;
 	    }
@@ -656,7 +873,7 @@ int Handle_keyboard(player_t *pl)
 	    case KEY_LOAD_LOCK_4: {
 		int *l = &(pl->lockbank[key - KEY_LOAD_LOCK_1]);
 
-		if (BIT(pl->status, REPROGRAM)) {
+		if (BIT(pl->pl_status, REPROGRAM)) {
 		    if (BIT(pl->lock.tagged, LOCK_PLAYER))
 			*l = pl->lock.pl_id;
 		} else {
@@ -670,14 +887,14 @@ int Handle_keyboard(player_t *pl)
 	    }
 
 	    case KEY_TOGGLE_AUTOPILOT:
-		if (BIT(pl->have, HAS_AUTOPILOT))
-		    Autopilot(pl, !BIT(pl->used, HAS_AUTOPILOT));
+		if (Player_has_autopilot(pl))
+		    Autopilot(pl, !Player_uses_autopilot(pl));
 		break;
 
 	    case KEY_EMERGENCY_THRUST:
-		if (BIT(pl->have, HAS_EMERGENCY_THRUST))
+		if (Player_has_emergency_thrust(pl))
 		    Emergency_thrust(pl,
-				     !BIT(pl->used, HAS_EMERGENCY_THRUST));
+				     !Player_uses_emergency_thrust(pl));
 		break;
 
 	    case KEY_EMERGENCY_SHIELD:
@@ -700,7 +917,7 @@ int Handle_keyboard(player_t *pl)
 
 	    case KEY_TURN_LEFT:
 	    case KEY_TURN_RIGHT:
-		if (BIT(pl->used, HAS_AUTOPILOT))
+		if (Player_uses_autopilot(pl))
 		    Autopilot(pl, false);
 		pl->turnacc = 0;
 #if 0
@@ -722,142 +939,49 @@ int Handle_keyboard(player_t *pl)
 		break;
 
 	    case KEY_PAUSE:
-		if (BIT(pl->status, PAUSE))
-		    i = PAUSE;
-		else if (BIT(pl->status, HOVERPAUSE))
-		    i = HOVERPAUSE;
-		else {
-		    pos = pl->home_base->pos;
-		    dx = ABS(CENTER_XCLICK(pl->pos.cx - pos.cx));
-		    dy = ABS(CENTER_YCLICK(pl->pos.cy - pos.cy));
-		    if (dx < BLOCK_CLICKS / 2 && dy < BLOCK_CLICKS / 2) {
-			minv = 3.0;
-			i = PAUSE;
-		    } else {
-			/*
-			 * Hover pause doesn't work within two squares of the
-			 * players home base, they would want the better pause.
-			 */
-			if (dx < 2 * BLOCK_CLICKS && dy < 2 * BLOCK_CLICKS)
-			    break;
-			minv = 5.0;
-			i = HOVERPAUSE;
-		    }
-		    minv += VECTOR_LENGTH(World_gravity(world, pl->pos));
-		    if (pl->velocity > minv)
-			break;
-		}
-
-		switch (i) {
-		case PAUSE:
-		    if (BIT(pl->status, HOVERPAUSE))
-			break;
-
-		    if (BIT(pl->used, HAS_AUTOPILOT))
-			Autopilot(pl, false);
-
-		    Pause_player(pl, !BIT(pl->status, PAUSE));
-
-		    if (BIT(pl->status, PLAYING)) {
-			BITV_SET(pl->last_keyv, key);
-			BITV_SET(pl->prev_keyv, key);
-			return 1;
-		    }
-		    break;
-
-		case HOVERPAUSE:
-		    if (BIT(pl->status, PAUSE))
-			break;
-
-		    if (!BIT(pl->status, HOVERPAUSE)) {
-			/*
-			 * Turn hover pause on, together with shields.
-			 */
-			pl->pause_count = 5 * 12;
-			Player_self_destruct(pl, false);
-			SET_BIT(pl->status, HOVERPAUSE);
-
-			if (BIT(pl->used, HAS_EMERGENCY_THRUST))
-			    Emergency_thrust(pl, false);
-
-			if (BIT(pl->used, HAS_EMERGENCY_SHIELD))
-			    Emergency_shield(pl, false);
-
-			if (!BIT(pl->used, HAS_AUTOPILOT))
-			    Autopilot(pl, true);
-
-			if (BIT(pl->used, HAS_PHASING_DEVICE))
-			    Phasing(pl, false);
-
-			/*
-			 * Don't allow firing while paused. Similar
-			 * reasons exist for refueling, connector and
-			 * tractor beams.  Other items are allowed (esp.
-			 * cloaking).
-			 */
-			Player_used_kill(pl);
-			if (BIT(pl->have, HAS_SHIELD))
-			    SET_BIT(pl->used, HAS_SHIELD);
-		    } else if (pl->pause_count <= 0) {
-			Autopilot(pl, false);
-			CLR_BIT(pl->status, HOVERPAUSE);
-			if (!BIT(pl->have, HAS_SHIELD))
-			    CLR_BIT(pl->used, HAS_SHIELD);
-		    }
-		    break;
-		default:
-		    warn("Handle_keyboard: unknown pause type %d.", i);
-		    break;
-		}
+		Player_toggle_pause(pl);
 		break;
 
 	    case KEY_SWAP_SETTINGS:
-		if (   BIT(pl->status, HOVERPAUSE)
-		    || BIT(pl->used, HAS_AUTOPILOT))
-		    break;
-		if (pl->turnacc == 0.0) {
-		    SWAP(pl->power, pl->power_s);
-		    SWAP(pl->turnspeed, pl->turnspeed_s);
-		    SWAP(pl->turnresistance, pl->turnresistance_s);
-		}
+		Player_swap_settings(pl);
 		break;
 
 	    case KEY_REFUEL:
-		Refuel(pl);
+		Player_refuel(pl);
 		break;
 
 	    case KEY_REPAIR:
-		Repair(pl);
+		Player_repair(pl);
 		break;
 
 	    case KEY_CONNECTOR:
 		if (BIT(pl->have, HAS_CONNECTOR))
-		    SET_BIT(pl->used, HAS_CONNECTOR);
+		    SET_BIT(pl->used, USES_CONNECTOR);
 		break;
 
 	    case KEY_PRESSOR_BEAM:
-		if (BIT(pl->have, HAS_TRACTOR_BEAM)) {
+		if (Player_has_tractor_beam(pl)) {
 		    pl->tractor_is_pressor = true;
-		    SET_BIT(pl->used, HAS_TRACTOR_BEAM);
+		    SET_BIT(pl->used, USES_TRACTOR_BEAM);
 		}
 		break;
 
 	    case KEY_TRACTOR_BEAM:
-		if (BIT(pl->have, HAS_TRACTOR_BEAM)) {
+		if (Player_has_tractor_beam(pl)) {
 		    pl->tractor_is_pressor = false;
-		    SET_BIT(pl->used, HAS_TRACTOR_BEAM);
+		    SET_BIT(pl->used, USES_TRACTOR_BEAM);
 		}
 		break;
 
 	    case KEY_THRUST:
-		if (BIT(pl->used, HAS_AUTOPILOT))
+		if (Player_uses_autopilot(pl))
 		    Autopilot(pl, false);
-		SET_BIT(pl->status, THRUSTING);
+		Thrust(pl, true);
 		break;
 
 	    case KEY_CLOAK:
 		if (pl->item[ITEM_CLOAK] > 0)
-		    Cloak(pl, !BIT(pl->used, HAS_CLOAKING_DEVICE));
+		    Cloak(pl, !Player_is_cloaked(pl));
 		break;
 
 	    case KEY_ECM:
@@ -870,7 +994,7 @@ int Handle_keyboard(player_t *pl)
 
 	    case KEY_DEFLECTOR:
 		if (pl->item[ITEM_DEFLECTOR] > 0)
-		    Deflector(pl, !BIT(pl->used, HAS_DEFLECTOR));
+		    Deflector(pl, !BIT(pl->used, USES_DEFLECTOR));
 		break;
 
 	    case KEY_HYPERJUMP:
@@ -878,16 +1002,16 @@ int Handle_keyboard(player_t *pl)
 		break;
 
 	    case KEY_PHASING:
-		if (BIT(pl->have, HAS_PHASING_DEVICE))
-		    Phasing(pl, !BIT(pl->used, HAS_PHASING_DEVICE));
+		if (Player_has_phasing_device(pl))
+		    Phasing(pl, !Player_is_phasing(pl));
 		break;
 
 	    case KEY_SELECT_ITEM:
 		for (i = 0; i < NUM_ITEMS; i++) {
 		    if (++pl->lose_item >= NUM_ITEMS)
 			pl->lose_item = 0;
-		    if (BIT(1U << pl->lose_item,
-			    ITEM_BIT_FUEL | ITEM_BIT_TANK))
+		    if (pl->lose_item == ITEM_FUEL
+			|| pl->lose_item == ITEM_TANK)
 			/* can't lose fuel or tanks. */
 			continue;
 		    if (pl->item[pl->lose_item] > 0) {
@@ -910,7 +1034,7 @@ int Handle_keyboard(player_t *pl)
 	    switch (key) {
 	    case KEY_TURN_LEFT:
 	    case KEY_TURN_RIGHT:
-		if (BIT(pl->used, HAS_AUTOPILOT))
+		if (Player_uses_autopilot(pl))
 		    Autopilot(pl, false);
 		pl->turnacc = 0;
 		if (BITV_ISSET(pl->last_keyv, KEY_TURN_LEFT))
@@ -920,20 +1044,20 @@ int Handle_keyboard(player_t *pl)
 		break;
 
 	    case KEY_REFUEL:
-		CLR_BIT(pl->used, HAS_REFUEL);
+		CLR_BIT(pl->used, USES_REFUEL);
 		break;
 
 	    case KEY_REPAIR:
-		CLR_BIT(pl->used, HAS_REPAIR);
+		CLR_BIT(pl->used, USES_REPAIR);
 		break;
 
 	    case KEY_CONNECTOR:
-		CLR_BIT(pl->used, HAS_CONNECTOR);
+		CLR_BIT(pl->used, USES_CONNECTOR);
 		break;
 
 	    case KEY_TRACTOR_BEAM:
 	    case KEY_PRESSOR_BEAM:
-		CLR_BIT(pl->used, HAS_TRACTOR_BEAM);
+		CLR_BIT(pl->used, USES_TRACTOR_BEAM);
 		break;
 
 	    case KEY_SHIELD:
@@ -958,13 +1082,13 @@ int Handle_keyboard(player_t *pl)
 		break;
 
 	    case KEY_THRUST:
-		if (BIT(pl->used, HAS_AUTOPILOT))
+		if (Player_uses_autopilot(pl))
 		    Autopilot(pl, false);
-		CLR_BIT(pl->status, THRUSTING);
+		Thrust(pl, false);
 		break;
 
 	    case KEY_REPROGRAM:
-		CLR_BIT(pl->status, REPROGRAM);
+		CLR_BIT(pl->pl_status, REPROGRAM);
 		break;
 
 	    case KEY_SELECT_ITEM:
@@ -979,24 +1103,4 @@ int Handle_keyboard(player_t *pl)
     memcpy(pl->prev_keyv, pl->last_keyv, sizeof(pl->last_keyv));
 
     return 1;
-}
-
-void filter_mods(world_t *world, modifiers_t * mods)
-{
-    if (!BIT(world->rules->mode, ALLOW_NUKES))
-	mods->nuclear = 0;
-
-    if (!BIT(world->rules->mode, ALLOW_CLUSTERS))
-	CLR_BIT(mods->warhead, CLUSTER);
-
-    if (!BIT(world->rules->mode, ALLOW_MODIFIERS)) {
-	CLR_BIT(mods->warhead, IMPLOSION);
-	mods->velocity = 0;
-	mods->mini = 0;
-	mods->spread = 0;
-	mods->power = 0;
-    }
-
-    if (!BIT(world->rules->mode, ALLOW_LASER_MODIFIERS))
-	mods->laser = 0;
 }

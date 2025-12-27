@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -25,15 +25,12 @@
 
 #include "xpclient.h"
 
-char paint_version[] = VERSION;
-
 /*
  * Globals.
  */
 ipos_t	world;
 ipos_t	realWorld;
 
-bool	gotFocus;
 bool	players_exposed;
 short	ext_view_width;		/* Width of extended visible area */
 short	ext_view_height;	/* Height of extended visible area */
@@ -56,8 +53,8 @@ int Check_view_dimensions(void)
     int			width_wanted, height_wanted;
     int			srv_width, srv_height;
 
-    width_wanted = (int)(draw_width * scaleFactor + 0.5);
-    height_wanted = (int)(draw_height * scaleFactor + 0.5);
+    width_wanted = (int)(draw_width * clData.scaleFactor + 0.5);
+    height_wanted = (int)(draw_height * clData.scaleFactor + 0.5);
 
     srv_width = width_wanted;
     srv_height = height_wanted;
@@ -120,8 +117,8 @@ void Paint_frame_start(void)
      */
     if (newSecond) {
 	/* kps - improve */
-	recordFPS = clientFPS;
-	timePerFrame = 1.0 / clientFPS;
+	recordFPS = (int)(clientFPS+0.5);
+	timePerFrame = 1.0 / recordFPS;
 
 	/* TODO: move this somewhere else */
 	/* check once per second if we are playing */
@@ -135,7 +132,7 @@ void Paint_frame_start(void)
      * at high fps.
      */
     time_counter += timePerFrame;
-    if (time_counter >= 1.0 / 12) {
+    if (time_counter >= (1.0 / 12)) {
 	loopsSlow++;
 	time_counter -= (1.0 / 12);
     }
@@ -242,7 +239,6 @@ static int Team_heading(int entrynum, int teamnum,
     other_t tmp;
     tmp.id = -1;
     tmp.team = teamnum;
-    tmp.war_id = -1;
     tmp.name_width = 0;
     tmp.ship = NULL;
     if (teamnum != TEAM_PAUSEHACK)
@@ -360,4 +356,3 @@ void Paint_score_table(void)
 
     scoresChanged = false;
 }
-

@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -27,7 +27,7 @@
 #define GFX2D_H
 
 extern char	*texturePath;		/* Path list of texture directories */
-
+extern char     *realTexturePath;       /* Real texture lookup path */
 
 typedef unsigned int RGB_COLOR;
 

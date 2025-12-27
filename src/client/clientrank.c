@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) TODO Erik Andersson
  *
@@ -19,8 +19,6 @@
  */
 
 #include "xpclient.h"
-
-char clientrank_version[] = VERSION;
 
 #define MAX_SCORES 500
 

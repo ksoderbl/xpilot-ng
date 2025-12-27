@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -37,10 +37,6 @@
 #include "net.h"
 #endif
 
-#ifndef DRAW_H
-/* need shipshape_t. */
-#include "draw.h"
-#endif
 
 
 /*

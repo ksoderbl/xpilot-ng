@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -26,12 +26,10 @@
 #ifndef OBJPOS_H
 #define OBJPOS_H
 
-void Object_position_set_clpos(world_t *world, object_t *obj, clpos_t pos);
-void Object_position_init_clpos(world_t *world, object_t *obj, clpos_t pos);
-void Player_position_restore(player_t *pl);
-void Player_position_set_clpos(player_t *pl, clpos_t pos);
-void Player_position_init_clpos(player_t *pl, clpos_t pos);
-void Player_position_limit(player_t *pl);
+void Object_position_set_clpos(object_t *obj, clpos_t pos);
+void Object_position_init_clpos(object_t *obj, clpos_t pos);
+void Object_position_restore(object_t *obj);
+void Object_position_limit(object_t *obj);
 void Player_position_debug(player_t *pl, const char *msg);
 
 static inline void Object_position_remember(object_t *obj)
@@ -39,25 +37,14 @@ static inline void Object_position_remember(object_t *obj)
     obj->prevpos = obj->pos;
 }
 
-static inline void Player_position_remember(player_t *pl)
-{
-    Object_position_remember((object_t *)pl);
-}
-
-static inline void Object_position_set_clvec(world_t *world, object_t *obj,
-					     clvec_t vec)
+static inline void Object_position_set_clvec(object_t *obj, clvec_t vec)
 {
     clpos_t pos;
 
     pos.cx = vec.cx;
     pos.cy = vec.cy;
 
-    Object_position_set_clpos(world, obj, pos);
-}
-
-static inline void Player_position_set_clvec(player_t *pl, clvec_t vec)
-{
-    Object_position_set_clvec(pl->world, (object_t *)pl, vec);
+    Object_position_set_clpos(obj, pos);
 }
 
 #endif

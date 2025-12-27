@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -27,6 +27,7 @@
 #define ITEM_H
 
 typedef enum Item {
+    NO_ITEM			= -1,
     ITEM_FUEL			= 0,
     ITEM_WIDEANGLE		= 1,
     ITEM_REARSHOT		= 2,

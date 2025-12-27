@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -28,6 +28,7 @@
 
 #ifdef _WINDOWS
 #  /* kps - what about this ???? */
+#  undef CONF_DATADIR
 #  define CONF_DATADIR			"lib/"
 #endif
 
@@ -40,7 +41,7 @@
 #endif
 
 #ifndef CONF_DEFAULT_MAP
-#  define CONF_DEFAULT_MAP		"polybloods.xp2"
+#  define CONF_DEFAULT_MAP		"ndh.xp2"
 #endif
 
 #ifndef CONF_MAPDIR
@@ -150,14 +151,10 @@
  * So for the client i route the "debug" printfs to the debug stream 
  * The server gets 'real' messages routed to the messages window 
  */
-#ifndef _WINDOWS
-#  define xpprintf	printf
-#else
+#ifdef _WINDOWS
 #  ifdef _XPILOTNTSERVER_
 #    define xpprintf	xpprintfW
 /* # define xpprintf _Trace  */
-#  else
-#    define xpprintf	_Trace
 #  endif
 #endif
 
@@ -178,6 +175,7 @@ char *Conf_defaults_file_name(void);
 char *Conf_password_file_name(void);
 char *Conf_player_passwords_file_name(void);
 char *Conf_mapdir(void);
+char *Conf_fontdir(void);
 char *Conf_default_map(void);
 char *Conf_servermotdfile(void);
 char *Conf_localmotdfile(void);

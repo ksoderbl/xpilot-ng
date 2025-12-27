@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -26,8 +26,6 @@
  */
 
 #include "xpclient_x11.h"
-
-char xdefault_version[] = VERSION;
 
 bool	titleFlip;		/* Do special title bar flipping? */
 
@@ -60,18 +58,12 @@ static bool testxcolors = false;
  * Default fonts
  */
 #define GAME_FONT	"-*-fixed-bold-*-*--13-*-*-*-c-*-iso8859-1"
-/*"-*-times-*-*-*--18-*-*-*-*-*-iso8859-1"*/
-#define MESSAGE_FONT	"-*-times-*-*-*--14-*-*-*-*-*-iso8859-1"
-/* "-*-fixed-medium-r-*--13-*-*-*-c-*-iso8859-1" */
+#define MESSAGE_FONT	"-*-fixed-bold-*-*--13-*-*-*-c-*-iso8859-1"
 #define SCORE_LIST_FONT	"-*-fixed-bold-*-*--13-*-*-*-c-*-iso8859-1"
 #define BUTTON_FONT	"-*-fixed-bold-*-*--13-*-*-*-c-*-iso8859-1"
-/*"-*-*-bold-o-*--14-*-*-*-*-*-iso8859-1"*/
 #define TEXT_FONT	"-*-fixed-bold-*-*--13-*-*-*-c-*-iso8859-1"
-/*"-*-*-bold-i-*--14-*-*-*-p-*-iso8859-1"*/
 #define TALK_FONT	"-*-fixed-bold-*-*--15-*-*-*-c-*-iso8859-1"
-#define KEY_LIST_FONT	"-*-fixed-medium-r-*--10-*-*-*-c-*-iso8859-1"
 #define MOTD_FONT	"-*-fixed-bold-*-*--13-*-*-*-c-*-iso8859-1"
-/*"-*-courier-bold-r-*--14-*-*-*-*-*-iso8859-1"*/
 
 static char displayName[MAX_DISP_LEN];
 static char keyboardName[MAX_DISP_LEN];
@@ -80,9 +72,7 @@ static char keyboardName[MAX_DISP_LEN];
 static bool Set_geometry(xp_option_t *opt, const char *value)
 {
     UNUSED_PARAM(opt);
-    if (geometry)
-	xp_free(geometry);
-
+    XFREE(geometry);
     geometry = xp_safe_strdup(value);
     return true;
 }
@@ -104,7 +94,7 @@ static bool Set_fullColor(xp_option_t *opt, bool val)
     if (val == fullColor)
 	return true;
 
-    if (val == true) {
+    if (val) {
 	/* see if we can use fullColor at all. */
 	fullColor = true;
 	if (Colors_init_bitmaps() == -1) {
@@ -129,7 +119,7 @@ static bool Set_texturedObjects(xp_option_t *opt, bool val)
     if (val == texturedObjects)
 	return true;
 
-    if (val == true) {
+    if (val) {
 	/* Can't use texturedObjects without fullColor */
 	texturedObjects = true;
 	if (!fullColor) {
@@ -195,7 +185,7 @@ static bool Set_mouseAccelThresh(xp_option_t *opt, int value)
 
 static bool Set_fontName(xp_option_t *opt, const char *val)
 {
-    char *buf = Option_get_private_data(opt);
+    char *buf = (char *)Option_get_private_data(opt);
     char *tmpval, *fontname;
 
     assert(val != NULL);
@@ -205,12 +195,12 @@ static bool Set_fontName(xp_option_t *opt, const char *val)
     
     fontname = strtok(tmpval, " \t\r\n");
     if (!fontname) {
-	xp_free(tmpval);
+	XFREE(tmpval);
 	return false;
     }
 
     strlcpy(buf, fontname, FONT_LEN);
-    xp_free(tmpval);
+    XFREE(tmpval);
 
     return true;
 }
@@ -252,7 +242,7 @@ xp_option_t xdefault_options[] = {
 	displayName,
 	sizeof displayName,
 	NULL, NULL, NULL,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_KEEP,
 	"Set the X display.\n"),
 
     XP_STRING_OPTION(
@@ -261,7 +251,7 @@ xp_option_t xdefault_options[] = {
 	keyboardName,
 	sizeof keyboardName,
 	NULL, NULL, NULL,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_KEEP,
 	"Set the X keyboard input if you want keyboard input from\n"
 	"another display.  The default is to use the keyboard input from\n"
 	"the X display.\n"),
@@ -272,7 +262,7 @@ xp_option_t xdefault_options[] = {
 	visualName,
 	sizeof visualName,
 	NULL, NULL, NULL,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_KEEP,
 	"Specify which visual to use for allocating colors.\n"
 	"To get a listing of all possible visuals on your dislay\n"
 	"set the argument for this option to list.\n"),
@@ -282,7 +272,7 @@ xp_option_t xdefault_options[] = {
 	true,
 	&colorSwitch,
 	NULL,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_KEEP,
 	"Use color buffering or not.\n"
 	"Usually color buffering is faster, especially on 8-bit\n"
 	"PseudoColor displays.\n"),
@@ -397,7 +387,10 @@ xp_option_t xdefault_options[] = {
 	&mouseAccelInClient,
 	NULL,
 	XP_OPTFLAG_CONFIG_DEFAULT,
-	"Set to true if you want to set the mouse turn rates to be linear\n"),
+	"This option makes the client handle the mouse acceleration.\n"
+	"Options mouseAccelNum, mouseAccelDenom and mouseAccelThresh can\n"
+	"be used to fine tune the acceleration. The default values of these\n"
+	"three options give linear response to mouse movements.\n"),
 
     XP_INT_OPTION(
         "mouseAccelNum",
@@ -407,7 +400,7 @@ xp_option_t xdefault_options[] = {
 	&new_acc_num,
 	Set_mouseAccelNum,
 	XP_OPTFLAG_CONFIG_DEFAULT,
-	"Fine tune the mouse acceleration\n"),
+	"Mouse acceleration numerator.\n"),
 
     XP_INT_OPTION(
         "mouseAccelDenom",
@@ -417,7 +410,7 @@ xp_option_t xdefault_options[] = {
 	&new_acc_denom,
 	Set_mouseAccelDenom,
 	XP_OPTFLAG_CONFIG_DEFAULT,
-	"Set the mouse acceleration denominator\n"),
+	"Mouse acceleration denominator.\n"),
 
     XP_INT_OPTION(
         "mouseAccelThresh",
@@ -427,7 +420,7 @@ xp_option_t xdefault_options[] = {
 	&new_threshold,
 	Set_mouseAccelThresh,
 	XP_OPTFLAG_CONFIG_DEFAULT,
-	"Set the mouse acceleration threshold\n"),
+	"Mouse acceleration threshold.\n"),
 
 	
     /* X debug stuff */
@@ -435,25 +428,25 @@ xp_option_t xdefault_options[] = {
     XP_NOARG_OPTION(
         "testxsync",
 	&testxsync,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_NEVER_SAVE,
         "Test XSynchronize() ?\n"),
 
     XP_NOARG_OPTION(
         "testxdebug",
 	&testxdebug,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_NEVER_SAVE,
         "Test X_error_handler() ?\n"),
 
     XP_NOARG_OPTION(
         "testxafter",
 	&testxafter,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_NEVER_SAVE,
         "Test XAfterFunction ?\n"),
 
     XP_NOARG_OPTION(
         "testxcolors",
 	&testxcolors,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_NEVER_SAVE,
         "Do Colors_debug() ?\n"),
 #endif
 
@@ -563,10 +556,12 @@ void Handle_X_options(void)
 bool Set_scaleFactor(xp_option_t *opt, double val)
 {
     UNUSED_PARAM(opt);
-    scaleFactor = val;
-    Init_scale_array();
+    clData.scaleFactor = val;
+    clData.scale = 1.0 / val;
+    clData.fscale = (float)clData.scale;
     /* Resize removed because it is not needed here */
     Scale_dashes();
+    Config_redraw();
     Bitmap_update_scale();
     return true;
 }
@@ -574,7 +569,7 @@ bool Set_scaleFactor(xp_option_t *opt, double val)
 bool Set_altScaleFactor(xp_option_t *opt, double val)
 {
     UNUSED_PARAM(opt);
-    scaleFactor_s = val;
+    clData.altScaleFactor = val;
     return true;
 }
 

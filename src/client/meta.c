@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -24,8 +24,6 @@
  */
 
 #include "xpclient.h"
-
-char meta_version[] = VERSION;
 
 static struct Meta metas[NUM_METAS] = {
     {META_HOST,     META_IP,     META_INIT_SOCK, MetaConnecting},
@@ -333,7 +331,6 @@ void Meta_connect(int *connections_ptr, int *maxfd_ptr)
     int status;
     int connections = 0;
     int max = -1;
-    char buf[MSG_LEN];
 
     for (i = 0; i < NUM_METAS; i++) {
 	if (metas[i].sock.fd != SOCK_FD_INVALID)
@@ -503,7 +500,7 @@ void Ping_servers(void)
 
 		if (reply_serial != it_sip->serial)
 		    /* replied to an old ping, alive but
-		     * slower than `interval' at least
+		     * slower than 'interval' at least
 		     */
 		    it_sip->pingtime = MIN(it_sip->pingtime, PING_SLOW);
 		else {

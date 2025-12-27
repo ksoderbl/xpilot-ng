@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 2000-2004 by
  *
@@ -31,12 +31,8 @@
 #ifndef CLICK_H
 #define CLICK_H
 
-#ifndef DRAW_H
-# include "draw.h"
-#endif
-
-#ifndef MAP_H
-# include "map.h"
+#ifndef CONST_H
+# include "const.h"
 #endif
 
 /*
@@ -49,82 +45,25 @@
  * Therefore a fixed point sub-pixel resolution is used called clicks.
  */
 
-
-/*
- * Two inline function for edge wrap of x and y coordinates measured
- * in clicks.
- *
- * Note that even when wrap play is off, ships will wrap around the map
- * if there is not walls that hinder it.
- */
-static inline int WRAP_XCLICK(int cx)
-{
-    return World_wrap_xclick(&World, cx);
-}
-
-static inline int WRAP_YCLICK(int cy)
-{
-    return World_wrap_yclick(&World, cy);
-}
-
-
-/*
- * Two macros for edge wrap of differences in position.
- * If the absolute value of a difference is bigger than
- * half the map size then it is wrapped.
- */
-#define WRAP_DCX(dcx)	\
-	(BIT(World.rules->mode, WRAP_PLAY) \
-	    ? ((dcx) < - (World.cwidth >> 1) \
-		? (dcx) + World.cwidth \
-		: ((dcx) > (World.cwidth >> 1) \
-		    ? (dcx) - World.cwidth \
-		    : (dcx))) \
-	    : (dcx))
-
-#define WRAP_DCY(dcy)	\
-	(BIT(World.rules->mode, WRAP_PLAY) \
-	    ? ((dcy) < - (World.cheight >> 1) \
-		? (dcy) + World.cheight \
-		: ((dcy) > (World.cheight >> 1) \
-		    ? (dcy) - World.cheight \
-		    : (dcy))) \
-	    : (dcy))
-
-#define TWRAP_XCLICK(x_) \
-     ((x_) > 0 ? (x_) % World.cwidth : \
-      ((x_) % World.cwidth + World.cwidth))
-
-#define TWRAP_YCLICK(y_) \
-     ((y_) > 0 ? (y_) % World.cheight : \
-      ((y_) % World.cheight + World.cheight))
-
-
-#define CENTER_XCLICK(X) \
-        (((X) < -(World.cwidth >> 1)) ? \
-             (X) + World.cwidth : \
-             (((X) >= (World.cwidth >> 1)) ? \
-                 (X) - World.cwidth : \
-                 (X)))
-
-#define CENTER_YCLICK(X) \
-        (((X) < -(World.cheight >> 1)) ? \
-	     (X) + World.cheight : \
-	     (((X) >= (World.cheight >> 1)) ? \
-	         (X) - World.cheight : \
-	         (X)))
-
-#if 0 /* kps -moved to common/draw.h because shipshapes needs this */
 typedef int click_t;
 
 typedef struct {
     click_t		cx, cy;
 } clpos_t;
-#endif
 
 typedef struct {
     click_t		cx, cy;
 } clvec_t;
+
+#define CLICK_SHIFT		6
+#define CLICK			(1 << CLICK_SHIFT)
+#define PIXEL_CLICKS		CLICK
+#define BLOCK_CLICKS		(BLOCK_SZ << CLICK_SHIFT)
+#define CLICK_TO_PIXEL(C)	((int)((C) >> CLICK_SHIFT))
+#define CLICK_TO_BLOCK(C)	((int)((C) / (BLOCK_SZ << CLICK_SHIFT)))
+#define CLICK_TO_FLOAT(C)	((double)(C) * (1.0 / CLICK))
+#define PIXEL_TO_CLICK(I)	((click_t)(I) << CLICK_SHIFT)
+#define FLOAT_TO_CLICK(F)	((int)((F) * CLICK))
 
 /*
  * Return the block position this click position is in.

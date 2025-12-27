@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 2000-2002 Uoti Urpala <uau@users.sourceforge.net>
  *
@@ -19,8 +19,6 @@
  */
 
 #include "xpserver.h"
-
-char recwrap_version[] = VERSION;
 
 /* RECORDING WON'T WORK PROPERLY ON WINDOWS BECAUSE OF
  * errno = WSAGetLastError();

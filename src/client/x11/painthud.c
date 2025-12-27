@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2004 by
  *
@@ -26,8 +26,6 @@
  */
 
 #include "xpclient_x11.h"
-
-char painthud_version[] = VERSION;
 
 int hudColor;		/* Color index for HUD drawing, has to be global for windoze */
 static int hudHLineColor;	/* Color index for horiz. HUD line drawing */
@@ -273,8 +271,11 @@ static void Paint_lock(int hud_pos_x, int hud_pos_y)
     char	str[50];
     static int	mapdiag = 0;
 
-    if (mapdiag == 0)
-	mapdiag = LENGTH(Setup->width, Setup->height);
+    if (mapdiag == 0) {
+	double d = LENGTH(Setup->width, Setup->height);
+
+	mapdiag = (int) d;
+    }
 
     /*
      * Display direction arrow and miscellaneous target information.
@@ -352,16 +353,16 @@ static void Paint_hudradar(double hrscale, double xlimit, double ylimit,
 			   int sz)
 {
     int i, x, y;
-    int hrw = hrscale * 256;
-    int hrh = hrscale * RadarHeight;
+    int hrw = (int)(hrscale * 256);
+    int hrh = (int)(hrscale * RadarHeight);
     double xf = (double) hrw / (double) Setup->width;
     double yf = (double) hrh / (double) Setup->height;
 
     for (i = 0; i < num_radar; i++) {
-	x = radar_ptr[i].x * hrscale
-	    - (world.x + ext_view_width / 2) * xf;
-	y = radar_ptr[i].y * hrscale
-	    - (world.y + ext_view_height / 2) * yf;
+	x = (int)(radar_ptr[i].x * hrscale
+		  - (world.x + ext_view_width / 2) * xf);
+	y = (int)(radar_ptr[i].y * hrscale
+		  - (world.y + ext_view_height / 2) * yf);
 
 	if (x < -hrw / 2)
 	    x += hrw;
@@ -517,6 +518,26 @@ static void Paint_HUD_items(int hud_pos_x, int hud_pos_y)
 
 }
 
+static bool have_hudmsg = false;
+static char hudmsg[MSG_LEN];
+
+void Del_HUD_message(void);
+void Add_HUD_message(const char *message);
+
+void Del_HUD_message(void)
+{
+    have_hudmsg = false;
+}
+
+void Add_HUD_message(const char *message)
+{
+    if (!message)
+	return;
+
+    strlcpy(hudmsg, message, sizeof(hudmsg));
+    have_hudmsg = true;
+}
+
 void Paint_HUD(void)
 {
     const int		BORDER = 3;
@@ -639,6 +660,19 @@ void Paint_HUD(void)
     /* Update the lock display */
     Paint_lock(hud_pos_x, hud_pos_y);
 
+    /* kps tmp hack to draw "alert" messages */
+    if (have_hudmsg) {
+	int len = strlen(hudmsg);
+	int width = XTextWidth(gameFont, hudmsg, len);
+
+	SET_FG(colors[WHITE].pixel);
+	rd.drawString(dpy, drawPixmap, gameGC,
+		      WINSCALE(hud_pos_x) - width / 2,
+		      WINSCALE(hud_pos_y - hudSize /*+ HUD_OFFSET*/ - BORDER )
+		      - gameFont->descent,
+		      hudmsg, len);
+    }
+
     /* Draw last score on hud if it is an message attached to it */
     if (hudColor) {
 	SET_FG(colors[hudColor].pixel);
@@ -723,7 +757,7 @@ void Paint_HUD(void)
 			 UWINSCALE(HUD_OFFSET - (2*FUEL_GAUGE_OFFSET)) + 3,
 			 UWINSCALE(HUD_FUEL_GAUGE_SIZE) + 3);
 
-	size = (HUD_FUEL_GAUGE_SIZE * fuelSum) / fuelMax;
+	size = (int)((HUD_FUEL_GAUGE_SIZE * fuelSum) / fuelMax);
 	rd.fillRectangle(dpy, drawPixmap, gameGC,
 			 WINSCALE(hud_pos_x + hudSize - HUD_OFFSET
 				  + FUEL_GAUGE_OFFSET) + 1,
@@ -749,12 +783,10 @@ void Paint_messages(void)
     bot_y = WINSCALE(ext_view_height) - messageFont->descent - BORDER;
 
     /* get number of player messages */
-    if (selectionAndHistory) {
-	while (last_msg_index < maxMessages
-		&& TalkMsg[last_msg_index]->len != 0)
-	    last_msg_index++;
-	last_msg_index--; /* make it an index */
-    }
+    while (last_msg_index < maxMessages
+	   && TalkMsg[last_msg_index]->len != 0)
+	last_msg_index++;
+    last_msg_index--; /* make it an index */
 
     for (i = 0; i < 2 * maxMessages; i++) {
 	if (i < maxMessages)
@@ -770,7 +802,6 @@ void Paint_messages(void)
 	 * anymore.
 	 */
 	if (msg->lifeTime > MSG_FLASH_TIME
-	    || !selectionAndHistory
 	    || (selection.draw.state != SEL_PENDING
 		&& selection.draw.state != SEL_EMPHASIZED)) {
 	    if ((msg->lifeTime -= timePerFrame) <= 0.0) {
@@ -823,13 +854,13 @@ void Paint_messages(void)
 	    y = bot_y;
 	    bot_y -= SPACING;
 	}
-	len = charsPerSecond * (MSG_LIFE_TIME - msg->lifeTime);
+	len = (int)(charsPerSecond * (MSG_LIFE_TIME - msg->lifeTime));
 	len = MIN(msg->len, len);
 
 	/*
 	 * it's an emphasized talk message
 	 */
-	if (selectionAndHistory && selection.draw.state == SEL_EMPHASIZED
+	if (selection.draw.state == SEL_EMPHASIZED
 	    && i < maxMessages
 	    && i >= selection.draw.y1
 	    && i <= selection.draw.y2) {
@@ -841,7 +872,7 @@ void Paint_messages(void)
 	     *   2nd an emphasized part itself,
 	     *   3rd an unemph. part to the right of a selection.
 	     * set the according variables if a part exists.
-	     * e.g: a selection of several lines `stopping' somewhere in
+	     * e.g: a selection of several lines 'stopping' somewhere in
 	     *   the middle of a line -> ptr2,ptr3 are needed to draw
 	     *   this line
 	     */
@@ -967,65 +998,34 @@ void Paint_recording(void)
 }
 
 
-void Paint_client_fps(void)
+void Paint_HUD_values(void)
 {
-    int			w, x, y, len;
-    char		buf[32];
+    int w, x, y, len, w2, len2, wmax;
+    static char buf[32], buf2[32];
 
     if (!hudColor)
 	return;
 
     SET_FG(colors[hudColor].pixel);
-    sprintf(buf, "FPS: %d", clientFPS);
+
+    sprintf(buf,  "FPS    : %.3f", clientFPS);
+    sprintf(buf2, "CL.LAG : %.1f ms", clData.clientLag);
+
     len = strlen(buf);
     w = XTextWidth(gameFont, buf, len);
-    x = WINSCALE(ext_view_width) - 10 - w;
+    len2 = strlen(buf2);
+    w2 = XTextWidth(gameFont, buf2, len2);
+
+    wmax = MAX(w, w2);
+
+    x = WINSCALE(ext_view_width) - 10 - wmax;
     y = 200 + gameFont->ascent;
     rd.drawString(dpy, drawPixmap, gameGC, x, y, buf, len);
+
+    x = WINSCALE(ext_view_width) - 10 - wmax;
+    y = 220 + gameFont->ascent;
+    rd.drawString(dpy, drawPixmap, gameGC, x, y, buf2, len2);
 }
-
-static void handle_packet_measurement(void)
-{
-    if (packetDropMeterColor || packetLossMeterColor) {
-	packetMeasurement = true;
-	Net_init_measurement();
-	if (!packetMeasurement)
-	    packetDropMeterColor
-		= packetLossMeterColor = 0;
-    }
-}
-
-static bool Set_packetLossMeterColor(xp_option_t *opt, int value)
-{
-    UNUSED_PARAM(opt);
-
-    packetLossMeterColor = value;
-    handle_packet_measurement();
-
-    return true;
-}
-
-static bool Set_packetDropMeterColor(xp_option_t *opt, int value)
-{
-    UNUSED_PARAM(opt);
-
-    packetDropMeterColor = value;
-    handle_packet_measurement();
-
-    return true;
-}
-
-static bool Set_packetLagMeterColor(xp_option_t *opt, int value)
-{
-    UNUSED_PARAM(opt);
-
-    packetLagMeterColor = value;
-    if (packetLagMeterColor)
-	Net_init_lag_measurement();
-
-    return true;
-}
-
 
 xp_option_t hud_options[] = {
 
@@ -1056,14 +1056,14 @@ xp_option_t hud_options[] = {
 
     COLOR_INDEX_OPTION(
 	"hudRadarEnemyColor",
-	11,
+	3,
 	&hudRadarEnemyColor,
 	"Which color number to use for drawing hudradar dots\n"
 	"that represent enemy ships.\n"),
 
     COLOR_INDEX_OPTION(
 	"hudRadarOtherColor",
-	4,
+	2,
 	&hudRadarOtherColor,
 	"Which color number to use for drawing hudradar dots\n"
 	"that represent friendly ships or other objects.\n"),
@@ -1148,28 +1148,25 @@ xp_option_t hud_options[] = {
 	"Which color number to use for drawing the packet size meter.\n"
 	"Each bar is equavalent to 1024 bytes, for a maximum of 4096 bytes.\n"),
 
-    COLOR_INDEX_OPTION_WITH_SETFUNC(
+    COLOR_INDEX_OPTION(
 	"packetLossMeterColor",
 	3,
 	&packetLossMeterColor,
-	Set_packetLossMeterColor,
 	"Which color number to use for drawing the packet loss meter.\n"
 	"This gives the percentage of lost frames due to network failure.\n"),
 
-    COLOR_INDEX_OPTION_WITH_SETFUNC(
+    COLOR_INDEX_OPTION(
 	"packetDropMeterColor",
-	0,
+	3,
 	&packetDropMeterColor,
-	Set_packetDropMeterColor,
 	"Which color number to use for drawing the packet drop meter.\n"
 	"This gives the percentage of dropped frames due to display\n"
 	"slowness.\n"),
 
-    COLOR_INDEX_OPTION_WITH_SETFUNC(
+    COLOR_INDEX_OPTION(
 	"packetLagMeterColor",
 	3,
 	&packetLagMeterColor,
-	Set_packetLagMeterColor,
 	"Which color number to use for drawing the packet lag meter.\n"
 	"This gives the amount of lag in frames over the past one second.\n"),
 

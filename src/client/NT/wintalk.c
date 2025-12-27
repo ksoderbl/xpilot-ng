@@ -22,13 +22,6 @@
  */
 #include "xpclient_x11.h"
 
-char talk_version[] = VERSION;
-
-#ifndef	lint
-static char sourceid[] = "@(#)";
-#endif
-
-
 /* Information window dimensions */
 #define TALK_TEXT_HEIGHT	(textFont->ascent + textFont->descent)
 #define TALK_OUTSIDE_BORDER	2
@@ -44,8 +37,6 @@ static char sourceid[] = "@(#)";
 /*
  * Globals.
  */
-bool talk_mapped;
-
 static bool talk_created;
 static char talk_str[MAX_CHARS];
 static struct {
@@ -95,7 +86,7 @@ void Talk_map_window(bool map)
 
 /*
  * redraw a possible selection [un]emphasized.
- * to unemphasize a selection, `selection.txt' is needed.
+ * to unemphasize a selection, 'selection.txt' is needed.
  * thus selection.talk.state == SEL_SELECTED indicates that it
  * should not be drawn emphasized
  */
@@ -115,7 +106,7 @@ void Add_msg_to_history(char *message)
     /*always */
     save_talk_str = false;
 
-    if (!selectionAndHistory || strlen(message) == 0) {
+    if (strlen(message) == 0) {
 	return;			/* unexpected. nothing to add */
     }
 
@@ -134,15 +125,15 @@ void Add_msg_to_history(char *message)
 }
 
 /*
- * Fetch a message from the `history' by returning a pointer to it.
+ * Fetch a message from the 'history' by returning a pointer to it.
  * Choice depends on current poition (*pos, call by ref for modification here)
- * and `direction' of browsing
+ * and 'direction' of browsing
  *
- * if we are here _and the gobal `save_talk_str' is set, then the submitted
+ * if we are here _and the gobal 'save_talk_str' is set, then the submitted
  * message is unfinished - call Add_msg_to_history(), but don't return
  * the next line.
  * Purpose: gives ability to abort writing a message and resume later.
- * The global `save_talk' can be set anywhere else in the code whenever
+ * The global 'save_talk' can be set anywhere else in the code whenever
  * a line from the history gets modified
  * (thus save_talk not as parameter here)
  *
@@ -152,10 +143,9 @@ char *Get_msg_from_history(int *pos, char *message, keys_t direction)
     int i;
     char **msg_set;
 
-    if (!selectionAndHistory
-	|| (direction != KEY_TALK_CURSOR_UP
+    if (direction != KEY_TALK_CURSOR_UP
 	    && direction != KEY_TALK_CURSOR_DOWN
-	    && direction != KEY_DUMMY)) {
+	    && direction != KEY_DUMMY) {
 	return NULL;
     }
 
@@ -197,7 +187,7 @@ char *Get_msg_from_history(int *pos, char *message, keys_t direction)
 /*
  * Pressing a key while there is an emphasized text in the talk window
  * substitutes this text, means: delete the text before inserting the
- * new character and place the character at this `gap'.
+ * new character and place the character at this 'gap'.
  */
 void Talk_delete_emphasized_text()
 {
@@ -206,7 +196,7 @@ void Talk_delete_emphasized_text()
     int onewidth = XTextWidth(talkFont, talk_str, 1);
     char new_str[MAX_CHARS];
 
-    if (!(selectionAndHistory && selection.talk.state == SEL_EMPHASIZED)) {
+    if (selection.talk.state != SEL_EMPHASIZED) {
 	return;
     }
 
@@ -260,13 +250,13 @@ void Talk_delete_emphasized_text()
 
 
 /*
- * Try to paste `data_len' amount of `data' at the cursor position into
- * the talk window.  Cut off overflow (`accept_len').
+ * Try to paste 'data_len' amount of 'data' at the cursor position into
+ * the talk window.  Cut off overflow ('accept_len').
  *
- * The global `talk_str' will contain the new content.
+ * The global 'talk_str' will contain the new content.
  * (safe if *data references *talk_str).
  *
- * if `overwrite' then don't insert/append but substitute the text
+ * if 'overwrite' then don't insert/append but substitute the text
  *
  * Return the number of pasted characters.
  */
@@ -282,12 +272,11 @@ int Talk_paste(char *data, size_t data_len, bool overwrite)
     int accept_len;		/* for still matching the window */
     char paste_buf[MAX_CHARS - 2];	/* gets the XBuffer */
     char tmp_str[MAX_CHARS - 2];
-    char talk_backup[MAX_CHARS - 2];	/* no `collision' with data */
+    char talk_backup[MAX_CHARS - 2];	/* no 'collision' with data */
     bool cursor_visible = false;
     int i;
 
-    if (!selectionAndHistory || !data || data_len == 0
-	|| strlen(data) == 0) {
+    if (!data || data_len == 0 || strlen(data) == 0) {
 	return 0;
     }
 
@@ -319,7 +308,7 @@ int Talk_paste(char *data, size_t data_len, bool overwrite)
 
     /*
      * substitute unprintables according to iso-latin-1.
-     *  (according to `data_len' one could ask for all but the
+     *  (according to 'data_len' one could ask for all but the
      *   final '\0' to be converted, but we have only text selections anyway)
      */
     /* don't convert a final newline to space */
@@ -407,7 +396,7 @@ int Talk_paste(char *data, size_t data_len, bool overwrite)
  * place the cursor in the talk window with help of the pointer button.
  * return the cursor position as index in talk_str.
  *
- * place cursor conveniently, if `pending' is set and cutting
+ * place cursor conveniently, if 'pending' is set and cutting
  * in the talk window finished outside of it (border is also outside).
  */
 
@@ -430,10 +419,7 @@ void Clear_draw_selection()
  */
 void Clear_selection()
 {
-    if (!selectionAndHistory)
-	return;
-
-    if (talk_mapped && selection.talk.state == SEL_EMPHASIZED) {
+    if (clData.talking && selection.talk.state == SEL_EMPHASIZED) {
 	/* trick to unemphasize */
 	selection.talk.state = SEL_SELECTED;
 	Talk_refresh();
@@ -464,7 +450,7 @@ void Talk_window_cut(XButtonEvent * xbutton)
  * for proper cutting: Notice if cutting heppens left from the most left
  * or right from the most right character (c1/2.x_off).
  *
- * while the cut is pending, the state of Talk+GameMsg[] is `freezed'
+ * while the cut is pending, the state of Talk+GameMsg[] is 'freezed'
  * in Paint_message(). thus call Add_pending_messages() here after this.
  */
 void Talk_cut_from_messages(XButtonEvent * xbutton)

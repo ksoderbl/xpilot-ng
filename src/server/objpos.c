@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -25,19 +25,20 @@
 
 #include "xpserver.h"
 
-char objpos_version[] = VERSION;
 
-
-void Object_position_set_clpos(world_t *world, object_t *obj, clpos_t pos)
+void Object_position_set_clpos(object_t *obj, clpos_t pos)
 {
-    if (!World_contains_clpos(world, pos)) {
+    if (!World_contains_clpos(pos)) {
 	if (0) {
 	    printf("BUG!  Illegal object position %d,%d\n", pos.cx, pos.cy);
 	    printf("      Type = %d (%s)\n", obj->type, Object_typename(obj));
 	    *(double *)(-1) = 4321.0;
 	    abort();
 	} else {
-	    Object_crash(obj, CrashUnknown, NO_IND);
+	    if (obj->type == OBJ_PLAYER)
+		Player_crash((player_t *)obj, CrashUnknown, NO_IND, 1);
+	    else
+		Object_crash(obj, CrashUnknown, NO_IND);
 	    return;
 	}
     }
@@ -45,52 +46,26 @@ void Object_position_set_clpos(world_t *world, object_t *obj, clpos_t pos)
     obj->pos = pos;
 }
 
-void Object_position_init_clpos(world_t *world, object_t *obj, clpos_t pos)
+void Object_position_init_clpos(object_t *obj, clpos_t pos)
 {
-    Object_position_set_clpos(world, obj, pos);
+    Object_position_set_clpos(obj, pos);
     Object_position_remember(obj);
     obj->collmode = 0;
 }
 
-void Player_position_restore(player_t *pl)
+void Object_position_restore(object_t *obj)
 {
-    Player_position_set_clpos(pl, pl->prevpos);
+    Object_position_set_clpos(obj, obj->prevpos);
 }
 
-void Player_position_set_clpos(player_t *pl, clpos_t pos)
+void Object_position_limit(object_t *obj)
 {
-    world_t *world = pl->world;
-
-    if (!World_contains_clpos(world, pos)) {
-	if (0) {
-	    printf("BUG!  Illegal player position %d,%d\n", pos.cx, pos.cy);
-	    *(double *)(-1) = 4321.0;
-	    abort();
-	} else {
-	    Player_crash(pl, CrashUnknown, NO_IND, 1);
-	    return;
-	}
-    }
-
-    pl->pos = pos;
-}
-
-void Player_position_init_clpos(player_t *pl, clpos_t pos)
-{
-    Player_position_set_clpos(pl, pos);
-    Player_position_remember(pl);
-    pl->collmode = 0;
-}
-
-void Player_position_limit(player_t *pl)
-{
-    clpos_t pos = pl->pos, oldpos = pos;
-    world_t *world = pl->world;
+    clpos_t pos = obj->pos, oldpos = pos;
 
     LIMIT(pos.cx, 0, world->cwidth - 1);
     LIMIT(pos.cy, 0, world->cheight - 1);
     if (pos.cx != oldpos.cx || pos.cy != oldpos.cy)
-	Player_position_set_clpos(pl, pos);
+	Object_position_set_clpos(obj, pos);
 }
 
 #ifdef DEVELOPMENT

@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -25,44 +25,51 @@
 
 #include "xpserver.h"
 
-char ship_version[] = VERSION;
-
-
 /******************************
  * Functions for ship movement.
  */
 
-void Thrust(player_t *pl)
+void Make_thrust_sparks(player_t *pl)
 {
-    const int min_dir = (int)(pl->dir + RES/2 - RES*0.2 - 1);
-    const int max_dir = (int)(pl->dir + RES/2 + RES*0.2 + 1);
-    const double max_speed = 1 + (pl->power * 0.14);
-    const double max_life = 3 + pl->power * 0.35;
-    clpos_t engine = Ship_get_engine_clpos(pl->ship, pl->dir);
-    clpos_t pos;
+    static int min_dir, max_dir;
+    static double max_speed; /* kps - why are these static ? */
+    clpos_t engine = Ship_get_engine_clpos(pl->ship, pl->dir), pos;
     int afterburners;
-    double tot_sparks = (pl->power * 0.15 + 2.5) * timeStep;
-    double alt_sparks;
+    double max_life, tot_sparks, alt_sparks, power;
+
+    if (pl->fuel.sum > 0.0) {
+	power = pl->power;
+	afterburners = (Player_uses_emergency_thrust(pl)
+			? MAX_AFTERBURNER
+			: pl->item[ITEM_AFTERBURNER]);
+    }
+    else {
+	/* read comment about this in update.c */
+	power = MIN_PLAYER_POWER * 0.6;
+	afterburners = 0;
+    }
+
+    max_life = 3 + power * 0.35;
+    tot_sparks = (power * 0.15 + 2.5) * timeStep;
+
+    min_dir = (int)(pl->dir + RES/2 - (RES*0.2 + 1) * options.thrustWidth);
+    max_dir = (int)(pl->dir + RES/2 + (RES*0.2 + 1) * options.thrustWidth);
+    max_speed = (1 + (power * 0.14)) * options.sparkSpeed;
+    alt_sparks = tot_sparks * afterburners * (1. / (MAX_AFTERBURNER + 1));
 
     pos.cx = pl->pos.cx + engine.cx;
     pos.cy = pl->pos.cy + engine.cy;
 
     sound_play_sensors(pl->pos, THRUST_SOUND);
 
-    afterburners = (BIT(pl->used, HAS_EMERGENCY_THRUST)
-		    ? MAX_AFTERBURNER
-		    : pl->item[ITEM_AFTERBURNER]);
-    alt_sparks = tot_sparks * afterburners * (1. / (MAX_AFTERBURNER + 1));
-
     /* floor(tot_sparks + rfrac()) randomly rounds up or down to an integer,
      * so that the expectation value of the result is tot_sparks */
-    Make_debris(pl->world,
-		pos,
+    Make_debris(pos,
 		pl->vel,
 		pl->id,
 		pl->team,
 		OBJ_SPARK,
-		THRUST_MASS,
+		options.thrustMass,
 		GRAVITY | OWNERIMMUNE,
 		RED,
 		8,
@@ -71,13 +78,12 @@ void Thrust(player_t *pl)
 		1.0, max_speed,
 		3.0, max_life);
 
-    Make_debris(pl->world,
-		pos,
+    Make_debris(pos,
 		pl->vel,
 		pl->id,
 		pl->team,
 		OBJ_SPARK,
-		THRUST_MASS * ALT_SPARK_MASS_FACT,
+		options.thrustMass * ALT_SPARK_MASS_FACT,
 		GRAVITY | OWNERIMMUNE,
 		BLUE,
 		8,
@@ -112,7 +118,7 @@ void Delta_mv(object_t *ship, object_t *obj)
     vy = (ship->vel.y * ship->mass + obj->vel.y * obj->mass) / m;
     if (ship->type == OBJ_PLAYER
 	&& obj->id != NO_ID
-	&& BIT(obj->status, COLLISIONSHOVE)) {
+	&& BIT(obj->obj_status, COLLISIONSHOVE)) {
 	player_t *pl = (player_t *)ship;
 	player_t *pusher = Player_by_id(obj->id);
 	if (pusher != pl)
@@ -148,7 +154,7 @@ void Delta_mv_elastic(object_t *obj1, object_t *obj2)
 		  + (m2 - m1) / ms * v2y;
     if (obj1->type == OBJ_PLAYER
 	&& obj2->id != NO_ID
-	&& BIT(obj2->status, COLLISIONSHOVE)) {
+	&& BIT(obj2->obj_status, COLLISIONSHOVE)) {
 	player_t *pl = (player_t *)obj1;
 	player_t *pusher = Player_by_id(obj2->id);
 	if (pusher != pl)
@@ -159,11 +165,8 @@ void Delta_mv_elastic(object_t *obj1, object_t *obj2)
 
 void Obj_repel(object_t *obj1, object_t *obj2, int repel_dist)
 {
-    double		xd, yd,
-			force, dm,
-			dvx1, dvy1,
-			dvx2, dvy2;
-    int			obj_theta;
+    double xd, yd, force, dm, dvx1, dvy1, dvx2, dvy2, a;
+    int obj_theta;
 
     xd = WRAP_DCX(obj2->pos.cx - obj1->pos.cx);
     yd = WRAP_DCY(obj2->pos.cy - obj1->pos.cy);
@@ -174,7 +177,8 @@ void Obj_repel(object_t *obj1, object_t *obj2, int repel_dist)
 
     force = MIN(force, 10);
 
-    obj_theta = findDir(xd, yd);
+    a = findDir(xd, yd);
+    obj_theta = MOD2((int) (a + 0.5), RES);
 
     dm = obj1->mass / obj2->mass;
     dvx2 = tcos(obj_theta) * force * dm;
@@ -313,11 +317,10 @@ void Update_tanks(pl_fuel_t *ft)
  */
 void Tank_handle_detach(player_t *pl)
 {
-    world_t *world = pl->world;
     player_t *tank;
     int i, ct;
 
-    if (BIT(pl->used, HAS_PHASING_DEVICE))
+    if (Player_is_phasing(pl))
 	return;
 
     /* Return, if no more players or no tanks */
@@ -341,16 +344,16 @@ void Tank_handle_detach(player_t *pl)
      * Player structures contain pointers to dynamic memory...
      */
 
-    Init_player(world, NumPlayers,
+    Init_player(NumPlayers,
 		options.allowShipShapes
-		? Parse_shape_str(options.tankShipShape) : NULL);
+		? Parse_shape_str(options.tankShipShape) : NULL,
+		PL_TYPE_TANK);
 
     /* Released tanks don't have tanks... */
     while (tank->fuel.num_tanks > 0)
 	Player_remove_tank(tank, tank->fuel.num_tanks);
 
-    SET_BIT(tank->type_ext, OBJ_EXT_TANK);
-    Player_position_init_clpos(tank, pl->pos);
+    Object_position_init_clpos(OBJ_PTR(tank), pl->pos);
     tank->vel = pl->vel;
     tank->acc = pl->acc;
     tank->dir = pl->dir;
@@ -372,8 +375,7 @@ void Tank_handle_detach(player_t *pl)
     tank->pseudo_team = pl->pseudo_team;
     tank->alliance = ALLIANCE_NOT_SET;
     tank->invite = NO_ID;
-    tank->mychar = 'T';
-    tank->score = pl->score - options.tankScoreDecrement;
+    tank->score =  Get_Score(pl) - options.tankScoreDecrement;
 
     /* Fuel is the one from chosen tank */
     tank->fuel.sum =
@@ -388,7 +390,7 @@ void Tank_handle_detach(player_t *pl)
     tank->power *= TANK_THRUST_FACT;
 
     /* Reset visibility. */
-    tank->updateVisibility = 1;
+    tank->updateVisibility = true;
     for (i = 0; i <= NumPlayers; i++) {
 	tank->visibility[i].lastChange = 0;
 	Player_by_index(i)->visibility[NumPlayers].lastChange = 0;
@@ -409,7 +411,8 @@ void Tank_handle_detach(player_t *pl)
     sound_play_sensors(pl->pos, TANK_DETACH_SOUND);
 
     /* The tank uses shield and thrust */
-    tank->status = (DEF_BITS & ~KILL_BITS) | PLAYING | GRAVITY | THRUSTING;
+    tank->obj_status = GRAVITY;
+    Thrust(tank, true);
     tank->have = DEF_HAVE;
     tank->used = (DEF_USED & ~USED_KILL & pl->have) | HAS_SHIELD;
 
@@ -422,10 +425,14 @@ void Tank_handle_detach(player_t *pl)
     for (i = 0; i < NumObjs; i++) {
 	object_t *obj = Obj[i];
 
-	if (obj->type == OBJ_HEAT_SHOT
-	    && obj->info > 0
-	    && Player_by_id(obj->info) == pl)
-	    obj->info = NumPlayers - 1; 	/* kps - is this right ? */
+	if (obj->type == OBJ_HEAT_SHOT) {
+	    heatobject_t *heat = HEAT_PTR(obj);
+
+	    if (heat->heat_lock_id > 0
+		&& Player_by_id(heat->heat_lock_id) == pl)
+		/* kps - is this right ? */
+		heat->heat_lock_id = NumPlayers - 1;
+	}
     }
 
     /* Remove tank, fuel and mass from myself */
@@ -452,15 +459,107 @@ void Tank_handle_detach(player_t *pl)
 }
 
 
-void Make_wreckage(world_t *world,
-		   clpos_t  pos,
+
+
+
+
+/****************************
+ * Functions for explosions.
+ */
+
+/* Create debris particles */
+void Make_debris(clpos_t  pos,
+		 vector_t vel,
+		 int      owner_id,
+		 int      owner_team,
+		 int      type,
+		 double   mass,
+		 int      status,
+		 int      color,
+		 int      radius,
+		 int      num_debris,
+		 int      min_dir,   int     max_dir,
+		 double   min_speed, double  max_speed,
+		 double   min_life,  double  max_life)
+{
+    object_t *debris;
+    int i;
+    double life;
+    modifiers_t mods;
+
+    if (!options.useDebris)
+	return;
+
+    pos = World_wrap_clpos(pos);
+    if (!World_contains_clpos(pos))
+	return;
+
+    if (max_life < min_life)
+	max_life = min_life;
+
+    if (max_speed < min_speed)
+	max_speed = min_speed;
+
+    Mods_clear(&mods);
+
+    if (type == OBJ_SHOT) {
+	Mods_set(&mods, ModsCluster, 1);
+	if (!options.shotsGravity)
+	    CLR_BIT(status, GRAVITY);
+    }
+
+    if (num_debris > MAX_TOTAL_SHOTS - NumObjs)
+	num_debris = MAX_TOTAL_SHOTS - NumObjs;
+
+    for (i = 0; i < num_debris; i++) {
+	double speed, dx, dy, diroff;
+	int dir, dirplus;
+
+	if ((debris = Object_allocate()) == NULL)
+	    break;
+
+	debris->color = color;
+	debris->id = owner_id;
+	debris->team = owner_team;
+	Object_position_init_clpos(debris, pos);
+	dir = MOD2(min_dir + (int)(rfrac() * (max_dir - min_dir)), RES);
+	dirplus = MOD2(dir + 1, RES);
+	diroff = rfrac();
+	dx = tcos(dir) + (tcos(dirplus) - tcos(dir)) * diroff;
+	dy = tsin(dir) + (tsin(dirplus) - tsin(dir)) * diroff;
+	speed = min_speed + rfrac() * (max_speed - min_speed);
+	debris->vel.x = vel.x + dx * speed;
+	debris->vel.y = vel.y + dy * speed;
+	debris->acc.x = 0;
+	debris->acc.y = 0;
+	if (options.shotHitFuelDrainUsesKineticEnergy
+	    && type == OBJ_SHOT) {
+	    /* compensate so that m*v^2 is constant */
+	    double sp_shotsp = speed / options.shotSpeed;
+
+	    debris->mass = mass / (sp_shotsp * sp_shotsp);
+	} else
+	    debris->mass = mass;
+	debris->type = type;
+	life = min_life + rfrac() * (max_life - min_life);
+	debris->life = life;
+	debris->fuse = 0;
+	debris->pl_range = radius;
+	debris->pl_radius = radius;
+	debris->obj_status = status;
+	debris->mods = mods;
+	Cell_add_object(debris);
+    }
+}
+
+
+void Make_wreckage(clpos_t  pos,
 		   vector_t vel,
 		   int      owner_id,
 		   int      owner_team,
 		   double   min_mass,     double max_mass,
 		   double   total_mass,
-		   long     status,
-		   int      color,
+		   int      status,
 		   int      max_wreckage,
 		   int      min_dir,      int    max_dir,
 		   double   min_speed,    double max_speed,
@@ -474,8 +573,8 @@ void Make_wreckage(world_t *world,
     if (!options.useWreckage)
 	return;
 
-    pos = World_wrap_clpos(world, pos);
-    if (!World_contains_clpos(world, pos))
+    pos = World_wrap_clpos(pos);
+    if (!World_contains_clpos(pos))
 	return;
 
     if (max_life < min_life)
@@ -487,7 +586,7 @@ void Make_wreckage(world_t *world,
     if (max_wreckage > MAX_TOTAL_SHOTS - NumObjs)
 	max_wreckage = MAX_TOTAL_SHOTS - NumObjs;
 
-    CLEAR_MODS(mods);
+    Mods_clear(&mods);
 
     for (i = 0; i < max_wreckage && sum_mass < total_mass; i++) {
 
@@ -507,13 +606,13 @@ void Make_wreckage(world_t *world,
 	if ((wreckage = WIRE_PTR(Object_allocate())) == NULL)
 	    break;
 
-	wreckage->color = color;
+	wreckage->color = WHITE;
 	wreckage->id = owner_id;
 	wreckage->team = owner_team;
 	wreckage->type = OBJ_WRECKAGE;
 
 	/* Position */
-	Object_position_init_clpos(world, OBJ_PTR(wreckage), pos);
+	Object_position_init_clpos(OBJ_PTR(wreckage), pos);
 
 	/* Direction */
 	dir = MOD2(min_dir + (int)(rfrac() * MOD2(max_dir - min_dir, RES)),
@@ -534,26 +633,26 @@ void Make_wreckage(world_t *world,
 	life = min_life + rfrac() * (max_life - min_life);
 
 	wreckage->life = life;
-	wreckage->fusetime = 0;
+	wreckage->fuse = 0;
 
 	/* Wreckage type, rotation, and size */
-	wreckage->turnspeed = 0.02 + rfrac() * 0.35;
-	wreckage->rotation = (int)(rfrac() * RES);
+	wreckage->wire_turnspeed = 0.02 + rfrac() * 0.35;
+	wreckage->wire_rotation = (int)(rfrac() * RES);
 	size = (int) ( 256.0 * 1.5 * mass / total_mass );
 	if (size > 255)
 	    size = 255;
-	wreckage->size = size;
-	wreckage->info = (int)(rfrac() * 256);
+	wreckage->wire_size = size;
+	wreckage->wire_type = (uint8_t)(rfrac() * 256);
 
-	radius = wreckage->size * 16 / 256;
+	radius = wreckage->wire_size * 16 / 256;
 	if (radius < 8)
 	    radius = 8;
 
 	wreckage->pl_range = radius;
 	wreckage->pl_radius = radius;
-	wreckage->status = status;
+	wreckage->obj_status = status;
 	wreckage->mods = mods;
-	Cell_add_object(world, OBJ_PTR(wreckage));
+	Cell_add_object(OBJ_PTR(wreckage));
     }
 }
 
@@ -570,8 +669,7 @@ void Explode_fighter(player_t *pl)
     /* reduce debris since we also create wreckage objects */
     min_debris >>= 1; /* Removed *2.0 from range */
 
-    Make_debris(pl->world,
-		pl->pos,
+    Make_debris(pl->pos,
 		pl->vel,
 		pl->id,
 		pl->team,
@@ -585,18 +683,13 @@ void Explode_fighter(player_t *pl)
 		20.0, 20.0 + pl->mass * 0.5,
 		5.0, 5.0 + pl->mass * 1.5);
 
-    if (!BIT(pl->status, KILLED))
-	return;
-
-    Make_wreckage(pl->world,
-		  pl->pos,
+    Make_wreckage(pl->pos,
 		  pl->vel,
 		  pl->id,
 		  pl->team,
 		  MAX(pl->mass/8.0, 0.33), pl->mass,
 		  2.0 * pl->mass,
 		  GRAVITY,
-		  WHITE,
 		  10,
 		  0, RES-1,
 		  10.0, 10.0 + pl->mass * 0.5,

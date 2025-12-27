@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -24,10 +24,6 @@
  */
 
 #include "xpclient_x11.h"
-
-
-char colors_version[] = VERSION;
-
 
 /* Kludge for visuals under C++ */
 #if defined(__cplusplus)
@@ -444,7 +440,7 @@ int Colors_init(void)
     if (visual->map_entries < 16)
 	colorSwitch = false;
 
-    if (colorSwitch == true) {
+    if (colorSwitch) {
 	maxColors = (maxColors >= 16 && visual->map_entries >= 256) ? 16
 	    : (maxColors >= 8 && visual->map_entries >= 64) ? 8
 	    : 4;
@@ -667,7 +663,7 @@ int Colors_init_bitmaps(void)
 
     Colors_init_style_colors();
 
-    return (fullColor == true) ? 0 : -1;
+    return (fullColor) ? 0 : -1;
 }
 
 
@@ -1067,7 +1063,7 @@ static bool Set_maxColors (xp_option_t *opt, int val)
 {
     UNUSED_PARAM(opt);
     if (val == 4 || val == 8) {
-	warn("WARNING: Values 4 or 8 for maxColors are not actively "
+	warn("Values 4 or 8 for maxColors are not actively "
 	     "supported. Use at own risk.");
 	maxColors = val;
     } else

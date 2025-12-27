@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -26,8 +26,6 @@
  */
 
 #include "xpclient_x11.h"
-
-char guiobjects_version[] = VERSION;
 
 static bool texturedShips = false; /* Turned this off because the images drawn
 				    * don't match the actual shipshape used
@@ -248,9 +246,9 @@ void Gui_paint_mine(int x, int y, int teammine, char *name)
 	    { 0, -2 }
 	};
 
-	if (lastScaleFactor != scaleFactor) {
+	if (lastScaleFactor != clData.scaleFactor) {
 	    int			i;
-	    lastScaleFactor = scaleFactor;
+	    lastScaleFactor = clData.scaleFactor;
 	    for (i = 1; i < 21; ++i) {
 		mine_points[i].x = WINSCALE(world_mine_points[i].x);
 		mine_points[i].y = WINSCALE(world_mine_points[i].y);

@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -24,9 +24,6 @@
  */
 
 #include "xpclient_x11.h"
-
-char about_version[] = VERSION;
-
 
 /* How far away objects should be placed from each other etc... */
 #define BORDER			10

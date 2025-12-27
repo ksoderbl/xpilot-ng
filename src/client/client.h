@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -30,16 +30,11 @@
 #ifndef	_WINSOCKAPI_
 #include <winsock.h>
 #endif
-
-#ifndef	_WINX_H_
-/*#include "NT/winX.h"*/
 #endif
-#endif
-
 
 #ifndef DRAW_H
 /* need shipshape_t */
-#include "draw.h"
+#include "shipshape.h"
 #endif
 #ifndef ITEM_H
 /* need NUM_ITEMS */
@@ -53,6 +48,19 @@
 /* need xp_keysym_t */
 #include "option.h"
 #endif
+
+typedef struct {
+    bool	talking;	/* Some talk window is open? */
+    bool	pointerControl;	/* Pointer (mouse) control is on? */
+    bool	restorePointerControl;
+				/* Pointer control should be restored later? */
+    bool	quitMode;	/* Client is in quit mode? */
+    double	clientLag;
+    double	scaleFactor;
+    double	scale;
+    float	fscale;
+    double	altScaleFactor;
+} client_data_t;
 
 typedef struct {
     bool blockProtocol;
@@ -102,8 +110,8 @@ typedef struct {
 #define MIN_SHOW_ITEMS_TIME	0.0
 #define MAX_SHOW_ITEMS_TIME	300.0
 
-#define MIN_SCALEFACTOR		0.4
-#define MAX_SCALEFACTOR		8.0
+#define MIN_SCALEFACTOR		0.1
+#define MAX_SCALEFACTOR		20.0
 
 #define FUEL_NOTIFY_TIME	3.0
 #define CONTROL_TIME		8.0
@@ -196,7 +204,6 @@ typedef struct {
     short	life;
     short	mychar;
     short	alliance;
-    short	war_id;
     short	name_width;	/* In pixels */
     short	name_len;	/* In bytes */
     short	max_chars_in_names;	/* name_width was calculated
@@ -328,7 +335,7 @@ typedef struct {
 
 typedef enum {
     normal,
-    friend
+    friendly
 } radar_type_t;
 
 typedef struct {
@@ -406,7 +413,7 @@ typedef struct {
         bool    state;	/* current state of the selection */
         size_t  x1;	/* string indices */
         size_t  x2;
-        bool    incl_nl;/* include a `\n'? */
+        bool    incl_nl;/* include a '\n'? */
     } talk ;
     /* a selection in the draw window */
     struct {
@@ -419,7 +426,7 @@ typedef struct {
     char	*txt;   /* allocated when needed */
     size_t	txt_size;	/* size of txt buffer */
     size_t	len;
-    /* when a message `jumps' from talk window to the player messages: */
+    /* when a message 'jumps' from talk window to the player messages: */
     bool	keep_emphasizing;
 } selection_t;
 
@@ -441,6 +448,8 @@ typedef struct {
 } message_t;
 /* typedefs end */
 
+extern client_data_t	clData;
+
 extern bool		newbie;
 extern char		*geometry;
 extern xp_args_t	xpArgs;
@@ -455,7 +464,6 @@ extern int		maxLinesInHistory;	/* lines to save in history */
 extern selection_t	selection;		/* in talk/draw window */
 extern int		maxMessages;
 extern int		messagesToStdout;
-extern bool		selectionAndHistory;
 
 extern char		*talk_fast_msgs[];	/* talk macros */
 
@@ -553,14 +561,13 @@ extern bool	scoresChanged;
 extern bool	toggle_shield;		/* Are shields toggled by a press? */
 extern bool	shields;		/* When shields are considered up */
 extern bool	auto_shield;            /* drops shield for fire */
-extern bool	initialPointerControl;	/* Start by using mouse for control? */
-extern bool	pointerControl;		/* current state of mouse ship flying */
-extern int	maxFPS;			/* Client's own FPS */
+
+extern int	maxFPS;			/* Max FPS player wants from server */
 extern int 	oldMaxFPS;
-extern int	clientFPS;	        /* How many fps we actually get */
-extern int	recordFPS;		/* Optimal FPS to record at. */
+extern double	clientFPS;		/* FPS client is drawing at */
+extern int	recordFPS;		/* What FPS to record at */
 extern time_t	currentTime;	        /* Current value of time() */
-extern bool	newSecond;              /* True if time() incremented this frame */
+extern bool	newSecond;              /* Did time() increment this frame? */
 extern int	maxMouseTurnsPS;
 extern int	mouseMovementInterval;
 extern int	cumulativeMouseMovement;
@@ -660,11 +667,24 @@ extern bool played_this_round;
  * somewhere
  */
 const char *Program_name(void);
+int Bitmap_add(const char *filename, int count, bool scalable);
+void Pointer_control_newbie_message(void);
+
+/*
+ * Platform specific code needs to implement these.
+ */
+void Platform_specific_pointer_control_set_state(bool on);
+void Platform_specific_talk_set_state(bool on);
+void Record_toggle(void);
+void Toggle_fullscreen(void);
+void Toggle_radar_and_scorelist(void);
 
 /*
  * event.c
  */
 void Pointer_control_set_state(bool on);
+void Talk_set_state(bool on);
+
 void Pointer_button_pressed(int button);
 void Pointer_button_released(int button);
 void Keyboard_button_pressed(xp_keysym_t ks);
@@ -672,17 +692,11 @@ void Keyboard_button_released(xp_keysym_t ks);
 
 int Key_init(void);
 int Key_update(void);
+void Key_clear_counts(void);
 bool Key_press(keys_t key);
 bool Key_release(keys_t key);
-bool Key_press_pointer_control(void);
-bool Key_press_swap_scalefactor(void);
-bool Key_press_talk(void);
-bool Key_press_toggle_radar_score(void);
-bool Key_press_toggle_record(void);
-bool Key_press_toggle_fullscreen(void);
 void Set_auto_shield(bool on);
 void Set_toggle_shield(bool on);
-void Talk_set_state(bool on);
 
 /*
  * messages.c
@@ -693,6 +707,8 @@ int Alloc_history(void);
 void Free_selectionAndHistory(void);
 void Add_message(const char *message);
 void Add_newbie_message(const char *message);
+extern void Add_alert_message(const char *message, double timeout);
+extern void Clear_alert_messages(void);
 void Add_pending_messages(void);
 void Add_roundend_messages(other_t **order);
 void Print_messages_to_stdout(void);
@@ -724,7 +740,6 @@ int Handle_score(int id, double score, int life, int mychar, int alliance);
 int Handle_score_object(double score, int x, int y, char *msg);
 int Handle_team_score(int team, double score);
 int Handle_timing(int id, int check, int round, long loops);
-int Handle_war(int robot_id, int killer_id);
 int Handle_seek(int programmer_id, int robot_id, int sought_id);
 int Handle_start(long server_loops);
 int Handle_end(long server_loops);
@@ -758,6 +773,7 @@ int Handle_debris(int type, u_byte *p, int n);
 int Handle_wreckage(int x, int y, int wrecktype, int size, int rotation);
 int Handle_asteroid(int x, int y, int type, int size, int rotation);
 int Handle_wormhole(int x, int y);
+int Handle_polystyle(int polyind, int newstyle);
 int Handle_ecm(int x, int y, int size);
 int Handle_trans(int x_1, int y_1, int x_2, int y_2);
 int Handle_paused(int x, int y, int count);
@@ -783,21 +799,18 @@ int Client_fps_request(void);
 int Client_power(void);
 int Client_pointer_move(int movement);
 int Client_check_pointer_move_interval(void);
+void Client_exit(int status);
 
 int Init_playing_windows(void);
 void Raise_window(void);
 void Reset_shields(void);
-void Quit(void);
+void Platform_specific_cleanup(void);
 
 #ifdef _WINDOWS
 void MarkPlayersForRedraw(void);
 #endif
 
 int Check_client_fps(void);
-
-#ifdef	SOUND
-extern	void audioEvents(void);
-#endif
 
 /*
  * about.c
@@ -906,15 +919,6 @@ extern void Widget_cleanup(void);
  */
 #ifdef _WINDOWS
 extern	void WinXCreateItemBitmaps();
-#endif
-
-/*
- * winX - The Windows X emulator
- */
-#ifdef _WINDOWS
-#define	WinXFlush(__w)	WinXFlush(__w)
-#else
-#define	WinXFlush(__w)
 #endif
 
 #endif

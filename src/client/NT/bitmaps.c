@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game. 
+ * XPilot NG, a multiplayer space war game. 
  *
  * Copyright (C) 1991-2001 by
  *
@@ -24,8 +24,6 @@
  */
 
 #include "xpclient_x11.h"
-
-char bitmaps_version[] = VERSION;
 
 /* this gets rid of missing initializer warnings */
 #define XP_PIXMAP_INITIALIZER(f, c) { f,c,0,0,0,false,NULL,{0,0,0,NULL,NULL} }

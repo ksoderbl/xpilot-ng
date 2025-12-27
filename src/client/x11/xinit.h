@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -36,7 +36,13 @@
 #define DEF_TOP_HEIGHT	1024
 
 extern Atom		ProtocolAtom, KillAtom;
-extern int		buttonColor, windowColor, borderColor;
+extern int		buttonColor;
+extern int		windowColor;
+extern int		borderColor;
+extern int		wallColor;	/* Color index for wall drawing */
+extern int		decorColor;	/* Color index for decor drawing */
+extern char		sparkColors[MSG_LEN];
+extern int		spark_color[MAX_COLORS];
 extern int		ButtonHeight;
 extern char		visualName[MAX_VISUAL_NAME];
 extern Visual		*visual;
@@ -80,6 +86,7 @@ extern int Talk_do_event(XEvent *event);
 extern int Talk_paste(char* data, size_t len, bool overwrite);
 extern int Talk_place_cursor(XButtonEvent *xbutton, bool pending);
 extern void Talk_window_cut(XButtonEvent *xbutton);
+extern bool Talk_cut_area_hit(XButtonEvent *xbutton);
 extern void Talk_cut_from_messages(XButtonEvent *xbutton);
 extern void Clear_selection(void);
 extern int FatalError(Display *);

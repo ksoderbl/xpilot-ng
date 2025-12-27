@@ -1,5 +1,5 @@
 /*
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -26,8 +26,6 @@
  */
 
 #include "xpclient.h"
-
-char default_version[] = VERSION;
 
 static double	hudScale;	/* Scale for HUD drawing */
 
@@ -161,10 +159,10 @@ static bool Set_team(xp_option_t *opt, int value)
 static bool Set_texturePath(xp_option_t *opt, const char *value)
 {
     UNUSED_PARAM(opt);
-    if (texturePath)
-	xp_free(texturePath);
-
+    XFREE(texturePath);
     texturePath = xp_safe_strdup(value);
+    if (realTexturePath == NULL) 
+	realTexturePath = xp_safe_strdup(value);
     return true;
 }
 static const char *Get_texturePath(xp_option_t *opt)
@@ -197,8 +195,7 @@ static void tryToSetShipShape(void)
      * Let's allow overriding shipshape with another. E.g the first
      * one is from xpilotrc, the other from command line.
      */
-    if (shipShape)
-	xp_free(shipShape);
+    XFREE(shipShape);
 
     /* If there is no shipShapeSetting, there is nothing we can do. */
     if (shipShapeSetting == NULL || strlen(shipShapeSetting) == 0)
@@ -215,7 +212,7 @@ static void tryToSetShipShape(void)
 	valid = Validate_shape_str(shipShapeSetting);
 	if (valid) {
 	    shipShape = xp_safe_strdup(shipShapeSetting);
-	    warn("Your shipShape is valid. Have a nice day.\n");
+	    xpinfo("Your shipShape is valid. Have a nice day.\n");
 	} else
 	    warn("Your shipShape isn't valid. Please fix it.");
 	return;
@@ -263,10 +260,10 @@ static void tryToSetShipShape(void)
 
     valid = Validate_shape_str(ss_candidate);
     if (valid) {
-	warn("Ship shape \"%s\" is now in use.\n", shipShapeSetting);
+	xpinfo("Ship shape \"%s\" is now in use.\n", shipShapeSetting);
 	shipShape = ss_candidate;
     } else {
-	xp_free(ss_candidate);
+	XFREE(ss_candidate);
 	warn("Your shipShape \"%s\" isn't valid. Please fix it.",
 	     shipShapeSetting);
     }
@@ -278,10 +275,8 @@ static void tryToSetShipShape(void)
 static bool Set_shipShape(xp_option_t *opt, const char *value)
 {
     UNUSED_PARAM(opt);
-    if (shipShapeSetting)
-	xp_free(shipShapeSetting);
+    XFREE(shipShapeSetting);
     shipShapeSetting = xp_safe_strdup(value);
-
     tryToSetShipShape();
 
     return true;
@@ -296,10 +291,8 @@ static const char *Get_shipShape(xp_option_t *opt)
 static bool Set_shipShapeFile(xp_option_t *opt, const char *value)
 {
     UNUSED_PARAM(opt);
-    if (shipShapeFile)
-	xp_free(shipShapeFile);
+    XFREE(shipShapeFile);
     shipShapeFile = xp_safe_strdup(value);
-
     tryToSetShipShape();
 
     return true;
@@ -471,9 +464,7 @@ static bool Set_texturedWalls(xp_option_t *opt, bool val)
 	    /* don't bother to check if recalculations are really needed. */
 	    Map_restore(0, 0, Setup->x, Setup->y);
 	    Map_blue(0, 0, Setup->x, Setup->y);
-	}
-	else
-	    Mapdata_setup(Setup->data_url);
+	} else Mapdata_setup(Setup->data_url);
     }
     return true;
 }
@@ -487,6 +478,25 @@ static bool Set_showDecor(xp_option_t *opt, bool val)
     if (oldServer) 
 	Map_dots();
     Paint_world_radar();
+    return true;
+}
+
+static bool Set_dirPrediction(xp_option_t *opt, bool val)
+{
+    UNUSED_PARAM(opt);
+    if (val) {
+        if (!dirPrediction) {
+	    /* reset pointer movements */
+            int m;
+            for (m = 0; m < MAX_POINTER_MOVES; m++)
+                pointer_moves[m].id = -1;
+            pointer_move_next = 0;
+            last_keyboard_ack = 0;
+	    dirPrediction = true;
+	}
+    } else
+        dirPrediction = false;
+    
     return true;
 }
 
@@ -514,32 +524,32 @@ xp_option_t default_options[] = {
     XP_NOARG_OPTION(
 	"help",
 	&xpArgs.help,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_NEVER_SAVE,
 	"Display this help message.\n"),
 
     XP_NOARG_OPTION(
 	"version",
 	&xpArgs.version,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_NEVER_SAVE,
 	"Show the source code version.\n"),
 
     XP_NOARG_OPTION(
 	"join",
 	&xpArgs.auto_connect,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_NEVER_SAVE,
 	"Join the game immediately, no questions asked.\n"),
 
     XP_NOARG_OPTION(
 	"text",
 	&xpArgs.text,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_NEVER_SAVE,
 	"Use the simple text interface to contact a server\n"
 	"instead of the graphical user interface.\n"),
 
     XP_NOARG_OPTION(
 	"list",
 	&xpArgs.list_servers,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_NEVER_SAVE,
 	"List all servers running on the local network.\n"),
 
     XP_STRING_OPTION(
@@ -548,7 +558,7 @@ xp_option_t default_options[] = {
 	xpArgs.shutdown_reason,
 	sizeof xpArgs.shutdown_reason,
 	NULL, NULL, NULL,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_NEVER_SAVE,
 	"Shutdown the server with a message.\n"
 	"The message used is the first argument to this option.\n"),
 
@@ -557,7 +567,7 @@ xp_option_t default_options[] = {
 	"",
 	NULL, 0,
 	Set_nickName, NULL, Get_nickName,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_KEEP,
 	"Set the nickname.\n"),
 
     XP_STRING_OPTION(
@@ -565,7 +575,7 @@ xp_option_t default_options[] = {
 	"",
 	NULL, 0,
 	Set_userName, NULL, Get_userName,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_KEEP,
 	"Set the username.\n"),
 
     XP_STRING_OPTION(
@@ -573,7 +583,7 @@ xp_option_t default_options[] = {
 	"",
 	NULL, 0,
 	Set_hostName, NULL, Get_hostName,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_KEEP,
 	"Set the hostname.\n"),
 
     XP_INT_OPTION(
@@ -583,7 +593,7 @@ xp_option_t default_options[] = {
 	TEAM_NOT_SET,
 	&connectParam.team,
 	Set_team,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_KEEP,
 	"Set the team to join.\n"),
 
     XP_INT_OPTION(
@@ -593,7 +603,7 @@ xp_option_t default_options[] = {
 	65535,
 	&connectParam.contact_port,
 	NULL,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_KEEP,
 	"Set the port number of the server.\n"
 	"Almost all servers use the default port, which is the recommended\n"
 	"policy.  You can find out about which port is used by a server by\n"
@@ -606,7 +616,7 @@ xp_option_t default_options[] = {
 	65535,
 	&clientPortStart,
 	NULL,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_KEEP,
 	"Use UDP ports clientPortStart - clientPortEnd (for firewalls).\n"
 	/* TODO: describe what value 0 means */),
 
@@ -617,7 +627,7 @@ xp_option_t default_options[] = {
 	65535,
 	&clientPortEnd,
 	NULL,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_KEEP,
 	"Use UDP ports clientPortStart - clientPortEnd (for firewalls).\n"),
 
     XP_DOUBLE_OPTION(
@@ -661,7 +671,7 @@ xp_option_t default_options[] = {
 	1.0,
 	MIN_SCALEFACTOR,
 	MAX_SCALEFACTOR,
-	&scaleFactor,
+	&clData.scaleFactor,
 	Set_scaleFactor,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"Specifies scaling factor for the drawing window.\n"),
@@ -671,7 +681,7 @@ xp_option_t default_options[] = {
         2.0,
 	MIN_SCALEFACTOR,
 	MAX_SCALEFACTOR,
-	&scaleFactor_s,
+	&clData.altScaleFactor,
 	Set_altScaleFactor,
 	XP_OPTFLAG_CONFIG_DEFAULT,
         "Specifies alternative scaling factor for the drawing window.\n"),
@@ -722,7 +732,7 @@ xp_option_t default_options[] = {
 
     XP_INT_OPTION(
 	"hudRadarDotSize",
-	8,
+	10,
 	1,
 	SHIP_SZ,
 	&hudRadarDotSize,
@@ -795,6 +805,16 @@ xp_option_t default_options[] = {
 	"If the game is in edgewrap mode then the radar will keep your\n"
 	"position on the radar in the center and raw the rest of the radar\n"
 	"around it.  Note that this requires a fast graphics system.\n"),
+
+    XP_BOOL_OPTION(
+	"dirPrediction",
+	false,
+	&dirPrediction,
+	Set_dirPrediction,
+	XP_OPTFLAG_CONFIG_DEFAULT,
+	"Client paints the wanted direction of your ship instead of what\n"
+	"the server sent you. Possible differences are corrected in\n"
+	"roundtrip time.\n"),
 
     XP_BOOL_OPTION(
 	"showShipShapes",
@@ -941,7 +961,7 @@ xp_option_t default_options[] = {
 
     XP_INT_OPTION(
 	"shotSize",
-	5,
+	6,
 	MIN_SHOT_SIZE,
 	MAX_SHOT_SIZE,
 	&shotSize,
@@ -951,7 +971,7 @@ xp_option_t default_options[] = {
 
     XP_INT_OPTION(
 	"teamShotSize",
-	3,
+	4,
 	MIN_TEAMSHOT_SIZE,
 	MAX_TEAMSHOT_SIZE,
 	&teamShotSize,
@@ -1025,15 +1045,6 @@ xp_option_t default_options[] = {
 	"1: Only player messages.\n"
 	"2: Player and status messages.\n"),
 
-    XP_BOOL_OPTION(
-	"selectionAndHistory",
-	true,
-	&selectionAndHistory,
-	NULL,
-	XP_OPTFLAG_DEFAULT,
-	"Provide cut&paste for the player messages and the talk window and\n"
-	"a `history' for the talk window.\n"),
-
     XP_INT_OPTION(
 	"maxLinesInHistory",
 	32,
@@ -1042,8 +1053,8 @@ xp_option_t default_options[] = {
 	&maxLinesInHistory,
 	NULL,
 	XP_OPTFLAG_DEFAULT,
-	"Number of your messages saved in the `history' of the talk window.\n"
-	"`history' is accessible with `keyTalkCursorUp/Down'.\n"),
+	"Number of your messages saved in the 'history' of the talk window.\n"
+	"'history' is accessible with 'keyTalkCursorUp/Down'.\n"),
 
     XP_BOOL_OPTION(
 	"toggleShield",
@@ -1246,12 +1257,12 @@ xp_option_t default_options[] = {
 	CONF_TEXTUREDIR,
 	NULL, 0,
 	Set_texturePath, NULL, Get_texturePath,
-	XP_OPTFLAG_NO_SAVE,
+	XP_OPTFLAG_KEEP,
 	"Search path for texture files.\n"
 	"This is a list of one or more directories separated by colons.\n"),
 
     /* kps - these should not be needed in the SDL windows client. */
-#ifdef _WINDOWS
+#if 0
     XP_BOOL_OPTION(
 	"threadedDraw",
 	false,

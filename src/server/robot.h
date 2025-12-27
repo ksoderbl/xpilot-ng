@@ -1,5 +1,5 @@
 /* 
- * XPilotNG, an XPilot-like multiplayer space war game.
+ * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 1991-2001 by
  *
@@ -64,7 +64,7 @@
  *    5) The playing function which gets called each loop.
  *       The programming challenge here is to implement
  *       different characters per robot, while at the
- *       same time not calculating `everything' every
+ *       same time not calculating 'everything' every
  *       time this function is called.  i.e., try to give
  *       the robot some long term goals which are only
  *       recalculated once every couple of seconds or so.
@@ -94,7 +94,7 @@
  */
 typedef struct {
     const char		*name;
-    void		(*robot_round_tick)(world_t *world);
+    void		(*robot_round_tick)(void);
     void		(*robot_create)(player_t *robot, char *str);
     void		(*robot_go_home)(player_t *robot);
     void		(*robot_play)(player_t *robot);
@@ -159,5 +159,22 @@ typedef struct robot_default_data {
     double	fuel_l2;		/* Fuel warning level */
     double	fuel_l3;		/* Fuel notify level */
 } robot_default_data_t;
+
+
+/*
+ * Prototypes for robot.c
+ */
+void Parse_robot_file(void);
+void Robot_init(void);
+void Robot_delete(player_t *robot, bool kicked);
+void Robot_destroy(player_t *robot);
+void Robot_update(bool tick);
+void Robot_invite(player_t *robot, player_t *inviter);
+void Robot_war(player_t *robot, player_t *killer);
+void Robot_reset_war(player_t *robot);
+int Robot_war_on_player(player_t *robot);
+void Robot_go_home(player_t *robot);
+void Robot_program(player_t *robot, int victim_id);
+void Robot_message(player_t *robot, const char *message);
 
 #endif

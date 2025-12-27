@@ -27,6 +27,8 @@
 #include "sdlkeys.h"
 #include "glwidgets.h"
 #include "sdlpaint.h"
+#include "sdlinit.h"
+#include "scrap.h"
 
 /* These are only needed for the polygon tessellation */
 /* I'd like to move them to Paint_init/cleanup but because it */
@@ -51,7 +53,7 @@ int mapFontSize;
 char *gamefontname;
 
 /* ugly kps hack */
-bool file_exists(const char *path) 
+static bool file_exists(const char *path) 
 { 
   FILE *fp;
 
@@ -91,26 +93,25 @@ int Init_playing_windows(void)
 
 static bool find_size(int *w, int *h)
 {
-    SDL_Rect **modes;
-    int i;
+    SDL_Rect **modes, *m;
+    int i, d, best_i, best_d;
 
     modes = SDL_ListModes(NULL, videoFlags);
     if (modes == NULL) return false;
     if (modes == (SDL_Rect**)-1) return true;
-
-    if (!modes[1]) {
-	*w = modes[0]->w;
-	*h = modes[0]->h;
-    } else {
-	for (i = 1; modes[i]; i++) {
-	    if (*w > modes[i]->w) {
-		*w = modes[i - 1]->w;
-		*h = modes[i - 1]->h;
-		break;
-	    }
+    
+    best_i = 0;
+    best_d = INT_MAX;
+    for (i = 0; modes[i]; i++) {
+	m = modes[i];
+	d = (m->w - *w)*(m->w - *w) + (m->h - *h)*(m->h - *h);
+	if (d < best_d) {
+	    best_d = d;
+	    best_i = i;
 	}
     }
-
+    *w = modes[best_i]->w;
+    *h = modes[best_i]->h;
     return true;
 }
 
@@ -124,11 +125,11 @@ int Init_window(void)
     	error("SDL_ttf initialization failed: %s", SDL_GetError());
     	return -1;
     }
-    xpprintf("SDL_ttf initialized\n");
+    warn("SDL_ttf initialized.\n");
 
     Conf_print();
 
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_NOPARACHUTE) < 0) {
         error("failed to initialize SDL: %s", SDL_GetError());
         return -1;
     }
@@ -247,6 +248,11 @@ int Init_window(void)
 	return -1;
     }
 
+    /* Set up the clipboard */
+    if ( init_scrap() < 0 ) {
+    	error("Couldn't init clipboard: %s\n");
+    }
+
     return 0;
 }
 
@@ -290,7 +296,7 @@ int Resize_Window( int width, int height )
 }
 
 
-void Quit(void)
+void Platform_specific_cleanup(void)
 {
     Close_Widget(&MainWidget);
     Gui_cleanup();
@@ -330,8 +336,7 @@ static const char* Get_geometry(xp_option_t *opt)
 static bool Set_fontName(xp_option_t *opt, const char *value)
 {
     UNUSED_PARAM(opt);
-    if (gamefontname)
-	xp_free(gamefontname);
+    XFREE(gamefontname);
     gamefontname = xp_safe_strdup(value);
 
     return true;
