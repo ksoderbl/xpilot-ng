@@ -347,7 +347,7 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
 	for (i = 0; i < 10; i++) {
 	    if (deatharray[i].id == id &&
 		deatharray[i].deathtime > loops - 3 * FPS) {
-		if ((loops % 2) == 1) {
+		if ((loopsSlow % 2) == 1) {
 		    baseColor = WHITE;
 		    /*Paint_baseInfoOnHudRadar(x,y); */
 		} else

@@ -225,7 +225,7 @@ int main(int argc, char **argv)
     serverTime = time(NULL);
 
 #ifndef SILENT
-    xpprintf("%s Server runs at %d frames per second (FPSMultiplier = %d)\n",
+    xpprintf("%s Server runs at %d frames per second (FPSMultiplier = %.2f)\n",
 	     showtime(), framesPerSecond, FPSMultiplier);
 #endif
 
@@ -550,7 +550,7 @@ void Server_info(char *str, unsigned max_size)
 	    "\n"
 	    "EXPERIMENTAL SERVER, see\n"
 	    "http://xpilot.sourceforge.net/\n"
-	    "http://www.hut.fi/~ksoderbl/xpilot/xpilot-4.5.4X-rc5.txt\n"
+	    "http://www.hut.fi/~ksoderbl/xpilot/xpilot-4.5.4X-rc6.txt\n"
 	    "\n",
 	    server_version,
 	    (game_lock && ShutdownServer == -1) ? "locked" :

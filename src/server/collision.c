@@ -160,6 +160,97 @@ static int in_range_acd_old(
 	return 0;
 }
 
+/* poly acd functions */
+/* doubles because the multiplies might overflow ints */
+static int in_range_acd(double dx, double dy, double dvx, double dvy, double r)
+{
+    double	tmin, fminx, fminy;
+    double	top, bot;
+
+    /*
+     * Get the wrapped coordinates straight
+     */
+    if (BIT(World.rules->mode, WRAP_PLAY)) {
+	if (dx > World.cwidth / 2)
+	    dx -= World.cwidth;
+	else if (dx < -World.cwidth / 2)
+	    dx += World.cwidth;
+	if (dy > World.cheight / 2)
+	    dy -= World.cheight;
+	else if (dy < -World.cheight / 2)
+	    dy += World.cheight;
+    }
+
+    if (dx * dx + dy * dy < r * r)
+	return 1;
+    top = -(dvx * dx + dvy * dy);
+    bot = dvx * dvx + dvy * dvy;
+    if (top < 0 || bot < CLICK * CLICK || top > bot)
+	return 0;
+    tmin = top / bot;
+    fminx = dx + dvx * tmin;
+    fminy = dy + dvy * tmin;
+    if (fminx * fminx + fminy * fminy < r * r)
+	return 1;
+    else
+	return 0;
+}
+
+static int in_range_simple(int px, int py, int qx, int qy, int r)
+{
+    int dx = px - qx, dy = py - qy;
+
+    if (dx > World.cwidth >> 1)
+	dx -= World.cwidth;
+    else if (dx < -World.cwidth >> 1)
+	dx += World.cwidth;
+    if (dy > World.cheight >> 1)
+	dy -= World.cheight;
+    else if (dy < -World.cheight >> 1)
+	dy += World.cheight;
+    if ((double)dx * dx + (double)dy * dy < r * r)
+	return 1;
+    else
+	return 0;
+}
+
+static int in_range_partial(double dx, double dy, double dvx, double dvy,
+			    double r, DFLOAT wall_time)
+{
+    double	tmin, fminx, fminy;
+    double	top, bot;
+
+    /*
+     * Get the wrapped coordinates straight
+     */
+    if (BIT(World.rules->mode, WRAP_PLAY)) {
+	if (dx > World.cwidth / 2)
+	    dx -= World.cwidth;
+	else if (dx < -World.cwidth / 2)
+	    dx += World.cwidth;
+	if (dy > World.cheight / 2)
+	    dy -= World.cheight;
+	else if (dy < -World.cheight / 2)
+	    dy += World.cheight;
+    }
+
+    top = -(dvx * dx + dvy * dy);
+    bot = dvx * dvx + dvy * dvy;
+    if (top <= 0)
+	return 0;
+    if (bot < 5 * CLICK * CLICK || top >= bot)
+	tmin = wall_time;
+    else
+	tmin = top / bot;
+    fminx = dx + dvx * tmin;
+    fminy = dy + dvy * tmin;
+    if (fminx * fminx + fminy * fminy < r * r)
+	return 1;
+    else
+	return 0;
+}
+
+
 
 /*
  * Globals
@@ -274,7 +365,7 @@ static void PlayerCollision(void)
 		    pl->forceVisible = 20;
 		    Players[j]->forceVisible = 20;
 		    Obj_repel((object *)pl, (object *)Players[j],
-			      2*SHIP_SZ);
+			      PIXEL_TO_CLICK(2*SHIP_SZ));
 		}
 		if (!BIT(World.rules->mode, CRASH_WITH_PLAYER)) {
 		    continue;
@@ -716,7 +807,7 @@ static void Player_collides_with_ball(int ind, object *obj, int radius)
      * shields up, or die with shields down.  The treasure may
      * be destroyed.
      */
-    Obj_repel((object *)pl, obj, radius);
+    Obj_repel((object *)pl, obj, PIXEL_TO_CLICK(radius));
     if (BIT(pl->used, (HAS_SHIELD|HAS_EMERGENCY_SHIELD))
 	!= (HAS_SHIELD|HAS_EMERGENCY_SHIELD)) {
 	Add_fuel(&(pl->fuel), (long)ED_BALL_HIT);
@@ -1415,7 +1506,7 @@ static void AsteroidCollision(void)
 
 	    switch (obj->type) {
 	    case OBJ_BALL:
-		Obj_repel(ast, obj, radius);
+		Obj_repel(ast, obj, PIXEL_TO_CLICK(radius));
 		if (treasureCollisionDestroys)
 		    obj->life = 0;
 		damage = ED_BALL_HIT;
@@ -1609,7 +1700,7 @@ static void BallCollision(void)
 		} else {
 		    /* they bounce */
 		    Obj_repel((object*)ball, obj,
-			      ball->pl_radius + obj->pl_radius);
+			      PIXEL_TO_CLICK(ball->pl_radius + obj->pl_radius));
 		}
 		break;
 

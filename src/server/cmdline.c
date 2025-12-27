@@ -324,9 +324,10 @@ int		playerLimit;		/* allow less players than bases */
 int		constantScoring;	/* Fixed points for kills etc? */
 int		eliminationRace;	/* Last player drops each lap? */
 
-int		FPSMultiplier;		/* Slow everything by this factor */
-int		framespeed;
-DFLOAT		framespeed2;
+DFLOAT		FPSMultiplier;		/* Slow everything by this factor */
+int		timeStep;		/* Game time step per frame */
+DFLOAT		timeStep2;		/* timeStep /TIME_FACT */
+					/* before: framespeed, framespeed2 */
 
 
 int		recordMode;		/* 0=off, 1=record, 2=playback */
@@ -3503,11 +3504,11 @@ static option_desc options[] = {
     {
 	"FPSMultiplier",
 	"FPSMultiplier",
-	"1",
+	"1.0",
 	&FPSMultiplier,
-	valInt,
+	valReal,
 	Timing_setup,
-	"Everything is slowed by this (integer) factor. Allows using higher\n"
+	"Everything is slowed by this factor. Allows using higher\n"
 	"FPS without making the game too fast.\n",
 	OPT_ORIGIN_ANY | OPT_DEFAULTS /* kps - was OPT_ANY */
     },
@@ -3621,13 +3622,17 @@ option_desc* Find_option_by_name(const char* name)
 
 void Timing_setup(void)
 {
-    if (FPSMultiplier < 1)
-	FPSMultiplier = 1;
-    if (FPSMultiplier > 64)
-	FPSMultiplier = 64;
+    if (FPSMultiplier < 1.0)
+	FPSMultiplier = 1.0;
+    if (FPSMultiplier > 64.0)
+	FPSMultiplier = 64.0;
 
-    framespeed = TIME_FACT / FPSMultiplier;
-    framespeed2 = 1. / FPSMultiplier;
+    /*
+     * Calculate amount of game time that elapses per frame.
+     */
+    timeStep = (int)(TIME_FACT / FPSMultiplier);
+    timeStep2 = 1. / FPSMultiplier;
+
     ShotsLife = ShotsLifeSetting * TIME_FACT;
     fireRepeatRate = fireRepeatRateSetting * TIME_FACT;
 
@@ -3645,10 +3650,10 @@ void Timing_setup(void)
 	friction = pow(friction, 1. / FPSMultiplier);
 #endif
 
-#if 0
-    xpprintf(__FILE__ ": FPSMultiplier     = %d\n", FPSMultiplier);
-    xpprintf(__FILE__ ": framespeed        = %d\n", framespeed);
-    xpprintf(__FILE__ ": framespeed2       = %f\n", framespeed2);
+#if 1
+    xpprintf(__FILE__ ": FPSMultiplier     = %f\n", FPSMultiplier);
+    xpprintf(__FILE__ ": timeStep          = %d\n", timeStep);
+    xpprintf(__FILE__ ": timeStep2         = %f\n", timeStep2);
     xpprintf(__FILE__ ": ShotsLife         = %d\n", ShotsLife);
     xpprintf(__FILE__ ": fireRepeatRate    = %d\n", fireRepeatRate);
     xpprintf(__FILE__ ": friction          = %f\n", friction);

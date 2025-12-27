@@ -154,9 +154,12 @@ bool	useErase;		/* use Erase hack for slow X */
 int		maxKeyDefs;
 keydefs_t	*keyDefs = NULL;
 
-other_t     *self;          /* player info */
+other_t	*self;			/* player info */
 
-long        loops = 0;
+long	loops = 0;
+long	loopsSlow = 0;		/* Proceeds slower than loops */
+int	paintFPS;		/* How many fps we actually paint */
+DFLOAT	fpsMult;		/* Server fpsmultiplier guess */
 
 int	cacheShips = 0;		/* cache some ship bitmaps every frame */
 
@@ -198,9 +201,17 @@ void Paint_frame(void)
     loops = end_loops;
 
     /*
+     * Instead of using loops to determining if things are drawn this frame,
+     * loopsSlow can be used. Helps at high fps.
+     */
+    paintFPS = MIN(FPS, maxFPS);
+    loopsSlow = (loops * 12) / paintFPS;
+    fpsMult = (DFLOAT)paintFPS / 12.0;
+
+    /*
      * Switch between two different window titles.
      */
-    if (titleFlip && (loops % TITLE_DELAY) == 0) {
+    if (titleFlip && (loopsSlow % TITLE_DELAY) == 0) {
 	scroll_i = !scroll_i;
 	if (scroll_i)
 	    XStoreName(dpy, top, COPYRIGHT);

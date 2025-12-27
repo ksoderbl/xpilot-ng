@@ -206,6 +206,9 @@ extern int	(*radarDrawRectanglePtr)	/* Function to draw player on radar */
 
 extern int	maxKeyDefs;
 extern long	loops;
+extern long	loopsSlow;
+extern int	paintFPS;
+extern DFLOAT	fpsMult;
 extern int	maxMessages;
 extern int	messagesToStdout;
 extern bool	selectionAndHistory;

@@ -744,10 +744,10 @@ void Paint_HUD(void)
     if (BIT(instruments, SHOW_FUEL_GAUGE) == 0
 	|| !((fuelCount)
 	   || (fuelSum < fuelLevel3
-	      && ((fuelSum < fuelLevel1 && (loops%4) < 2)
+	      && ((fuelSum < fuelLevel1 && (loopsSlow % 4) < 2)
 		  || (fuelSum < fuelLevel2
 		      && fuelSum > fuelLevel1
-		      && (loops%8) < 4)
+		      && (loopsSlow % 8) < 4)
 		  || (fuelSum > fuelLevel2)))))
 	return;
 
@@ -792,7 +792,7 @@ void Paint_messages(void)
     int		last_msg_index = 0;
 
     if (charsPerTick <= 0.0)
-	charsPerTick = (float)charsPerSecond / FPS;
+	charsPerTick = (DFLOAT)charsPerSecond / paintFPS;
 
     top_y = BORDER + messageFont->ascent;
     bot_y = WINSCALE(ext_view_height) - messageFont->descent - BORDER;
@@ -1104,7 +1104,7 @@ static bool Msg_match_fmt(char *msg, char *fmt, msgnames_t *nm)
 void Msg_scan_death(int id)
 {
     deatharray[deathpos].id = id;
-    deatharray[deathpos].deathtime = loops /*36*/;
+    deatharray[deathpos].deathtime = loops;
     deathpos = (deathpos + 1) % 10;
 }
 
@@ -1625,7 +1625,7 @@ void Paint_recording(void)
     int			mb, ck, len;
     long		size;
 
-    if (!recording || (loops % 16) < 8)
+    if (!recording || (loopsSlow % 16) < 8)
 	return;
 
     SET_FG(colors[RED].pixel);

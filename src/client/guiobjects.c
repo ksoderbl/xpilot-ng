@@ -421,7 +421,7 @@ void Gui_paint_paused(int x, int y, int count)
 	rd.fillRectangle(dpy, p_draw, gc,
 		       WINSCALE(x0), WINSCALE(y0),
 		       WINSCALE(2*half_pause_size+1), WINSCALE(2*half_pause_size+1));
-	if (count <= 0 || loops % 10 >= 5) {
+	if (count <= 0 || loopsSlow % 10 >= 5) {
 	    SET_FG(colors[mono?BLACK:WHITE].pixel);
 	    rd.drawRectangle(dpy, p_draw, gc,
 			   WINSCALE(x0 - 1),
@@ -441,7 +441,7 @@ void Gui_paint_paused(int x, int y, int count)
     else {
 	Bitmap_paint(p_draw, BM_PAUSED, WINSCALE(X(x - BLOCK_SZ / 2)),
 		     WINSCALE(Y(y + BLOCK_SZ / 2)),
-		     (count <= 0 || loops % 10 >= 5) ? 1 : 0);
+		     (count <= 0 || loopsSlow % 10 >= 5) ? 1 : 0);
     }
 }
 
@@ -711,7 +711,7 @@ static void Gui_paint_marking_lights(int id, int x, int y, shipobj *ship, int di
 {
     int lcnt;
 
-    if (((loops + id) & 0xF) == 0) {
+    if (((loopsSlow + id) & 0xF) == 0) {
 	for (lcnt = 0; lcnt < ship->num_l_light; lcnt++) {
 	    Rectangle_add(RED,
 			  X(x + ship->l_light[lcnt][dir].x) - 2,
@@ -728,7 +728,7 @@ static void Gui_paint_marking_lights(int id, int x, int y, shipobj *ship, int di
 			X(x + ship->l_light[lcnt][dir].x),
 			Y(y + ship->l_light[lcnt][dir].y)+8);
 	}
-    } else if (((loops + id) & 0xF) == 2) {
+    } else if (((loopsSlow + id) & 0xF) == 2) {
 	for (lcnt = 0; lcnt < ship->num_r_light; lcnt++) {
 	    int rightLightColor = maxColors > 4 ? 4 : BLUE;
 	    Rectangle_add(rightLightColor,
@@ -765,7 +765,7 @@ static void Gui_paint_shields_deflectors(int x, int y, int radius, int shield,
     if (shield) 
 	scolor = ship_color;
     if (deflector)
-	ecolor = loops & 0x02 ? RED : BLUE;
+	ecolor = loopsSlow & 0x02 ? RED : BLUE;
     if (eshield && shield) {
 	if (ecolor != -1) {
 	    scolor = ecolor;

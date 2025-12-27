@@ -1084,7 +1084,7 @@ void Move_segment(move_state_t *ms)
 		if (BIT(World.rules->mode, TEAM_PLAY)
 		    && World.treasures[ms->treasure].team ==
 		       Players[GetInd[ball->owner]]->team) {
-		    long frames = (LONG_MAX - ball->life) / framespeed;
+		    long frames = (LONG_MAX - ball->life) / timeStep;
 		    int ind = GetInd[ball->owner];
 		    DFLOAT tm = ((DFLOAT)frames) / framesPerSecond;
 
@@ -1987,8 +1987,8 @@ void Move_object_old(object *obj)
     if (dist > 2) {
 	int max = ((dist - 2) * BLOCK_SZ) >> 1;
 	if (sqr(max) >= sqr(obj->vel.x) + sqr(obj->vel.y)) {
-	    DFLOAT x = obj->pos.cx + FLOAT_TO_CLICK(obj->vel.x) * framespeed2;
-	    DFLOAT y = obj->pos.cy + FLOAT_TO_CLICK(obj->vel.y) * framespeed2;
+	    DFLOAT x = obj->pos.cx + FLOAT_TO_CLICK(obj->vel.x) * timeStep2;
+	    DFLOAT y = obj->pos.cy + FLOAT_TO_CLICK(obj->vel.y) * timeStep2;
 	    x = WRAP_XCLICK(x);
 	    y = WRAP_YCLICK(y);
 	    Object_position_set_clicks(obj, (int)(x), (int)(y));
@@ -2015,8 +2015,8 @@ void Move_object_old(object *obj)
     ms.pos.x = obj->pos.cx;
     ms.pos.y = obj->pos.cy;
     ms.vel = obj->vel;
-    ms.todo.x = FLOAT_TO_CLICK(ms.vel.x) * framespeed2;
-    ms.todo.y = FLOAT_TO_CLICK(ms.vel.y) * framespeed2;
+    ms.todo.x = FLOAT_TO_CLICK(ms.vel.x) * timeStep2;
+    ms.todo.y = FLOAT_TO_CLICK(ms.vel.y) * timeStep2;
     ms.dir = obj->missile_dir;
     ms.mip = &mi;
 
@@ -2296,8 +2296,8 @@ static void Move_player_old(int ind)
 
     if (BIT(pl->status, PLAYING|PAUSE|GAME_OVER|KILLED) != PLAYING) {
 	if (!BIT(pl->status, KILLED|PAUSE)) {
-	    pos.x = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x) * framespeed2;
-	    pos.y = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y) * framespeed2;
+	    pos.x = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x) * timeStep2;
+	    pos.y = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y) * timeStep2;
 	    pos.x = WRAP_XCLICK(pos.x);
 	    pos.y = WRAP_YCLICK(pos.y);
 	    if (pos.x != pl->pos.cx || pos.y != pl->pos.cy) {
@@ -2336,8 +2336,8 @@ static void Move_player_old(int ind)
     if (dist > 3) {
 	int max = ((dist - 3) * BLOCK_SZ) >> 1;
 	if (max >= pl->velocity) {
-	    pos.x = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x) * framespeed2;
-	    pos.y = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y) * framespeed2;
+	    pos.x = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x) * timeStep2;
+	    pos.y = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y) * timeStep2;
 	    pos.x = WRAP_XCLICK(pos.x);
 	    pos.y = WRAP_YCLICK(pos.y);
 	    Player_position_set_clicks(pl, pos.x, pos.y);
@@ -2358,8 +2358,8 @@ static void Move_player_old(int ind)
     mi.phased = BIT(pl->used, HAS_PHASING_DEVICE);
 
     vel = pl->vel;
-    todo.x = FLOAT_TO_CLICK(vel.x) * framespeed2;
-    todo.y = FLOAT_TO_CLICK(vel.y) * framespeed2;
+    todo.x = FLOAT_TO_CLICK(vel.x) * timeStep2;
+    todo.y = FLOAT_TO_CLICK(vel.y) * timeStep2;
     for (i = 0; i < pl->ship->num_points; i++) {
 	ms[i].pos.x = pl->pos.cx + pl->ship->pts[i][pl->dir].cx;
 	ms[i].pos.y = pl->pos.cy + pl->ship->pts[i][pl->dir].cy;
@@ -6093,8 +6093,8 @@ static void Move_ball_new(object *obj)
     struct collans ans;
     int owner;
 
-    move.delta.x = FLOAT_TO_CLICK(obj->vel.x) * framespeed2;
-    move.delta.y = FLOAT_TO_CLICK(obj->vel.y) * framespeed2;
+    move.delta.x = FLOAT_TO_CLICK(obj->vel.x) * timeStep2;
+    move.delta.y = FLOAT_TO_CLICK(obj->vel.y) * timeStep2;
     obj->extmove.x = move.delta.x;
     obj->extmove.y = move.delta.y;
 
@@ -6201,8 +6201,8 @@ void Move_object_new(object *obj)
 
     move.start.x = obj->pos.cx;
     move.start.y = obj->pos.cy;
-    move.delta.x = FLOAT_TO_CLICK(obj->vel.x * framespeed2);
-    move.delta.y = FLOAT_TO_CLICK(obj->vel.y * framespeed2);
+    move.delta.x = FLOAT_TO_CLICK(obj->vel.x * timeStep2);
+    move.delta.y = FLOAT_TO_CLICK(obj->vel.y * timeStep2);
     obj->extmove.x = move.delta.x;
     obj->extmove.y = move.delta.y;
     while (move.delta.x || move.delta.y) {
@@ -6248,8 +6248,8 @@ static void Move_player_new(int ind)
 
     if (BIT(pl->status, PLAYING|PAUSE|GAME_OVER|KILLED) != PLAYING) {
 	if (!BIT(pl->status, KILLED|PAUSE)) {
-	    pos.x = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x) * framespeed2;
-	    pos.y = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y) * framespeed2;
+	    pos.x = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x) * timeStep2;
+	    pos.y = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y) * timeStep2;
 	    pos.x = WRAP_XCLICK(pos.x);
 	    pos.y = WRAP_YCLICK(pos.y);
 	    if (pos.x != pl->pos.cx || pos.y != pl->pos.cy) {
@@ -6269,8 +6269,8 @@ static void Move_player_new(int ind)
 
     pl->collmode = 1;
 
-    move.delta.x = FLOAT_TO_CLICK(pl->vel.x) * framespeed2;
-    move.delta.y = FLOAT_TO_CLICK(pl->vel.y) * framespeed2;
+    move.delta.x = FLOAT_TO_CLICK(pl->vel.x) * timeStep2;
+    move.delta.y = FLOAT_TO_CLICK(pl->vel.y) * timeStep2;
 #if 0
     pl->extmove.x = move.delta.x;
     pl->extmove.y = move.delta.y;

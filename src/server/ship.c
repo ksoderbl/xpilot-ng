@@ -67,7 +67,7 @@ void Thrust(int ind)
     int			cx = pl->pos.cx + pl->ship->engine[pl->dir].cx; 
     int			cy = pl->pos.cy + pl->ship->engine[pl->dir].cy; 
     int			afterburners;
-    DFLOAT		tot_sparks = (pl->power * 0.15 + 2.5) * framespeed2;
+    DFLOAT		tot_sparks = (pl->power * 0.15 + 2.5) * timeStep2;
     DFLOAT		alt_sparks;
 
     sound_play_sensors(pl->pos.cx, pl->pos.cy, THRUST_SOUND);
@@ -337,14 +337,14 @@ void Update_tanks(pl_fuel_t *ft)
 	    if (!fuel) {
 		if (t
 		    && t != ft->current
-		    && *f >= low_level + REFUEL_RATE * framespeed
-		    && *(f-1) <= TANK_CAP(t-1) - REFUEL_RATE * framespeed) {
+		    && *f >= low_level + REFUEL_RATE * timeStep
+		    && *(f-1) <= TANK_CAP(t-1) - REFUEL_RATE * timeStep) {
 
-		    *f -= REFUEL_RATE * framespeed;
-		    fuel = REFUEL_RATE * framespeed;
+		    *f -= REFUEL_RATE * timeStep;
+		    fuel = REFUEL_RATE * timeStep;
 		} else if (t && *f < low_level) {
-		    *f += REFUEL_RATE * framespeed;
-		    fuel = -REFUEL_RATE * framespeed;
+		    *f += REFUEL_RATE * timeStep;
+		    fuel = -REFUEL_RATE * timeStep;
 		}
 	    }
 	    if (fuel && t == 0) {

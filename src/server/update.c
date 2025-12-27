@@ -58,17 +58,19 @@ char update_version[] = VERSION;
 #define update_object_speed(o_)						\
     if (BIT((o_)->status, GRAVITY)) {					\
 	(o_)->vel.x += ((o_)->acc.x					\
-	  + World.gravity[(o_)->pos.bx][(o_)->pos.by].x) * framespeed2;	\
+	  + World.gravity[(o_)->pos.bx][(o_)->pos.by].x) * timeStep2;	\
 	(o_)->vel.y += ((o_)->acc.y					\
-	  + World.gravity[(o_)->pos.bx][(o_)->pos.by].y) * framespeed2;	\
+	  + World.gravity[(o_)->pos.bx][(o_)->pos.by].y) * timeStep2;	\
     } else {								\
-	(o_)->vel.x += (o_)->acc.x * framespeed2;			\
-	(o_)->vel.y += (o_)->acc.y * framespeed2;			\
+	(o_)->vel.x += (o_)->acc.x * timeStep2;			\
+	(o_)->vel.y += (o_)->acc.y * timeStep2;			\
     }
 
 int	round_delay = 0;	/* delay until start of next round */
 int	round_delay_send = 0;	/* number of frames to send round_delay */
 int	roundtime = -1;		/* time left this round */
+static int time_to_update = TIME_FACT;	/* time before less frequent updates */
+static int do_update_this_frame = 0;	/* less frequent update this frame? */
 
 static char msg[MSG_LEN];
 
@@ -110,8 +112,8 @@ static void Transport_to_home(int ind)
 	t = T - t;
 	m = (4 * t) / (T * T - 2 * t * t);
     }
-    /* kps - this can be optimized by multiplying by framespeed here
-     * and not multiplying by framespeed2 in some places of Move_player
+    /* kps - this can be optimized by multiplying by timeStep here
+     * and not multiplying by timeStep2 in some places of Move_player
      * functions, but it can be confusing.
      */
     m *= TIME_FACT;
@@ -499,6 +501,24 @@ void Update_objects(void)
     object *obj;
 
     /*
+     * Since the amount per frame of some things could get too small to
+     * be represented accurately as an integer, FPSMultiplier makes these
+     * things happen less often (in terms of frames) rather than smaller
+     * amount each time.
+     */
+    do_update_this_frame = 0;
+    if ((time_to_update -= timeStep) <= 0) {
+	do_update_this_frame = 1;
+	time_to_update += TIME_FACT;
+    }
+
+#if 0
+    xpprintf(__FILE__ ": frame loops         : %ld\n", frame_loops);
+    xpprintf(__FILE__ ": update this frame   : %d\n", do_update_this_frame);
+    xpprintf(__FILE__ ": time to next update : %d\n\n", time_to_update);
+#endif
+
+    /*
      * Update robots.
      */
     Robot_update();
@@ -532,7 +552,7 @@ void Update_objects(void)
      * Let the fuel stations regenerate some fuel.
      */
     if (NumPlayers > 0) {
-	DFLOAT fuel = (NumPlayers * framespeed * STATION_REGENERATION);
+	DFLOAT fuel = (NumPlayers * timeStep * STATION_REGENERATION);
 	int frames_per_update = MAX_STATION_FUEL / (fuel * BLOCK_SZ);
 	for (i=0; i<World.NumFuels; i++) {
 	    if (World.fuel[i].fuel == MAX_STATION_FUEL) {
@@ -729,7 +749,7 @@ void Update_objects(void)
 	else if (World.targets[i].damage == TARGET_DAMAGE) {
 	    continue;
 	}
-	World.targets[i].damage += TARGET_REPAIR_PER_FRAME * framespeed;
+	World.targets[i].damage += TARGET_REPAIR_PER_FRAME * timeStep;
 	if (World.targets[i].damage >= TARGET_DAMAGE) {
 	    World.targets[i].damage = TARGET_DAMAGE;
 	}
@@ -770,7 +790,7 @@ void Update_objects(void)
 	    pl->damaged--;
 
 	if (pl->count >= 0) {
-	    pl->count -= framespeed;
+	    pl->count -= timeStep;
 	    if (pl->count > 0) {
 		if (!BIT(pl->status, PLAYING)) {
 		    Transport_to_home(i);
@@ -816,7 +836,7 @@ void Update_objects(void)
 	}
 
 	if (pl->shield_time > 0) {
-	    if ((pl->shield_time -= framespeed) <= 0) {
+	    if ((pl->shield_time -= timeStep) <= 0) {
 		pl->shield_time = 0;
 		if (!BIT(pl->used, HAS_EMERGENCY_SHIELD)) {
 		    CLR_BIT(pl->used, HAS_SHIELD);
@@ -935,12 +955,8 @@ void Update_objects(void)
 
 	/*
 	 * Compute energy drainage
-	 *
-	 * Since the amount per frame could get too small to be represented
-	 * accurately as an integer, FPSMultiplier makes this happen less
-	 * often (in terms of frames) rather than smaller amount each time.
 	 */
-	if (frame_loops % FPSMultiplier == 0) {
+	if (do_update_this_frame) {
 	    if (BIT(pl->used, HAS_SHIELD))
 		Add_fuel(&(pl->fuel), (long)ED_SHIELD);
 
@@ -998,11 +1014,11 @@ void Update_objects(void)
 		int ct = pl->fuel.current;
 
 		do {
-		    if (World.fuel[pl->fs].fuel > REFUEL_RATE * framespeed) {
-			World.fuel[pl->fs].fuel -= REFUEL_RATE * framespeed;
+		    if (World.fuel[pl->fs].fuel > REFUEL_RATE * timeStep) {
+			World.fuel[pl->fs].fuel -= REFUEL_RATE * timeStep;
 			World.fuel[pl->fs].conn_mask = 0;
 			World.fuel[pl->fs].last_change = frame_loops;
-			Add_fuel(&(pl->fuel), REFUEL_RATE * framespeed);
+			Add_fuel(&(pl->fuel), REFUEL_RATE * timeStep);
 		    } else {
 			Add_fuel(&(pl->fuel), World.fuel[pl->fs].fuel);
 			World.fuel[pl->fs].fuel = 0;
@@ -1036,11 +1052,11 @@ void Update_objects(void)
 
 		do {
 		    if (pl->fuel.tank[pl->fuel.current] >
-			REFUEL_RATE * framespeed) {
+			REFUEL_RATE * timeStep) {
 			targ->damage += TARGET_FUEL_REPAIR_PER_FRAME;
 			targ->conn_mask = 0;
 			targ->last_change = frame_loops;
-			Add_fuel(&(pl->fuel), -REFUEL_RATE * framespeed);
+			Add_fuel(&(pl->fuel), -REFUEL_RATE * timeStep);
 			if (targ->damage > TARGET_DAMAGE) {
 			    targ->damage = TARGET_DAMAGE;
 			    break;
@@ -1061,7 +1077,7 @@ void Update_objects(void)
 	    CLR_BIT(pl->used, HAS_SHIELD|HAS_CLOAKING_DEVICE|HAS_DEFLECTOR);
 	    CLR_BIT(pl->status, THRUSTING);
 	}
-	if (pl->fuel.sum > (pl->fuel.max - REFUEL_RATE * framespeed))
+	if (pl->fuel.sum > (pl->fuel.max - REFUEL_RATE * timeStep))
 	    CLR_BIT(pl->used, HAS_REFUEL);
 
 	/*
@@ -1082,7 +1098,7 @@ void Update_objects(void)
 	    pl->acc.x = power * tcos(pl->dir) / inert;
 	    pl->acc.y = power * tsin(pl->dir) / inert;
 	    /* Decrement fuel */
-	    if (frame_loops % FPSMultiplier == 0)
+	    if (do_update_this_frame)
 		Add_fuel(&(pl->fuel), (long)(-f * FUEL_SCALE_FACT));
 	} else {
 	    pl->acc.x = pl->acc.y = 0.0;
@@ -1360,7 +1376,7 @@ void Update_objects(void)
      * Kill shots that ought to be dead.
      */
     for (i = NumObjs - 1; i >= 0; i--)
-	if ((Obj[i]->life -= framespeed) <= 0)
+	if ((Obj[i]->life -= timeStep) <= 0)
 	    Delete_shot(i);
 
     /*

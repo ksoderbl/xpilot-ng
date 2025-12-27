@@ -348,9 +348,9 @@ extern char		*dataURL;
 extern int		clientPortStart;
 extern int		clientPortEnd;
 extern char		*recordFileName;
-extern int		FPSMultiplier;
-extern int		framespeed;
-extern DFLOAT		framespeed2;
+extern DFLOAT		FPSMultiplier;
+extern int		timeStep;
+extern DFLOAT		timeStep2;
 extern char		*playerPasswordsFileName;
 extern int		playerPasswordsFileSizeLimit;
  

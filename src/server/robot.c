@@ -1127,7 +1127,7 @@ void Robot_update(void)
 	     && World.teams[robotTeam].NumMembers >=
 		World.teams[robotTeam].NumBases)) {
 
-	new_robot_delay += framespeed;
+	new_robot_delay += timeStep;
 	if (new_robot_delay >= ROBOT_CREATE_DELAY) {
 	    Robot_create();
 	    new_robot_delay = 0;

@@ -242,7 +242,7 @@ void Pause_player(int ind, int onoff)
     if (onoff != 0 && !BIT(pl->status, PAUSE)) { /* Turn pause mode on */
 	if (pl->team != TEAM_NOT_SET)
 	    World.teams[pl->team].SwapperId = -1;
-	pl->count = 10 * TIME_FACT * FPS / FPSMultiplier;
+	pl->count = (int)(10 * TIME_FACT * FPS / FPSMultiplier);
 	pl->updateVisibility = 1;
 	CLR_BIT(pl->status, SELF_DESTRUCT|PLAYING);
 	SET_BIT(pl->status, PAUSE);

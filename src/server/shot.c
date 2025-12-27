@@ -1424,9 +1424,9 @@ void Fire_laser(int ind)
 	} else {
 	    /* kps - ng does not want to add the velocity here */
 	    cx = pl->pos.cx + pl->ship->m_gun[pl->dir].cx
-		+ PIXEL_TO_CLICK(pl->vel.x) * framespeed2;
+		+ PIXEL_TO_CLICK(pl->vel.x) * timeStep2;
 	    cy = pl->pos.cy + pl->ship->m_gun[pl->dir].cy
-		+ PIXEL_TO_CLICK(pl->vel.y) * framespeed2;
+		+ PIXEL_TO_CLICK(pl->vel.y) * timeStep2;
 	    cx = WRAP_XCLICK(cx);
 	    cy = WRAP_YCLICK(cy);
 	    Fire_general_laser(ind, pl->team, cx, cy, pl->dir, pl->mods);
@@ -1465,8 +1465,8 @@ void Fire_general_laser(int ind, unsigned short team, int cx, int cy,
     pulse->life = life;
     pulse->mods = mods;
     pulse->refl = false;
-    pulse->pos.cx = cx - (int)(PULSE_SPEED * tcos(dir) * framespeed2);
-    pulse->pos.cy = cy - (int)(PULSE_SPEED * tsin(dir) * framespeed2);
+    pulse->pos.cx = cx - (int)(PULSE_SPEED * tcos(dir) * timeStep2);
+    pulse->pos.cy = cy - (int)(PULSE_SPEED * tsin(dir) * timeStep2);
     NumPulses++;
     if (pl)
 	pl->num_pulses++;
@@ -1577,13 +1577,13 @@ void Move_ball(int ind)
 
     /* compute accelleration for player, assume t = 1 */
     accell = (force + damping) / pl->mass;
-    pl->vel.x += D.x * accell * framespeed2;
-    pl->vel.y += D.y * accell * framespeed2;
+    pl->vel.x += D.x * accell * timeStep2;
+    pl->vel.y += D.y * accell * timeStep2;
 
     /* compute accelleration for ball, assume t = 1 */
     accell = (force + damping) / ball->mass;
-    ball->vel.x += -D.x * accell * framespeed2;
-    ball->vel.y += -D.y * accell * framespeed2;
+    ball->vel.x += -D.x * accell * timeStep2;
+    ball->vel.y += -D.y * accell * timeStep2;
 }
 
 

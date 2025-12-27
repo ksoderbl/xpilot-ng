@@ -363,7 +363,7 @@ void Ball_hits_goal(ballobject *ball, int group)
      * The team should be punished.
      */
     sprintf(msg," < The ball was loose for %ld frames >",
-	    (LONG_MAX - ball->life) / framespeed);
+	    (LONG_MAX - ball->life) / timeStep);
     Set_message(msg);
     if (Punish_team_new(GetInd[ball->owner], ball->treasure,
 			ball->pos.cx, ball->pos.cy))

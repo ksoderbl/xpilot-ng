@@ -454,7 +454,7 @@ void Laser_pulse_collision(void)
 	pulse = Pulses[p];
 
 	/* check for end of pulse life */
-	if ((pulse->life -= framespeed) < 0 || pulse->len < PULSE_LENGTH) {
+	if ((pulse->life -= timeStep) < 0 || pulse->len < PULSE_LENGTH) {
 	    Laser_pulse_destroy_one(p);
 	    continue;
 	}
@@ -467,8 +467,8 @@ void Laser_pulse_collision(void)
 	    pl = NULL;
 	}
 
-	pulse->pos.cx += tcos(pulse->dir) * PULSE_SPEED * framespeed2;
-	pulse->pos.cy += tsin(pulse->dir) * PULSE_SPEED * framespeed2;
+	pulse->pos.cx += tcos(pulse->dir) * PULSE_SPEED * timeStep2;
+	pulse->pos.cy += tsin(pulse->dir) * PULSE_SPEED * timeStep2;
 	if (BIT(World.rules->mode, WRAP_PLAY)) {
 	    if (pulse->pos.cx < 0) {
 		pulse->pos.cx += World.cwidth;

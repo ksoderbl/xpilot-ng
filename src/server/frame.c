@@ -298,6 +298,7 @@ static void Frame_radar_buffer_send(int conn)
     int			i;
     int			dest;
     int			tmp;
+    int			ver;
     radar_t		*p;
     const int		radar_width = 256;
     int			radar_height;
@@ -336,7 +337,8 @@ static void Frame_radar_buffer_send(int conn)
 	}
     }
 
-    if (Get_conn_version(conn) <= 0x4400) {
+    ver = Get_conn_version(conn);
+    if (ver <= 0x4400 || (ver >= 0x4F00 && ver < 0x4F11)) {
 	for (i = 0; i < num_radar; i++) {
 	    p = &radar_ptr[radar_shuffle[i]];
 	    radar_x = (radar_width * p->x) / World.width;
@@ -1304,7 +1306,7 @@ void Frame_update(void)
     static bool		game_over_called = false;
 
     frame_loops++;
-    frame_time += framespeed;
+    frame_time += timeStep;
     if (frame_time > ULONG_MAX - TIME_FACT) {
 	frame_loops = 0; /* This is likely to cause visible problems, but */
 	frame_time = 0;  /* maybe nothing fatal. Might happen after a ~month.*/
