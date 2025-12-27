@@ -386,6 +386,7 @@ struct xui {
 static char small_font[] = "-*-helvetica-medium-r-*--14-*-*-*-*-*-iso8859-1";
 static char small_bold_font[] =
 	"-*-helvetica-bold-r-*--14-*-*-*-*-*-iso8859-1";
+static char alternative_font[] = "fixed";
 
 static int		Argc;
 static char		**Argv;
@@ -1359,8 +1360,13 @@ static XFontStruct *loadQueryFont(const char *fontName, GC gc)
     XFontStruct		*font;
 
     if ((font = XLoadQueryFont(dpy, fontName)) == NULL) {
-	fprintf(stderr, "Can't load font \"%s\".\n", fontName);
-	font = XQueryFont(dpy, XGContextFromGC(gc));
+	fprintf(stderr, "Can't load font \"%s\", using \"%s\" instead.\n",
+		fontName, alternative_font);
+	if ((font = XLoadQueryFont(dpy, alternative_font)) == NULL) {
+	    fprintf(stderr, "Can't load alternative font \"%s\".\n",
+		    alternative_font);
+	    font = XQueryFont(dpy, XGContextFromGC(gc));
+	}
     }
     return font;
 }
@@ -3293,8 +3299,8 @@ static void TestInput(struct xprc *rc)
 
 static void usage(void)
 {
-    fprintf(stderr, "Usage: %s [options] filename\n", *Argv);
-    fprintf(stderr,
+    printf("Usage: %s [options] filename\n", *Argv);
+    printf(
 "    If filename is a dash - then standard input is used.\n"
 "    Valid options are:\n"
 "        -scale \"factor\"\n"
@@ -3308,13 +3314,14 @@ static void usage(void)
 "        -fps \"value\", -FPS \"value\"\n"
 "               Set the number of frames per second used for replay and\n"
 "               recording.\n"
-"        -loop\n"
-"               Loop after playing.\n"
 "        -play\n"
 "               Start playing immediately.\n"
+"        -loop\n"
+"               Loop after playing.\n"
 "        -debug\n"
 "        -verbose\n"
 "        -help\n"
+"        -version\n"
 "    In addition to the pushbuttons you can use the following keys:\n"
 "        f  -  move forwards to the next frame.\n"
 "        b  -  move backwards to the next frame.\n"
@@ -3326,7 +3333,13 @@ static void usage(void)
 "        &  -  save the marked frames in XPilot Recording format.\n"
 "        q  -  quit the program.\n"
     );
-    exit(2);
+    exit(0);
+}
+
+static void version(void)
+{
+    printf("xpilot-ng-replay %s\n", VERSION);
+    exit(0);
 }
 
 int main(int argc, char **argv)
@@ -3380,12 +3393,14 @@ int main(int argc, char **argv)
 	    currentSpeed = 1;
 	else if (!strcmp(argv[argi], "-loop"))
 	    loopAtEnd = 1;
+	else if (!strcmp(argv[argi], "-version") ||
+		 !strcmp(argv[argi], "--version"))
+	    version();
 	else {
 	    if (!strncmp(argv[argi], "-h", 2) ||
 		!strncmp(argv[argi], "--h", 3) ||
-		!strcmp(argv[argi], "-?")) {
+		!strcmp(argv[argi], "-?"))
 		usage();
-	    }
 	    else if (argi < argc - 1) {
 		fprintf(stderr, "%s: Unknown option \"%s\"\n",
 			Argv[0], argv[argi]);

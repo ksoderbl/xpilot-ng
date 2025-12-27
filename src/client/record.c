@@ -1,5 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,10 +20,10 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "xpclient.h"
+#include "xpclient_x11.h"
 
 char record_version[] = VERSION;
 
@@ -66,7 +68,8 @@ extern void paintItemSymbol(int type, Drawable drawable, GC mygc,
 static void Dummy_paintItemSymbol(int type, Drawable drawable,
 				  GC mygc, int x, int y, int color)
 {
-    (void)type; (void)drawable; (void)mygc; (void)x; (void)y; (void)color;
+    UNUSED_PARAM(type); UNUSED_PARAM(drawable); UNUSED_PARAM(mygc);
+    UNUSED_PARAM(x); UNUSED_PARAM(y); UNUSED_PARAM(color);
 }
 #endif
 
@@ -152,9 +155,9 @@ static void RWriteHeader(void)
     putc('\n', recordFP);
 
     /* Write player's nick, login, host, server, FPS and the date. */
-    RWriteString(nickname);
-    RWriteString(realname);
-    RWriteString(hostname);
+    RWriteString(connectParam.nick_name);
+    RWriteString(connectParam.user_name);
+    RWriteString(connectParam.host_name);
     RWriteString(servername);
 
     /*
@@ -224,6 +227,33 @@ static int RGetPixelIndex(unsigned long pixel)
     return WHITE;
 }
 
+#ifndef _WINDOWS
+static XImage *Image_from_pixmap(Pixmap pixmap)
+{
+    XImage		*img;
+    Window		rootw;
+    int			x, y;
+    unsigned		width, height, border_width, depth;
+
+    if (!XGetGeometry(dpy, pixmap, &rootw,
+		      &x, &y,
+		      &width, &height,
+		      &border_width, &depth)) {
+	error("Can't get pixmap geometry");
+	return NULL;
+    }
+    img = XGetImage(dpy, pixmap,
+		    0, 0,
+		    width, height,
+		    AllPlanes, ZPixmap);
+    if (!img) {
+	error("Can't get Image from Pixmap");
+	return NULL;
+    }
+    return img;
+}
+#endif
+
 static void RWriteTile(Pixmap tile)
 {
 #ifndef _WINDOWS
@@ -260,7 +290,7 @@ static void RWriteTile(Pixmap tile)
     lptr->tile_id = next_tile_id;
     list = lptr;
 
-    if (!(img = xpm_image_from_pixmap(tile))) {
+    if (!(img = Image_from_pixmap(tile))) {
 	RWriteByte(RC_TILE);
 	RWriteByte(0);
 	lptr->tile_id = 0;
@@ -455,9 +485,8 @@ static void RWriteGC(GC gc, unsigned long req_mask)
 	    RWriteLong(values.ts_x_origin);
 	if (write_mask & GCTileStipYOrigin)
 	    RWriteLong(values.ts_y_origin);
-	if (write_mask & GCTile) {
+	if (write_mask & GCTile)
 	    RWriteTile(values.tile);
-	}
     }
 }
 
@@ -642,7 +671,7 @@ static void RPaintItemSymbol(int type, Drawable drawable, GC mygc,
 #ifdef _WINDOWS
     paintItemSymbol(type, drawable, mygc, x, y, color);
 #else
-    (void)mygc; (void)color;
+    UNUSED_PARAM(mygc); UNUSED_PARAM(color);
 #endif
     if (drawable == drawPixmap) {
 	putc(RC_PAINTITEMSYMBOL, recordFP);
@@ -825,12 +854,12 @@ void Record_toggle(void)
 {
 #if !(defined(_WINDOWS) && defined(PENS_OF_PLENTY))
     /* No recording available with PEN_OF_PLENTY under Windows. */
-    if (record_filename != NULL) {
+    if (record_filename != NULL && strlen(record_filename) > 0) {
 	if (!record_start) {
 	    record_start = true;
 	    if (!recordFP) {
 		if ((recordFP = fopen(record_filename, "w")) == NULL) {
-		    perror("Unable to open record file");
+		    warn("%s: %s", record_filename, strerror(errno));
 		    free(record_filename);
 		    record_filename = NULL;
 		    record_start = false;
@@ -874,9 +903,48 @@ void Record_cleanup(void)
  * Store the name of the file where the user
  * wants recordings to be written to.
  */
-void Record_init(char *filename)
+void Record_init(const char *filename)
 {
     rd = Xdrawing;
-    if (filename != NULL && filename[0] != '\0')
-	record_filename = xp_strdup(filename);
+    assert(filename != NULL);
+    if (record_filename)
+	xp_free(record_filename);
+    record_filename = xp_safe_strdup(filename);
+}
+
+
+static bool setRecordFile(xp_option_t *opt, const char *value)
+{
+    UNUSED_PARAM(opt);
+
+    assert(value);
+    /* Don't allow changing record file after file has been opened. */
+    if (recordFP != NULL)
+	return false;
+    Record_init(value);
+    return true;
+}
+
+static const char *getRecordFile(xp_option_t *opt)
+{
+    UNUSED_PARAM(opt);
+    return record_filename;
+}
+
+xp_option_t record_options[] = {
+
+    XP_STRING_OPTION(
+	"recordFile",
+	"",
+	NULL, 0,
+	setRecordFile, NULL, getRecordFile,
+	XP_OPTFLAG_DEFAULT,
+	"An optional file where a recording of a game can be made.\n"
+	"If this file is undefined then recording isn't possible.\n"),
+
+};
+
+void Store_record_options(void)
+{
+    STORE_OPTIONS(record_options);
 }

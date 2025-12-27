@@ -1,5 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,9 +20,8 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
-
 
 /*
  * This file deals with low-level object structure manipulations.
@@ -38,7 +39,7 @@ int			ObjCount = 0;
 int			NumPulses = 0;
 int			NumEcms = 0;
 int			NumTransporters = 0;
-object			*Obj[MAX_TOTAL_SHOTS];
+object_t		*Obj[MAX_TOTAL_SHOTS];
 ecm_t			*Ecms[MAX_TOTAL_ECMS];
 trans_t			*Transporters[MAX_TOTAL_TRANSPORTERS];
 
@@ -53,9 +54,9 @@ static void Object_decr_count(void)
     ObjCount--;
 }
 
-object *Object_allocate(void)
+object_t *Object_allocate(void)
 {
-    object	*obj = OBJ_PTR(NULL);
+    object_t	*obj = OBJ_PTR(NULL);
 
     if (ObjCount < MAX_TOTAL_SHOTS) {
 	obj = Obj[ObjCount];
@@ -71,7 +72,7 @@ object *Object_allocate(void)
 void Object_free_ind(int ind)
 {
     if ((0 <= ind) && (ind < ObjCount) && (ObjCount <= MAX_TOTAL_SHOTS)) {
-	object *obj = Obj[ind];
+	object_t *obj = Obj[ind];
 	Object_decr_count();
 	Obj[ind] = Obj[ObjCount];
 	Obj[ObjCount] = obj;
@@ -80,7 +81,7 @@ void Object_free_ind(int ind)
 	     ind, ObjCount, MAX_TOTAL_SHOTS);
 }
 
-void Object_free_ptr(object *obj)
+void Object_free_ptr(object_t *obj)
 {
     int		i;
 
@@ -94,14 +95,14 @@ void Object_free_ptr(object *obj)
 	warn("Could NOT free object!");
 }
 
-static anyobject *objArray;
+static anyobject_t *objArray;
 
-void Alloc_shots(int number)
+void Alloc_shots(world_t *world, int number)
 {
-    anyobject		*x;
+    anyobject_t		*x;
     int			i;
 
-    x = (anyobject *) calloc(number, sizeof(anyobject));
+    x = (anyobject_t *) calloc((size_t)number, sizeof(anyobject_t));
     if (!x) {
 	error("Not enough memory for shots.");
 	exit(1);
@@ -111,22 +112,20 @@ void Alloc_shots(int number)
     for (i = 0; i < number; i++) {
 	Obj[i] = &(x->obj);
 	MINE_PTR(Obj[i])->owner = NO_ID;
-	Cell_init_object(Obj[i]);
+	Cell_init_object(world, Obj[i]);
 	x++;
     }
 }
 
-void Free_shots(void)
+void Free_shots(world_t *world)
 {
-    if (objArray != NULL) {
-	free(objArray);
-	objArray = NULL;
-    }
+    UNUSED_PARAM(world);
+    XFREE(objArray);
 }
 
 
 /* kps debug hack */
-const char *Object_typename(object *obj)
+const char *Object_typename(object_t *obj)
 {
     int type;
 

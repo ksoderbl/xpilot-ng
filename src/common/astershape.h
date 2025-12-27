@@ -1,5 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,7 +20,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef ASTERSHAPE_H
@@ -38,6 +40,6 @@
       {-10,0}, {-8, 7}, {-4, 9}, { 0,10}, { 5, 7}, { 6, 3}, \
       {10, 0}, { 9,-4}, { 7,-7}, {0,-10}, {-6,-9}, {-9,-7}
 
-extern position *asteroidShapes[NUM_ASTEROID_SHAPES][NUM_ASTEROID_POINTS];
+extern position_t *asteroidShapes[NUM_ASTEROID_SHAPES][NUM_ASTEROID_POINTS];
 
 #endif

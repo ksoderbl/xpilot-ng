@@ -1,5 +1,11 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 2000-2004 by
+ *
+ *      Uoti Urpala          <uau@users.sourceforge.net>
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,7 +24,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpserver.h"
@@ -92,13 +98,16 @@ static void catch_timer(int signum)
 {
     static unsigned int		timer_count = 0;
 
+    UNUSED_PARAM(signum);
     timer_count += FPS;
-    if (timer_count >= (unsigned)timerResolution) {
-	timer_count -= timerResolution;
+    if (timer_count >= (unsigned)options.timerResolution) {
+	timer_count -= options.timerResolution;
 	timer_ticks++;
-	if (timer_count >= (unsigned)timerResolution)
-	    /* Don't let timer_count grow boundlessly with timerResolution 0
-	     * now that timerResolution can be changed at runtime. */
+	if (timer_count >= (unsigned)options.timerResolution)
+	    /*
+	     * Don't let timer_count grow boundlessly with timer resolution 0
+	     * now that timer resolution can be changed at runtime.
+	     */
 	    timer_count = 0;
     }
 }
@@ -560,10 +569,10 @@ void sched(void)
 	tv.tv_sec = 0;
 	/* KOERBER */
 	/*	tv.tv_usec = 1000000 / (3 * timer_freq + 1); */
-	tv.tv_usec = 1000000 / (10 * timer_freq + 1); 
+	tv.tv_usec = 1000000 / (10 * timer_freq + 1);
     }
     else {
-	/* slow I/O checks are possible here... (2 times per second) */ ; 
+	/* slow I/O checks are possible here... (2 times per second) */
 	tv.tv_sec = 0;
 	tv.tv_usec = 500000;
     }

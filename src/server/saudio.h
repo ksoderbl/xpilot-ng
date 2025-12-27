@@ -1,5 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,45 +20,24 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
+
 /* This piece of code was provided by Greg Renda (greg@ncd.com). */
 
 #ifndef SAUDIO_H
 #define SAUDIO_H
 
-#if defined(SERVER_SOUND) && defined(SERVER) && !defined(SOUND)
-/* Enable only sound support in the server, not in the client. */
-#define SOUND	1
-#endif
-
 #define SDBG(x)	/*#x*/
-
-#ifndef SOUND
-
-/*
- * Define like this to avoid having to put #ifdef SOUND all over the place.
- */
-#define sound_player_init(player)		((player)->audio = NULL)
-#define sound_player_on(player, on)
-#define sound_play_player(player, index)
-#define sound_play_all(index)
-#define sound_play_sensors(pos, index)
-#define sound_play_queued(player)
-#define sound_close(player)
-
-#else						/* SOUND */
 
 #include "audio.h"
 
-int		sound_player_init(player *);
-void		sound_player_on(player *pl, int on);
-void		sound_play_player(player *, int);
+int		sound_player_init(player_t *);
+void		sound_player_on(player_t *pl, int on);
+void		sound_play_player(player_t *, int);
 void		sound_play_all(int);
-void		sound_play_sensors(clpos, int);
-void		sound_play_queued(player * pl);
-void		sound_close(player * pl);
-
-#endif						/* SOUND */
+void		sound_play_sensors(clpos_t, int);
+void		sound_play_queued(player_t * pl);
+void		sound_close(player_t * pl);
 
 #endif						/* SAUDIO_H */

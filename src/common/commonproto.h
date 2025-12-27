@@ -1,5 +1,7 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,7 +20,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef	COMMONPROTO_H
@@ -33,8 +35,8 @@ extern unsigned int randomMT(void);
 extern double rfrac(void);
 extern int mod(int x, int y);
 extern void Make_table(void);
-extern int ON(char *optval);
-extern int OFF(char *optval);
+extern int ON(const char *optval);
+extern int OFF(const char *optval);
 extern double findDir(double x, double y);
 
 /* strdup.c */

@@ -1,10 +1,16 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2003 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2004 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
  *      Bert Gijsbers        <bert@xpilot.org>
  *      Dick Balaska         <dick@xpilot.org>
+ *      Uoti Urpala          <uau@users.sourceforge.net>
+ *      Juha Lindström       <juhal@users.sourceforge.net>
+ *      Kristian Söderblom   <kps@users.sourceforge.net>
+ *      Erik Andersson       <maximan@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,28 +24,17 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef	VERSION_H
 #define	VERSION_H
 
-#if defined(__hpux)
-#   pragma COPYRIGHT_DATE	"1991-2003"
-#   pragma COPYRIGHT		"Bjørn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska & Uoti Urpala"
-#   pragma VERSIONID		"XPilot 4.5.4X2"
-#endif
-
+#define TITLE			"XPilotNG 4.6.1"
 #ifndef VERSION
-#  define VERSION			"4.5.4X2"
+#  define VERSION		"4.6.1"
 #endif
-#ifdef	_WINDOWS
-#define	TITLE			"4.5.4X2-NT13"
-#define	VERSION_WINDOWS	"13"
-#else
-#define TITLE			"XPilot 4.5.4X2"
-#endif
-#define AUTHORS			"Bjørn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska & Uoti Urpala"
-#define COPYRIGHT		"Copyright © 1991-2003 by Bjørn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska & Uoti Urpala"
+#define AUTHORS			"Bjørn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska, Uoti Urpala, Juha Lindström, Kristian Söderblom and Erik Andersson"
+#define COPYRIGHT		"Copyright © 1991-2004 by Bjørn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska, Uoti Urpala, Juha Lindström, Kristian Söderblom and Erik Andersson"
 
 #endif /* VERSION_H */

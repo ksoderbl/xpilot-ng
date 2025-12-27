@@ -1,10 +1,10 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
  *
- *      Bjørn Stabell        <bjoern@xpilot.org>
- *      Ken Ronny Schouten   <ken@xpilot.org>
- *      Bert Gijsbers        <bert@xpilot.org>
- *      Dick Balaska         <dick@xpilot.org>
+ * Copyright (C) 2000-2004 by
+ *
+ *      Uoti Urpala          <uau@users.sourceforge.net>
+ *      Kristian Söderblom   <kps@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,19 +18,16 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpserver.h"
 
 char polygon_version[] = VERSION;
 
-
-
 /* polygon map format related stuff */
 int num_edges, max_edges;
 extern int num_polys;
-extern int num_groups;
 
 int *edgeptr;
 int *estyleptr;
@@ -46,41 +43,32 @@ int num_pstyles, num_bstyles, num_estyles = 1; /* "Internal" edgestyle */
 int max_bases, max_balls, max_polys,max_echanges; /* !@# make static after testing done */
 static int current_estyle, current_group, is_decor;
 
-#define STORE(T,P,N,M,V)						\
-    if (N >= M && ((M <= 0)						\
-	? (P = (T *) malloc((M = 1) * sizeof(*P)))			\
-	: (P = (T *) realloc(P, (M += M) * sizeof(*P)))) == NULL) {	\
-	warn("No memory");						\
-	exit(1);							\
-    } else								\
-	(P[N++] = V)
-/* !@# add a final realloc later to free wasted memory */
-
-
-static void Check_groupcount(void)
-{
-    if (current_group == 1000) {
-	warn("Server didn't allocate enough space for groups");
-	exit(1);
-    }
-}
-
-static int Create_group(int type, int team, int hitmask,
-			bool (*hitfunc)(struct group *gp, struct move *move),
+static int Create_group(int type, int team, hitmask_t hitmask,
+			bool (*hitfunc)(group_t *gp, move_t *move),
 			int mapobj_ind)
 {
+    group_t gp;
+
+    gp.type = type;
+    gp.team = team;
+    gp.hitmask = hitmask;
+    gp.hitfunc = hitfunc;
+    gp.mapobj_ind = mapobj_ind;
+
     if (current_group != 0) {
 	warn("Broken map: map object defined inside another.");
 	exit(1);
     }
-    current_group = ++num_groups;
-    Check_groupcount();
-    groups[current_group].type = type;
-    groups[current_group].team = team;
-    groups[current_group].hitmask = hitmask;
-    groups[current_group].hitfunc = hitfunc;
-    groups[current_group].mapobj_ind = mapobj_ind;
-    return current_group;    
+
+    current_group = num_groups;
+    STORE(group_t, groups, num_groups, max_groups, gp);
+    return current_group;
+}
+
+void Groups_init(void)
+{
+    Create_group(FILLED, TEAM_NOT_SET, 0, NULL, NO_IND);
+    current_group = 0;
 }
 
 void P_edgestyle(const char *id, int width, int color, int style)
@@ -134,16 +122,17 @@ void P_bmpstyle(const char *id, const char *filename, int flags)
 }
 
 /* current vertex */
-static clpos P_cv;
+static clpos_t P_cv;
 
-void P_start_polygon(clpos pos, int style)
+void P_start_polygon(clpos_t pos, int style)
 {
     poly_t t;
+    world_t *world = &World;
 
-    if (!INSIDE_MAP(pos.cx, pos.cy)) {
+    if (!World_contains_clpos(world, pos)) {
 	warn("Polygon start point (%d, %d) is not inside the map"
 	     "(0 <= x < %d, 0 <= y < %d)",
-	     pos.cx, pos.cy, World.cwidth, World.cheight);
+	     pos.cx, pos.cy, world->cwidth, world->cheight);
 	exit(1);
     }
     if (style == -1) {
@@ -164,12 +153,17 @@ void P_start_polygon(clpos pos, int style)
 }
 
 
-void P_offset(clpos offset, int edgestyle)
+void P_offset(clpos_t offset, int edgestyle)
 {
     int i, offcx = offset.cx, offcy = offset.cy;
 
     if (offcx == 0 && offcy == 0) {
-	warn("Edge with zero length");
+	/*
+	 * Don't warn about zero length edges for xp maps, since
+	 * the conversion creates such edges.
+	 */
+	if (is_polygon_map)
+	    warn("Edge with zero length");
 	if (edgestyle != -1 && edgestyle != current_estyle) {
 	    warn("Refusing to change edgestyle with zero-length edge");
 	    exit(1);
@@ -196,9 +190,9 @@ void P_offset(clpos offset, int edgestyle)
     }
 }
 
-void P_vertex(clpos pos, int edgestyle)
+void P_vertex(clpos_t pos, int edgestyle)
 {
-    clpos offset;
+    clpos_t offset;
 
     offset.cx = pos.cx - P_cv.cx;
     offset.cy = pos.cy - P_cv.cy;
@@ -249,7 +243,8 @@ void P_end_balltarget(void)
 
 int P_start_target(int target_ind)
 {
-    target_t *targ = Targets(target_ind);
+    world_t *world = &World;
+    target_t *targ = Targets(world, target_ind);
 
     targ->group = Create_group(TARGET,
 			       targ->team,
@@ -266,7 +261,8 @@ void P_end_target(void)
 
 int P_start_cannon(int cannon_ind)
 {
-    cannon_t *cannon = Cannons(cannon_ind);
+    world_t *world = &World;
+    cannon_t *cannon = Cannons(world, cannon_ind);
 
     cannon->group = Create_group(CANNON,
 				 cannon->team,
@@ -283,13 +279,15 @@ void P_end_cannon(void)
 
 int P_start_wormhole(int wormhole_ind)
 {
-    wormhole_t *wormhole = Wormholes(wormhole_ind);
+    world_t *world = &World;
+    wormhole_t *wormhole = Wormholes(world, wormhole_ind);
 
-    return Create_group(WORMHOLE,
-			TEAM_NOT_SET,
-			Wormhole_hitmask(wormhole),
-			Wormhole_hitfunc,
-			wormhole_ind);
+    wormhole->group = Create_group(WORMHOLE,
+				   TEAM_NOT_SET,
+				   Wormhole_hitmask(wormhole),
+				   Wormhole_hitfunc,
+				   wormhole_ind);
+    return wormhole->group;
 }
 
 void P_end_wormhole(void)
@@ -297,16 +295,20 @@ void P_end_wormhole(void)
     current_group = 0;
 }
 
-int P_start_frictionarea(void)
+int P_start_friction_area(int fa_ind)
 {
-    return Create_group(FRICTION,
-			TEAM_NOT_SET,
-			ALL_BITS,
-			NULL,
-			NO_IND);
+    world_t *world = &World;
+    friction_area_t *fa = FrictionAreas(world, fa_ind);
+
+    fa->group = Create_group(FRICTION,
+			     TEAM_NOT_SET,
+			     0,
+			     Friction_area_hitfunc,
+			     fa_ind);
+    return fa->group;
 }
 
-void P_end_frictionarea(void)
+void P_end_friction_area(void)
 {
     current_group = 0;
 }
@@ -359,17 +361,14 @@ int P_get_poly_id(const char *s)
 /*
  * Call given function f with group map object pointer as argument for
  * all groups of grouptype 'type'.
- *
- * kps - which group numbers are ok ???
- * Is it 1 to num_groups ???
  */
 #if 0
 void P_grouphack(int type, void (*f)(int, void *))
 {
     int group;
 
-    for (group = 0; group <= num_groups; group++) {
-	struct group *gp = groupptr_by_id(group);
+    for (group = 0; group < num_groups; group++) {
+	group_t *gp = groupptr_by_id(group);
 
 	if (gp->type == type)
 	    (*f)(group, gp->mapobj);
@@ -377,9 +376,9 @@ void P_grouphack(int type, void (*f)(int, void *))
 }
 #endif
 
-void P_set_hitmask(int group, int hitmask)
+void P_set_hitmask(int group, hitmask_t hitmask)
 {
     assert(group >= 0);
-    assert(group <= num_groups);
+    assert(group < num_groups);
     groups[group].hitmask = hitmask;
 }

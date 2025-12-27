@@ -1,10 +1,14 @@
 /*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
  *      Bert Gijsbers        <bert@xpilot.org>
  *      Dick Balaska         <dick@xpilot.org>
+ *
+ * Copyright (C) 2003-2004 Kristian Söderblom <kps@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,49 +22,173 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "xpclient.h"
+#include "xpclient_x11.h"
 
 char guiobjects_version[] = VERSION;
 
 static bool texturedShips = false; /* Turned this off because the images drawn
 				    * don't match the actual shipshape used
 				    * for wall collisions by the server. */
+static int ballColor;		/* Color index for ball drawing */
+static int connColor;		/* Color index for connector drawing */
+static int teamShotColor;	/* Color index for harmless shot drawing */
+static int zeroLivesColor;	/* Color to associate with 0 lives */
+static int oneLifeColor;	/* Color to associate with 1 life */
+static int twoLivesColor;	/* Color to associate with 2 lives */
+static int manyLivesColor;	/* Color to associate with >2 lives */
+static int selfLWColor;		/* Color index for selfLifeWarning */
+static int enemyLWColor;	/* Color index for enemyLifeWarning */
+static int teamLWColor;		/* Color index for teamLifeWarning */
+static int shipNameColor;	/* Color index for ship name drawing */
+static int mineNameColor;	/* Color index for mine name drawing */
+static int team0Color;		/* Color index to associate with team 0 */
+static int team1Color;		/* Color index to associate with team 1 */
+static int team2Color;		/* Color index to associate with team 2 */
+static int team3Color;		/* Color index to associate with team 3 */
+static int team4Color;		/* Color index to associate with team 4 */
+static int team5Color;		/* Color index to associate with team 5 */
+static int team6Color;		/* Color index to associate with team 6 */
+static int team7Color;		/* Color index to associate with team 7 */
+static int team8Color;		/* Color index to associate with team 8 */
+static int team9Color;		/* Color index to associate with team 9 */
 
-int selfLWColor;
-int enemyLWColor;
-int teamLWColor;
-int shipNameColor;
-int baseNameColor;
-int mineNameColor;
-int ballColor;
-int connColor;
-int teamShotColor;
-int shipShapesHackColor;
-int team0Color;
-int team1Color;
-int team2Color;
-int team3Color;
-int team4Color;
-int team5Color;
-int team6Color;
-int team7Color;
-int team8Color;
-int team9Color;
 
-void Gui_paint_ball(int x, int y)
+static int asteroidRawShapes[NUM_ASTEROID_SHAPES][NUM_ASTEROID_POINTS][2] = {
+    { ASTEROID_SHAPE_0 },
+    { ASTEROID_SHAPE_1 },
+};
+
+
+position_t *asteroidShapes[NUM_ASTEROID_SHAPES][NUM_ASTEROID_POINTS];
+
+
+int Init_asteroids(void)
 {
+    int		shp, i;
+    size_t	point_size;
+    size_t	total_size;
+    char	*dynmem;
+
+    /*
+     * Allocate memory for all the asteroid points.
+     */
+    point_size = sizeof(position_t) * RES;
+    total_size = point_size * NUM_ASTEROID_POINTS * NUM_ASTEROID_SHAPES;
+    if ((dynmem = (char *) malloc(total_size)) == NULL) {
+	error("Not enough memory for asteroid shapes");
+	return -1;
+    }
+
+    /*
+     * For each asteroid-shape rotate all points.
+     */
+    for ( shp = 0; shp < NUM_ASTEROID_SHAPES; shp++ ) {
+	for ( i = 0; i < NUM_ASTEROID_POINTS; i++ ) {
+	    asteroidShapes[shp][i] = (position_t *) dynmem;
+	    dynmem += point_size;
+	    asteroidShapes[shp][i][0].x = asteroidRawShapes[shp][i][0];
+	    asteroidShapes[shp][i][0].y = asteroidRawShapes[shp][i][1];
+	    Rotate_position( &asteroidShapes[shp][i][0] );
+	}
+    }
+
+    return 0;
+}
+
+
+void Gui_paint_item_symbol(int type, Drawable d, GC mygc, int x, int y, int c)
+{
+    if (!texturedObjects) {
+#ifdef _WINDOWS
+	rd.paintItemSymbol(type, d, mygc, x, y, c);
+#else
+	gcv.stipple = itemBitmaps[type];
+	gcv.fill_style = FillStippled;
+	gcv.ts_x_origin = x;
+	gcv.ts_y_origin = y;
+	XChangeGC(dpy, mygc,
+		  GCStipple|GCFillStyle|GCTileStipXOrigin|GCTileStipYOrigin,
+		  &gcv);
+	rd.paintItemSymbol(type, d, mygc, x, y, c);
+	XFillRectangle(dpy, d, mygc, x, y, ITEM_SIZE, ITEM_SIZE);
+	gcv.fill_style = FillSolid;
+	XChangeGC(dpy, mygc, GCFillStyle, &gcv);
+#endif
+    } else
+	Bitmap_paint(d, BM_ALL_ITEMS, x, y, type);
+}
+
+void Gui_paint_item(int type, Drawable d, GC mygc, int x, int y)
+{
+    const int		SIZE = ITEM_TRIANGLE_SIZE;
+    XPoint		points[5];
+
+#ifndef NO_ITEM_TRIANGLES
+    points[0].x = x - SIZE;
+    points[0].y = y - SIZE;
+    points[1].x = x;
+    points[1].y = y + SIZE;
+    points[2].x = x + SIZE;
+    points[2].y = y - SIZE;
+    points[3] = points[0];
+    SET_FG(colors[BLUE].pixel);
+    rd.drawLines(dpy, d, mygc, points, 4, CoordModeOrigin);
+#endif
+
+    SET_FG(colors[RED].pixel);
+#if 0
+    str[0] = itemtype_ptr[i].type + '0';
+    str[1] = '\0';
+    rd.drawString(dpy, d, mygc,
+		  x - XTextWidth(gameFont, str, 1)/2,
+		  y + SIZE - 1,
+		  str, 1);
+#endif
+    Gui_paint_item_symbol(type, d, mygc,
+			  x - ITEM_SIZE/2,
+			  y - SIZE + 2, ITEM_PLAYFIELD);
+}
+
+void Gui_paint_item_object(int type, int x, int y)
+{
+    Gui_paint_item(type, drawPixmap, gameGC, WINSCALE(X(x)), WINSCALE(Y(y)));
+}
+
+void Gui_paint_ball(int x, int y, int style)
+{
+    unsigned long rgb = 0;
+
     x = X(x);
     y = Y(y);
 
-    if (!texturedObjects)
-	Arc_add(ballColor, x - BALL_RADIUS, y - BALL_RADIUS,
-		2 * BALL_RADIUS, 2 * BALL_RADIUS, 0, 64 * 360);
-    else
-	Bitmap_paint(drawPixmap, BM_BALL, WINSCALE(x - BALL_RADIUS),
-		     WINSCALE(y - BALL_RADIUS), 0);
+    /*
+     * kps - currently style 0xff means no style.
+     * This code assumes num_polygon_styles < 256.
+     */
+    if (style >= 0 && style < num_polygon_styles)
+	rgb = polygon_styles[style].rgb;
+
+    if (!texturedObjects) {
+	/* hack */
+	if (rgb == 0)
+	    Arc_add(ballColor, x - BALL_RADIUS, y - BALL_RADIUS,
+		    2 * BALL_RADIUS, 2 * BALL_RADIUS, 0, 64 * 360);
+	else
+	    Arc_add_rgb(rgb, ballColor, x - BALL_RADIUS, y - BALL_RADIUS,
+			2 * BALL_RADIUS, 2 * BALL_RADIUS, 0, 64 * 360);
+    } else {
+	if (style == 0xff) {
+	    Bitmap_paint(drawPixmap, BM_BALL, WINSCALE(x - BALL_RADIUS),
+			 WINSCALE(y - BALL_RADIUS), 0);
+	} else {
+	    Bitmap_paint_blended(drawPixmap, BM_BALL_GRAY,
+				 WINSCALE(x - BALL_RADIUS),
+				 WINSCALE(y - BALL_RADIUS), rgb);
+	}
+    }
 }
 
 
@@ -77,7 +205,7 @@ static void Gui_paint_mine_name(int x, int y, char *name)
 {
     int		name_len, name_width;
 
-    if (!name)
+    if (!name || !mineNameColor)
 	return;
 
     SET_FG(colors[mineNameColor].pixel);
@@ -85,11 +213,10 @@ static void Gui_paint_mine_name(int x, int y, char *name)
     name_len = strlen(name);
     name_width = XTextWidth(gameFont, name, name_len);
 
-    if (name != NULL)
-	rd.drawString(dpy, drawPixmap, gameGC,
-		    WINSCALE(x) - name_width / 2,
-		    WINSCALE(y + 4) + gameFont->ascent + 1,
-		    name, name_len);
+    rd.drawString(dpy, drawPixmap, gameGC,
+		  WINSCALE(x) - name_width / 2,
+		  WINSCALE(y + 4) + gameFont->ascent + 1,
+		  name, name_len);
 }
 
 void Gui_paint_mine(int x, int y, int teammine, char *name)
@@ -137,8 +264,8 @@ void Gui_paint_mine(int x, int y, int teammine, char *name)
 	if (teammine == 0) {
 	    SET_FG(colors[BLUE].pixel);
 	    rd.fillRectangle(dpy, drawPixmap, gameGC,
-			WINSCALE(x - 7), WINSCALE(y - 2),
-			WINSCALE(15), WINSCALE(5));
+			     WINSCALE(x - 7), WINSCALE(y - 2),
+			     UWINSCALE(15), UWINSCALE(5));
 	}
 
 	SET_FG(colors[WHITE].pixel);
@@ -200,12 +327,20 @@ void Gui_paint_wreck(int x, int y, bool deadly, int wtype, int rot, int size)
     rd.drawLines(dpy, drawPixmap, gameGC, points, cnt, 0);
 }
 
+void Gui_paint_asteroids_begin(void)
+{
+}
+
+void Gui_paint_asteroids_end(void)
+{
+}
 
 void Gui_paint_asteroid(int x, int y, int type, int rot, int size)
 {
     int cnt, tx, ty;
     static XPoint points[NUM_ASTEROID_POINTS+2];
 
+    type = type % NUM_ASTEROID_SHAPES;
     for (cnt = 0; cnt < NUM_ASTEROID_POINTS; cnt++) {
 	tx = (int)(asteroidShapes[type][cnt][rot].x * size * 1.4);
 	ty = (int)(asteroidShapes[type][cnt][rot].y * size * 1.4);
@@ -224,7 +359,7 @@ static void Gui_paint_nastyshot(int color, int x, int y, int size)
 {
     int z = size;
 
-    if (rfrac() < 0.5f) {
+    if (rfrac() < 0.5) {
 	Segment_add(color,
 		    x - z, y - z,
 		    x + z, y + z);
@@ -345,7 +480,7 @@ void Gui_paint_paused(int x, int y, int count)
     if (!texturedObjects) {
 	int		x_0, y_0;
 	static int	pauseCharWidth = -1;
-	const int	half_pause_size = 3*BLOCK_SZ/7;
+	const unsigned	half_pause_size = 3*BLOCK_SZ/7;
 
 	if (pauseCharWidth < 0)
 	    pauseCharWidth = XTextWidth(gameFont, "P", 1);
@@ -355,15 +490,15 @@ void Gui_paint_paused(int x, int y, int count)
 	y_0 = Y(y + half_pause_size);
 	rd.fillRectangle(dpy, drawPixmap, gameGC,
 			 WINSCALE(x_0), WINSCALE(y_0),
-			 WINSCALE(2*half_pause_size+1),
-			 WINSCALE(2*half_pause_size+1));
+			 UWINSCALE(2*half_pause_size+1),
+			 UWINSCALE(2*half_pause_size+1));
 	if (count <= 0 || loopsSlow % 10 >= 5) {
 	    SET_FG(colors[WHITE].pixel);
 	    rd.drawRectangle(dpy, drawPixmap, gameGC,
 			     WINSCALE(x_0 - 1),
 			     WINSCALE(y_0 - 1),
-			     WINSCALE(2*(half_pause_size+1)),
-			     WINSCALE(2*(half_pause_size+1)));
+			     UWINSCALE(2*(half_pause_size+1)),
+			     UWINSCALE(2*(half_pause_size+1)));
 	    rd.drawString(dpy, drawPixmap, gameGC,
 			  WINSCALE(X(x)) - pauseCharWidth/2,
 			  WINSCALE(Y(y-1)) + gameFont->ascent/2,
@@ -379,35 +514,26 @@ void Gui_paint_paused(int x, int y, int count)
 /* Create better graphics for this. */
 void Gui_paint_appearing(int x, int y, int id, int count)
 {
-    const int hsize = 3 * BLOCK_SZ / 7;
+    const unsigned hsize = 3 * BLOCK_SZ / 7;
+    other_t *other = Other_by_id(id);
+    int color = other ? Life_color(other) : 0;
+
+    if (!color)
+	color = RED;
 
     /* Make a note we are doing the base warning */
     if (version >= 0x4F12) {
 	homebase_t *base = Homebase_by_id(id);
-	/* hack */
 	if (base != NULL)
-	    base->deathtime = loops + count;
+	    base->appeartime = loops + (count * clientFPS) / 120;
     }
 
-#if 1
-    SET_FG(colors[RED].pixel);
+    SET_FG(colors[color].pixel);
     rd.fillRectangle(dpy, drawPixmap, gameGC,
-		     SCALEX(x - hsize),
-		     SCALEY(y - hsize + (int)(count / 180. * hsize + 1)),
-		     WINSCALE(2 * hsize + 1),
-		     WINSCALE((int)(count / 180. * hsize + 1)));
-#else
-    SET_FG(colors[RED].pixel);
-    rd.fillRectangle(dpy, drawPixmap, gameGC, SCALEX(x - hsize), SCALEY(y + hsize),
-		     WINSCALE(2 * hsize + 1), WINSCALE(2 * hsize + 1));
-    SET_FG(colors[WHITE].pixel);
-    count = 360 - count;
-    if (count < 0)
-	count = 0;
-    rd.fillRectangle(dpy, drawPixmap, gameGC, SCALEX(x - hsize), SCALEY(y + hsize),
-		     WINSCALE(2 * hsize + 1),
-		     WINSCALE((int)(count / 180. * hsize + 1)));
-#endif
+		     SCALEX(x - (int)hsize),
+		     SCALEY(y - (int)hsize + (int)(count / 180. * hsize + 1)),
+		     UWINSCALE(2 * hsize + 1),
+		     UWINSCALE((unsigned)(count / 180. * hsize + 1)));
 }
 
 
@@ -457,8 +583,8 @@ void Gui_paint_connector(int x_0, int y_0, int x_1, int y_1, int tractor)
 	rd.setDashes(dpy, gameGC, 0, dashes, NUM_DASHES);
 
     rd.drawLine(dpy, drawPixmap, gameGC,
-	      WINSCALE(X(x_0)), WINSCALE(Y(y_0)),
-	      WINSCALE(X(x_1)), WINSCALE(Y(y_1)));
+		WINSCALE(X(x_0)), WINSCALE(Y(y_0)),
+		WINSCALE(X(x_1)), WINSCALE(Y(y_1)));
     if (tractor)
 	rd.setDashes(dpy, gameGC, 0, dashes, NUM_DASHES);
 }
@@ -540,13 +666,11 @@ static void Gui_paint_ship_name(int x, int y, other_t *other)
     } else
 	SET_FG(colors[BLUE].pixel);
 
-    if (BIT(instruments, SHOW_LIVES_BY_SHIP)
+    if (instruments.showLivesByShip
 	&& BIT(Setup->mode, LIMITED_LIVES)) {
 	char keff[4] = "";
 
 	sprintf(keff, "%03d", other->life);
-	if (other->life < 1)
-	    SET_FG(colors[WHITE].pixel);
 	rd.drawString(dpy, drawPixmap, gameGC,
 		      WINSCALE(X(x) + SHIP_SZ),
 		      WINSCALE(Y(y) - SHIP_SZ) + gameFont->ascent,
@@ -567,68 +691,19 @@ static int Gui_is_my_tank(other_t *other)
 	    return 0;
     }
 
-    if (strlcpy(tank_name, self->name, MAX_NAME_LEN) < MAX_NAME_LEN)
+    if (strlcpy(tank_name, self->nick_name, MAX_NAME_LEN) < MAX_NAME_LEN)
 	strlcat(tank_name, "'s tank", MAX_NAME_LEN);
 
-    if (strcmp(tank_name, other->name))
+    if (strcmp(tank_name, other->nick_name))
 	return 0;
 
     return 1;
-}
-
-/*
- * Assume MAX_TEAMS is 10
- */
-int Team_color(int team)
-{
-    switch (team) {
-    case 0:	return team0Color;
-    case 1:	return team1Color;
-    case 2:	return team2Color;
-    case 3:	return team3Color;
-    case 4:	return team4Color;
-    case 5:	return team5Color;
-    case 6:	return team6Color;
-    case 7:	return team7Color;
-    case 8:	return team8Color;
-    case 9:	return team9Color;
-    default:    break;
-    }
-    return 0;
-}
-
-int Life_color(other_t *other)
-{
-    int color = 0;/* default is 'no special color' */
-
-    if (other
-	&& (other->mychar == ' ' || other->mychar == 'R')
-	&& BIT(Setup->mode, LIMITED_LIVES)) {
-		color = Life_color_by_life(other->life);
-    }
-    return color;
-}
-
-int Life_color_by_life(int life) /* This function doesn't check stuff */
-{
-  int color;
-	
-	if (life > 2)
-	    color = manyLivesColor;
-	else if (life == 2)
-	    color = twoLivesColor;
-	else if (life == 1)
-	    color = oneLifeColor;
-	else /* we catch all */
-	    color = zeroLivesColor;
-  return color;
 }
 
 static int Gui_calculate_ship_color(int id, other_t *other)
 {
     int ship_color = WHITE;
 
-#ifndef NO_BLUE_TEAM
     if (BIT(Setup->mode, TEAM_PLAY)
 	&& eyesId != id
 	&& other != NULL
@@ -656,7 +731,7 @@ static int Gui_calculate_ship_color(int id, other_t *other)
 
     if (Gui_is_my_tank(other))
 	ship_color = BLUE;
-#endif
+
     if (roundDelay > 0 && ship_color == WHITE)
 	ship_color = RED;
 
@@ -698,7 +773,7 @@ static void Gui_paint_marking_lights(int id, int x, int y,
 
     if (((loopsSlow + id) & 0xF) == 0) {
 	for (lcnt = 0; lcnt < ship->num_l_light; lcnt++) {
-	    position l_light = Ship_get_l_light_position(ship, lcnt, dir);
+	    position_t l_light = Ship_get_l_light_position(ship, lcnt, dir);
 	    Rectangle_add(RED,
 			  X(x + l_light.x) - 2,
 			  Y(y + l_light.y) - 2,
@@ -717,7 +792,7 @@ static void Gui_paint_marking_lights(int id, int x, int y,
     } else if (((loopsSlow + id) & 0xF) == 2) {
 	for (lcnt = 0; lcnt < ship->num_r_light; lcnt++) {
 	    int rightLightColor = maxColors > 4 ? 4 : BLUE;
-	    position r_light = Ship_get_r_light_position(ship, lcnt, dir);
+	    position_t r_light = Ship_get_r_light_position(ship, lcnt, dir);
 	    Rectangle_add(rightLightColor,
 			  X(x + r_light.x)-2,
 			  Y(y + r_light.y)-2,
@@ -738,7 +813,8 @@ static void Gui_paint_marking_lights(int id, int x, int y,
 
 
 static void Gui_paint_shields_deflectors(int x, int y, int radius, int shield,
-				  int deflector, int eshield, int ship_color)
+					 int deflector, int eshield,
+					 int ship_color)
 {
     int		e_radius = radius + 4;
     int		half_radius = radius >> 1;
@@ -763,7 +839,8 @@ static void Gui_paint_shields_deflectors(int x, int y, int radius, int shield,
 	rd.drawArc(dpy, drawPixmap, gameGC,
 		   WINSCALE(X(x - half_e_radius)),
 		   WINSCALE(Y(y + half_e_radius)),
-		   WINSCALE(e_radius), WINSCALE(e_radius),
+		   (unsigned)WINSCALE(e_radius),
+		   (unsigned)WINSCALE(e_radius),
 		   0, 64 * 360);
     }
     if (scolor != -1) {
@@ -771,17 +848,18 @@ static void Gui_paint_shields_deflectors(int x, int y, int radius, int shield,
 	rd.drawArc(dpy, drawPixmap, gameGC,
 		   WINSCALE(X(x - half_radius)),
 		   WINSCALE(Y(y + half_radius)),
-		   WINSCALE(radius), WINSCALE(radius),
+		   (unsigned)WINSCALE(radius),
+		   (unsigned)WINSCALE(radius),
 		   0, 64 * 360);
     }
 }
 
-static void Set_drawstyle_dashed(int ship_color, int cloak);
+static void Set_drawstyle_dashed(int ship_color);
 
 static void Gui_paint_ship_cloaked(int ship_color, XPoint *points,
 				   int point_count)
 {
-    Set_drawstyle_dashed(ship_color, 1);
+    Set_drawstyle_dashed(ship_color);
     rd.drawLines(dpy, drawPixmap, gameGC, points, point_count, 0);
 }
 
@@ -793,7 +871,8 @@ static void Gui_paint_ship_phased(int ship_color, XPoint *points,
 
 static void generic_paint_ship(int x, int y, int ang, int ship)
 {
-    Bitmap_paint(drawPixmap, ship, WINSCALE(X(x) - 16), WINSCALE(Y(y) - 16), ang);
+    Bitmap_paint(drawPixmap, ship,
+		 WINSCALE(X(x) - 16), WINSCALE(Y(y) - 16), ang);
 }
 
 
@@ -814,9 +893,9 @@ static void Gui_paint_ship_uncloaked(int id, XPoint *points,
 }
 
 
-static void Set_drawstyle_dashed(int ship_color, int cloak)
+static void Set_drawstyle_dashed(int ship_color)
 {
-    int mask;
+    unsigned long mask;
     if (gcv.line_style != LineOnOffDash) {
 	gcv.line_style = LineOnOffDash;
 	mask = GCLineStyle;
@@ -830,11 +909,11 @@ static void Set_drawstyle_dashed(int ship_color, int cloak)
 
 
 static int set_shipshape(int world_x, int world_y,
-		  int dir, shipshape_t *ship, XPoint *points)
+			 int dir, shipshape_t *ship, XPoint *points)
 {
     int			cnt;
-    register position	ship_point_pos;
-    register XPoint	*xpts = points;
+    position_t		ship_point_pos;
+    XPoint		*xpts = points;
     int			window_x;
     int			window_y;
 
@@ -866,11 +945,11 @@ void Gui_paint_ship(int x, int y, int dir, int id, int cloak, int phased,
     ship_color = WHITE;
 
     /* mara attempts similar behaviour to the kth ss hack */
-    if ((!BIT(instruments, SHOW_SHIP_SHAPES))
+    if ((!instruments.showShipShapes)
 	&& (self != NULL)
 	&& (self->id != id))
 	cnt = set_shipshape(x, y, dir, Default_ship(), points);
-    else if ((!BIT(instruments, SHOW_MY_SHIP_SHAPE))
+    else if ((!instruments.showMyShipShape)
 	       && (self != NULL)
 	       && (self->id == id))
 	cnt = set_shipshape(x, y, dir, Default_ship(), points);
@@ -897,13 +976,13 @@ void Gui_paint_ship(int x, int y, int dir, int id, int cloak, int phased,
 	if (!texturedObjects || !texturedShips) {
 	    Gui_paint_ship_uncloaked(id, points, ship_color, cnt);
 	    /* shipshapeshack by Mara */
-	    if (shipShapesHackColor >= 1) {
-		Segment_add(ship_color /*shipShapesHackColor*/,
+	    if (instruments.showShipShapesHack) {
+		Segment_add(ship_color,
 			    (X(x + SHIP_SZ * tcos(dir))),
 			    (Y(y + SHIP_SZ * tsin(dir))),
 			    (X(x + (SHIP_SZ + 12) * tcos(dir))),
 			    (Y(y + (SHIP_SZ + 12) * tsin(dir))));
-		Arc_add(ship_color /*shipShapesHackColor*/,
+		Arc_add(ship_color,
 			X(x - SHIP_SZ), Y(y + SHIP_SZ),
 			2 * SHIP_SZ, 2 * SHIP_SZ,
 			0, 64 * 360);
@@ -930,9 +1009,205 @@ void Gui_paint_ship(int x, int y, int dir, int id, int cloak, int phased,
         Gui_paint_marking_lights(id, x, y, ship, dir);
 
     if (shield || deflector) {
-        Set_drawstyle_dashed(ship_color, cloak);
+	Set_drawstyle_dashed(ship_color);
 	Gui_paint_shields_deflectors(x, y, ship->shield_radius,
-				    shield, deflector,
-				    eshield, ship_color);
+				     shield, deflector,
+				     eshield, ship_color);
     }
+}
+
+
+int Team_color(int team)
+{
+    /* This code assumes we have max 10 teams. */
+    assert(MAX_TEAMS == 10);
+    switch (team) {
+    case 0:	return team0Color;
+    case 1:	return team1Color;
+    case 2:	return team2Color;
+    case 3:	return team3Color;
+    case 4:	return team4Color;
+    case 5:	return team5Color;
+    case 6:	return team6Color;
+    case 7:	return team7Color;
+    case 8:	return team8Color;
+    case 9:	return team9Color;
+    default:    break;
+    }
+    return 0;
+}
+
+int Life_color(other_t *other)
+{
+    int color = 0; /* default is 'no special color' */
+
+    if (other
+	&& (other->mychar == ' ' || other->mychar == 'R')
+	&& BIT(Setup->mode, LIMITED_LIVES))
+	color = Life_color_by_life(other->life);
+    return color;
+}
+
+int Life_color_by_life(int life)
+{
+    int color;
+	
+    if (life > 2)
+	color = manyLivesColor;
+    else if (life == 2)
+	color = twoLivesColor;
+    else if (life == 1)
+	color = oneLifeColor;
+    else /* we catch all */
+	color = zeroLivesColor;
+    return color;
+}
+
+
+
+static xp_option_t guiobject_options[] = {
+    COLOR_INDEX_OPTION(
+	"teamShotColor",
+	2,
+	&teamShotColor,
+	"Which color number to use for drawing harmless shots.\n"),
+
+    COLOR_INDEX_OPTION(
+	"ballColor",
+	1,
+	&ballColor,
+	"Which color number to use for drawing balls.\n"),
+
+    COLOR_INDEX_OPTION(
+	"connColor",
+	2,
+	&connColor,
+	"Which color number to use for drawing connectors.\n"),
+
+    COLOR_INDEX_OPTION(
+	"zeroLivesColor",
+	3,
+	&zeroLivesColor,
+	"Which color to associate with ships with zero lives left.\n"
+	"This can be used to paint for example ship and base names.\n"),
+
+    COLOR_INDEX_OPTION(
+	"oneLifeColor",
+	11,
+	&oneLifeColor,
+	"Which color to associate with ships with one life left.\n"
+	"This can be used to paint for example ship and base names.\n"),
+
+    COLOR_INDEX_OPTION(
+	"twoLivesColor",
+	4,
+	&twoLivesColor,
+	"Which color to associate with ships with two lives left.\n"
+	"This can be used to paint for example ship and base names.\n"),
+
+    COLOR_INDEX_OPTION(
+	"manyLivesColor",
+	13,
+	&manyLivesColor,
+	"Which color to associate with ships with more than two lives left.\n"
+	"This can be used to paint for example ship and base names.\n"),
+
+    COLOR_INDEX_OPTION(
+	"selfLWColor",
+	3,
+	&selfLWColor,
+	"Which color to use to paint your ship in when on last life.\n"
+	"Original color for this is red.\n"),
+
+    COLOR_INDEX_OPTION(
+	"enemyLWColor",
+	3,
+	&enemyLWColor,
+	"Which color to use to paint enemy ships in when on last life.\n"
+	"Original color for this is red.\n"),
+
+    COLOR_INDEX_OPTION(
+	"teamLWColor",
+	2,
+	&teamLWColor,
+	"Which color to use to paint teammate ships in when on last life.\n"
+	"Original color for this is green.\n"),
+
+    COLOR_INDEX_OPTION(
+	"shipNameColor",
+	2,
+	&shipNameColor,
+	"Which color number to use for drawing names of ships\n"
+	"(unless drawn in one of the life colors).\n"),
+
+    COLOR_INDEX_OPTION(
+	"mineNameColor",
+	2,
+	&mineNameColor,
+	"Which color number to use for drawing names of mines.\n"),
+
+    COLOR_INDEX_OPTION(
+	"team0Color",
+	0,
+	&team0Color,
+	"Which color number to use for drawing team 0 objects.\n"),
+
+    COLOR_INDEX_OPTION(
+	"team1Color",
+	0,
+	&team1Color,
+	"Which color number to use for drawing team 1 objects.\n"),
+
+    COLOR_INDEX_OPTION(
+	"team2Color",
+	0,
+	&team2Color,
+	"Which color number to use for drawing team 2 objects.\n"),
+
+    COLOR_INDEX_OPTION(
+	"team3Color",
+	0,
+	&team3Color,
+	"Which color number to use for drawing team 3 objects.\n"),
+
+    COLOR_INDEX_OPTION(
+	"team4Color",
+	0,
+	&team4Color,
+	"Which color number to use for drawing team 4 objects.\n"),
+
+    COLOR_INDEX_OPTION(
+	"team5Color",
+	0,
+	&team5Color,
+	"Which color number to use for drawing team 5 objects.\n"),
+
+    COLOR_INDEX_OPTION(
+	"team6Color",
+	0,
+	&team6Color,
+	"Which color number to use for drawing team 6 objects.\n"),
+
+    COLOR_INDEX_OPTION(
+	"team7Color",
+	0,
+	&team7Color,
+	"Which color number to use for drawing team 7 objects.\n"),
+
+    COLOR_INDEX_OPTION(
+	"team8Color",
+	0,
+	&team8Color,
+	"Which color number to use for drawing team 8 objects.\n"),
+
+    COLOR_INDEX_OPTION(
+	"team9Color",
+	0,
+	&team9Color,
+	"Which color number to use for drawing team 9 objects.\n"),
+};
+
+void Store_guiobject_options(void)
+{
+    STORE_OPTIONS(guiobject_options);
 }

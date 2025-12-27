@@ -1,6 +1,9 @@
 /* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
  *
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * Copyright (C) 2000-2004 Uoti Urpala <uau@users.sourceforge.net>
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -19,14 +22,18 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef WALLS_H
 #define WALLS_H
 
 #ifndef CLICK_H
-#include "click.h"
+# include "click.h"
+#endif
+
+#ifndef OBJECT_H
+# include "object.h"
 #endif
 
 /*
@@ -67,17 +74,17 @@ typedef struct {
     int			treasure_crashes;
     int			wormhole_warps;
     int			phased;
-    object		*obj;
-    player		*pl;
+    object_t		*obj;
+    player_t		*pl;
 } move_info_t;
 
 typedef struct {
     const move_info_t	*mip;
     move_crash_t	crash;
-    clpos		pos;
-    vector		vel;
-    clvec		todo;
-    clvec		done;
+    clpos_t		pos;
+    vector_t		vel;
+    clvec_t		todo;
+    clvec_t		done;
     int			dir;
     int			cannon;
     int			wormhole;
@@ -98,6 +105,74 @@ struct move_parameters {
     unsigned long	obj_treasure_mask;	/* objects treasure crash? */
 };
 
-/*void Move_segment(move_state_t *ms);*/
+/* kps change 100, 30 etc to something sane */
+struct polystyle {
+    char id[100];
+    int color;
+    int texture_id;
+    int defedge_id;
+    int flags;
+};
+
+struct edgestyle {
+    char id[100];
+    int width;
+    int color;
+    int style;
+};
+
+struct bmpstyle {
+    char id[100];
+    char filename[32];
+    int flags;
+};
+
+typedef struct {
+    int style;
+    int group;
+    int edges;
+    clpos_t pos;
+    int num_points;
+    int estyles_start;
+    int num_echanges;
+    int is_decor;
+} poly_t;
+
+typedef uint32_t hitmask_t;
+
+typedef struct move {
+    clvec_t start;
+    clvec_t delta;
+    hitmask_t hitmask;
+    object_t *obj;
+} move_t;
+
+typedef struct group group_t;
+
+struct group {
+    int type;
+    int team;
+    hitmask_t hitmask;
+    bool (*hitfunc)(group_t *groupptr, move_t *move);
+    int mapobj_ind;
+};
+
+extern struct polystyle pstyles[256];
+extern struct edgestyle estyles[256];
+extern struct bmpstyle  bstyles[256];
+extern poly_t *pdata;
+extern int *estyleptr;
+extern int *edgeptr;
+extern group_t *groups;
+extern int num_groups, max_groups;
+
+static inline group_t *groupptr_by_id(int group)
+{
+    if (group >= 0 && group < num_groups)
+	return &groups[group];
+    return NULL;
+}
+
+extern int num_pstyles, num_estyles, num_bstyles;
 
 #endif

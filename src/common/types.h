@@ -1,5 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,7 +20,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef	TYPES_H
@@ -42,11 +44,13 @@ typedef unsigned char	u_byte;
 /*typedef enum { false = 0, true = 1 } bool;*/
 #endif
 
-typedef struct { double x, y; }	vector;
-typedef vector			position;
-typedef struct { int x, y; }	ivec;
-typedef ivec			ipos;
-typedef struct { int x, y, w, h;} irec;
+typedef struct { double x, y; }		vector_t;
+typedef vector_t			position_t;
+typedef struct { int x, y; }		ivec_t;
+typedef ivec_t				ipos_t;
+typedef struct { int x, y, w, h;}	irec_t;
+typedef struct { int bx, by; }		blkvec_t;
+typedef blkvec_t			blkpos_t;
 
 #ifdef _WINDOWS
 # define strncasecmp(__s, __t, __l)	strnicmp(__s, __t, __l)

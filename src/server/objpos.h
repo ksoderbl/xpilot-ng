@@ -1,6 +1,7 @@
 /* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
  *
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -19,23 +20,44 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef OBJPOS_H
 #define OBJPOS_H
 
-void Object_position_set_clicks(object *obj, int cx, int cy);
-void Object_position_init_clicks(object *obj, int cx, int cy);
-void Player_position_restore(player *pl);
-void Player_position_set_clicks(player *pl, int cx, int cy);
-void Player_position_init_clicks(player *pl, int cx, int cy);
-void Player_position_limit(player *pl);
-void Player_position_debug(player *pl, const char *msg);
+void Object_position_set_clpos(world_t *world, object_t *obj, clpos_t pos);
+void Object_position_init_clpos(world_t *world, object_t *obj, clpos_t pos);
+void Player_position_restore(player_t *pl);
+void Player_position_set_clpos(player_t *pl, clpos_t pos);
+void Player_position_init_clpos(player_t *pl, clpos_t pos);
+void Player_position_limit(player_t *pl);
+void Player_position_debug(player_t *pl, const char *msg);
 
-#define Object_position_remember(o_) \
-	((o_)->prevpos.cx = (o_)->pos.cx, \
-	 (o_)->prevpos.cy = (o_)->pos.cy)
-#define Player_position_remember(p_) Object_position_remember(p_)
+static inline void Object_position_remember(object_t *obj)
+{
+    obj->prevpos = obj->pos;
+}
+
+static inline void Player_position_remember(player_t *pl)
+{
+    Object_position_remember((object_t *)pl);
+}
+
+static inline void Object_position_set_clvec(world_t *world, object_t *obj,
+					     clvec_t vec)
+{
+    clpos_t pos;
+
+    pos.cx = vec.cx;
+    pos.cy = vec.cy;
+
+    Object_position_set_clpos(world, obj, pos);
+}
+
+static inline void Player_position_set_clvec(player_t *pl, clvec_t vec)
+{
+    Object_position_set_clvec(pl->world, (object_t *)pl, vec);
+}
 
 #endif

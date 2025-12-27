@@ -1,5 +1,12 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 2000-2004 by
+ *
+ *      Uoti Urpala          <uau@users.sourceforge.net>
+ *      Kristian Söderblom   <kps@users.sourceforge.net>
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,25 +25,21 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpserver.h"
 
 char update_version[] = VERSION;
 
-int	round_delay = 0;	/* delay until start of next round */
-int	round_delay_send = 0;	/* number of frames to send round_delay */
 int	roundtime = -1;		/* time left this round */
 static double time_to_update = 1;	/* time before less frequent updates */
 static bool do_update_this_frame = false; /* less frequent update this frame */
 
-static char msg[MSG_LEN];
-
-static inline void update_object_speed(object *obj)
+static inline void update_object_speed(world_t *world, object_t *obj)
 {
     if (BIT(obj->status, GRAVITY)) {
-	vector gravity = World_gravity(obj->pos);
+	vector_t gravity = World_gravity(world, obj->pos);
 
 	obj->vel.x += (obj->acc.x + gravity.x) * timeStep;
 	obj->vel.y += (obj->acc.y + gravity.y) * timeStep;
@@ -46,7 +49,7 @@ static inline void update_object_speed(object *obj)
     }
 }
 
-static void Transport_to_home(player *pl)
+static void Transport_to_home(player_t *pl)
 {
     /*
      * Transport a corpse from the place where it died back to its homebase,
@@ -56,9 +59,10 @@ static void Transport_to_home(player *pl)
      * acceleration G, during the second part we make this a negative one -G.
      * This results in a visually pleasing take off and landing.
      */
-    clpos		startpos;
-    double		dx, dy, t, m;
-    const int		T = RECOVERY_DELAY;
+    clpos_t startpos;
+    double dx, dy, t, m;
+    const double T = RECOVERY_DELAY;
+    world_t *world = pl->world;
 
     if (pl->home_base == NULL) {
 	pl->vel.x = 0;
@@ -66,20 +70,20 @@ static void Transport_to_home(player *pl)
 	return;
     }
 
-    if (BIT(World.rules->mode, TIMING) && pl->round) {
+    if (BIT(world->rules->mode, TIMING) && pl->round) {
 	int check;
 
 	if (pl->check)
 	    check = pl->check - 1;
 	else
-	    check = World.NumChecks - 1;
-	startpos = Checks(check)->pos;
+	    check = world->NumChecks - 1;
+	startpos = Checks(world, check)->pos;
     } else
 	startpos = pl->home_base->pos;
 
     dx = WRAP_DCX(startpos.cx - pl->pos.cx);
     dy = WRAP_DCY(startpos.cy - pl->pos.cy);
-    t = pl->count + 0.5f;
+    t = pl->recovery_count;
     if (2 * t <= T)
 	m = 2 / t;
     else {
@@ -93,7 +97,7 @@ static void Transport_to_home(player *pl)
 /*
  * Turn phasing on or off.
  */
-void Phasing(player *pl, bool on)
+void Phasing(player_t *pl, bool on)
 {
     if (on) {
 	if (pl->phasing_left <= 0) {
@@ -109,7 +113,7 @@ void Phasing(player *pl, bool on)
 	CLR_BIT(pl->status, GRAVITY);
 	sound_play_sensors(pl->pos, PHASING_ON_SOUND);
     } else {
-	int hitmask = NONBALL_BIT | HITMASK(pl->team); /* kps - ok ? */
+	hitmask_t hitmask = NONBALL_BIT | HITMASK(pl->team); /* kps - ok ? */
 	int group;
 
 	CLR_BIT(pl->used, HAS_PHASING_DEVICE);
@@ -131,11 +135,11 @@ void Phasing(player *pl, bool on)
 /*
  * Turn cloak on or off.
  */
-void Cloak(player *pl, bool on)
+void Cloak(player_t *pl, bool on)
 {
     if (on) {
 	if (!BIT(pl->used, HAS_CLOAKING_DEVICE) && pl->item[ITEM_CLOAK] > 0) {
-	    if (!cloakedShield) {
+	    if (!options.cloakedShield) {
 		if (BIT(pl->used, HAS_EMERGENCY_SHIELD))
 		    Emergency_shield(pl, false);
 		if (BIT(pl->used, HAS_DEFLECTOR))
@@ -155,7 +159,7 @@ void Cloak(player *pl, bool on)
 	}
 	if (!pl->item[ITEM_CLOAK])
 	    CLR_BIT(pl->have, HAS_CLOAKING_DEVICE);
-	if (!cloakedShield) {
+	if (!options.cloakedShield) {
 	    if (BIT(pl->have, HAS_EMERGENCY_SHIELD)) {
 		SET_BIT(pl->have, HAS_SHIELD);
 		Emergency_shield(pl, true);
@@ -171,11 +175,12 @@ void Cloak(player *pl, bool on)
 /*
  * Turn deflector on or off.
  */
-void Deflector(player *pl, bool on)
+void Deflector(player_t *pl, bool on)
 {
     if (on) {
 	if (!BIT(pl->used, HAS_DEFLECTOR) && pl->item[ITEM_DEFLECTOR] > 0) {
-	    if (!cloakedShield || !BIT(pl->used, HAS_CLOAKING_DEVICE)) {
+	    /* only allow deflector when cloaked shielding or not cloaked */
+	    if (options.cloakedShield || !BIT(pl->used, HAS_CLOAKING_DEVICE)) {
 		SET_BIT(pl->used, HAS_DEFLECTOR);
 		sound_play_player(pl, DEFLECTOR_SOUND);
 	    }
@@ -193,7 +198,7 @@ void Deflector(player *pl, bool on)
 /*
  * Turn emergency thrust on or off.
  */
-void Emergency_thrust(player *pl, bool on)
+void Emergency_thrust(player_t *pl, bool on)
 {
     if (on) {
 	if (pl->emergency_thrust_left <= 0) {
@@ -219,7 +224,7 @@ void Emergency_thrust(player *pl, bool on)
 /*
  * Turn emergency shield on or off.
  */
-void Emergency_shield (player *pl, bool on)
+void Emergency_shield (player_t *pl, bool on)
 {
     if (on) {
 	if (BIT(pl->have, HAS_EMERGENCY_SHIELD)) {
@@ -227,7 +232,7 @@ void Emergency_shield (player *pl, bool on)
 		pl->emergency_shield_left += EMERGENCY_SHIELD_TIME;
 		pl->item[ITEM_EMERGENCY_SHIELD]--;
 	    }
-	    if (cloakedShield || !BIT(pl->used, HAS_CLOAKING_DEVICE)) {
+	    if (options.cloakedShield || !BIT(pl->used, HAS_CLOAKING_DEVICE)) {
 		SET_BIT(pl->have, HAS_SHIELD);
 		if (!BIT(pl->used, HAS_EMERGENCY_SHIELD)) {
 		    SET_BIT(pl->used, HAS_EMERGENCY_SHIELD);
@@ -256,7 +261,7 @@ void Emergency_shield (player *pl, bool on)
  * automatic pilot mode any changes to the current power, turnacc, turnspeed
  * and turnresistance settings will be temporary.
  */
-void Autopilot(player *pl, bool on)
+void Autopilot(player_t *pl, bool on)
 {
     CLR_BIT(pl->status, THRUSTING);
     if (on) {
@@ -284,19 +289,17 @@ void Autopilot(player *pl, bool on)
  * cause the ship to come to a rest within a short period of time.
  * This code is fairly self contained.
  */
-static void do_Autopilot (player *pl)
+static void do_Autopilot (player_t *pl)
 {
-    int		vad;	/* Velocity Away Delta */
-    int		dir;
-    int		afterburners;
-    vector	gravity;
-    double	acc, vel;
-    double	delta;
-    double	turnspeed, power;
-    const double	emergency_thrust_settings_delta = 150.0 / FPS;
-    const double	auto_pilot_settings_delta = 15.0 / FPS;
-    const double	auto_pilot_turn_factor = 2.5;
-    const double	auto_pilot_dead_velocity = 0.5;
+    int vad;	/* Velocity Away Delta */
+    int dir, afterburners;
+    vector_t gravity;
+    double acc, vel, delta, turnspeed, power;
+    const double emergency_thrust_settings_delta = 150.0 / FPS;
+    const double auto_pilot_settings_delta = 15.0 / FPS;
+    const double auto_pilot_turn_factor = 2.5;
+    const double auto_pilot_dead_velocity = 0.5;
+    world_t *world = pl->world;
 
     /*
      * If the last movement touched a wall then we shouldn't
@@ -322,7 +325,7 @@ static void do_Autopilot (player *pl)
     } else
 	afterburners = pl->item[ITEM_AFTERBURNER];
 
-    gravity = World_gravity(pl->pos);
+    gravity = World_gravity(world, pl->pos);
 
     /*
      * Due to rounding errors if the velocity is very small we were probably
@@ -349,9 +352,9 @@ static void do_Autopilot (player *pl)
 	if (gravity.x == 0 && gravity.y == 0)
 	    vad = pl->dir;
 	else
-	    vad = (int)findDir(-gravity.x, -gravity.y);
+	    vad = findDir(-gravity.x, -gravity.y);
     } else
-	vad = (int)findDir(-pl->vel.x, -pl->vel.y);
+	vad = findDir(-pl->vel.x, -pl->vel.y);
 
     vad = MOD2(vad - pl->dir, RES);
     if (vad > RES/2) {
@@ -434,7 +437,7 @@ static void do_Autopilot (player *pl)
 }
 
 
-static void Fuel_update(void)
+static void Fuel_update(world_t *world)
 {
     int i;
     double fuel;
@@ -446,8 +449,8 @@ static void Fuel_update(void)
     fuel = (NumPlayers * STATION_REGENERATION * timeStep);
     frames_per_update = MAX_STATION_FUEL / (fuel * BLOCK_SZ);
 
-    for (i = 0; i < World.NumFuels; i++) {
-	fuel_t *fs = Fuels(i);
+    for (i = 0; i < world->NumFuels; i++) {
+	fuel_t *fs = Fuels(world, i);
 
 	if (fs->fuel == MAX_STATION_FUEL)
 	    continue;
@@ -465,163 +468,53 @@ static void Fuel_update(void)
     }
 }
 
-static void Misc_object_update(void)
+static void Misc_object_update(world_t *world)
 {
     int i;
-    object *obj;
+    object_t *obj;
 
     for (i = 0; i < NumObjs; i++) {
 	obj = Obj[i];
 
 	if (BIT(obj->type, OBJ_MINE))
-	    Update_mine(MINE_PTR(obj));
+	    Update_mine(world, MINE_PTR(obj));
 
 	else if (BIT(obj->type, OBJ_TORPEDO))
-	    Update_torpedo(TORP_PTR(obj));
+	    Update_torpedo(world, TORP_PTR(obj));
 
 	else if (BIT(obj->type, OBJ_SMART_SHOT|OBJ_HEAT_SHOT))
-	    Update_missile(MISSILE_PTR(obj));
+	    Update_missile(world, MISSILE_PTR(obj));
 
 	else if (BIT(obj->type, OBJ_BALL))
-	    Update_connector_force(BALL_PTR(obj));
+	    Update_connector_force(world, BALL_PTR(obj));
 
 	else if (BIT(obj->type, OBJ_WRECKAGE)) {
-	    wireobject *wireobj = WIRE_PTR(obj);
+	    wireobject_t *wireobj = WIRE_PTR(obj);
+
 	    wireobj->rotation =
 		(wireobj->rotation
 		 + (int) (wireobj->turnspeed * timeStep * RES)) % RES;
 	}
 
 	else if (BIT(obj->type, OBJ_PULSE)) {
-	    pulseobject *pulse = PULSE_PTR(obj);
-	    pulse->len += pulseSpeed * timeStep;
-	    if (pulse->len > pulseLength)
-		pulse->len = pulseLength;
+	    pulseobject_t *pulse = PULSE_PTR(obj);
+
+	    pulse->len += options.pulseSpeed * timeStep;
+	    LIMIT(pulse->len, 0, options.pulseLength);
 	}
 
-	update_object_speed(obj);
+	update_object_speed(world, obj);
 
 	if (!BIT(obj->type, OBJ_ASTEROID))
 	    Move_object(obj);
     }
 }
 
-static void Cannon_update(void)
+static void Ecm_update(world_t *world)
 {
     int i;
-    for (i = 0; i < World.NumCannons; i++) {
-	cannon_t *c = Cannons(i);
 
-	if (c->dead_time > 0) {
-	    if ((c->dead_time -= timeStep) <= 0)
-		Cannon_restore_on_map(c);
-	    continue;
-	} else {
-	    /* don't check too often, because this gets quite expensive
-	       on maps with many cannons with defensive items */
-	    if (do_update_this_frame
-		&& cannonsUseItems
-		&& cannonsDefend
-		&& rfrac() < 0.65)
-		Cannon_check_defense(c);
-
-	    if (do_update_this_frame
-		&& !BIT(c->used, HAS_EMERGENCY_SHIELD)
-		&& !BIT(c->used, HAS_PHASING_DEVICE)
-		&& (c->damaged <= 0)
-		&& (c->tractor_count <= 0)
-		&& rfrac() * 16 < 1)
-		Cannon_check_fire(c);
-	    else if (do_update_this_frame
-		     && cannonsUseItems
-		     && itemProbMult > 0
-		     && cannonItemProbMult > 0) {
-		int item = (int)(rfrac() * NUM_ITEMS);
-		/* this gives the cannon an item about once every minute */
-		if (World.items[item].cannonprob > 0
-		    && cannonItemProbMult > 0
-		    && (int)(rfrac() * (60 * 12))
-		    < (cannonItemProbMult * World.items[item].cannonprob))
-		    Cannon_add_item(c, item,
-				    (item == ITEM_FUEL ?
-				     ENERGY_PACK_FUEL >> FUEL_SCALE_BITS
-				     : 1));
-	    }
-	}
-	if ((c->damaged -= timeStep) <= 0)
-	    c->damaged = 0;
-	if (c->tractor_count > 0) {
-	    player *tpl = c->tractor_target_pl;
-
-	    if ((Wrap_length(tpl->pos.cx - c->pos.cx,
-			     tpl->pos.cy - c->pos.cy)
-		 < TRACTOR_MAX_RANGE(c->item[ITEM_TRACTOR_BEAM]) * CLICK)
-		&& Player_is_playing(tpl)) {
-		General_tractor_beam(NULL, c->pos, c->item[ITEM_TRACTOR_BEAM],
-				     tpl, c->tractor_is_pressor);
-		if ((c->tractor_count -= timeStep) <= 0)
-		    c->tractor_count = 0;
-	    } else
-		c->tractor_count = 0;
-	}
-	if (c->emergency_shield_left > 0) {
-	    if ((c->emergency_shield_left -= timeStep) <= 0) {
-		CLR_BIT(c->used, HAS_EMERGENCY_SHIELD);
-		sound_play_sensors(c->pos, EMERGENCY_SHIELD_OFF_SOUND);
-	    }
-	}
-	if (c->phasing_left > 0) {
-	    if ((c->phasing_left -= timeStep) <= 0) {
-		CLR_BIT(c->used, HAS_PHASING_DEVICE);
-	        sound_play_sensors(c->pos, PHASING_OFF_SOUND);
-	    }
-	}
-    }
-}
-
-static void Target_update(void)
-{
-    int i, j;
-
-    for (i = 0; i < World.NumTargets; i++) {
-	target_t *targ = Targets(i);
-
-	if (targ->dead_time > 0) {
-	    if ((targ->dead_time -= timeStep) <= 0) {
-		Target_restore_on_map(targ);
-
-		if (targetSync) {
-		    for (j = 0; j < World.NumTargets; j++) {
-			target_t *t = Targets(j);
-			if (t->team == targ->team)
-			    Target_restore_on_map(t);
-		    }
-		}
-	    }
-	    continue;
-	}
-	else if (targ->damage == TARGET_DAMAGE)
-	    continue;
-
-	targ->damage += TARGET_REPAIR_PER_FRAME * timeStep;
-	if (targ->damage >= TARGET_DAMAGE)
-	    targ->damage = TARGET_DAMAGE;
-	else if (targ->last_change + TARGET_UPDATE_DELAY
-		 < frame_loops)
-	    /*
-	     * We don't send target info to the clients every frame
-	     * if the latest repair wouldn't change their display.
-	     */
-	    continue;
-
-	targ->conn_mask = 0;
-	targ->last_change = frame_loops;
-    }
-}
-
-static void Ecm_update(void)
-{
-    int i;
+    UNUSED_PARAM(world);
 
     for (i = 0; i < NumEcms; i++) {
 	if ((Ecms[i]->size *= ecmSizeFactor) < 1.0) {
@@ -635,9 +528,11 @@ static void Ecm_update(void)
     }
 }
 
-static void Transporter_update(void)
+static void Transporter_update(world_t *world)
 {
     int i;
+
+    UNUSED_PARAM(world);
 
     for (i = 0; i < NumTransporters; i++) {
 	if ((Transporters[i]->count -= timeStep) <= 0) {
@@ -652,7 +547,8 @@ static void Transporter_update(void)
 static void Players_turn(void)
 {
     int i;
-    player *pl;
+    player_t *pl;
+    double new_float_dir;
 
     for (i = 0; i < NumPlayers; i++) {
 	pl = Players(i);
@@ -675,12 +571,15 @@ static void Players_turn(void)
 	if (pl->turnresistance)
 	    pl->turnvel *= pl->turnresistance;
 
-	pl->float_dir += pl->turnvel;
+	new_float_dir = pl->float_dir;
+	new_float_dir += pl->turnvel;
 
-	while (pl->float_dir < 0)
-	    pl->float_dir += RES;
-	while (pl->float_dir >= RES)
-	    pl->float_dir -= RES;
+	while (new_float_dir < 0)
+	    new_float_dir += RES;
+	while (new_float_dir >= RES)
+	    new_float_dir -= RES;
+
+	Player_set_float_dir(pl, new_float_dir);
 
 	if (!pl->turnresistance)
 	    pl->turnvel = 0;
@@ -689,7 +588,7 @@ static void Players_turn(void)
     }
 }
 
-static void Use_items(player *pl)
+static void Use_items(player_t *pl)
 {
     if (pl->shield_time > 0) {
 	if ((pl->shield_time -= timeStep) <= 0) {
@@ -743,33 +642,33 @@ static void Use_items(player *pl)
      */
     if (do_update_this_frame) {
 	if (BIT(pl->used, HAS_SHIELD))
-	    Add_fuel(&(pl->fuel), (long)ED_SHIELD);
+	    Player_add_fuel(pl, ED_SHIELD);
 
 	if (BIT(pl->used, HAS_PHASING_DEVICE))
-	    Add_fuel(&(pl->fuel), (long)ED_PHASING_DEVICE);
+	    Player_add_fuel(pl, ED_PHASING_DEVICE);
 
 	if (BIT(pl->used, HAS_CLOAKING_DEVICE))
-	    Add_fuel(&(pl->fuel), (long)ED_CLOAKING_DEVICE);
+	    Player_add_fuel(pl, ED_CLOAKING_DEVICE);
 
 	if (BIT(pl->used, HAS_DEFLECTOR))
-	    Add_fuel(&(pl->fuel), (long)ED_DEFLECTOR);
+	    Player_add_fuel(pl, ED_DEFLECTOR);
     }
 }
 
 /*
  * Player is refueling.
  */
-static void Do_refuel(player *pl)
+static void Do_refuel(player_t *pl)
 {
-    fuel_t *fs = Fuels(pl->fs);
+    world_t *world = pl->world;
+    fuel_t *fs = Fuels(world, pl->fs);
 
     if ((Wrap_length(pl->pos.cx - fs->pos.cx,
-		     pl->pos.cy - fs->pos.cy)
-	 > 90.0 * CLICK)
+		     pl->pos.cy - fs->pos.cy) > 90.0 * CLICK)
 	|| (pl->fuel.sum >= pl->fuel.max)
 	|| BIT(pl->used, HAS_PHASING_DEVICE)
-	|| (BIT(World.rules->mode, TEAM_PLAY)
-	    && teamFuel
+	|| (BIT(world->rules->mode, TEAM_PLAY)
+	    && options.teamFuel
 	    && fs->team != pl->team)) {
 	CLR_BIT(pl->used, HAS_REFUEL);
     } else {
@@ -781,9 +680,9 @@ static void Do_refuel(player *pl)
 		fs->fuel -= REFUEL_RATE * timeStep;
 		fs->conn_mask = 0;
 		fs->last_change = frame_loops;
-		Add_fuel(&(pl->fuel), REFUEL_RATE * timeStep);
+		Player_add_fuel(pl, REFUEL_RATE * timeStep);
 	    } else {
-		Add_fuel(&(pl->fuel), fs->fuel);
+		Player_add_fuel(pl, fs->fuel);
 		fs->fuel = 0;
 		fs->conn_mask = 0;
 		fs->last_change = frame_loops;
@@ -802,14 +701,15 @@ static void Do_refuel(player *pl)
 /*
  * Player is repairing a target.
  */
-static void Do_repair(player *pl)
+static void Do_repair(player_t *pl)
 {
-    target_t *targ = Targets(pl->repair_target);
+    world_t *world = pl->world;
+    target_t *targ = Targets(world, pl->repair_target);
 
     if ((Wrap_length(pl->pos.cx - targ->pos.cx,
 		     pl->pos.cy - targ->pos.cy) > 90.0 * CLICK)
 	|| targ->damage >= TARGET_DAMAGE
-	|| targ->dead_time > 0
+	|| targ->dead_ticks > 0
 	|| BIT(pl->used, HAS_PHASING_DEVICE))
 	CLR_BIT(pl->used, HAS_REPAIR);
     else {
@@ -819,10 +719,10 @@ static void Do_repair(player *pl)
 	do {
 	    if (pl->fuel.tank[pl->fuel.current]
 		> REFUEL_RATE * timeStep) {
-		targ->damage += TARGET_FUEL_REPAIR_PER_FRAME;
+		targ->damage += TARGET_FUEL_REPAIR_PER_FRAME * timeStep;
 		targ->conn_mask = 0;
 		targ->last_change = frame_loops;
-		Add_fuel(&(pl->fuel), -REFUEL_RATE * timeStep);
+		Player_add_fuel(pl, -REFUEL_RATE * timeStep);
 		if (targ->damage > TARGET_DAMAGE) {
 		    targ->damage = TARGET_DAMAGE;
 		    break;
@@ -839,358 +739,128 @@ static void Do_repair(player *pl)
     }
 }
 
-static void Do_warping(player *pl)
+
+/* kps - UPDATE_RATE should depend on gamespeed */
+#define UPDATE_RATE 100
+static inline void Update_visibility(player_t *pl, int ind)
 {
-    clpos dest;
-    int j, wcx, wcy, nearestFront, nearestRear;
-    double proximity, proxFront, proxRear;
+    int j;
 
-#if 0
-    if (pl->wormHoleHit >= World.NumWormholes) {
-	/* could happen if the player hit a temporary wormhole
-	   that was removed while the player was warping */
-	CLR_BIT(pl->status, WARPING);
-	return;
-    }
-#endif
-    if (pl->wormHoleHit != -1) {
-	wormhole_t *wh_hit = Wormholes(pl->wormHoleHit);
+    for (j = 0; j < NumPlayers; j++) {
+	player_t *pl_j = Players(j);
 
-	if (wh_hit->countdown > 0)
-	    j = wh_hit->lastdest;
-	else if (rfrac() < 0.10f) {
-	    do
-		j = (int)(rfrac() * World.NumWormholes);
-	    while (World.wormholes[j].type == WORM_IN
-		   || pl->wormHoleHit == j
-		   || World.wormholes[j].temporary);
-	} else {
-	    nearestFront = nearestRear = -1;
-	    proxFront = proxRear = 1e20;
+	if (pl->forceVisible > 0)
+	    pl_j->visibility[ind].canSee = 1;
 
-	    for (j = 0; j < World.NumWormholes; j++) {
-		wormhole_t *wh = Wormholes(j);
+	if (ind == j || !BIT(pl_j->used, HAS_CLOAKING_DEVICE))
+	    pl->visibility[j].canSee = 1;
+	else if (pl->updateVisibility
+		 || pl_j->updateVisibility
+		 || (int)(rfrac() * UPDATE_RATE)
+		 < ABS(frame_loops - pl->visibility[j].lastChange)) {
 
-		if (j == pl->wormHoleHit
-		    || wh->type == WORM_IN
-		    || wh->temporary)
-		    continue;
-
-		wcx = WRAP_DCX(wh->pos.cx - wh_hit->pos.cx);
-		wcy = WRAP_DCY(wh->pos.cy - wh_hit->pos.cy);
-
-		proximity = (pl->vel.y * wcx + pl->vel.x * wcy);
-		proximity = ABS(proximity);
-
-		if (pl->vel.x * wcx + pl->vel.y * wcy < 0) {
-		    if (proximity < proxRear) {
-			nearestRear = j;
-			proxRear = proximity;
-		    }
-		} else if (proximity < proxFront) {
-		    nearestFront = j;
-		    proxFront = proximity;
-		}
-	    }
-
-#define RANDOM_REAR_WORM 1
-
-	    if (! RANDOM_REAR_WORM)
-		j = nearestFront < 0 ? nearestRear : nearestFront;
-	    else {
-		if (nearestFront >= 0)
-		    j = nearestFront;
-		else {
-		    do
-			j = (int)(rfrac() * World.NumWormholes);
-		    while (World.wormholes[j].type == WORM_IN
-			   || j == pl->wormHoleHit);
-		}
-	    }
-	}
-
-	sound_play_sensors(pl->pos, WORM_HOLE_SOUND);
-	dest = World.wormholes[j].pos;
-
-    } else { /* wormHoleHit == -1 */
-	int counter;
-	int hitmask = NONBALL_BIT | HITMASK(pl->team); /* kps - ok ? */
-
-	/* try to find empty space to hyperjump to */
-	for (counter = 20; counter > 0; counter--) {
-	    dest.cx = (int)(rfrac() * World.cwidth);
-	    dest.cy = (int)(rfrac() * World.cheight);
-	    if (shape_is_inside(dest.cx, dest.cy, hitmask,
-				(object *)pl, (shape_t *)pl->ship,
-				pl->dir)
-		== NO_GROUP)
-		break;
-	}
-
-	/* can't find an empty space, hyperjump failed */
-	if (!counter)
-	    dest = pl->pos;
-
-#if 0 /* kps - temporary wormholes disabled currently */
-	if (counter
-	    && wormTime
-	    && BIT(1U << World.block[OBJ_X_IN_BLOCKS(pl)]
-		   [OBJ_Y_IN_BLOCKS(pl)],
-		   SPACE_BIT)
-	    && BIT(1U << World.block[CLICK_TO_BLOCK(dest.cx)]
-		   [CLICK_TO_BLOCK(dest.cy)],
-		   SPACE_BIT))
-	    add_temp_wormholes(OBJ_X_IN_BLOCKS(pl),
-			       OBJ_Y_IN_BLOCKS(pl),
-			       CLICK_TO_BLOCK(dest.cx),
-			       CLICK_TO_BLOCK(dest.cy));
-#endif
-	j = -2;
-	sound_play_sensors(pl->pos, HYPERJUMP_SOUND);
-    }
-
-    /*
-     * Don't connect to balls while warping.
-     */
-    if (BIT(pl->used, HAS_CONNECTOR))
-	pl->ball = NULL;
-
-    if (BIT(pl->have, HAS_BALL)) {
-	/*
-	 * Take every ball associated with player through worm hole.
-	 * NB. the connector can cross a wall boundary this is
-	 * allowed, so long as the ball itself doesn't collide.
-	 */
-	int k;
-	for (k = 0; k < NumObjs; k++) {
-	    object *b = Obj[k];
-	    if (BIT(b->type, OBJ_BALL) && b->id == pl->id) {
-		clpos ballpos;
-		ballpos.cx = b->pos.cx + dest.cx - pl->pos.cx;
-		ballpos.cy = b->pos.cy + dest.cy - pl->pos.cy;
-		ballpos.cx = WRAP_XCLICK(ballpos.cx);
-		ballpos.cy = WRAP_YCLICK(ballpos.cy);
-		if (!INSIDE_MAP(ballpos.cx, ballpos.cy)) {
-		    b->life = 0;
-		    continue;
-		}
-		/*
-		 * kps - use shape is inside here to check if ball
-		 * is inside wall
-		 */
-		Object_position_set_clicks(b, ballpos.cx, ballpos.cy);
-		Object_position_remember(b);
-		b->vel.x *= WORM_BRAKE_FACTOR;
-		b->vel.y *= WORM_BRAKE_FACTOR;
-		Cell_add_object(b);
-	    }
+	    pl->visibility[j].lastChange = frame_loops;
+	    pl->visibility[j].canSee
+		= (rfrac() * (pl->item[ITEM_SENSOR] + 1))
+		> (rfrac() * (pl_j->item[ITEM_CLOAK] + 1));
 	}
     }
-
-    pl->wormHoleDest = j;
-    Player_position_init_clicks(pl, dest.cx, dest.cy);
-    pl->vel.x *= WORM_BRAKE_FACTOR;
-    pl->vel.y *= WORM_BRAKE_FACTOR;
-    pl->forceVisible += 15;
-
-    if ((j != pl->wormHoleHit) && (pl->wormHoleHit != -1)) {
-	World.wormholes[pl->wormHoleHit].lastdest = j;
-	if (!World.wormholes[j].temporary)
-	    World.wormholes[pl->wormHoleHit].countdown
-		= (wormTime ? wormTime : WORMCOUNT);
-    }
-
-    CLR_BIT(pl->status, WARPING);
-    /*
-     * One second immunity to warped-to wormhole
-     */
-    pl->warped = 12 * 1.0;
-
-    sound_play_sensors(pl->pos, WORM_HOLE_SOUND);
 }
+#undef UPDATE_RATE
 
 
-/********** **********
- * Updating objects and the like.
+
+/* * * * * *
+ *
+ * Player loop. Computes miscellaneous updates.
+ *
  */
-void Update_objects(void)
+static void Update_players(world_t *world)
 {
-    int i, j;
-    player *pl;
-
-    /*
-     * Since the amount per frame of some things could get too small to
-     * be represented accurately as an integer, FPSMultiplier makes these
-     * things happen less often (in terms of frames) rather than smaller
-     * amount each time.
-     *
-     * Can also be used to do some updates less frequently.
-     */
-    do_update_this_frame = false;
-    if ((time_to_update -= timeStep) <= 0) {
-	do_update_this_frame = true;
-	time_to_update += 1;
-    }
-
-    Robot_update();
-
-    if (fastAim)
-	Players_turn();
+    int i;
+    player_t *pl;
 
     for (i = 0; i < NumPlayers; i++) {
 	pl = Players(i);
 
-	if (pl->stunned > 0) {
-	    pl->stunned -= timeStep;
-	    if (pl->stunned <= 0)
-		pl->stunned = 0;
-	    CLR_BIT(pl->used, HAS_SHIELD|HAS_LASER|HAS_SHOT);
-	    pl->did_shoot = false;
-	    CLR_BIT(pl->status, THRUSTING);
+	if (BIT(pl->status, PAUSE)) {
+	    if (options.pauseTax > 0.0 && (frame_loops % FPS) == 0) {
+		pl->score -= options.pauseTax;
+		updateScores = true;
+	    }
 	}
-	if (pl->warped > 0) {
-	    pl->warped -= timeStep;
-	    if (pl->warped <= 0)
-		pl->warped = 0;
-	}
-	if (BIT(pl->used, HAS_SHOT) || pl->did_shoot)
-	    Fire_normal_shots(pl);
-	if (BIT(pl->used, HAS_LASER)) {
-	    if (pl->item[ITEM_LASER] <= 0 || BIT(pl->used, HAS_PHASING_DEVICE))
-		CLR_BIT(pl->used, HAS_LASER);
-	    else
-		Fire_laser(pl);
-	}
-	pl->did_shoot = false;
-    }
-
-    /*
-     * Special items.
-     */
-    if (do_update_this_frame) {
-	for (i = 0; i < NUM_ITEMS; i++)
-	    if (World.items[i].num < World.items[i].max
-		&& World.items[i].chance > 0
-		&& (rfrac() * World.items[i].chance) < 1.0f)
-		Place_item(NULL, i);
-    }
-
-    Fuel_update();
-    Misc_object_update();
-    Asteroid_update();
-    Ecm_update();
-    Transporter_update();
-    Cannon_update();
-    Target_update();
-
-    if (!fastAim)
-	Players_turn();
-
-    /* * * * * *
-     *
-     * Player loop. Computes miscellaneous updates.
-     *
-     */
-    for (i = 0; i < NumPlayers; i++) {
-	pl = Players(i);
 
 	if ((pl->damaged -= timeStep) <= 0)
 	    pl->damaged = 0;
 
-	/* kps - fix these */
-	if (pl->flooding > FPS + 1) {
-	    sprintf(msg, "%s was kicked out because of flooding.", pl->name);
+	if (pl->flooding > FPS + 2) {
+	    Set_message("%s was kicked out because of flooding. "
+			"[*Server notice*]", pl->name);
 	    Destroy_connection(pl->conn, "flooding");
 	    i--;
 	    continue;
-	} else if ( pl->flooding >= 0 )
+	} else if (pl->flooding > 0)
 	    pl->flooding--;
 
-#define IDLETHRESHOLD (FPS * 60)
-
-	if (IS_HUMAN_PTR(pl)) {
+	/* ugly hack */
+	if (Player_is_human(pl))
 	    pl->rank->score = pl->score;
-	    if ( pl->mychar == ' ' ) {
-		if ( pl->idleCount++ == IDLETHRESHOLD ) {
-		    if ( NumPlayers - 1 > NumPseudoPlayers + NumRobots ) {
-			/* Kill player, he/she will be paused when returned
-			   to base, unless he/she wakes up. */
-			Kill_player(pl, false);
-		    } else
-			pl->idleCount = 0;
-		}
+
+	if (pl->pause_count > 0) {
+	    /*assert(BIT(pl->status, PAUSE|HOVERPAUSE));*/
+
+	    /* kps - this is because of bugs elsewhere */
+	    if (!BIT(pl->status, PAUSE|HOVERPAUSE))
+		pl->pause_count = 0;
+
+	    pl->pause_count -= timeStep;
+	    if (pl->pause_count <= 0)
+		pl->pause_count = 0;
+	}
+
+	if (pl->recovery_count > 0) {
+	    /* this shouldn't happen */
+	    if (BIT(pl->status, PLAYING))
+		warn("**** Player %s is playing, recovery count = %f",
+		     pl->name, pl->recovery_count);
+
+	    pl->recovery_count -= timeStep;
+	    if (pl->recovery_count <= 0) {
+		/* Player has recovered. */
+		pl->recovery_count = 0;
+		SET_BIT(pl->status, PLAYING);
+		Go_home(pl); 
+	    }
+	    else {
+		/* Player didn't recover yet. */
+		Transport_to_home(pl);
+		Move_player(pl);
+		continue;
 	    }
 	}
 
-	if (pl->count >= 0) {
-	    pl->count -= timeStep;
-	    if (pl->count > 0) {
-		if (!BIT(pl->status, PLAYING)) {
-		    Transport_to_home(pl);
-		    Move_player(pl);
-		    continue;
+	if (Player_is_self_destructing(pl)) {
+	    pl->self_destruct_count -= timeStep;
+	    if (pl->self_destruct_count <= 0) {
+		if (options.selfDestructScoreMult != 0) {
+		    double sc = Rate(0.0, pl->score)
+			* options.selfDestructScoreMult;
+		    Score(pl, -sc, pl->pos, "Self-Destruct");
 		}
-	    } else {
-		pl->count = -1;
-		if (!BIT(pl->status, PLAYING)) {
-		    /*
-		     * kps - another idle check comes later in this file.
-		     * Are both needed ?
-		     */
-		    if (pl->idleCount >= IDLETHRESHOLD) { /* idle */
-			Pause_player(pl, true);
-			sprintf(msg, "%s was paused for idling.", pl->name);
-			Set_message(msg);
-			continue;
-		    }
-
-		    SET_BIT(pl->status, PLAYING);
-		    Go_home(pl);
-		}
-		if (BIT(pl->status, SELF_DESTRUCT)) {
-		    if (selfDestructScoreMult != 0) {
-			double sc = Rate(0, pl->score) * selfDestructScoreMult;
-			Score(pl, -sc, pl->pos, "Self-Destruct");
-		    }
-		    SET_BIT(pl->status, KILLED);
-		    sprintf(msg, "%s has committed suicide.", pl->name);
-		    Set_message(msg);
-		    Throw_items(pl);
-		    Kill_player(pl, true);
-		    updateScores = true;
-		}
+		SET_BIT(pl->status, KILLED);
+		Set_message("%s has committed suicide.", pl->name);
+		Throw_items(pl);
+		Kill_player(pl, true);
+		updateScores = true;
 	    }
 	}
 
 	if (!Player_is_active(pl))
 	    continue;
 
-	if (round_delay > 0)
-	    continue;
-
 	Use_items(pl);
 
-#define UPDATE_RATE 100
-
-	for (j = 0; j < NumPlayers; j++) {
-	    player *pl_j = Players(j);
-
-	    if (pl->forceVisible > 0)
-		pl_j->visibility[i].canSee = 1;
-
-	    if (i == j || !BIT(pl_j->used, HAS_CLOAKING_DEVICE))
-		pl->visibility[j].canSee = 1;
-	    else if (pl->updateVisibility
-		     || pl_j->updateVisibility
-		     || (int)(rfrac() * UPDATE_RATE)
-		     < ABS(frame_loops - pl->visibility[j].lastChange)) {
-
-		pl->visibility[j].lastChange = frame_loops;
-		pl->visibility[j].canSee
-		    = (rfrac() * (pl->item[ITEM_SENSOR] + 1))
-		    > (rfrac() * (pl_j->item[ITEM_CLOAK] + 1));
-	    }
-	}
+	Update_visibility(pl, i);
 
 	if (BIT(pl->used, HAS_REFUEL))
 	    Do_refuel(pl);
@@ -1220,27 +890,41 @@ void Update_objects(void)
 		power = AFTER_BURN_POWER(power, a);
 		f = AFTER_BURN_FUEL(f, a);
 	    }
-	    pl->acc.x = power * tcos(pl->dir) / inert;
-	    pl->acc.y = power * tsin(pl->dir) / inert;
+
+	    if (!options.ngControls) {
+		pl->acc.x = power * tcos(pl->dir) / inert;
+		pl->acc.y = power * tsin(pl->dir) / inert;
+	    } else {
+		pl->acc.x = power * pl->float_dir_cos / inert;
+		pl->acc.y = power * pl->float_dir_sin / inert;
+	    }
+
 	    /* Decrement fuel */
 	    if (do_update_this_frame)
-		Add_fuel(&(pl->fuel), (long)(-f * FUEL_SCALE_FACT));
+		Player_add_fuel(pl, -f);
 	} else
 	    pl->acc.x = pl->acc.y = 0.0;
 
-	pl->mass = pl->emptymass
-		   + FUEL_MASS(pl->fuel.sum)
-		   + pl->item[ITEM_ARMOR] * ARMOR_MASS;
+	Player_set_mass(pl);
 
+	/*
+	 * Handle hyperjumps and wormholes.
+	 */
+#if 0
+	warn("Player %s update, warping = %d",
+	     pl->name, BIT(pl->status, WARPING));
+#endif
+	if (BIT(pl->status, WARPING)) {
+	    if (pl->wormHoleHit == -1)
+		Hyperjump(pl);
+	    else
+		Traverse_wormhole(pl);
+	}
 
-	/* Wormholes and warping */
-	if (BIT(pl->status, WARPING))
-	    Do_warping(pl);
-
-	update_object_speed(OBJ_PTR(pl));
+	update_object_speed(world, OBJ_PTR(pl));
 	Move_player(pl);
 
-	if ((!BIT(pl->used, HAS_CLOAKING_DEVICE) || cloakedExhaust)
+	if ((!BIT(pl->used, HAS_CLOAKING_DEVICE) || options.cloakedExhaust)
 	    && !BIT(pl->used, HAS_PHASING_DEVICE)) {
 	    if (BIT(pl->status, THRUSTING))
   		Thrust(pl);
@@ -1250,15 +934,89 @@ void Update_objects(void)
 
 	pl->used &= pl->have;
     }
+}
 
-    for (i = World.NumWormholes - 1; i >= 0; i--) {
-	wormhole_t *wh = Wormholes(i);
+/********** **********
+ * Updating objects and the like.
+ */
+void Update_objects(world_t *world)
+{
+    int i;
+    player_t *pl;
+
+    /*
+     * Since the amount per frame of some things could get too small to
+     * be represented accurately as an integer, FPSMultiplier makes these
+     * things happen less often (in terms of frames) rather than smaller
+     * amount each time.
+     *
+     * Can also be used to do some updates less frequently.
+     */
+    do_update_this_frame = false;
+    if ((time_to_update -= timeStep) <= 0) {
+	do_update_this_frame = true;
+	time_to_update += 1;
+    }
+
+    Robot_update(world);
+
+    /*
+     * Fast aim:
+     * When calculating a frame, turn the ship before firing.
+     * This means you can change aim one frame faster.
+     */
+    Players_turn();
+
+    for (i = 0; i < NumPlayers; i++) {
+	pl = Players(i);
+
+	if (pl->stunned > 0) {
+	    pl->stunned -= timeStep;
+	    if (pl->stunned <= 0)
+		pl->stunned = 0;
+	    CLR_BIT(pl->used, HAS_SHIELD|HAS_LASER|HAS_SHOT);
+	    pl->did_shoot = false;
+	    CLR_BIT(pl->status, THRUSTING);
+	}
+	if (BIT(pl->used, HAS_SHOT) || pl->did_shoot)
+	    Fire_normal_shots(pl);
+	if (BIT(pl->used, HAS_LASER)) {
+	    if (pl->item[ITEM_LASER] <= 0 || BIT(pl->used, HAS_PHASING_DEVICE))
+		CLR_BIT(pl->used, HAS_LASER);
+	    else
+		Fire_laser(pl);
+	}
+	pl->did_shoot = false;
+    }
+
+    /*
+     * Special items.
+     */
+    if (do_update_this_frame) {
+	for (i = 0; i < NUM_ITEMS; i++)
+	    if (world->items[i].num < world->items[i].max
+		&& world->items[i].chance > 0
+		&& (rfrac() * world->items[i].chance) < 1.0f)
+		Place_item(world, NULL, i);
+    }
+
+    Fuel_update(world);
+    Misc_object_update(world);
+    Asteroid_update(world);
+    Ecm_update(world);
+    Transporter_update(world);
+    Cannon_update(world, do_update_this_frame);
+    Target_update(world);
+    Update_players(world);
+
+    for (i = world->NumWormholes - 1; i >= 0; i--) {
+	wormhole_t *wh = Wormholes(world, i);
 
 	if ((wh->countdown -= timeStep) <= 0)
 	    wh->countdown = 0;
 
 	if (wh->temporary && wh->countdown <= 0)
-	    remove_temp_wormhole(i);
+	    remove_temp_wormhole(world, i);
     }
 
 
@@ -1279,19 +1037,17 @@ void Update_objects(void)
 	    Tractor_beam(pl);
 
 	if (BIT(pl->lock.tagged, LOCK_PLAYER)) {
-	    player *lpl = Player_by_id(pl->lock.pl_id);
+	    player_t *lpl = Player_by_id(pl->lock.pl_id);
 
-	    pl->lock.distance =
-		Wrap_length(pl->pos.cx - lpl->pos.cx,
-			    pl->pos.cy - lpl->pos.cy) / CLICK;
+	    pl->lock.distance = Wrap_length(pl->pos.cx - lpl->pos.cx,
+					    pl->pos.cy - lpl->pos.cy) / CLICK;
 	}
     }
 
     /*
      * Checking for collision, updating score etc. (see collision.c)
      */
-    Check_collision();
-
+    Check_collision(world);
 
     /*
      * Update tanks, Kill players that ought to be killed.
@@ -1301,52 +1057,78 @@ void Update_objects(void)
 
 	if (Player_is_playing(pl))
 	    Update_tanks(&(pl->fuel));
+
 	if (BIT(pl->status, KILLED)) {
 	    Throw_items(pl);
 
 	    Detonate_items(pl);
 
 	    Kill_player(pl, true);
+	}
 
-	    if (IS_HUMAN_PTR(pl)) {
-		if (frame_loops - pl->frame_last_busy > 60 * FPS) {
-		    if ((NumPlayers - NumRobots - NumPseudoPlayers) > 1) {
-			Pause_player(pl, true);
-			sprintf(msg, "%s was paused for idling.", pl->name);
-			Set_message(msg);
-		    }
-		}
+	if (BIT(pl->status, PAUSE)) {
+	    pl->pauseTime += timePerFrame;
+	    if (Player_is_human(pl)
+		&& options.maxPauseTime > 0
+		&& pl->pauseTime > options.maxPauseTime) {
+		Set_message("%s was auto-kicked for pausing too long. "
+			    "[*Server notice*]", pl->name);
+		Destroy_connection(pl->conn, "auto-kicked: paused too long");
 	    }
 	}
+	else
+	    pl->pauseTime = 0;
 
-	if (maxPauseTime > 0
-	    && IS_HUMAN_PTR(pl)
-	    && BIT(pl->status, PAUSE)
-	    && frame_loops - pl->frame_last_busy > maxPauseTime) {
-	    sprintf(msg, "%s was auto-kicked for pausing too long "
-		    "[*Server notice*]", pl->name);
-	    Set_message(msg);
-	    Destroy_connection(pl->conn, "auto-kicked: paused too long");
+	if (Player_is_playing(pl) && pl->recovery_count <= 0) {
+	    pl->idleTime += timePerFrame;
+	    if (Player_is_human(pl)
+		&& options.maxIdleTime > 0
+		&& pl->idleTime > options.maxIdleTime
+		&& (NumPlayers - NumRobots - NumPseudoPlayers) > 1) {
+		Set_message("%s was paused for idling. "
+			    "[*Server notice*]", pl->name);
+		Pause_player(pl, true);
+	    }
 	}
     }
+
+#if 0
+    warn("1. NumObjs = %d", NumObjs);
+#endif
 
     /*
      * Kill shots that ought to be dead.
      */
     for (i = NumObjs - 1; i >= 0; i--)
 	if ((Obj[i]->life -= timeStep) <= 0)
-	    Delete_shot(i);
+	    Delete_shot(world, i);
+
+#if 0
+    warn("2. NumObjs = %d", NumObjs);
+#endif
+
+     /*
+      * In tag games, check if anyone is tagged. otherwise, tag someone.
+      */
+    if (options.tagGame) {
+	int oldtag = tagItPlayerId;
+
+	Check_tag();
+	if (tagItPlayerId != oldtag && tagItPlayerId != NO_ID)
+	    Set_message(" < %s is 'it' now. >",
+			Player_by_id(tagItPlayerId)->name);
+    }
 
     /*
      * Compute general game status, do we have a winner?
      * (not called after Game_Over() )
      */
-    if (gameDuration >= 0.0 || maxRoundTime > 0)
-	Compute_game_status();
+    if (options.gameDuration >= 0.0 || options.maxRoundTime > 0)
+	Compute_game_status(world);
 
     /*
      * Now update labels if need be.
      */
     if (updateScores && frame_loops % UPDATE_SCORE_DELAY == 0)
-	Update_score_table();
+	Update_score_table(world);
 }

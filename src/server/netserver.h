@@ -1,5 +1,7 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,13 +20,17 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef	NETSERVER_H
 #define	NETSERVER_H
 
-int Get_motd(char *buf, int offset, int maxlen, int *size_ptr);
+#ifndef OBJECT_H
+/* need player_t */
+#include "object.h"
+#endif
+
 int Setup_net_server(void);
 void Conn_change_nick(connection_t *connp, const char *nick);
 void Destroy_connection(connection_t *connp, const char *reason);
@@ -33,7 +39,7 @@ int Setup_connection(char *real, char *nick, char *dpy, int team,
 		     char *addr, char *host, unsigned version);
 int Input(void);
 int Send_reply(connection_t *connp, int replyto, int result);
-int Send_self(connection_t *connp, player *pl,
+int Send_self(connection_t *connp, player_t *pl,
 	      int lock_id,
 	      int lock_dist,
 	      int lock_dir,
@@ -47,38 +53,37 @@ int Send_player(connection_t *connp, int id);
 int Send_team(connection_t *connp, int id, int team);
 int Send_score(connection_t *connp, int id, double score,
 	       int life, int mychar, int alliance);
-int Send_score_object(connection_t *connp, double score, int cx, int cy, const char *string);
+int Send_score_object(connection_t *connp, double score, clpos_t pos, const char *string);
 int Send_team_score(connection_t *connp, int team, double score);
 int Send_timing(connection_t *connp, int id, int check, int round);
 int Send_base(connection_t *connp, int id, int num);
-int Send_fuel(connection_t *connp, int num, int fuel);
-int Send_cannon(connection_t *connp, int num, int dead_time);
+int Send_fuel(connection_t *connp, int num, double fuel);
+int Send_cannon(connection_t *connp, int num, int dead_ticks);
 int Send_destruct(connection_t *connp, int count);
 int Send_shutdown(connection_t *connp, int count, int delay);
 int Send_thrusttime(connection_t *connp, int count, int max);
 int Send_shieldtime(connection_t *connp, int count, int max);
 int Send_phasingtime(connection_t *connp, int count, int max);
-int Send_rounddelay(connection_t *connp, int count, int max);
-int Send_debris(connection_t *connp, int type, unsigned char *p, int n);
-int Send_wreckage(connection_t *connp, int cx, int cy, u_byte wrtype, u_byte size, u_byte rot);
-int Send_asteroid(connection_t *connp, int cx, int cy, u_byte type, u_byte size, u_byte rot);
-int Send_fastshot(connection_t *connp, int type, unsigned char *p, int n);
-int Send_missile(connection_t *connp, int cx, int cy, int len, int dir);
-int Send_ball(connection_t *connp, int cx, int cy, int id);
-int Send_mine(connection_t *connp, int cx, int cy, int teammine, int id);
-int Send_target(connection_t *connp, int num, int dead_time, int damage);
-int Send_wormhole(connection_t *connp, int cx, int cy);
+int Send_debris(connection_t *connp, int type, unsigned char *p, unsigned n);
+int Send_wreckage(connection_t *connp, clpos_t pos, int wrtype, int size, int rot);
+int Send_asteroid(connection_t *connp, clpos_t pos, int type, int size, int rot);
+int Send_fastshot(connection_t *connp, int type, unsigned char *p, unsigned n);
+int Send_missile(connection_t *connp, clpos_t pos, int len, int dir);
+int Send_ball(connection_t *connp, clpos_t pos, int id, int style);
+int Send_mine(connection_t *connp, clpos_t pos, int teammine, int id);
+int Send_target(connection_t *connp, int num, int dead_ticks, double damage);
+int Send_wormhole(connection_t *connp, clpos_t pos);
 int Send_audio(connection_t *connp, int type, int vol);
-int Send_item(connection_t *connp, int cx, int cy, int type);
-int Send_paused(connection_t *connp, int cx, int cy, int count);
-int Send_appearing(connection_t *connp, int cx, int cy, int id, int count);
-int Send_ecm(connection_t *connp, int cx, int cy, int size);
-int Send_ship(connection_t *connp, int cx, int cy, int id, int dir, int shield, int cloak, int eshield, int phased, int deflector);
-int Send_refuel(connection_t *connp, int cx0, int cy0, int cx1, int cy1);
-int Send_connector(connection_t *connp, int cx0, int cy0, int cx1, int cy1, int tractor);
-int Send_laser(connection_t *connp, int color, int cx, int cy, int len, int dir);
+int Send_item(connection_t *connp, clpos_t pos, int type);
+int Send_paused(connection_t *connp, clpos_t pos, int count);
+int Send_appearing(connection_t *connp, clpos_t pos, int id, int count);
+int Send_ecm(connection_t *connp, clpos_t pos, int size);
+int Send_ship(connection_t *connp, clpos_t pos, int id, int dir, int shield, int cloak, int eshield, int phased, int deflector);
+int Send_refuel(connection_t *connp, clpos_t pos1, clpos_t pos2);
+int Send_connector(connection_t *connp, clpos_t pos1, clpos_t pos2, int tractor);
+int Send_laser(connection_t *connp, int color, clpos_t pos, int len, int dir);
 int Send_radar(connection_t *connp, int x, int y, int size);
-int Send_fastradar(connection_t *connp, unsigned char *buf, int n);
+int Send_fastradar(connection_t *connp, unsigned char *buf, unsigned n);
 int Send_damaged(connection_t *connp, int damaged);
 int Send_message(connection_t *connp, const char *msg);
 int Send_loseitem(connection_t *connp, int lose_item_index);
@@ -87,17 +92,18 @@ int Send_end_of_frame(connection_t *connp);
 int Send_reliable(connection_t *connp);
 int Send_time_left(connection_t *connp, long sec);
 int Send_eyes(connection_t *connp, int id);
-int Send_trans(connection_t *connp, int cx1, int cy1, int cx2, int cy2);
+int Send_trans(connection_t *connp, clpos_t pos1, clpos_t pos2);
 void Get_display_parameters(connection_t *connp, int *width, int *height,
 			    int *debris_colors, int *spark_rand);
 int Get_player_id(connection_t *connp);
-const char *Player_get_addr(player *pl);
-const char *Player_get_dpy(player *pl);
+const char *Player_get_addr(player_t *pl);
+const char *Player_get_dpy(player_t *pl);
 int Send_shape(connection_t *connp, int shape);
+int Check_max_clients_per_IP(char *host_addr);
 #define FEATURE(connp, feature)	((connp)->features & (feature))
 #define F_POLY			(1 << 0)
 #define F_FLOATSCORE		(1 << 1)
-#define F_TEAMSCORE F_FLOATSCORE
+#define F_TEAMSCORE		F_FLOATSCORE
 #define F_EXPLICITSELF		(1 << 2)
 #define F_ASTEROID		(1 << 3)
 #define F_TEMPWORM		(1 << 4)
@@ -105,6 +111,8 @@ int Send_shape(connection_t *connp, int shape);
 #define F_SEPARATEPHASING	(1 << 6)
 #define F_TEAMRADAR		(1 << 7)
 #define F_SHOW_APPEARING	(1 << 8)
-#define F_SENDTEAM		(1 << 8)
+#define F_SENDTEAM		F_SHOW_APPEARING
+#define F_CUMULATIVETURN	(1 << 9)
+#define F_BALLSTYLE		(1 << 10)
 
 #endif

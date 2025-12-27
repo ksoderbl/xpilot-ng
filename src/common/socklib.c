@@ -1,5 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,7 +20,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpcommon.h"
@@ -77,7 +79,9 @@ static int sock_set_error(sock_t *sock, int err, sock_call_t call, int line)
 {
     DEB(printf("set error %d, %d, %d.  \"%s\"\n",
 	       err, call, line, strerror(err)));
-
+#ifdef _WINDOWS
+	DEB(printf("WSAGetLastError: %d\n", WSAGetLastError()));
+#endif
     sock->error.error = err;
     sock->error.call = call;
     sock->error.line = line;
@@ -317,17 +321,20 @@ int sock_open_tcp_connected_non_blocking(sock_t *sock, char *host, int port)
 	    = ((struct in_addr *)(hp->h_addr_list[0]))->s_addr;
     }
 
-#ifndef _WINDOWS
     if (connect(sock->fd, (struct sockaddr *)&dest,
-		sizeof(struct sockaddr_in)) < 0
-	&& errno != EINPROGRESS)
-    {
-	sock_set_error(sock, errno, SOCK_CALL_CONNECT, __LINE__);
-	sock_close(sock);
-	return SOCK_IS_ERROR;
-    }
+		sizeof(struct sockaddr_in)) < 0) {
+
+#ifndef _WINDOWS
+  	if (errno != EINPROGRESS) {
+#else
+ 	if (WSAGetLastError() != 10035) {
 #endif
 
+		sock_set_error(sock, errno, SOCK_CALL_CONNECT, __LINE__);
+		sock_close(sock);
+		return SOCK_IS_ERROR;
+		}
+	}
     sock_flags_add(sock, SOCK_FLAG_CONNECT);
 
     return SOCK_IS_OK;
@@ -718,7 +725,7 @@ int sock_readable(sock_t *sock)
 
 static void sock_catch_alarm(int signum)
 {
-    (void)signum;
+    UNUSED_PARAM(signum);
     printf("DNS lookup cancelled\n");
 
     longjmp(env, 1);
@@ -752,7 +759,7 @@ static struct hostent *sock_get_host_by_name(const char *name)
      * If you aren't connected to the net, then gethostbyname()
      * can take many minutes to time out.  WSACancelBlockingCall()
      * doesn't affect it.
-     */
+     *
     
     static char     chp[MAXGETHOSTSTRUCT+1];
     struct hostent* hp = (struct hostent*)&chp;
@@ -771,6 +778,8 @@ static struct hostent *sock_get_host_by_name(const char *name)
     }
     WSACancelAsyncRequest(h);
     return NULL;
+	*/
+	return gethostbyname(name);
 
 #endif
 }

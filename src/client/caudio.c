@@ -1,5 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,22 +20,20 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 /* This piece of code was provided by Greg Renda (greg@ncd.com). */
 /*
  * client audio
  */
 
-#ifdef SOUND
-
-#define	MAX_RANDOM_SOUNDS	6
-
-#define _CAUDIO_C_
-
 #include "xpclient.h"
 
 char caudio_version[] = VERSION;
+
+#ifdef SOUND
+
+#define	MAX_RANDOM_SOUNDS	6
 
 static int	audioEnabled;
 
@@ -163,11 +163,5 @@ int Handle_audio(int type, int volume)
 
     return 0;
 }
-
-#else
-
-#include "xpclient.h"
-
-char caudio_version[] = VERSION;
 
 #endif /* SOUND */

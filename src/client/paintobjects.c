@@ -1,5 +1,7 @@
 /*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,7 +20,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpclient.h"
@@ -38,19 +40,9 @@ static int wreckageRawShapes[NUM_WRECKAGE_SHAPES][NUM_WRECKAGE_POINTS][2] = {
 };
 
 
-position *wreckageShapes[NUM_WRECKAGE_SHAPES][NUM_WRECKAGE_POINTS];
+position_t *wreckageShapes[NUM_WRECKAGE_SHAPES][NUM_WRECKAGE_POINTS];
 
 
-static int asteroidRawShapes[NUM_ASTEROID_SHAPES][NUM_ASTEROID_POINTS][2] = {
-    { ASTEROID_SHAPE_0 },
-    { ASTEROID_SHAPE_1 },
-};
-
-
-position *asteroidShapes[NUM_ASTEROID_SHAPES][NUM_ASTEROID_POINTS];
-
-
-u_byte	debris_colors;		/* Number of debris intensities from server */
 bool	markingLights;
 
 
@@ -72,64 +64,6 @@ static int wrap(int *xp, int *yp)
     return 1;
 }
 
-/* might want to move this one to gui_objects.c */
-
-/*db960828 added color parameter cause Windows needs to blt a different
-         bitmap based on the color. Unix ignores this parameter*/
-void Paint_item_symbol(int type, Drawable d, GC mygc, int x, int y, int color)
-{
-    if (!texturedObjects) {
-#ifdef _WINDOWS
-	rd.paintItemSymbol(type, d, mygc, x, y, color);
-#else
-	gcv.stipple = itemBitmaps[type];
-	gcv.fill_style = FillStippled;
-	gcv.ts_x_origin = x;
-	gcv.ts_y_origin = y;
-	XChangeGC(dpy, mygc,
-		  GCStipple|GCFillStyle|GCTileStipXOrigin|GCTileStipYOrigin,
-		  &gcv);
-	rd.paintItemSymbol(type, d, mygc, x, y, color);
-	XFillRectangle(dpy, d, mygc, x, y, ITEM_SIZE, ITEM_SIZE);
-	gcv.fill_style = FillSolid;
-	XChangeGC(dpy, mygc, GCFillStyle, &gcv);
-#endif
-    } else
-	Bitmap_paint(d, BM_ALL_ITEMS, x, y, type);
-}
-
-
-void Paint_item(int type, Drawable d, GC mygc, int x, int y)
-{
-    const int		SIZE = ITEM_TRIANGLE_SIZE;
-    XPoint		points[5];
-
-#ifndef NO_ITEM_TRIANGLES
-    points[0].x = x - SIZE;
-    points[0].y = y - SIZE;
-    points[1].x = x;
-    points[1].y = y + SIZE;
-    points[2].x = x + SIZE;
-    points[2].y = y - SIZE;
-    points[3] = points[0];
-    SET_FG(colors[BLUE].pixel);
-    rd.drawLines(dpy, d, mygc, points, 4, CoordModeOrigin);
-#endif
-
-    SET_FG(colors[RED].pixel);
-#if 0
-    str[0] = itemtype_ptr[i].type + '0';
-    str[1] = '\0';
-    rd.drawString(dpy, d, mygc,
-		  x - XTextWidth(gameFont, str, 1)/2,
-		  y + SIZE - 1,
-		  str, 1);
-#endif
-    Paint_item_symbol(type, d, mygc,
-		      x - ITEM_SIZE/2,
-		      y - SIZE + 2, ITEM_PLAYFIELD);
-}
-
 
 static void Paint_items(void)
 {
@@ -137,13 +71,11 @@ static void Paint_items(void)
 
     if (num_itemtype > 0) {
 
-	SET_FG(colors[RED].pixel);
 	for (i = 0; i < num_itemtype; i++) {
 	    x = itemtype_ptr[i].x;
 	    y = itemtype_ptr[i].y;
 	    if (wrap(&x, &y))
-		Paint_item(itemtype_ptr[i].type, drawPixmap, gameGC,
-			   WINSCALE(X(x)), WINSCALE(Y(y)));
+		Gui_paint_item_object(itemtype_ptr[i].type, x, y);
 	}
 	RELEASE(itemtype_ptr, num_itemtype, max_itemtype);
     }
@@ -152,7 +84,7 @@ static void Paint_items(void)
 
 static void Paint_balls(void)
 {
-    int		i, j, id, x, y, xs, ys;
+    int		i, j, id, style, x, y, xs, ys;
 
     if (num_ball > 0) {
 
@@ -160,9 +92,10 @@ static void Paint_balls(void)
 	    x = ball_ptr[i].x;
 	    y = ball_ptr[i].y;
 	    id = ball_ptr[i].id;
+	    style = ball_ptr[i].style;
 
 	    if (wrap(&x, &y)) {
-		Gui_paint_ball(x, y);
+		Gui_paint_ball(x, y, style);
 
 		if (id == -1)
 		    continue;
@@ -207,19 +140,17 @@ static void Paint_mines(void)
 		 * We do not know who is safe for mines sent with id==0
 		 */
 		name = NULL;
-		if (mineNameColor) {
-		    if (mine_ptr[i].id != 0) {
-			other_t *other;
-			if (mine_ptr[i].id == EXPIRED_MINE_ID) {
-			    static char expired_name[] = "Expired";
-			    name = expired_name;
-			} else if ((other = Other_by_id(mine_ptr[i].id))
-				   != NULL)
-			    name = other->id_string;
-			else {
-			    static char unknown_name[] = "Not of this world!";
-			    name = unknown_name;
-			}
+		if (mine_ptr[i].id != 0) {
+		    other_t *other;
+		    if (mine_ptr[i].id == EXPIRED_MINE_ID) {
+			static char expired_name[] = "Expired";
+			name = expired_name;
+		    } else if ((other = Other_by_id(mine_ptr[i].id))
+			       != NULL)
+			name = other->id_string;
+		    else {
+			static char unknown_name[] = "Not of this world!";
+			name = unknown_name;
 		    }
 		}
 		Gui_paint_mine(x, y, mine_ptr[i].teammine, name);
@@ -237,14 +168,14 @@ static void Paint_debris(int x_areas, int y_areas, int areas, int max_)
 #if 0
 /* before "sparkColors" option: */
 #define DEBRIS_COLOR(color) \
-	((debris_colors > 4) ?				\
+	((num_spark_colors > 4) ?			\
 	 (5 + (((color & 1) << 2) | (color >> 1))) :	\
-	 ((debris_colors >= 3) ?			\
+	 ((num_spark_colors >= 3) ?			\
 	  (5 + color) : (color)))
 #else
 /* adjusted for "sparkColors" option: */
 #define DEBRIS_COLOR(color) \
-	((debris_colors > 4) ?				\
+	((num_spark_colors > 4) ?			\
 	 ((((color & 1) << 2) | (color >> 1))) :	\
 	  (color))
 #endif
@@ -299,11 +230,12 @@ static void Paint_asteroids(void)
     int		type, size, rot;
 
     if ( num_asteroids > 0 ) {
+	Gui_paint_asteroids_begin();
 	for (i = 0; i < num_asteroids; i++) {
 	    x = asteroid_ptr[i].x;
 	    y = asteroid_ptr[i].y;
 	    if (wrap(&x, &y)) {
-		type = (asteroid_ptr[i].type) % NUM_ASTEROID_SHAPES;
+		type = asteroid_ptr[i].type;
 		rot = asteroid_ptr[i].rotation;
 		size = asteroid_ptr[i].size;
 
@@ -311,6 +243,7 @@ static void Paint_asteroids(void)
 	    }
 
 	}
+	Gui_paint_asteroids_end();
 	RELEASE(asteroid_ptr, num_asteroids, max_asteroids);
     }
 }
@@ -325,7 +258,7 @@ static void Paint_wormholes(void)
 	    x = wormhole_ptr[i].x;
 	    y = wormhole_ptr[i].y;
 	    if (wrap(&x, &y))
-		Gui_paint_setup_worm(x, y, loops & 7);
+		Gui_paint_setup_worm(x, y);
 	}
 	RELEASE(wormhole_ptr, num_wormholes, max_wormholes);
     }
@@ -436,7 +369,7 @@ void Paint_shots(void)
     x_areas = (active_view_width + 255) >> 8;
     y_areas = (active_view_height + 255) >> 8;
     areas = x_areas * y_areas;
-    max_ = areas * (debris_colors >= 3 ? debris_colors : 4);
+    max_ = areas * (num_spark_colors >= 3 ? num_spark_colors : 4);
 
     Paint_debris(x_areas, y_areas, areas, max_);
 
@@ -642,7 +575,7 @@ int Init_wreckage(void)
     /*
      * Allocate memory for all the wreckage points.
      */
-    point_size = sizeof(position) * RES;
+    point_size = sizeof(position_t) * RES;
     total_size = point_size * NUM_WRECKAGE_POINTS * NUM_WRECKAGE_SHAPES;
     if ((dynmem = (char *) malloc(total_size)) == NULL) {
 	error("Not enough memory for wreckage shapes");
@@ -654,45 +587,11 @@ int Init_wreckage(void)
      */
     for ( shp = 0; shp < NUM_WRECKAGE_SHAPES; shp++ ) {
 	for ( i = 0; i < NUM_WRECKAGE_POINTS; i++ ) {
-	    wreckageShapes[shp][i] = (position *) dynmem;
+	    wreckageShapes[shp][i] = (position_t *) dynmem;
 	    dynmem += point_size;
 	    wreckageShapes[shp][i][0].x = wreckageRawShapes[shp][i][0];
 	    wreckageShapes[shp][i][0].y = wreckageRawShapes[shp][i][1];
 	    Rotate_position( &wreckageShapes[shp][i][0] );
-	}
-    }
-
-    return 0;
-}
-
-
-int Init_asteroids(void)
-{
-    int		shp, i;
-    size_t	point_size;
-    size_t	total_size;
-    char	*dynmem;
-
-    /*
-     * Allocate memory for all the asteroid points.
-     */
-    point_size = sizeof(position) * RES;
-    total_size = point_size * NUM_ASTEROID_POINTS * NUM_ASTEROID_SHAPES;
-    if ((dynmem = (char *) malloc(total_size)) == NULL) {
-	error("Not enough memory for asteroid shapes");
-	return -1;
-    }
-
-    /*
-     * For each asteroid-shape rotate all points.
-     */
-    for ( shp = 0; shp < NUM_ASTEROID_SHAPES; shp++ ) {
-	for ( i = 0; i < NUM_ASTEROID_POINTS; i++ ) {
-	    asteroidShapes[shp][i] = (position *) dynmem;
-	    dynmem += point_size;
-	    asteroidShapes[shp][i][0].x = asteroidRawShapes[shp][i][0];
-	    asteroidShapes[shp][i][0].y = asteroidRawShapes[shp][i][1];
-	    Rotate_position( &asteroidShapes[shp][i][0] );
 	}
     }
 

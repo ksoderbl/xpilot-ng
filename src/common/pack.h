@@ -1,5 +1,9 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 2000-2004 Uoti Urpala <uau@users.sourceforge.net>
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,7 +22,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef	PACK_H
@@ -27,7 +31,6 @@
 #define CAP_LETTER(c)	((c) = ((c)>='a' && (c)<='z') ? (c)-'a'+'A' : (c))
 
 #define SERVER_PORT	15345		/* Port which server listens to. */
-#define SERVER_PORT_STR	"15345"		/* ASCII version of server port. */
 
 /*
  * Magic contact word.
@@ -104,11 +107,13 @@
  * 4.F.1.0: Send_player(): Additional %c (1 when sending player's own info).
  * 4.F.1.1: support for everything in 4.5.0.1
  * 4.F.1.2: Show ships about to appear on bases, new team change packet.
+ * 4.F.1.3: cumulative turning
+ * 4.F.1.4: balls use polygon styles
  */
 #ifdef SERVER
-#define	MAGIC		(is_polygon_map ? 0x4F12F4ED : 0x4501F4ED)
+#define	MAGIC		(is_polygon_map ? 0x4F14F4ED : 0x4501F4ED)
 #else
-#define	MAGIC		0x4F12F4ED
+#define	MAGIC		0x4F14F4ED
 #endif
 
 #define MAGIC2VERSION(M)	(((M) >> 16) & 0xFFFF)
@@ -152,7 +157,7 @@
 #define	REPLY_pack		0x10
 #define	REPORT_STATUS_pack	0x21
 #define	OPTION_LIST_pack	0x28
-#define	CORE_pack		0x30
+/*#define	CORE_pack		0x30*/
 #define	CONTACT_pack		0x31
 /* The owner-only commands have a common bit high. */
 #define PRIVILEGE_PACK_MASK	0x40
@@ -160,7 +165,7 @@
 #define	MESSAGE_pack		0x63
 #define	SHUTDOWN_pack		0x64
 #define	KICK_PLAYER_pack	0x65
-#define	MAX_ROBOT_pack		0x66
+/*#define	MAX_ROBOT_pack		0x66*/
 #define	OPTION_TUNE_pack	0x67
 #define	CREDENTIALS_pack	0x69
 

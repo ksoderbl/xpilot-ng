@@ -1,5 +1,7 @@
 /*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,28 +20,13 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "xpclient.h"
+#include "xpclient_x11.h"
 
 char xeventhandlers_version[] = VERSION;
 
-
-extern int	talk_key_repeating;  /* xevent.c */
-extern XEvent	talk_key_repeat_event;  /* xevent.c */
-extern struct timeval talk_key_repeat_time;
-extern keys_t	buttonDefs[MAX_POINTER_BUTTONS][MAX_BUTTON_DEFS+1];
-extern ipos	mouse;		/* position of mouse pointer. */
-extern int	movement;	/* horizontal mouse movement. */
-
-#ifndef _WINDOWS
-/* avoid trouble with Atoms and 64 bit archs */
-typedef CARD32  Atom32;
-#endif
-
-/* store message in history, when it is sent? */
-extern bool save_talk_str;
 
 #ifdef DEVELOPMENT
 time_t	back_in_play_since;
@@ -92,9 +79,8 @@ static void Selection_request(void)
 	if (Talk_paste(selection.txt, selection.len, False) > 0)
 	    save_talk_str = true;
     }
-    else if (XGetSelectionOwner(dpy, XA_PRIMARY) == None) {
+    else if (XGetSelectionOwner(dpy, XA_PRIMARY) == None)
 	Selection_paste(DefaultRootWindow(dpy), XA_CUT_BUFFER0, False);
-    }
     else {
 	prop = XInternAtom(dpy, "VT_SELECTION", False);
 	XConvertSelection(dpy, XA_PRIMARY, XA_STRING, prop, talkWindow,
@@ -135,7 +121,7 @@ static void Selection_send(const XSelectionRequestEvent *rq)
     else if (rq->target == XA_STRING) {
 	XChangeProperty(dpy, rq->requestor, rq->property,
 			rq->target, 8, PropModeReplace,
-			(unsigned char *) selection.txt, selection.len);
+			(unsigned char *) selection.txt, (int)selection.len);
 	ev.xselection.property = rq->property;
     }
     XSendEvent(dpy, rq->requestor, False, 0, &ev);
@@ -156,6 +142,7 @@ void SelectionRequest_event(XEvent *event)
 
 void MapNotify_event(XEvent *event)
 {
+    UNUSED_PARAM(event);
     if (ignoreWindowManager == 1) {
         XSetInputFocus(dpy, topWindow, RevertToParent, CurrentTime);
         ignoreWindowManager = 2;
@@ -191,6 +178,7 @@ int ClientMessage_event(XEvent *event)
 
 void FocusIn_event(XEvent *event)
 {
+    UNUSED_PARAM(event);
 #ifdef DEVELOPMENT
     if (!gotFocus)
         time(&back_in_play_since);
@@ -205,6 +193,7 @@ void FocusIn_event(XEvent *event)
 
 void UnmapNotify_event(XEvent *event)
 {
+    UNUSED_PARAM(event);
     if (pointerControl) {
         initialPointerControl = true;
         Pointer_control_set_state(false);
@@ -216,12 +205,29 @@ void UnmapNotify_event(XEvent *event)
 void ConfigureNotify_event(XEvent *event)
 {
     XConfigureEvent	*conf;
-
+    static unsigned int conf_width = 0;
+    static unsigned int conf_height = 0;
+   
+    /* Changed to check if this is a window move or a 
+       window resize event , sadly ConfigureNotify and
+       Expose are used to resize windows, if the window
+       size has not changed then we do not need to destroy
+       and resize widgets */
+    
     conf = &(event->xconfigure);
-    if (conf->window == topWindow)
-	Resize(conf->window, conf->width, conf->height);
+    
+    if (((unsigned) conf->width != conf_width) || 
+	((unsigned) conf->height != conf_height))
+      {
+	Resize(conf->window, (unsigned)conf->width, (unsigned)conf->height);  
+	
+	conf_height = (unsigned)conf->height;
+	conf_width = (unsigned)conf->width;	
+      }
     else
-        Widget_event(event);
+      {
+	Widget_event(event); 
+      }
 }
 #endif
 
@@ -263,15 +269,9 @@ void ButtonPress_event(XEvent *event)
 	|| event->xbutton.window == talkWindow) {
         if (pointerControl
 	    && !talk_mapped
-	    && event->xbutton.button <= MAX_POINTER_BUTTONS) {
-	    int i;
-	    for (i = 0;
-		 i < (int)NUM_BUTTON_DEFS(event->xbutton.button - 1);
-		 i++) {
-	    	if (Key_press(buttonDefs[event->xbutton.button - 1][i]))
-		    Net_key_change();
-	    }
-	}
+	    && event->xbutton.button <= MAX_POINTER_BUTTONS)
+	    Pointer_button_pressed((int)event->xbutton.button);
+
 #ifndef _WINDOWS
 	else if (selectionAndHistory) {
 	    switch (event->xbutton.button) {
@@ -317,10 +317,10 @@ void MotionNotify_event(XEvent *event)
         if (pointerControl) {
 	    if (!talk_mapped) {
 	        if (!event->xmotion.send_event)
-		    movement += event->xmotion.x - mouse.x;
+		    mouseMovement += event->xmotion.x - mousePosition.x;
 	    }
-	    mouse.x = event->xmotion.x;
-	    mouse.y = event->xmotion.y;
+	    mousePosition.x = event->xmotion.x;
+	    mousePosition.y = event->xmotion.y;
 	}
     } else
         Widget_event(event);
@@ -333,15 +333,9 @@ int ButtonRelease_event(XEvent *event)
 
         if (pointerControl
 	    && !talk_mapped
-	    && event->xbutton.button <= MAX_POINTER_BUTTONS) {
-	    int i;
-	    for (i = 0;
-		 i < (int)NUM_BUTTON_DEFS(event->xbutton.button - 1);
-		 i++) {
-	    	if (Key_release(buttonDefs[event->xbutton.button - 1][i]))
-		    Net_key_change();
-	    }
-	}
+	    && event->xbutton.button <= MAX_POINTER_BUTTONS)
+	    Pointer_button_released((int)event->xbutton.button);
+
 #ifndef _WINDOWS
 	else if (!selectionAndHistory)
 	    return 0;

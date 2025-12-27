@@ -1,10 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2003 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
  *
- *      Bjørn Stabell        <bjoern@xpilot.org>
- *      Ken Ronny Schouten   <ken@xpilot.org>
- *      Bert Gijsbers        <bert@xpilot.org>
- *      Dick Balaska         <dick@xpilot.org>
+ * Copyright (C) TODO Erik Andersson
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,16 +15,18 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpclient.h"
 
+char clientrank_version[] = VERSION;
+
 #define MAX_SCORES 500
 
-char *clientRankFile = NULL;
-char *clientRankHTMLFile = NULL;
-char *clientRankHTMLNOJSFile = NULL;
+char clientRankFile[PATH_MAX];
+char clientRankHTMLFile[PATH_MAX];
+char clientRankHTMLNOJSFile[PATH_MAX];
 
 /*
  * Defining one/both of CLIENTRANKINGPAGE/CLIENTNOJSRANKINGPAGE while leaving
@@ -164,7 +163,7 @@ static void Rank_score(void)
 	}
     }
 
-    if (clientRankHTMLFile != NULL) {
+    if (strlen(clientRankHTMLFile) > 0) {
 	FILE *const file = fopen(clientRankHTMLFile, "w");
 
 	if (file != NULL && fseek(file, 2000, SEEK_SET) == 0) {
@@ -184,7 +183,7 @@ static void Rank_score(void)
 	}
     }
 
-    if (clientRankHTMLNOJSFile != NULL) {
+    if (strlen(clientRankHTMLNOJSFile) > 0) {
 	FILE *const file = fopen(clientRankHTMLNOJSFile, "w");
 
 	if (file != NULL && fseek(file, 2000, SEEK_SET) == 0) {
@@ -210,7 +209,8 @@ static void Rank_score(void)
 	}
     }
 
-    if (clientRankHTMLFile == NULL && clientRankHTMLNOJSFile == NULL)
+    if (strlen(clientRankHTMLFile) == 0
+	&& strlen(clientRankHTMLNOJSFile) == 0)
 	warn("You have not specified clientRankHTMLFile or "
 	     "clientRankHTMLNOJSFile.");
 }
@@ -230,7 +230,7 @@ void Init_saved_scores(void)
 {
     int i = 0;
 
-    if (clientRankFile != NULL) {
+    if (strlen(clientRankFile) > 0) {
 	FILE *file = fopen(clientRankFile, "r");
 
 	if (file != NULL) {
@@ -327,7 +327,7 @@ void Print_saved_scores(void)
     FILE *file = NULL;
 
     Rank_score();
-    if (clientRankFile != NULL &&
+    if (strlen(clientRankFile) > 0 &&
 	(file = fopen(clientRankFile, "w")) != NULL) {
 	const int actual = fwrite(scores, sizeof(ScoreNode),
 				  MAX_SCORES, file);

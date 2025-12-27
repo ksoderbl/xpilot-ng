@@ -1,5 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,7 +20,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpcommon.h"
@@ -32,7 +34,7 @@ int Sockbuf_init(sockbuf_t *sbuf, sock_t *sock, size_t size, int state)
     if ((sbuf->buf = sbuf->ptr = malloc(size)) == NULL)
 	return -1;
 
-    if (sock != (sock_t *) NULL)
+    if (sock != NULL)
 	sbuf->sock = *sock;
     else
 	sock_init(&sbuf->sock);
@@ -95,7 +97,7 @@ int Sockbuf_advance(sockbuf_t *sbuf, int len)
 	sbuf->len = 0;
 	sbuf->ptr = sbuf->buf;
     } else {
-	memmove(sbuf->buf, sbuf->buf + len, sbuf->len - len);
+	memmove(sbuf->buf, sbuf->buf + len, (size_t)(sbuf->len - len));
 	sbuf->len -= len;
 	if (sbuf->ptr - sbuf->buf <= len)
 	    sbuf->ptr = sbuf->buf;
@@ -178,10 +180,10 @@ int Sockbuf_flush(sockbuf_t *sbuf)
 		Sockbuf_clear(sbuf);
 		return -1;
 	    }
-	    { static int send_err;
-		if ((send_err++ & 0x3F) == 0) {
+	    {
+		static int send_err;
+		if ((send_err++ & 0x3F) == 0)
 		    error("send (%d)", i);
-		}
 	    }
 	    if (sock_get_error(&sbuf->sock) == -1) {
 		error("sock_get_error send");
@@ -200,8 +202,7 @@ int Sockbuf_flush(sockbuf_t *sbuf)
 		errno = 0;
 		continue;
 	    }
-	    if (errno != EWOULDBLOCK
-		&& errno != EAGAIN) {
+	    if (errno != EWOULDBLOCK && errno != EAGAIN) {
 		error("Can't write on socket");
 		return -1;
 	    }
@@ -230,7 +231,7 @@ int Sockbuf_write(sockbuf_t *sbuf, char *buf, int len)
 	if (sbuf->size - sbuf->len < len)
 	    return 0;
     }
-    memcpy(sbuf->buf + sbuf->len, buf, len);
+    memcpy(sbuf->buf + sbuf->len, buf, (size_t)len);
     sbuf->len += len;
 
     return len;
@@ -279,8 +280,7 @@ int Sockbuf_read(sockbuf_t *sbuf)
 		errno = 0;
 		continue;
 	    }
-	    if (errno == EWOULDBLOCK
-		|| errno == EAGAIN) {
+	    if (errno == EWOULDBLOCK || errno == EAGAIN) {
 		return 0;
 	    }
 #if 0
@@ -321,8 +321,7 @@ int Sockbuf_read(sockbuf_t *sbuf)
 		errno = 0;
 		continue;
 	    }
-	    if (errno != EWOULDBLOCK
-		&& errno != EAGAIN) {
+	    if (errno != EWOULDBLOCK && errno != EAGAIN) {
 		error("Can't read on socket");
 		return -1;
 	    }
@@ -344,7 +343,7 @@ int Sockbuf_copy(sockbuf_t *dest, sockbuf_t *src, int len)
 	warn("Not enough data in source copy socket buffer");
 	return -1;
     }
-    memcpy(dest->buf + dest->len, src->buf, len);
+    memcpy(dest->buf + dest->len, src->buf, (size_t)len);
     dest->len += len;
 
     return len;
@@ -372,6 +371,12 @@ int Packet_printf(sockbuf_t *sbuf, const char *fmt, ...)
 			*buf,
 			*stop;
     va_list		ap;
+
+    /* kps hack - let's not segfault if sbuf was not initialized yet. */
+    assert(sbuf);
+    if (sbuf->buf == NULL)
+	return -1;
+    /* kps hack ends */
 
     va_start(ap, fmt);
 
@@ -477,11 +482,10 @@ int Packet_printf(sockbuf_t *sbuf, const char *fmt, ...)
 	    case 's':	/* Small strings */
 		max_str_size = (fmt[i] == 'S') ? MSG_LEN : MAX_CHARS;
 		str = va_arg(ap, char *);
-		if (buf + max_str_size >= end) {
+		if (buf + max_str_size >= end)
 		    stop = end;
-		} else {
+		else
 		    stop = buf + max_str_size;
-		}
 		/* Send the nul byte too */
 		do {
 		    if (buf >= stop)
@@ -502,10 +506,9 @@ int Packet_printf(sockbuf_t *sbuf, const char *fmt, ...)
 	if (failure == PRINTF_SIZE) {
 #if 0
 	    static int before;
-	    if ((before++ & 0x0F) == 0) {
+	    if ((before++ & 0x0F) == 0)
 		printf("Write socket buffer not big enough (%d,%d,\"%s\")\n",
-		    sbuf->size, sbuf->len, fmt);
-	    }
+		       sbuf->size, sbuf->len, fmt);
 #endif
 	    if (BIT(sbuf->state, SOCKBUF_DGRAM) != 0) {
 		count = 0;
@@ -681,7 +684,8 @@ int Packet_scanf(sockbuf_t *sbuf, const char *fmt, ...)
 		k = 0;
 		for (;;) {
 		    if (&sbuf->buf[sbuf->len] < &sbuf->ptr[j + 1]) {
-			if (BIT(sbuf->state, SOCKBUF_DGRAM | SOCKBUF_LOCK) != 0) {
+			if (BIT(sbuf->state, SOCKBUF_DGRAM | SOCKBUF_LOCK)
+			    != 0) {
 			    failure = 3;
 			    break;
 			}
@@ -694,9 +698,8 @@ int Packet_scanf(sockbuf_t *sbuf, const char *fmt, ...)
 			    break;
 			}
 		    }
-		    if ((str[k++] = sbuf->ptr[j++]) == '\0') {
+		    if ((str[k++] = sbuf->ptr[j++]) == '\0')
 			break;
-		    }
 		    else if (k >= max_str_size) {
 			/*
 			 * What to do now is unclear to me.
@@ -704,30 +707,24 @@ int Packet_scanf(sockbuf_t *sbuf, const char *fmt, ...)
 			 * the client has more difficulty with that
 			 * if this is the reliable data buffer.
 			 */
-#ifndef SILENT
-			errno = 0;
-			error("String overflow while scanning (%d,%d)",
+			warn("String overflow while scanning (%d,%d)",
 			      k, max_str_size);
-#endif
-			if (BIT(sbuf->state, SOCKBUF_LOCK) != 0) {
+			if (BIT(sbuf->state, SOCKBUF_LOCK) != 0)
 			    failure = 2;
-			} else {
+			else
 			    failure = 3;
-			}
 			break;
 		    }
 		}
-		if (failure != 0) {
+		if (failure != 0)
 		    strcpy(str, "ErRoR");
-		}
 		break;
 	    default:
 		failure = 1;
 		break;
 	    }
-	} else {
+	} else
 	    failure = 1;
-	}
     }
     if (failure == 1)
 	warn("Error in format string (%s)", fmt);

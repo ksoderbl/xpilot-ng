@@ -1,5 +1,7 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,266 +20,22 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef PAINTTYPES_H
-#define PAINTTYPES_H
+#ifndef PAINTDATA_H
+#define PAINTDATA_H
 
 /* need u_byte */
 #ifndef	TYPES_H
 #include "types.h"
 #endif
 
-/* need MAX_COLORS */
+/* Define Windows Colours */
 #ifdef _WINDOWS
-#define MAX_COLORS  16   /* Max. switched colors ever */
-#define MAX_COLOR_LEN 32 /* Max. length of a color name */
+#define MAX_COLORS 16
+#define MAX_COLOR_LEN 32
 #endif
-
-/*
- * Macro to add one new element of a given type to a dynamic array.
- * T is the type of the element.
- * P is the pointer to the array memory.
- * N is the current number of elements in the array.
- * M is the current size of the array.
- * V is the new element to add.
- * The goal is to keep the number of malloc/realloc calls low
- * while not wasting too much memory because of over-allocation.
- */
-#define STORE(T,P,N,M,V)						\
-    if (N >= M && ((M <= 0)						\
-	? (P = (T *) malloc((M = 1) * sizeof(*P)))			\
-	: (P = (T *) realloc(P, (M += M) * sizeof(*P)))) == NULL) {	\
-	error("No memory");						\
-	exit(1);							\
-    } else								\
-	(P[N++] = V)
-
-/*
- * Local types and data for painting.
- */
-
-typedef struct {
-    short		x0, y0, x1, y1;
-} refuel_t;
-
-typedef struct {
-    short		x0, y0, x1, y1;
-    u_byte		tractor;
-    u_byte		pad[3];
-} connector_t;
-
-typedef struct {
-    unsigned char	color, dir;
-    short		x, y, len;
-} laser_t;
-
-typedef struct {
-    short		x, y, dir;
-    unsigned char	len;
-    u_byte		pad[1];
-} missile_t;
-
-typedef struct {
-    short		x, y, id;
-} ball_t;
-
-typedef struct {
-    short		x, y, id, dir;
-    u_byte		shield, cloak, eshield;
-    u_byte		phased, deflector;
-    u_byte		pad[3];
-} ship_t;
-
-typedef struct {
-    short		x, y, teammine, id;
-} mine_t;
-
-typedef struct {
-    short		x, y, type;
-} itemtype_t;
-
-typedef struct {
-    short		x, y, size;
-} ecm_t;
-
-typedef struct {
-    short		x1, y1, x2, y2;
-} trans_t;
-
-typedef struct {
-    short		x, y, count;
-} paused_t;
-
-typedef struct {
-    short		x, y, id, count;
-} appearing_t;
-
-typedef struct {
-    short		x, y, size, color;
-} radar_t;
-
-typedef struct {
-    short		x, y, type;
-} vcannon_t;
-
-typedef struct {
-    short		x, y;
-    long		fuel;
-} vfuel_t;
-
-typedef struct {
-    short		x, y, xi, yi, type;
-} vbase_t;
-
-typedef struct {
-    u_byte		x, y;
-} debris_t;
-
-typedef struct {
-    short		x, y, xi, yi, type;
-} vdecor_t;
-
-typedef struct {
-    short		x, y;
-    u_byte		wrecktype, size, rotation;
-    u_byte		pad[1];
-} wreckage_t;
-
-typedef struct {
-    short		x, y;
-    u_byte		type, size, rotation;
-    u_byte		pad[1];
-} asteroid_t;
-
-typedef struct {
-    short		x, y;
-} wormhole_t;
-
-extern refuel_t		*refuel_ptr;
-extern int		 num_refuel, max_refuel;
-extern connector_t	*connector_ptr;
-extern int		 num_connector, max_connector;
-extern laser_t		*laser_ptr;
-extern int		 num_laser, max_laser;
-extern missile_t	*missile_ptr;
-extern int		 num_missile, max_missile;
-extern ball_t		*ball_ptr;
-extern int		 num_ball, max_ball;
-extern ship_t		*ship_ptr;
-extern int		 num_ship, max_ship;
-extern mine_t		*mine_ptr;
-extern int		 num_mine, max_mine;
-extern itemtype_t	*itemtype_ptr;
-extern int		 num_itemtype, max_itemtype;
-extern ecm_t		*ecm_ptr;
-extern int		 num_ecm, max_ecm;
-extern trans_t		*trans_ptr;
-extern int		 num_trans, max_trans;
-extern paused_t		*paused_ptr;
-extern int		 num_paused, max_paused;
-extern appearing_t	*appearing_ptr;
-extern int		 num_appearing, max_appearing;
-extern radar_t		*radar_ptr;
-extern int		 num_radar, max_radar;
-extern vcannon_t	*vcannon_ptr;
-extern int		 num_vcannon, max_vcannon;
-extern vfuel_t		*vfuel_ptr;
-extern int		 num_vfuel, max_vfuel;
-extern vbase_t		*vbase_ptr;
-extern int		 num_vbase, max_vbase;
-extern debris_t		*debris_ptr[DEBRIS_TYPES];
-extern int		 num_debris[DEBRIS_TYPES],
-			 max_debris[DEBRIS_TYPES];
-extern debris_t		*fastshot_ptr[DEBRIS_TYPES * 2];
-extern int		 num_fastshot[DEBRIS_TYPES * 2],
-			 max_fastshot[DEBRIS_TYPES * 2];
-extern vdecor_t		*vdecor_ptr;
-extern int		 num_vdecor, max_vdecor;
-extern wreckage_t	*wreckage_ptr;
-extern int		 num_wreckage, max_wreckage;
-extern asteroid_t	*asteroid_ptr;
-extern int		 num_asteroids, max_asteroids;
-extern wormhole_t	*wormhole_ptr;
-extern int		 num_wormholes, max_wormholes;
-
-extern long		start_loops, end_loops;
-extern long		time_left;
-
-#define RESET_FG()	(current_foreground = -1)
-#define SET_FG(PIXEL) \
-do { \
-    if ((PIXEL) == current_foreground) ; \
-    else XSetForeground(dpy, gameGC, current_foreground = (PIXEL)); \
-} while (0)
-
-extern unsigned long	current_foreground;
-
-
-#define MAX_LINE_WIDTH	10
-
-#if 0
-/*
- * Macro to make room in a given dynamic array for new elements.
- * P is the pointer to the array memory.
- * N is the current number of elements in the array.
- * M is the current size of the array.
- * T is the type of the elements.
- * E is the number of new elements to store in the array.
- * The goal is to keep the number of malloc/realloc calls low
- * while not wasting too much memory because of over-allocation.
- */
-#define EXPAND(P,N,M,T,E)						\
-    if ((N) + (E) > (M)) {						\
-	if ((M) <= 0) {							\
-	    M = (E) + 2;						\
-	    P = (T *) malloc((M) * sizeof(T));				\
-	    N = 0;							\
-	} else {							\
-	    M = ((M) << 1) + (E);					\
-	    P = (T *) realloc(P, (M) * sizeof(T));			\
-	}								\
-	if (P == NULL) {						\
-	    error("No memory");						\
-	    N = M = 0;							\
-	    return;	/* ! */						\
-	}								\
-    }
-
-#define UNEXPAND(P,N,M)							\
-    if ((N) < ((M) >> 2)) {						\
-	free(P);							\
-	M = 0;								\
-    }									\
-    N = 0;
-#endif
-
-
-#ifndef PAINT_FREE
-# define PAINT_FREE	1
-#endif
-#if PAINT_FREE
-# define RELEASE(P, N, M)					\
-do {								\
-	if (!(N)) ; else (free(P), (M) = 0, (N) = 0);		\
-} while (0)
-#else
-# define RELEASE(P, N, M)	((N) = 0)
-#endif
-
-
-extern XRectangle	*rect_ptr[MAX_COLORS];
-extern int		num_rect[MAX_COLORS], max_rect[MAX_COLORS];
-extern XArc		*arc_ptr[MAX_COLORS];
-extern int		num_arc[MAX_COLORS], max_arc[MAX_COLORS];
-extern XSegment		*seg_ptr[MAX_COLORS];
-extern int		num_seg[MAX_COLORS], max_seg[MAX_COLORS];
-
-extern int		eyesId;		/* Player we get frame updates for */
-extern other_t		*eyes;		/* Player we get frame updates for */
-extern bool		snooping;	/* are we snooping on someone else? */
-extern int		eyeTeam;	/* Team of player we get updates for */
 
 extern void Rectangle_start(void);
 extern void Rectangle_end(void);
@@ -288,6 +46,11 @@ extern int Arc_add(int color,
 		   int x, int y,
 		   int width, int height,
 		   int angle1, int angle2);
+extern int Arc_add_rgb(unsigned long color, /* Used if fullColor is on. */
+		       int fallback_color,  /* Used if fullColor is off. */
+		       int x, int y,
+		       int width, int height,
+		       int angle1, int angle2);
 extern void Segment_start(void);
 extern void Segment_end(void);
 extern int Segment_add(int color, int x_1, int y_1, int x_2, int y_2);

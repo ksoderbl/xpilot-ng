@@ -1,5 +1,7 @@
 /*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,7 +20,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpclient.h"
@@ -26,11 +28,7 @@
 
 char gfx2d_version[] = VERSION;
 
-
-#ifndef PATH_MAX
-#define PATH_MAX	1023
-#endif
-
+char	*texturePath = NULL;		/* Path list of texture directories */
 
 /*
  *   Purpose: initialize xp_picture structure and load it from file.
@@ -74,7 +72,7 @@ static int Picture_find_path(const char *filename, char *path,
 			     size_t path_size)
 {
     char		*dir, *colon;
-    int			len;
+    size_t		len;
 
     if (!filename || !*filename)
 	return false;
@@ -112,7 +110,7 @@ static int Picture_find_path(const char *filename, char *path,
 	}
     }
 
-    error("Can't find PPM file \"%s\"", filename);
+    /*error("Can't find PPM file \"%s\"", filename);*/
     return(false);
 }
 
@@ -188,16 +186,6 @@ int Picture_load(xp_picture_t *picture, const char *filename)
 	error("Cannot find picture file \"%s\"", filename);
 	return -1;
     }
-
-#ifndef _WINDOWS
-    if (strcmp("xpm", filename + strlen(filename) - 3) == 0) {
-	if (!xpm_picture_from_file(picture, path)) {
-	    error("Failed to load XPM bitmap \"%s\"", path);
-	    return -1;
-	}
-	return 0;
-    }
-#endif
 
     if ((f = fopen(path, "rb")) == NULL) {
 	error("Cannot open \"%s\"", path);

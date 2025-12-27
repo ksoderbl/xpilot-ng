@@ -1,6 +1,7 @@
 /* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
  *
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -19,7 +20,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef RULES_H
@@ -59,13 +60,12 @@
 #define PAUSE			(1L<<1) 	/* Must stay below 8 */
 #define GAME_OVER		(1L<<2)		/* Must stay below 8 */
 #define THRUSTING		(1L<<3)		/* not used by client? */
-#define SELF_DESTRUCT		(1L<<4)		/* not used by client? */
 #define WANT_AUDIO		(1L<<5)		/* whether client has SOUND */
 
 #define KILLED			(1L<<10)
 #define GRAVITY			(1L<<11)
 #define WARPING			(1L<<12)
-/*#define WARPED			(1L<<13)*/
+#define WARPED			(1L<<13)
 #define CONFUSED		(1L<<14)
 #define FROMCANNON		(1L<<15)	/* Object from cannon */
 #define HOVERPAUSE		(1L<<16)	/* Hovering pause */

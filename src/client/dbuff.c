@@ -1,5 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,11 +20,10 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "xpclient.h"
-
+#include "xpclient_x11.h"
 
 char dbuff_version[] = VERSION;
 
@@ -43,7 +44,7 @@ static void dbuff_release(dbuff_state_t *state)
 #ifdef MBX
 	if (state->type == MULTIBUFFER
 	    && state->colormap_index != 2)
-	    XmbufDestroyBuffers(state->display, draw);
+	    XmbufDestroyBuffers(state->display, drawWindow);
 #endif
 
 	free(state);
@@ -70,12 +71,13 @@ static long dbuff_color(dbuff_state_t *state, long simple_color)
 
 
 dbuff_state_t *start_dbuff(Display *display, Colormap xcolormap,
-			   dbuff_t type, int num_planes, XColor *colorarray)
+			   dbuff_t type, unsigned num_planes,
+			   XColor *colorarray)
 {
     dbuff_state_t	*state;
     int			i, high_mask, low_mask;
 
-    state = (dbuff_state_t *) calloc(1, sizeof(dbuff_state_t));
+    state = calloc(1, sizeof(dbuff_state_t));
     if (state == NULL)
 	return NULL;
 
@@ -84,7 +86,7 @@ dbuff_state_t *start_dbuff(Display *display, Colormap xcolormap,
 	= (XColor *) malloc(state->colormap_size * sizeof(XColor));
     state->colormaps[1]
 	= (XColor *) malloc(state->colormap_size * sizeof(XColor));
-    state->planes = (unsigned long *) calloc(2 * num_planes, sizeof(long));
+    state->planes = calloc(2 * num_planes, sizeof(long));
     if (state->colormaps[1] == NULL ||
 	state->colormaps[0] == NULL ||
 	state->planes == NULL) {
@@ -125,7 +127,7 @@ dbuff_state_t *start_dbuff(Display *display, Colormap xcolormap,
 				&state->dbe.dbe_major,
 				&state->dbe.dbe_minor)) {
 	    dbuff_release(state);
-	    fprintf(stderr, "XdbeQueryExtension failed\n");
+	    warn("XdbeQueryExtension failed.");
 	    return NULL;
 	}
 #elif defined(MBX)
@@ -135,25 +137,25 @@ dbuff_state_t *start_dbuff(Display *display, Colormap xcolormap,
 				 &state->mbx.mbx_ev_base,
 				 &state->mbx.mbx_err_base)) {
 	    dbuff_release(state);
-	    fprintf(stderr, "XmbufQueryExtension failed\n");
+	    warn("XmbufQueryExtension failed.");
 	    return NULL;
 	}
 #else
-	printf("Support for multibuffering was not configured.\n");
+	warn("Support for multibuffering was not configured.");
 	dbuff_release(state);
 	return NULL;
 #endif
 	break;
 
     default:
-	fprintf(stderr, "Illegal dbuff_t %d\n", type);
+	warn("Illegal dbuff_t %d.");
 	exit(1);
     }
 
     state->drawing_plane_masks[0] = AllPlanes;
     state->drawing_plane_masks[1] = AllPlanes;
 
-    for (i = 0; i < num_planes; i++) {
+    for (i = 0; i < (int)num_planes; i++) {
 	state->drawing_plane_masks[0] &= ~state->planes[i];
 	state->drawing_plane_masks[1] &= ~state->planes[num_planes + i];
     }
@@ -174,8 +176,7 @@ dbuff_state_t *start_dbuff(Display *display, Colormap xcolormap,
 		return NULL;
 	    }
 	}
-    }
-    else {
+    } else {
 	colorarray[WHITE].pixel = WhitePixel(display, DefaultScreen(display));
 	colorarray[BLACK].pixel = BlackPixel(display, DefaultScreen(display));
 	colorarray[BLUE].pixel  = WhitePixel(display, DefaultScreen(display));
@@ -193,12 +194,11 @@ dbuff_state_t *start_dbuff(Display *display, Colormap xcolormap,
 
     state->drawing_planes = state->drawing_plane_masks[state->colormap_index];
 
-    if (state->type == COLOR_SWITCH) {
+    if (state->type == COLOR_SWITCH)
 	XStoreColors(state->display,
 		     state->xcolormap,
 		     state->colormaps[state->colormap_index],
 		     state->colormap_size);
-    }
 
     return state;
 }
@@ -210,11 +210,11 @@ void dbuff_init_buffer(dbuff_state_t *state)
     if (state->type == MULTIBUFFER) {
 	if (state->colormap_index == 2) {
 	    state->colormap_index = 0;
-	    if (XmbufCreateBuffers(state->display, draw, 2,
+	    if (XmbufCreateBuffers(state->display, drawWindow, 2,
 				   MultibufferUpdateActionUndefined,
 				   MultibufferUpdateHintFrequent,
 				   state->mbx.mbx_draw) != 2) {
-		perror("Couldn't create double buffering buffers");
+		error("Couldn't create double buffering buffers.");
 		exit(1);
 	    }
 	}
@@ -226,17 +226,17 @@ void dbuff_init_buffer(dbuff_state_t *state)
 	    state->colormap_index = 0;
 	    state->dbe.dbe_draw =
 		XdbeAllocateBackBufferName(state->display,
-					   draw,
+					   drawWindow,
 					   XdbeBackground);
 	    if (state->dbe.dbe_draw == 0) {
-		perror("Couldn't create double buffering back buffer");
+		error("Couldn't create double buffering back buffer.");
 		exit(1);
 	    }
 	}
 	drawPixmap = state->dbe.dbe_draw;
     }
 #else
-    (void)state;
+    UNUSED_PARAM(state);
 #endif
 }
 
@@ -258,10 +258,10 @@ void dbuff_switch(dbuff_state_t *state)
     else if (state->type == MULTIBUFFER) {
 	XdbeSwapInfo		swap;
 
-	swap.swap_window	= draw;
+	swap.swap_window	= drawWindow;
 	swap.swap_action	= XdbeBackground;
 	if (!XdbeSwapBuffers(state->display, &swap, 1)) {
-	    perror("XdbeSwapBuffers failed");
+	    error("XdbeSwapBuffers failed.");
 	    exit(1);
 	}
     }
@@ -299,7 +299,7 @@ static void dbuff_list_dbe(Display *display)
     printf("\n");
     info = XdbeGetVisualInfo(display, NULL, &n);
     if (!info) {
-	printf("Could not obtain double buffer extension info\n");
+	warn("Could not obtain double buffer extension info.");
 	return;
     }
     for (i = 0; i < n; i++) {
@@ -323,7 +323,7 @@ void dbuff_list(Display *display)
 #ifdef DBE
     dbuff_list_dbe(display);
 #else
-    (void)display;
+    UNUSED_PARAM(display);
 #endif
 }
 

@@ -1,5 +1,7 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,7 +20,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef SERVERCONST_H
@@ -27,29 +29,6 @@
 #ifndef CONST_H
 #include "const.h"
 #endif
-
-
-/*
- * Two macros for edge wrap of x and y coordinates measured in pixels.
- * Note that the correction needed shouldn't ever be bigger than one mapsize.
- */
-#define WRAP_XPIXEL(x_)	\
-	(BIT(World.rules->mode, WRAP_PLAY) \
-	    ? ((x_) < 0 \
-		? (x_) + World.width \
-		: ((x_) >= World.width \
-		    ? (x_) - World.width \
-		    : (x_))) \
-	    : (x_))
-
-#define WRAP_YPIXEL(y_)	\
-	(BIT(World.rules->mode, WRAP_PLAY) \
-	    ? ((y_) < 0 \
-		? (y_) + World.height \
-		: ((y_) >= World.height \
-		    ? (y_) - World.height \
-		    : (y_))) \
-	    : (y_))
 
 /*
  * Two macros for edge wrap of x and y coordinates measured in map blocks.
@@ -101,47 +80,16 @@
 	((pl1)->pseudo_team == (pl2)->pseudo_team)
 
 /*
- * Used where we wish to know if a player is simply on the same team.
- */
-#define TEAM(pl1, pl2) \
-	(BIT(World.rules->mode, TEAM_PLAY) \
-	&& ((pl1)->team != TEAM_NOT_SET) \
-	 && ((pl1)->team == (pl2)->team))
-
-
-/*
  * Not used where we wish to know if a player is on the same team
  * and has immunity to shots, thrust sparks, lasers, ecms, etc.
  */
-/*#define TEAM_IMMUNE(pl1, pl2)	(teamImmunity && TEAM((pl1), (pl2)))*/
+/*#define TEAM_IMMUNE(pl1, pl2)	(options.teamImmunity && TEAM((pl1), (pl2)))*/
 
 #define NO_ID			(-1)
 /*
  * Used when we want to pass an index which is not in use.
  */
 #define NO_IND			(-1)
-
-/*
- * Used where we wish to know if two players are members of the same alliance.
- */
-#define ALLIANCE(pl1, pl2) \
-	(((pl1)->alliance != ALLIANCE_NOT_SET) \
-	&& ((pl1)->alliance == (pl2)->alliance))
-
-/*
- * Used where we wish to know if a player pl owns a tank t.
- */
-#define OWNS_TANK(pl, t) \
-	(IS_TANK_PTR(t) \
-	&& ((t)->lock.pl_id != NO_ID) \
-	&& ((t)->lock.pl_id == (pl)->id))
-
-#define Player_is_playing(pl) \
-(BIT((pl)->status, PLAYING|PAUSE|GAME_OVER|KILLED) == PLAYING)
-
-#define Player_is_active(pl) \
-(BIT((pl)->status, PLAYING|PAUSE|GAME_OVER) == PLAYING)
-
 
 #define RECOVERY_DELAY		(12 * 3)
 #define ROBOT_CREATE_DELAY	(12 * 2)
@@ -150,18 +98,40 @@
 #define MAX_PSEUDO_PLAYERS      16
 
 #define MIN_PASS_LEN		5
-#define MAX_PASS_LEN		16      /* 8 => 16 by kps */
+#define MAX_PASS_LEN		16
 
 #define MAX_TOTAL_SHOTS		16384	/* must be <= 65536 */
 #define MAX_TOTAL_PULSES	(5 * 64)
 #define MAX_TOTAL_ECMS		64
 #define MAX_TOTAL_TRANSPORTERS	(2 * 64)
 
+/*
+ * Energy drainage
+ */
+#define ED_SHOT			(-0.2)
+#define ED_SMART_SHOT		(-30.0)
+#define ED_MINE			(-60.0)
+#define ED_ECM			(-60.0)
+#define ED_TRANSPORTER		(-60.0)
+#define ED_HYPERJUMP		(-60.0)
+#define ED_SHIELD		(-0.20)
+#define ED_PHASING_DEVICE	(-0.40)
+#define ED_CLOAKING_DEVICE	(-0.07)
+#define ED_DEFLECTOR		(-0.15)
+#define ED_SHOT_HIT		(-25.0)
+#define ED_SMART_SHOT_HIT	(-120.0)
+#define ED_PL_CRASH		(-100.0)
+#define ED_BALL_HIT		(-50.0)
+#define ED_LASER		(-10.0)
+#define ED_LASER_HIT		(-100.0)
+
+#define MAX_PLAYER_FUEL		2600.0
+#define ENERGY_PACK_FUEL	(500.0 + rfrac() * 511.0)
 
 #define LG2_MAX_AFTERBURNER     4
 #define ALT_SPARK_MASS_FACT     4.2
-#define ALT_FUEL_FACT           3
-#define MAX_AFTERBURNER        ((1<<LG2_MAX_AFTERBURNER)-1)
+#define ALT_FUEL_FACT	   3
+#define MAX_AFTERBURNER	((1<<LG2_MAX_AFTERBURNER)-1)
 /*#define AFTER_BURN_SPARKS(s,n)  (((s)*(n))>>LG2_MAX_AFTERBURNER)*/
 #define AFTER_BURN_POWER_FACTOR(n) \
  (1.0+(n)*((ALT_SPARK_MASS_FACT-1.0)/(MAX_AFTERBURNER+1.0)))
@@ -170,21 +140,17 @@
 #define AFTER_BURN_FUEL(f,n)    \
  (((f)*((MAX_AFTERBURNER+1)+(n)*(ALT_FUEL_FACT-1)))/(MAX_AFTERBURNER+1.0))
 
-#define TURN_FUEL(acc)          (0.005*FUEL_SCALE_FACT*ABS(acc))
-#define TURN_SPARKS(tf)         (5+((tf)>>((FUEL_SCALE_BITS)-6)))
+#define THRUST_MASS	     0.7
+#define ARMOR_MASS		(options.shipMass / 14)
 
-#define THRUST_MASS             0.7
-
-#define ARMOR_MASS		(ShipMass / 14)
-
-#define MAX_TANKS               8
-#define TANK_MASS               (ShipMass/10)
-#define TANK_CAP(n)             (!(n)?MAX_PLAYER_FUEL:(MAX_PLAYER_FUEL/3))
-#define TANK_FUEL(n)            ((TANK_CAP(n)*(5+(randomMT()&3)))/32)
-#define TANK_REFILL_LIMIT       (MIN_PLAYER_FUEL/8)
-#define TANK_THRUST_FACT        0.7
+#define MAX_TANKS	       8
+#define TANK_MASS	       (options.shipMass / 10)
+#define TANK_CAP(n)	     (!(n)?MAX_PLAYER_FUEL:(MAX_PLAYER_FUEL/3))
+#define TANK_FUEL(n)	    ((TANK_CAP(n)*(5+(randomMT()&3)))/32)
+#define TANK_REFILL_LIMIT       (350.0/8.0)
+#define TANK_THRUST_FACT	0.7
 #define TANK_NOTHRUST_TIME      (HEAT_CLOSE_TIMEOUT/2+2)
-#define TANK_THRUST_TIME        (TANK_NOTHRUST_TIME/2+1)
+#define TANK_THRUST_TIME	(TANK_NOTHRUST_TIME/2+1)
 
 #define GRAVS_POWER		2.7
 
@@ -194,25 +160,28 @@
  */
 #define TRANSPORTER_DISTANCE	(VISIBILITY_DISTANCE*0.2)
 
+/*#define SHOT_DEFAULT_LIFE	60.0*/
 #define SHOT_MULT(o) \
 	((BIT((o)->mods.nuclear, NUCLEAR) && BIT((o)->mods.warhead, CLUSTER)) \
-	 ? nukeClusterDamage : 1.0f)
+	 ? options.nukeClusterDamage : 1.0)
 
 #define MINE_RADIUS		8
-#define MINE_RANGE              (VISIBILITY_DISTANCE*0.1)
+#define MINE_RANGE	 	(VISIBILITY_DISTANCE*0.1)
 #define MINE_SENSE_BASE_RANGE   (MINE_RANGE*1.3)
 #define MINE_SENSE_RANGE_FACTOR (MINE_RANGE*0.3)
-#define MINE_MASS               30.0
-#define MINE_LIFETIME           (5000+(randomMT()&255))
-#define MINE_SPEED_FACT         1.3
+#define MINE_MASS		30.0
+/*#define MINE_LIFETIME           (5000+(randomMT()&255)) */
+/*#define MINE_DEFAULT_LIFE	7200.0	*/
+#define MINE_SPEED_FACT		1.3
 
-#define MISSILE_LIFETIME        ((randomMT()%(64 * 12 - 1) + 128 * 12))
-#define MISSILE_MASS            5.0
-#define MISSILE_RANGE           4
+/*#define MISSILE_LIFETIME	((randomMT()%(64 * 12 - 1) + 128 * 12))*/
+/*#define MISSILE_DEFAULT_LIFE	2400.0 */
+#define MISSILE_MASS		5.0
+#define MISSILE_RANGE		4
 #define SMART_SHOT_ACC		0.6
 #define SMART_SHOT_DECFACT	3
 #define SMART_SHOT_MIN_SPEED	(SMART_SHOT_ACC*8)
-#define SMART_TURNSPEED         2.6
+#define SMART_TURNSPEED		2.6
 #define SMART_SHOT_MAX_SPEED	22.0
 #define SMART_SHOT_LOOK_AH      4
 #define CONFUSED_TIME		3
@@ -227,19 +196,20 @@
 #define NUKE_MASS_MULT		1
 #define NUKE_MINE_EXPL_MULT	3
 #define NUKE_SMART_EXPL_MULT	4
+/*#define NUKE_DEFAULT_DEBRIS_LIFE	120.0*/
 
-#define HEAT_RANGE              (VISIBILITY_DISTANCE/2)
-#define HEAT_SPEED_FACT         1.7
+#define HEAT_RANGE		(VISIBILITY_DISTANCE/2)
+#define HEAT_SPEED_FACT		1.7
 #define HEAT_CLOSE_TIMEOUT      (2 * 12)
-#define HEAT_CLOSE_RANGE        HEAT_RANGE
-#define HEAT_CLOSE_ERROR        0
-#define HEAT_MID_TIMEOUT        (4 * 12)
-#define HEAT_MID_RANGE          (2 * HEAT_RANGE)
-#define HEAT_MID_ERROR          8
+#define HEAT_CLOSE_RANGE	HEAT_RANGE
+#define HEAT_CLOSE_ERROR	0
+#define HEAT_MID_TIMEOUT	(4 * 12)
+#define HEAT_MID_RANGE		(2 * HEAT_RANGE)
+#define HEAT_MID_ERROR		8
 #define HEAT_WIDE_TIMEOUT       (8 * 12)
-#define HEAT_WIDE_ERROR         16
+#define HEAT_WIDE_ERROR		16
 
-#define CLUSTER_MASS_SHOTS(mass) ((mass) * 0.9 / ShotsMass)
+#define CLUSTER_MASS_SHOTS(mass) ((mass) * 0.9 / options.shotMass)
 #define CLUSTER_MASS_DRAIN(mass) (CLUSTER_MASS_SHOTS(mass)*ED_SHOT)
 
 #define SMART_SHOT_LEN		12
@@ -253,36 +223,37 @@
 #define PULSE_MIN_LIFE		(4.5)
 #define PULSE_LIFE(lasers)	(PULSE_MIN_LIFE + ((lasers) / 4))
 #endif
+/*#define PULSE_DEFAULT_LIFE	6.0*/
 #define CANNON_PULSE_LIFE	(4.75)
 
 #define TRACTOR_MAX_RANGE(items)  (200 + (items) * 50)
 #define TRACTOR_MAX_FORCE(items)  (-40 + (items) * -20)
 #define TRACTOR_PERCENT(dist, maxdist) \
 	(1.0 - (0.5 * (dist) / (maxdist)))
-#define TRACTOR_COST(percent) (-1.5 * FUEL_SCALE_FACT * (percent))
+#define TRACTOR_COST(percent) (-1.5 * (percent))
 #define TRACTOR_FORCE(tr_pr, percent, maxforce) \
 	((percent) * (maxforce) * ((tr_pr) ? -1 : 1))
 
 #define WARN_TIME		(2 * 12)
 #define EMERGENCY_SHIELD_TIME	(4 * 12)
 #define SHIELD_TIME		(2 * 12)
-#define PHASING_TIME		(4*12)
-#define EMERGENCY_THRUST_TIME	(4*12)
+#define PHASING_TIME		(4 * 12)
+#define EMERGENCY_THRUST_TIME	(4 * 12)
 
-#define FUEL_MASS(f)            ((f)*0.005/FUEL_SCALE_FACT)
-/* changed the default to max to avoid sending lots of fuel ACKs */
-/*#define START_STATION_FUEL	(20<<FUEL_SCALE_BITS)*/
+#define FUEL_MASS(f)		((f) * 0.005)
 #define START_STATION_FUEL	MAX_STATION_FUEL
-#define STATION_REGENERATION	(0.06*FUEL_SCALE_FACT)
-#define REFUEL_RATE		(5<<FUEL_SCALE_BITS)
+#define STATION_REGENERATION	0.06
+#define REFUEL_RATE		5.0
 #define TARGET_FUEL_REPAIR_PER_FRAME (TARGET_DAMAGE / (12 * 10))
-
 #define TARGET_REPAIR_PER_FRAME	(TARGET_DAMAGE / (12 * 600))
+#define TARGET_UPDATE_DELAY	(TARGET_DAMAGE / (TARGET_REPAIR_PER_FRAME \
+				    * BLOCK_SZ))
+
 #define ALLIANCE_NOT_SET	(-1)
 
-#define DEBRIS_MASS             4.5
+#define DEBRIS_MASS		4.5
 
-#define ENERGY_RANGE_FACTOR	(2.5/FUEL_SCALE_FACT)
+#define ENERGY_RANGE_FACTOR	2.5
 
 /* Wall code only considers one way of wrapping around the map, and
  * assumes that after moving the length of one line or one unit of object
@@ -296,7 +267,6 @@
 #define MAX_MAP_SIZE		31500
 
 #define WORM_BRAKE_FACTOR	1
-#define WORMCOUNT		64
 
 #define POLYGON_MAX_OFFSET	30000
 #define NO_GROUP		(-1)

@@ -1,5 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,13 +20,14 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef GUIOBJECTS_H
 #define GUIOBJECTS_H
 
-void Gui_paint_ball(int x, int y);
+void Gui_paint_item_object(int type, int x, int y);
+void Gui_paint_ball(int x, int y, int style);
 void Gui_paint_ball_connector(int x_1, int y_1, int x_2, int y_2);
 
 void Gui_paint_mine(int x, int y, int teammine, char *name);
@@ -33,6 +36,8 @@ void Gui_paint_spark(int color, int x, int y);
 
 void Gui_paint_wreck(int x, int y, bool deadly, int wtype, int rot, int size);
 
+void Gui_paint_asteroids_begin(void);
+void Gui_paint_asteroids_end(void);
 void Gui_paint_asteroid(int x, int y, int type, int rot, int size);
 
 void Gui_paint_fastshot(int color, int x, int y);
@@ -66,4 +71,7 @@ void Gui_paint_ships_end(void);
 void Gui_paint_ship(int x, int y, int dir, int id, int cloak, int phased,
 		    int shield, int deflector, int eshield);
 
+void Store_guiobject_options(void);
+
 #endif
+

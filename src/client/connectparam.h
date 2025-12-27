@@ -1,6 +1,7 @@
 /* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
  *
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -19,7 +20,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef CONNECTPARAM_H
@@ -28,27 +29,22 @@
 
 #ifndef PACK_H
 /* need MAX_..._LEN */
-#include "pack.h"
+#  include "pack.h"
 #endif
-
 
 typedef struct Connect_param {
     int			contact_port,
 			server_port,
 			login_port;
     char		nick_name[MAX_NAME_LEN],
-			real_name[MAX_NAME_LEN],
+			user_name[MAX_NAME_LEN],
+			host_name[SOCK_HOSTNAME_LENGTH],
 			server_addr[MAX_HOST_LEN],
 			server_name[MAX_HOST_LEN],
 			disp_name[MAX_DISP_LEN];
     unsigned		server_version;
     int			team;
 } Connect_param_t;
-
-
-#ifdef PROTOCLIENT_H
-#error "protoclient.h was included before connectparam.h"
-#endif
 
 #endif
 

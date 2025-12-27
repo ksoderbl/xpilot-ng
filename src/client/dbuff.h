@@ -1,6 +1,7 @@
 /* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
  *
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -19,25 +20,31 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef	DBUFF_H
 #define	DBUFF_H
 
+#include "xpcommon.h"
+
 #ifdef DBE
-# include <X11/extensions/Xdbe.h>
-# undef MBX
+#  ifdef HAVE_X11_EXTENSIONS_XDBE_H
+#    include <X11/extensions/Xdbe.h>
+#  endif
+#  undef MBX
 #else
-# undef XdbeBackBuffer
-# define XdbeBackBuffer	unsigned int
+#  undef XdbeBackBuffer
+#  define XdbeBackBuffer	unsigned int
 #endif
 
 #ifdef MBX
-# include <X11/extensions/multibuf.h>
+#  ifdef HAVE_X11_EXTENSIONS_MULTIBUF_H
+#    include <X11/extensions/multibuf.h>
+#  endif
 #else
-# undef Multibuffer
-# define Multibuffer	unsigned int
+#   undef Multibuffer
+#   define Multibuffer	unsigned int
 #endif
 
 
@@ -85,17 +92,17 @@ extern dbuff_state_t   *dbuf_state;    /* Holds current dbuff state */
 
 dbuff_state_t *start_dbuff(Display *display, Colormap cmap,
 			   dbuff_t type,
-			   int num_planes, XColor *colors);
+			   unsigned num_planes, XColor *colors);
 void dbuff_switch(dbuff_state_t *state);
 void dbuff_init_buffer(dbuff_state_t *state);
 void end_dbuff(dbuff_state_t *state);
 void dbuff_list(Display *display);
 
 #ifndef MBX
-# undef Multibuffer
+#  undef Multibuffer
 #endif
 #ifndef DBE
-# undef XdbeBackBuffer
+#  undef XdbeBackBuffer
 #endif
 
 #endif

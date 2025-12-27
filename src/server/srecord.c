@@ -1,10 +1,7 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2003 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
  *
- *      Bjørn Stabell        <bjoern@xpilot.org>
- *      Ken Ronny Schouten   <ken@xpilot.org>
- *      Bert Gijsbers        <bert@xpilot.org>
- *      Dick Balaska         <dick@xpilot.org>
+ * Copyright (C) 2000-2002 Uoti Urpala <uau@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,7 +15,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpserver.h"
@@ -184,7 +181,7 @@ static void Dump_data(void)
 	fwrite(bufs[i].start, 1, len, recf1);
 	*bufs[i].curp = bufs[i].start;
     }
-    if (recordFlushInterval)
+    if (options.recordFlushInterval)
 	fflush(recf1);
 #ifdef RECSTAT
     printf("\n");
@@ -219,16 +216,17 @@ void Get_recording_data(void)
     }
 }
 
-void Init_recording(void)
+void Init_recording(world_t *world)
 {
     static int oldMode = 0;
     int i;
 
-    if (!recordFileName) {
-	if (recordMode != 0)
+    UNUSED_PARAM(world);
+    if (!options.recordFileName) {
+	if (options.recordMode != 0)
 	    warn("Can't do anything with recordings when recordFileName "
 		  "isn't specified.");
-	recordMode = 0;
+	options.recordMode = 0;
 	return;
     }
     if (sizeof(int) != 4 || sizeof(short) != 2) {
@@ -243,10 +241,10 @@ void Init_recording(void)
 
     recOpt = 1; /* Less robust but produces smaller files. */
     if (oldMode == 0) {
-	oldMode = recordMode + 10;
-	if (recordMode == 1) {
+	oldMode = options.recordMode + 10;
+	if (options.recordMode == 1) {
 	    record = rrecord = 1;
-	    recf1 = fopen(recordFileName, "wb");
+	    recf1 = fopen(options.recordFileName, "wb");
 	    if (!recf1) {
 		error("Opening record file failed");
 		exit(1);
@@ -256,21 +254,21 @@ void Init_recording(void)
 		*bufs[i].curp = bufs[i].start;
 	    }
 	    return;
-	} else if (recordMode == 2) {
+	} else if (options.recordMode == 2) {
 	    rplayback = 1;
 	    for (i = 0; i < num_types; i++) {
 		bufs[i].start = malloc(bufs[i].size);
 		*bufs[i].curp = bufs[i].start;
 		bufs[i].num_read = 0;
 	    }
-	    recf1 = fopen(recordFileName, "rb");
+	    recf1 = fopen(options.recordFileName, "rb");
 	    if (!recf1) {
 		error("Opening record file failed");
 		exit(1);
 	    }
 	    Get_recording_data();
 	    return;
-	} else if (recordMode == 0)
+	} else if (options.recordMode == 0)
 	    return;
 	else {
 	    warn("Trying to start recording or playback when the server is\n"
@@ -278,8 +276,8 @@ void Init_recording(void)
 	    return;
 	}
     }
-    if (recordMode != 0 || oldMode < 11 || oldMode > 12) {
-	recordMode = oldMode - 10;
+    if (options.recordMode != 0 || oldMode < 11 || oldMode > 12) {
+	options.recordMode = oldMode - 10;
 	return;
     }
     if (oldMode == 11) {
@@ -300,12 +298,12 @@ void Handle_recording_buffers(void)
     static time_t t;
     time_t tt;
 
-    if (recordMode != 1)
+    if (options.recordMode != 1)
 	return;
 
     tt = time(NULL);
-    if (recordFlushInterval) {
-	if (tt > t + recordFlushInterval) {
+    if (options.recordFlushInterval) {
+	if (tt > t + options.recordFlushInterval) {
 	    if (t == 0)
 		t = tt;
 	    else {

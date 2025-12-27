@@ -1,5 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-98 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,10 +20,10 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "xpclient.h"
+#include "xpclient_x11.h"
 
 
 char colors_version[] = VERSION;
@@ -36,24 +38,35 @@ char colors_version[] = VERSION;
 /*
  * The number of X11 visuals.
  */
-#define MAX_VISUAL_CLASS	6
+#define MAX_VISUAL_CLASS	4
 
 
 /*
  * Default colors.
  */
-char			color_names[MAX_COLORS][MAX_COLOR_LEN];
+#define XP_COLOR0		"#000000"		/* black */
+#define XP_COLOR1		"#FFFFFF"		/* white */
+#define XP_COLOR2		"#4E7CFF"		/* "xpblue" */
+#define XP_COLOR3		"#FF3A27"		/* "xpred" */
+#define XP_COLOR4		"#33BB44"		/* "xpgreen" */
+#define XP_COLOR5		"#992200"
+#define XP_COLOR6		"#BB7700"
+#define XP_COLOR7		"#EE9900"
+#define XP_COLOR8		"#002299"
+#define XP_COLOR9		"#CC4400"
+#define XP_COLOR10		"#DD8800"
+#define XP_COLOR11		"#FFBB11"		/* "xpyellow" */
+#define XP_COLOR12		"#9F9F9F"
+#define XP_COLOR13		"#5F5F5F"
+#define XP_COLOR14		"#DFDFDF"
+#define XP_COLOR15		"#202020"
+
+char		color_names[MAX_COLORS][MAX_COLOR_LEN];
 static const char	*color_defaults[MAX_COLORS] = {
-    "#000000", "#FFFFFF", "#4E7CFF", "#FF3A27",
-    "#33BB44", "#992200", "#BB7700", "#EE9900",
-    "#002299", "#CC4400", "#DD8800", "#FFBB11",
-    "#9f9f9f", "#5f5f5f", "#dfdfdf", "#202020"
-};
-static const char	*gray_defaults[MAX_COLORS] = {
-    "#000000", "#FFFFFF", "#AAAAAA", "#CCCCCC",
-    "#BBBBBB", "#888888", "#AAAAAA", "#CCCCCC",
-    "#777777", "#999999", "#BBBBBB", "#DDDDDD",
-    "#9f9f9f", "#5f5f5f", "#dfdfdf", "#202020"
+    XP_COLOR0,  XP_COLOR1,  XP_COLOR2,  XP_COLOR3,
+    XP_COLOR4,  XP_COLOR5,  XP_COLOR6,  XP_COLOR7,
+    XP_COLOR8,  XP_COLOR9,  XP_COLOR10, XP_COLOR11,
+    XP_COLOR12, XP_COLOR13, XP_COLOR14, XP_COLOR15
 };
 
 char		visualName[MAX_VISUAL_NAME];
@@ -67,6 +80,19 @@ bool		fullColor;	/* Whether to try using colors as close to
 bool		texturedObjects; /* Whether to draw bitmaps for some objects.
 				  * Previously this variable determined
 				  * fullColor too. */
+int		maxColors;	/* Max. number of colors to use */
+XColor		colors[MAX_COLORS];
+Colormap	colormap;	/* Private colormap */
+
+char	sparkColors[MSG_LEN];
+int	spark_color[MAX_COLORS];
+
+int	buttonColor;		/* Color index for button drawing */
+int	windowColor;		/* Color index for window drawing */
+int	borderColor;		/* Color index for border drawing */
+int	wallColor;		/* Color index for wall drawing */
+int	decorColor;		/* Color index for decoration drawing */
+
 
 #ifndef _WINDOWS
 
@@ -98,9 +124,9 @@ static struct rgb_cube_size {
  */
 #define RGB2COLOR(c) RGB(((c) >> 16) & 255, ((c) >> 8) & 255, ((c) & 255))
 
-unsigned long		(*RGB)(u_byte r, u_byte g, u_byte b) = 0;
-static unsigned long	RGB_PC(u_byte r, u_byte g, u_byte b);
-static unsigned long	RGB_TC(u_byte r, u_byte g, u_byte b);
+unsigned long		(*RGB)(int r, int g, int b) = NULL;
+static unsigned long	RGB_PC(int r, int g, int b);
+static unsigned long	RGB_TC(int r, int g, int b);
 
 /*
  * Visual names.
@@ -109,8 +135,6 @@ static struct Visual_class_name {
     int		visual_class;
     const char	*visual_name;
 } visual_class_names[MAX_VISUAL_CLASS] = {
-    { StaticGray,	"StaticGray"  },
-    { GrayScale,	"GrayScale"   },
     { StaticColor,	"StaticColor" },
     { PseudoColor,	"PseudoColor" },
     { TrueColor,	"TrueColor"   },
@@ -164,9 +188,8 @@ static const char *Visual_class_name(int visual_class)
     int			i;
 
     for (i = 0; i < MAX_VISUAL_CLASS; i++) {
-	if (visual_class_names[i].visual_class == visual_class) {
+	if (visual_class_names[i].visual_class == visual_class)
 	    return visual_class_names[i].visual_name;
-	}
     }
     return "UnknownVisual";
 }
@@ -247,9 +270,8 @@ static void Choose_visual(void)
 		}
 	    }
 	    if (visual_class == -1) {
-		errno = 0;
-		error("Unknown visual class named \"%s\", using default\n",
-		    visualName);
+		warn("Unknown visual class named \"%s\", using default\n",
+		     visualName);
 	    }
 	}
     }
@@ -260,9 +282,9 @@ static void Choose_visual(void)
 	    strcpy(visualName, "PseudoColor");
 	}
 	using_default = true;
-    } else {
+    } else
 	using_default = false;
-    }
+
     if (visual_class >= 0 || visual_id >= 0) {
 	mask = 0;
 	my_vinfo.screen = DefaultScreen(dpy);
@@ -278,11 +300,9 @@ static void Choose_visual(void)
 	num = 0;
 	if ((vinfo_ptr = XGetVisualInfo(dpy, mask, &my_vinfo, &num)) == NULL
 	    || num <= 0) {
-	    if (using_default == false) {
-		errno = 0;
-		error("No visuals available with class name \"%s\", using default",
-		    visualName);
-	    }
+	    if (using_default == false)
+		warn("No visuals available with class name \"%s\", "
+		     "using default", visualName);
 	    visual_class = -1;
 	}
 	else {
@@ -291,13 +311,11 @@ static void Choose_visual(void)
 		best_size = best_vinfo->colormap_size;
 		cmap_size = vinfo_ptr[i].colormap_size;
 		if (cmap_size > best_size) {
-		    if (best_size < 256) {
+		    if (best_size < 256)
 			best_vinfo = &vinfo_ptr[i];
-		    }
 		}
-		else if (cmap_size >= 256) {
+		else if (cmap_size >= 256)
 		    best_vinfo = &vinfo_ptr[i];
-		}
 	    }
 	    visual = best_vinfo->visual;
 	    visual_class = best_vinfo->class;
@@ -323,27 +341,21 @@ static void Choose_visual(void)
 static int Parse_colors(Colormap cmap)
 {
     int			i;
-    const char		**def;
+    const char		**def = &color_defaults[0];
 
     /*
      * Get the color definitions.
      */
-
-    if (visual->class == StaticGray || visual->class == GrayScale)
-	def = &gray_defaults[0];
-    else
-	def = &color_defaults[0];
-
     for (i = 0; i < maxColors; i++) {
 	if (color_names[i][0] != '\0') {
 	    if (XParseColor(dpy, cmap, color_names[i], &colors[i]))
 		continue;
-	    printf("Can't parse color %d \"%s\"\n", i, color_names[i]);
+	    warn("Can't parse color %d \"%s\".", i, color_names[i]);
 	}
 	if (def[i] != NULL && def[i][0] != '\0') {
 	    if (XParseColor(dpy, cmap, def[i], &colors[i]))
 		continue;
-	    printf("Can't parse default color %d \"%s\"\n", i, def[i]);
+	    warn("Can't parse default color %d \"%s\".", i, def[i]);
 	}
 	if (i < NUM_COLORS)
 	    return -1;
@@ -367,22 +379,20 @@ static void Fill_colormap(void)
     unsigned long	pixels[256];
     XColor		mycolors[256];
 
-    if (colormap == 0 || colorSwitch != true) {
+    if (colormap == 0 || colorSwitch != true)
 	return;
-    }
+
     cells_needed = (maxColors == 16) ? 256
 	: (maxColors == 8) ? 64
 	: 16;
     max_fill = MAX(256, visual->map_entries) - cells_needed;
-    if (max_fill <= 0) {
+    if (max_fill <= 0)
 	return;
-    }
 
     if (XAllocColorCells(dpy, colormap,
 			 False, NULL,
-			 0, pixels, max_fill) == False) {
-	errno = 0;
-	error("Can't pre-alloc color cells");
+			 0, pixels, (unsigned)max_fill) == False) {
+	warn("Can't pre-alloc color cells");
 	return;
     }
 
@@ -390,17 +400,15 @@ static void Fill_colormap(void)
     for (i = 0; i < max_fill; i++) {
 	if (i != (int) pixels[i]) {
 #ifdef DEVELOPMENT
-	    errno = 0;
-	    error("Can't pre-fill color map, got %d'th pixel %lu",
-		  i, pixels[i]);
+	    warn("Can't pre-fill color map, got %d'th pixel %lu",
+		 i, pixels[i]);
 #endif
 	    XFreeColors(dpy, colormap, pixels, max_fill, 0);
 	    return;
 	}
     }
-    for (i = 0; i < max_fill; i++) {
+    for (i = 0; i < max_fill; i++)
 	mycolors[i].pixel = pixels[i];
-    }
     XQueryColors(dpy, DefaultColormap(dpy, DefaultScreen(dpy)),
 		 mycolors, max_fill);
     XStoreColors(dpy, colormap, mycolors, max_fill);
@@ -414,7 +422,8 @@ static void Fill_colormap(void)
  */
 int Colors_init(void)
 {
-    int				i, num_planes;
+    int				i;
+    unsigned			num_planes;
 
     colormap = 0;
 
@@ -423,11 +432,10 @@ int Colors_init(void)
     /*
      * Get misc. display info.
      */
-    if (visual->class == StaticGray ||
-	visual->class == StaticColor ||
-	visual->class == TrueColor) {
+    if (visual->class == StaticColor ||
+	visual->class == TrueColor)
 	colorSwitch = false;
-    }
+
     if (visual->map_entries < 16)
 	colorSwitch = false;
 
@@ -446,20 +454,19 @@ int Colors_init(void)
 	: 2;
 
     if (Parse_colors(DefaultColormap(dpy, DefaultScreen(dpy))) == -1) {
-	printf("Color parsing failed\n");
+	warn("Color parsing failed.");
 	return -1;
     }
 
-    if (colormap != 0) {
+    if (colormap != 0)
 	Fill_colormap();
-    }
 
     /*
      * Initialize the double buffering routine.
      */
     dbuf_state = NULL;
 
-    if (multibuffer) {
+    if (multibuffer)
 	dbuf_state = start_dbuff(dpy,
 				 (colormap != 0)
 				     ? colormap
@@ -468,8 +475,7 @@ int Colors_init(void)
 				 MULTIBUFFER,
 				 num_planes,
 				 colors);
-    }
-    if (dbuf_state == NULL) {
+    if (dbuf_state == NULL)
 	dbuf_state = start_dbuff(dpy,
 				 (colormap != 0)
 				     ? colormap
@@ -478,7 +484,6 @@ int Colors_init(void)
 				 ((colorSwitch) ? COLOR_SWITCH : PIXMAP_COPY),
 				 num_planes,
 				 colors);
-    }
     if (dbuf_state == NULL && colormap == 0) {
 
 	/*
@@ -491,26 +496,22 @@ int Colors_init(void)
 	 * Try to initialize the double buffering again.
 	 */
 
-	if (multibuffer) {
-	    dbuf_state = start_dbuff(dpy, colormap,
-				     MULTIBUFFER,
-				     num_planes,
+	if (multibuffer)
+	    dbuf_state = start_dbuff(dpy, colormap, MULTIBUFFER, num_planes,
 				     colors);
-	}
 
-	if (dbuf_state == NULL) {
+	if (dbuf_state == NULL)
 	    dbuf_state = start_dbuff(dpy, colormap,
-				     ((colorSwitch) ? COLOR_SWITCH : PIXMAP_COPY),
+				     ((colorSwitch)
+				      ? COLOR_SWITCH : PIXMAP_COPY),
 				     num_planes,
 				     colors);
-	}
     }
 
     if (dbuf_state == NULL) {
 	/* Can't setup double buffering */
-	errno = 0;
-	error("Can't setup colors with visual %s and %d colormap entries",
-	      Visual_class_name(visual->class), visual->map_entries);
+	warn("Can't setup colors with visual %s and %d colormap entries",
+	     Visual_class_name(visual->class), visual->map_entries);
 	return -1;
     }
 
@@ -535,13 +536,11 @@ int Colors_init(void)
 #endif
 
     default:
-	printf("Unknown dbuf state %d\n", dbuf_state->type);
-	exit(1);
+	fatal("Unknown dbuf state %d.", dbuf_state->type);
     }
 
-    for (i = maxColors; i < MAX_COLORS; i++) {
+    for (i = maxColors; i < MAX_COLORS; i++)
 	colors[i] = colors[i % maxColors];
-    }
 
     Colors_init_radar_hack();
 
@@ -567,12 +566,10 @@ static void Colors_init_radar_hack(void)
 	for (i = 0; i < 32; i++) {
 	    if (!((1 << i) & dbuf_state->drawing_plane_masks[p])) {
 	        num++;
-		if (num == 1 || num == 3) {
+		if (num == 1 || num == 3)
 		    dpl_1[p] |= 1<<i;   /* planes with moving radar objects */
-		}
-		else {
+		else
 		    dpl_2[p] |= 1<<i;   /* constant map part of radar */
-		}
 	    }
 	}
     }
@@ -607,16 +604,9 @@ static int Colors_init_bitmap_colors(void)
 	r = Colors_init_true_color();
 	break;
 
-    case GrayScale:
-    case StaticGray:
-	/*
-	 * Haven't implemented implemented bitmaps for gray colors yet.
-	 */
-	/*FALLTHROUGH*/
-
     default:
-	printf("fullColor not implemented for visual \"%s\"\n",
-		Visual_class_name(visual->class));
+	warn("fullColor not implemented for visual \"%s\"",
+	     Visual_class_name(visual->class));
 	fullColor = false;
 	texturedObjects = false;
 	break;
@@ -635,10 +625,10 @@ void Colors_init_style_colors(void)
     int i;
     for (i = 0; i < num_polygon_styles; i++)
 	polygon_styles[i].color = (fullColor && RGB) ?
-	    RGB2COLOR(polygon_styles[i].rgb) : wallColor;
+	    RGB2COLOR(polygon_styles[i].rgb) : (unsigned long)wallColor;
     for (i = 0; i < num_edge_styles; i++)
 	edge_styles[i].color = (fullColor && RGB) ?
-	    RGB2COLOR(edge_styles[i].rgb) : wallColor;
+	    RGB2COLOR(edge_styles[i].rgb) : (unsigned long)wallColor;
 }
 
 
@@ -652,9 +642,13 @@ void Colors_init_style_colors(void)
  */
 int Colors_init_bitmaps(void)
 {
+    /* kps hack */
+    if (dbuf_state == NULL)
+	return 0;
+
     if (dbuf_state->type == COLOR_SWITCH) {
 	if (fullColor) {
-	    printf("Can't do texturedObjects if colorSwitch\n");
+	    warn("Can't do texturedObjects if colorSwitch.");
 	    fullColor = false;
 	    texturedObjects = false;
 	}
@@ -675,7 +669,7 @@ int Colors_init_bitmaps(void)
 /*
  * Calculate a pixel from a RGB triplet for a PseudoColor visual.
  */
-static unsigned long RGB_PC(u_byte r, u_byte g, u_byte b)
+static unsigned long RGB_PC(int r, int g, int b)
 {
     int			i;
 
@@ -691,7 +685,7 @@ static unsigned long RGB_PC(u_byte r, u_byte g, u_byte b)
 /*
  * Calculate a pixel from a RGB triplet for a TrueColor visual.
  */
-static unsigned long RGB_TC(u_byte r, u_byte g, u_byte b)
+static unsigned long RGB_TC(int r, int g, int b)
 {
     unsigned long	pixel = 0;
 
@@ -776,7 +770,7 @@ static int Colors_init_color_cube(void)
 						   DefaultScreen(dpy)),
 			     False, NULL, 0,
 			     &color_cube->pixels[0],
-			     n) == False) {
+			     (unsigned)n) == False) {
 	    /*printf("Could not alloc %d colors for RGB cube\n", n);*/
 	    continue;
 	}
@@ -801,7 +795,7 @@ static int Colors_init_color_cube(void)
 	return 0;
     }
 
-    printf("Could not alloc colors for RGB cube\n");
+    warn("Could not alloc colors for RGB cube.");
 
     return -1;
 }
@@ -873,9 +867,8 @@ static int Colors_init_true_color(void)
 	if ((visual->red_mask & (1UL << i)) != 0) {
 	    if (r >= 0) {
 		for (j = 0; j < 256; j++) {
-		    if (j & (1 << r)) {
+		    if (j & (1 << r))
 			true_color->red_bits[j] |= (1UL << i);
-		    }
 		}
 		r--;
 	    }
@@ -883,9 +876,8 @@ static int Colors_init_true_color(void)
 	if ((visual->green_mask & (1UL << i)) != 0) {
 	    if (g >= 0) {
 		for (j = 0; j < 256; j++) {
-		    if (j & (1 << g)) {
+		    if (j & (1 << g))
 			true_color->green_bits[j] |= (1UL << i);
-		    }
 		}
 		g--;
 	    }
@@ -893,9 +885,8 @@ static int Colors_init_true_color(void)
 	if ((visual->blue_mask & (1UL << i)) != 0) {
 	    if (b >= 0) {
 		for (j = 0; j < 256; j++) {
-		    if (j & (1 << b)) {
+		    if (j & (1 << b))
 			true_color->blue_bits[j] |= (1UL << i);
-		    }
 		}
 		b--;
 	    }
@@ -956,7 +947,7 @@ void Colors_cleanup(void)
 void Colors_debug(void)
 {
     int			i, n, r, g, b;
-    XColor		colors[256];
+    XColor		cols[256];
     FILE		*fp = fopen("rgb", "w");
 
     if (!color_cube) {
@@ -973,16 +964,15 @@ void Colors_debug(void)
 	b = rgb_cube_sizes[i].b;
 	n = r * g * b;
 
-	Fill_color_cube(r, g, b, colors);
+	Fill_color_cube(r, g, b, cols);
 
 	fprintf(fp, "\n\n  RGB  %d %d %d\n\n", r, g, b);
 	i = 0;
 	for (r = 0; r < color_cube->reds; r++) {
 	    for (g = 0; g < color_cube->greens; g++) {
-		for (b = 0; b < color_cube->blues; b++, i++) {
+		for (b = 0; b < color_cube->blues; b++, i++)
 		    fprintf(fp, "color %4d    %04X  %04X  %04X\n",
-			    i, colors[i].red, colors[i].green, colors[i].blue);
-		}
+			    i, cols[i].red, cols[i].green, cols[i].blue);
 	    }
 	}
 	fprintf(fp,
@@ -1003,3 +993,312 @@ void Colors_debug(void)
 
 
 #endif	/* _WINDOWS */
+
+/*
+ * Convert a string of color numbers into an array
+ * of "colors[]" indices stored by "spark_color[]".
+ * Initialize "num_spark_colors".
+ */
+void Init_spark_colors(void)
+{
+    char		buf[MSG_LEN];
+    char		*src, *dst;
+    unsigned		col;
+    int			i;
+
+    num_spark_colors = 0;
+    /*
+     * The sparkColors specification may contain
+     * any possible separator.  Only look at numbers.
+     */
+
+     /* hack but protocol will allow max 9 (MM) */ 
+    for (src = sparkColors; *src && (num_spark_colors < 9); src++) {
+	if (isascii(*src) && isdigit(*src)) {
+	    dst = &buf[0];
+	    do {
+		*dst++ = *src++;
+	    } while (*src &&
+		     isascii(*src) &&
+		     isdigit(*src) &&
+		     ((size_t)(dst - buf) < (sizeof(buf) - 1)));
+	    *dst = '\0';
+	    src--;
+	    if (sscanf(buf, "%u", &col) == 1) {
+		if (col < (unsigned)maxColors)
+		    spark_color[num_spark_colors++] = col;
+	    }
+	}
+    }
+    if (num_spark_colors == 0) {
+	if (maxColors <= 8) {
+	    /* 3 colors ranging from 5 up to 7 */
+	    for (i = 5; i < maxColors; i++)
+		spark_color[num_spark_colors++] = i;
+	}
+	else {
+	    /* 7 colors ranging from 5 till 11 */
+	    for (i = 5; i < 12; i++)
+		spark_color[num_spark_colors++] = i;
+	}
+	/* default spark colors always include RED. */
+	spark_color[num_spark_colors++] = RED;
+    }
+    for (i = num_spark_colors; i < MAX_COLORS; i++)
+	spark_color[i] = spark_color[num_spark_colors - 1];
+}
+
+
+static bool Set_sparkColors (xp_option_t *opt, const char *val)
+{
+    UNUSED_PARAM(opt);
+    strlcpy(sparkColors, val, sizeof sparkColors);
+    Init_spark_colors();
+    /* might fail to set what we wanted, but return ok nonetheless */
+    return true;
+}
+
+static bool Set_maxColors (xp_option_t *opt, int val)
+{
+    UNUSED_PARAM(opt);
+    if (val == 4 || val == 8) {
+	warn("WARNING: Values 4 or 8 for maxColors are not actively "
+	     "supported. Use at own risk.");
+	maxColors = val;
+    } else
+	maxColors = MAX_COLORS;
+    return true;
+}
+
+static bool Set_color (xp_option_t *opt, const char *val)
+{
+    char *buf = Option_get_private_data(opt);
+
+    /*warn("Set_color: name = %s, val = %s, buf = %p", opt->name, val, buf);*/
+
+    strlcpy(buf, val, MAX_COLOR_LEN);
+
+    /* kps - HACK */
+    {
+	char *s, *semicolon;
+	/* this should be done in the option.c code */
+	semicolon = strchr(buf, ';');
+	if (semicolon)
+	    *semicolon = '\0';
+
+	/* XParseColor doesn't want spaces after the color spec */
+	s = buf;
+	while (*s && !isspace(*s))
+	    s++;
+	*s = '\0';
+    }
+    /* kps - HACK */
+
+    return true;
+}
+
+
+static xp_option_t color_options[] = {
+
+    XP_INT_OPTION(
+	"maxColors",
+	MAX_COLORS,
+	4,
+	MAX_COLORS,
+	&maxColors,
+	Set_maxColors,
+	XP_OPTFLAG_DEFAULT,
+	"The number of colors to use.  Valid values are 4, 8 and 16.\n"),
+
+    /* 16 user definable color values */
+    XP_STRING_OPTION(
+	"color0",
+	XP_COLOR0,
+	color_names[0],
+	MAX_COLOR_LEN,
+	Set_color, color_names[0], NULL,
+	XP_OPTFLAG_DEFAULT,
+	"The color value for the first color.\n"),
+
+    XP_STRING_OPTION(
+	"color1",
+	XP_COLOR1,
+	color_names[1],
+	MAX_COLOR_LEN,
+	Set_color, color_names[1], NULL,
+	XP_OPTFLAG_DEFAULT,
+	"The color value for the second color.\n"),
+
+    XP_STRING_OPTION(
+	"color2",
+	XP_COLOR2,
+	color_names[2],
+	MAX_COLOR_LEN,
+	Set_color, color_names[2], NULL,
+	XP_OPTFLAG_DEFAULT,
+	"The color value for the third color.\n"),
+
+    XP_STRING_OPTION(
+	"color3",
+	XP_COLOR3,
+	color_names[3],
+	MAX_COLOR_LEN,
+	Set_color, color_names[3], NULL,
+	XP_OPTFLAG_DEFAULT,
+	"The color value for the fourth color.\n"),
+
+    XP_STRING_OPTION(
+	"color4",
+	XP_COLOR4,
+	color_names[4],
+	MAX_COLOR_LEN,
+	Set_color, color_names[4], NULL,
+	XP_OPTFLAG_DEFAULT,
+	"The color value for the fifth color.\n"),
+
+    XP_STRING_OPTION(
+	"color5",
+	XP_COLOR5,
+	color_names[5],
+	MAX_COLOR_LEN,
+	Set_color, color_names[5], NULL,
+	XP_OPTFLAG_DEFAULT,
+	"The color value for the sixth color.\n"),
+
+    XP_STRING_OPTION(
+	"color6",
+	XP_COLOR6,
+	color_names[6],
+	MAX_COLOR_LEN,
+	Set_color, color_names[6], NULL,
+	XP_OPTFLAG_DEFAULT,
+	"The color value for the seventh color.\n"),
+
+    XP_STRING_OPTION(
+	"color7",
+	XP_COLOR7,
+	color_names[7],
+	MAX_COLOR_LEN,
+	Set_color, color_names[7], NULL,
+	XP_OPTFLAG_DEFAULT,
+	"The color value for the eighth color.\n"),
+
+    XP_STRING_OPTION(
+	"color8",
+	XP_COLOR8,
+	color_names[8],
+	MAX_COLOR_LEN,
+	Set_color, color_names[8], NULL,
+	XP_OPTFLAG_DEFAULT,
+	"The color value for the ninth color.\n"),
+
+    XP_STRING_OPTION(
+	"color9",
+	XP_COLOR9,
+	color_names[9],
+	MAX_COLOR_LEN,
+	Set_color, color_names[9], NULL,
+	XP_OPTFLAG_DEFAULT,
+	"The color value for the tenth color.\n"),
+
+    XP_STRING_OPTION(
+	"color10",
+	XP_COLOR10,
+	color_names[10],
+	MAX_COLOR_LEN,
+	Set_color, color_names[10], NULL,
+	XP_OPTFLAG_DEFAULT,
+	"The color value for the eleventh color.\n"),
+
+    XP_STRING_OPTION(
+	"color11",
+	XP_COLOR11,
+	color_names[11],
+	MAX_COLOR_LEN,
+	Set_color, color_names[11], NULL,
+	XP_OPTFLAG_DEFAULT,
+	"The color value for the twelfth color.\n"),
+
+    XP_STRING_OPTION(
+	"color12",
+	XP_COLOR12,
+	color_names[12],
+	MAX_COLOR_LEN,
+	Set_color, color_names[12], NULL,
+	XP_OPTFLAG_DEFAULT,
+	"The color value for the thirteenth color.\n"),
+
+    XP_STRING_OPTION(
+	"color13",
+	XP_COLOR13,
+	color_names[13],
+	MAX_COLOR_LEN,
+	Set_color, color_names[13], NULL,
+	XP_OPTFLAG_DEFAULT,
+	"The color value for the fourteenth color.\n"),
+
+    XP_STRING_OPTION(
+	"color14",
+	XP_COLOR14,
+	color_names[14],
+	MAX_COLOR_LEN,
+	Set_color, color_names[14], NULL,
+	XP_OPTFLAG_DEFAULT,
+	"The color value for the fifteenth color.\n"),
+
+    XP_STRING_OPTION(
+	"color15",
+	XP_COLOR15,
+	color_names[15],
+	MAX_COLOR_LEN,
+	Set_color, color_names[15], NULL,
+	XP_OPTFLAG_DEFAULT,
+	"The color value for the sixteenth color.\n"),
+
+    XP_STRING_OPTION(
+	"sparkColors",
+	"5,6,7,3",
+	sparkColors,
+	sizeof sparkColors,
+	Set_sparkColors, NULL, NULL,
+	XP_OPTFLAG_DEFAULT,
+	"Which color numbers to use for spark and debris particles.\n"),
+
+    COLOR_INDEX_OPTION(
+	"wallColor",
+	2,
+	&wallColor,
+	"Which color number to use for drawing walls.\n"),
+
+    COLOR_INDEX_OPTION(
+	"decorColor",
+	6,
+	&decorColor,
+	"Which color number to use for drawing decorations.\n"),
+
+    COLOR_INDEX_OPTION(
+	"windowColor",
+	8,
+	&windowColor,
+	"Which color number to use for drawing windows.\n"),
+
+    COLOR_INDEX_OPTION(
+	"buttonColor",
+	2,
+	&buttonColor,
+	"Which color number to use for drawing buttons.\n"),
+
+    COLOR_INDEX_OPTION(
+	"borderColor",
+	1,
+	&borderColor,
+	"Which color number to use for drawing borders.\n"),
+};
+
+
+void Store_color_options(void)
+{
+    STORE_OPTIONS(color_options);
+}
+
+

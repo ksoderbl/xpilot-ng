@@ -1,5 +1,7 @@
 /*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,26 +20,40 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
+
 
 #include "xpclient.h"
 
+/* kps - move to some header */
+extern int Bitmap_add(char *filename, int count, bool scalable);
+extern int Startup_server_motd(void);
+
 char client_version[] = VERSION;
 
+char	*geometry;
+xp_args_t xpArgs;
+Connect_param_t connectParam;
+
+bool	newbie;
+int	baseWarningType;	/* Which type of base warning you prefer */
+int	hudRadarDotSize;	/* Size for hudradar dot drawing */
+double	hudRadarScale;		/* Scale for hudradar drawing */
+double	hudRadarLimit;		/* Hudradar dots are not drawn if closer to
+				   your ship than this factor of visible
+				   range */
+int	hudSize;		/* Size for HUD drawing, depends on hudScale */
 
 bool	is_server = false;	/* used in common code */
-char	*talk_fast_msgs[TALK_FAST_NR_OF_MSGS];	/* talk macros */
 
-bool	scoresChanged = false;
-unsigned	RadarHeight = 0;
-unsigned	RadarWidth = 256;	/* must always be 256! */
+int	scoresChanged = 1;
+unsigned RadarHeight = 0;
+unsigned RadarWidth = 256;	/* radar width at the server */ 
 
 int     oldServer;
-ipos	FOOpos;
-ipos	FOOvel;
-ipos	world;
-ipos	realWorld;
+ipos_t	selfPos;
+ipos_t	selfVel;
 short	heading;
 short	nextCheckPoint;
 
@@ -45,6 +61,7 @@ u_byte	numItems[NUM_ITEMS];	/* Count of currently owned items */
 u_byte	lastNumItems[NUM_ITEMS];/* Last item count shown */
 int	numItemsTime[NUM_ITEMS];/* Number of frames to show this item count */
 double	showItemsTime;		/* How long to show changed item count for */
+double	scoreObjectTime;	/* How long to flash score objects */
 
 short	autopilotLight;
 
@@ -54,6 +71,12 @@ short	lock_id;		/* Id of player locked onto */
 short	lock_dir;		/* Direction of lock */
 short	lock_dist;		/* Distance to player locked onto */
 
+int	eyesId;                 /* Player we get frame updates for */
+other_t	*eyes = NULL;	        /* Player we get frame updates for */
+bool	snooping;               /* are we snooping on someone else? */
+int	eyeTeam = TEAM_NOT_SET;
+
+other_t	*self = NULL;	        /* player info */
 short	selfVisible;		/* Are we alive and playing? */
 short	damaged;		/* Damaged by ECM */
 short	destruct;		/* If self destructing */
@@ -75,22 +98,20 @@ int	map_point_size;		/* size of navigation points */
 int	spark_size;		/* size of debris and spark */
 int	shot_size;		/* size of shot */
 int	teamshot_size;		/* size of team shot */
-bool	showNastyShots = false;	/* show original flavor shots or the new 
-				   "nasty shots" */
 double	controlTime;		/* Display control for how long? */
 u_byte	spark_rand;		/* Sparkling effect */
 u_byte	old_spark_rand;		/* previous value of spark_rand */
 
-long	fuelSum;		/* Sum of fuel in all tanks */
-long	fuelMax;		/* How much fuel can you take? */
+double	fuelSum;		/* Sum of fuel in all tanks */
+double	fuelMax;		/* How much fuel can you take? */
 short	fuelCurrent;		/* Number of currently used tank */
 short	numTanks;		/* Number of tanks */
 double	fuelTime;		/* Display fuel for how long? */
-int	fuelLevel1;		/* Fuel critical level */
-int	fuelLevel2;		/* Fuel warning level */
-int	fuelLevel3;		/* Fuel notify level */
+double	fuelCritical;		/* Fuel critical level */
+double	fuelWarning;		/* Fuel warning level */
+double	fuelNotify;		/* Fuel notify level */
 
-char	*shipShape;		/* Shape of player's ship */
+char	*shipShape = NULL;	/* Shape of player's ship */
 double	power;			/* Force of thrust */
 double	power_s;		/* Saved power fiks */
 double	turnspeed;		/* How fast player acc-turns */
@@ -100,12 +121,12 @@ double	turnresistance_s;	/* Saved (see above) */
 double	displayedPower;		/* What the server is sending us */
 double	displayedTurnspeed;	/* What the server is sending us */
 double	displayedTurnresistance;/* What the server is sending us */
-double	spark_prob;		/* Sparkling effect user configurable */
+double	sparkProb;		/* Sparkling effect user configurable */
 int     charsPerSecond;         /* Message output speed (configurable) */
 
 double	hud_move_fact;		/* scale the hud-movement (speed) */
 double	ptr_move_fact;		/* scale the speed pointer length */
-long	instruments;		/* Instruments on screen (bitmask) */
+instruments_t	instruments;		/* Instruments on screen */
 char	mods[MAX_CHARS];	/* Current modifiers in effect */
 int	packet_size;		/* Current frame update packet size */
 int	packet_loss;		/* lost packets per second */
@@ -114,18 +135,19 @@ int	packet_lag;		/* approximate lag in frames */
 char	*packet_measure;	/* packet measurement in a second */
 long	packet_loop;		/* start of measurement */
 
-bool	showRealName = false;	/* Show realname instead of nick name */
-char	nickname[MAX_CHARS];	/* Nick-name of player */
-char	realname[MAX_CHARS];	/* Real name of player */
+bool	showUserName = false;	/* Show user name instead of nick name */
 char	servername[MAX_CHARS];	/* Name of server connecting to */
 unsigned	version;	/* Version of the server */
 bool	toggle_shield;		/* Are shields toggled by a press? */
 bool	shields = true;		/* When shields are considered up */
 bool	auto_shield = true;	/* shield drops for fire */
+char	modBankStr[NUM_MODBANKS][MAX_CHARS]; /* modifier banks */
 
 int	maxFPS;			/* Maximum FPS player wants from server */
-int	oldMaxFPS;
-int	FPSDivisor = 1; /* default just in case, this is calced from FPS and maxFPS */
+int	oldMaxFPS = 0;
+int	clientFPS = 1;	        /* How many fps we actually get */
+time_t	currentTime;	        /* Current value of time() */
+bool	newSecond = false;      /* True if time() incremented this frame */
 
 int	clientPortStart = 0;	/* First UDP port for clients */
 int	clientPortEnd = 0;	/* Last one (these are for firewalls) */
@@ -136,53 +158,87 @@ int	lose_item_active;	/* one of the lose keys is pressed */
 double	scaleFactor;
 double	scaleFactor_s;
 
+bool	autoServerMotdPopup;
+
 #ifdef SOUND
-char 	sounds[MAX_CHARS];	/* audio mappings */
-char 	audioServer[MAX_CHARS];	/* audio server */
+char 	sounds[PATH_MAX];	/* audio mappings */
+char 	audioServer[PATH_MAX];	/* audio server */
 int 	maxVolume;		/* maximum volume (in percent) */
 #endif /* SOUND */
 
-other_t	*Others = 0;
-int	num_others = 0,
-	max_others = 0;
+static double       teamscores[MAX_TEAMS];
+static cannontime_t *cannons = NULL;
+static int          num_cannons = 0;
+static target_t     *targets = NULL;
+static int          num_targets = 0;
 
-static double		teamscores[MAX_TEAMS];
+fuelstation_t       *fuels = NULL;
+int                 num_fuels = 0;
+homebase_t          *bases = NULL;
+int                 num_bases = 0;
+checkpoint_t        *checks = NULL;
+int                 num_checks = 0;
+xp_polygon_t        *polygons = NULL;
+int                 num_polygons = 0;
+edge_style_t        *edge_styles = NULL;
+int                 num_edge_styles = 0;
+polygon_style_t     *polygon_styles = NULL;
+int                 num_polygon_styles = 0;
 
-fuelstation_t	*fuels = 0;
-int		num_fuels = 0;
+score_object_t      score_objects[MAX_SCORE_OBJECTS];
+int                 score_object = 0;
+other_t             *Others = NULL;
+int                 num_others = 0, max_others = 0;
+refuel_t            *refuel_ptr;
+int                 num_refuel, max_refuel;
+connector_t         *connector_ptr;
+int                 num_connector, max_connector;
+laser_t             *laser_ptr;
+int                 num_laser, max_laser;
+missile_t           *missile_ptr;
+int                 num_missile, max_missile;
+ball_t              *ball_ptr;
+int                 num_ball, max_ball;
+ship_t              *ship_ptr;
+int                 num_ship, max_ship;
+mine_t              *mine_ptr;
+int                 num_mine, max_mine;
+itemtype_t          *itemtype_ptr;
+int                 num_itemtype, max_itemtype;
+ecm_t               *ecm_ptr;
+int                 num_ecm, max_ecm;
+trans_t             *trans_ptr;
+int                 num_trans, max_trans;
+paused_t            *paused_ptr;
+int                 num_paused, max_paused;
+appearing_t         *appearing_ptr;
+int                 num_appearing, max_appearing;
+radar_t             *radar_ptr;
+int                 num_radar, max_radar;
+vcannon_t           *vcannon_ptr;
+int                 num_vcannon, max_vcannon;
+vfuel_t             *vfuel_ptr;
+int                 num_vfuel, max_vfuel;
+vbase_t             *vbase_ptr;
+int                 num_vbase, max_vbase;
+debris_t            *debris_ptr[DEBRIS_TYPES];
+int                 num_debris[DEBRIS_TYPES],
+                    max_debris[DEBRIS_TYPES];
+debris_t            *fastshot_ptr[DEBRIS_TYPES * 2];
+int                 num_fastshot[DEBRIS_TYPES * 2],
+                    max_fastshot[DEBRIS_TYPES * 2];
+vdecor_t            *vdecor_ptr;
+int                 num_vdecor, max_vdecor;
+wreckage_t          *wreckage_ptr;
+int                 num_wreckage, max_wreckage;
+asteroid_t          *asteroid_ptr;
+int                 num_asteroids, max_asteroids;
+wormhole_t          *wormhole_ptr;
+int                 num_wormholes, max_wormholes;
 
-homebase_t	*bases = 0;
-int		num_bases = 0;
-
-checkpoint_t	*checks = 0;
-int		num_checks = 0;
-
-xp_polygon_t	*polygons = 0;
-int		num_polygons = 0, max_polygons = 0;
-
-edge_style_t	*edge_styles = 0;
-int		num_edge_styles = 0, max_edge_styles = 0;
-
-polygon_style_t	*polygon_styles = 0;
-int		num_polygon_styles = 0, max_polygon_styles = 0;
-
-static cannontime_t	*cannons = 0;
-static int		num_cannons = 0;
-
-static target_t		*targets = 0;
-static int		num_targets = 0;
-
-score_object_t		score_objects[MAX_SCORE_OBJECTS];
-int			score_object = 0;
-
-int		num_playing_teams = 0;
-
-#ifndef  _WINDOWS
-/* provide cut&paste and message history */
-static	char		*HistoryBlock = NULL;
-#endif
-bool			selectionAndHistory = false;
-int			maxLinesInHistory;
+int                 num_playing_teams = 0;
+long		    time_left = -1;
+long		    start_loops, end_loops;
 
 static fuelstation_t *Fuelstation_by_pos(int x, int y)
 {
@@ -204,7 +260,7 @@ static fuelstation_t *Fuelstation_by_pos(int x, int y)
     return NULL;
 }
 
-int Fuel_by_pos(int x, int y)
+double Fuel_by_pos(int x, int y)
 {
     fuelstation_t	*fuelp;
 
@@ -213,7 +269,7 @@ int Fuel_by_pos(int x, int y)
     return fuelp->fuel;
 }
 
-int Target_by_index(int ind, int *xp, int *yp, int *dead_time, int *damage)
+int Target_by_index(int ind, int *xp, int *yp, int *dead_time, double *damage)
 {
     if (ind < 0 || ind >= num_targets)
 	return -1;
@@ -224,7 +280,7 @@ int Target_by_index(int ind, int *xp, int *yp, int *dead_time, int *damage)
     return 0;
 }
 
-int Target_alive(int x, int y, int *damage)
+int Target_alive(int x, int y, double *damage)
 {
     int 		i, lo, hi, pos;
 
@@ -246,7 +302,7 @@ int Target_alive(int x, int y, int *damage)
     return -1;
 }
 
-int Handle_fuel(int ind, int fuel)
+int Handle_fuel(int ind, double fuel)
 {
     if (ind < 0 || ind >= num_fuels) {
 	warn("Bad fuelstation index (%d)", ind);
@@ -296,24 +352,23 @@ int Handle_cannon(int ind, int dead_time)
     return 0;
 }
 
-int Handle_target(int num, int dead_time, int damage)
+int Handle_target(int num, int dead_time, double damage)
 {
     if (num < 0 || num >= num_targets) {
 	warn("Bad target index (%d)", num);
 	return 0;
     }
     if (dead_time == 0
-	&& (damage < 1
-	|| damage > TARGET_DAMAGE)) {
-	warn("BUG target %d, dead %d, damage %d", num, dead_time, damage);
-    }
+	&& (damage <= 0.0 || damage > TARGET_DAMAGE))
+	warn("BUG target %d, dead %d, damage %f", num, dead_time, damage);
+
     if (targets[num].dead_time > 0 && dead_time == 0) {
 	int pos = targets[num].pos;
-	Paint_radar_block(pos / Setup->y, pos % Setup->y, targetRadarColor);
+	Radar_show_target(pos / Setup->y, pos % Setup->y);
     }
     else if (targets[num].dead_time == 0 && dead_time > 0) {
 	int pos = targets[num].pos;
-	Paint_radar_block(pos / Setup->y, pos % Setup->y, BLACK);
+	Radar_hide_target(pos / Setup->y, pos % Setup->y);
     }
 
     targets[num].dead_time = dead_time;
@@ -463,7 +518,7 @@ void Map_dots(void)
      */
     memset(dot, 0, sizeof dot);
     dot[SETUP_SPACE] = 1;
-    if (!BIT(instruments, SHOW_DECOR)) {
+    if (!instruments.showDecor) {
 	dot[SETUP_DECOR_FILLED] = 1;
 	dot[SETUP_DECOR_RU] = 1;
 	dot[SETUP_DECOR_RD] = 1;
@@ -574,10 +629,12 @@ void Map_blue(int startx, int starty, int width, int height)
 			type,
 			newtype;
     unsigned char	blue[256];
-    const long		outline_mask = SHOW_OUTLINE_WORLD
-				     | SHOW_FILLED_WORLD
-				     | SHOW_TEXTURED_WALLS;
+    bool		outline = false;
 
+    if (instruments.showOutlineWorld ||
+	instruments.showFilledWorld ||
+	instruments.showTexturedWalls)
+	outline = true;
     /*
      * Optimize the map for blue.
      */
@@ -655,7 +712,7 @@ void Map_blue(int startx, int starty, int width, int height)
 		    : !(blue[Setup->map_data[x * Setup->y + (y - 1)]]
 			& BLUE_UP))
 		    newtype |= BLUE_DOWN;
-		if (!BIT(instruments, outline_mask)
+		if (!outline
 		    || ((x == Setup->x - 1)
 			? (!BIT(Setup->mode, WRAP_PLAY)
 			   || !(blue[Setup->map_data[y]]
@@ -663,7 +720,7 @@ void Map_blue(int startx, int starty, int width, int height)
 			: !(blue[Setup->map_data[(x + 1) * Setup->y + y]]
 			    & BLUE_LEFT)))
 		    newtype |= BLUE_RIGHT;
-		if (!BIT(instruments, outline_mask)
+		if (!outline
 		    || ((y == Setup->y - 1)
 			? (!BIT(Setup->mode, WRAP_PLAY)
 			   || !(blue[Setup->map_data[x * Setup->y]]
@@ -682,7 +739,7 @@ void Map_blue(int startx, int starty, int width, int height)
 		    : !(blue[Setup->map_data[(x - 1) * Setup->y + y]]
 			& BLUE_RIGHT))
 		    newtype |= BLUE_LEFT;
-		if (!BIT(instruments, outline_mask)
+		if (!outline
 		    || ((y == Setup->y - 1)
 			? (!BIT(Setup->mode, WRAP_PLAY)
 			   || !(blue[Setup->map_data[x * Setup->y]]
@@ -694,7 +751,7 @@ void Map_blue(int startx, int starty, int width, int height)
 
 	    case SETUP_REC_RU:
 		newtype = BLUE_BIT | BLUE_CLOSED;
-		if (!BIT(instruments, outline_mask)
+		if (!outline
 		    || ((x == Setup->x - 1)
 			? (!BIT(Setup->mode, WRAP_PLAY)
 			   || !(blue[Setup->map_data[y]]
@@ -702,7 +759,7 @@ void Map_blue(int startx, int starty, int width, int height)
 			: !(blue[Setup->map_data[(x + 1) * Setup->y + y]]
 			    & BLUE_LEFT)))
 		    newtype |= BLUE_RIGHT;
-		if (!BIT(instruments, outline_mask)
+		if (!outline
 		    || ((y == Setup->y - 1)
 			? (!BIT(Setup->mode, WRAP_PLAY)
 			   || !(blue[Setup->map_data[x * Setup->y]]
@@ -732,7 +789,7 @@ void Map_blue(int startx, int starty, int width, int height)
 
 	    case SETUP_REC_RD:
 		newtype = BLUE_BIT | BLUE_BELOW | BLUE_OPEN;
-		if (!BIT(instruments, outline_mask)
+		if (!outline
 		    || ((x == Setup->x - 1)
 			? (!BIT(Setup->mode, WRAP_PLAY)
 			   || !(blue[Setup->map_data[y]]
@@ -808,7 +865,7 @@ static void parse_styles(char **callptr)
 
     for (i = 0; i < num_polygon_styles; i++) {
 	polygon_styles[i].rgb = get_32bit(&ptr);
-	polygon_styles[i].texture = NUM_BITMAPS + (*ptr++);
+	polygon_styles[i].texture = (*ptr++);
 	polygon_styles[i].def_edge_style = *ptr++;
 	polygon_styles[i].flags = *ptr++;
     }
@@ -832,8 +889,8 @@ static void parse_styles(char **callptr)
     for (i = 0; i < num_bmaps; i++) {
 	char fname[30];
 	int flags;
-	strncpy(fname, ptr, 30 - 1);
-	fname[30 - 1] = 0;
+
+	strlcpy(fname, ptr, 30);
 	ptr += strlen(fname) + 1;
 	flags = *ptr++;
 	Bitmap_add(fname, 1, flags);
@@ -843,11 +900,11 @@ static void parse_styles(char **callptr)
 
 static int init_polymap(void)
 {
-    int i, j, startx, starty, polyc, ecount, edgechange, current_estyle;
+    int i, j, startx, starty, ecount, edgechange, current_estyle;
     int dx, dy, cx, cy, pc;
     int *styles;
-    xp_polygon_t poly;
-    ipos *points, min, max;
+    xp_polygon_t *poly;
+    ipos_t *points, min, max;
     char *ptr, *edgeptr;
 
     oldServer = 0;
@@ -855,11 +912,17 @@ static int init_polymap(void)
 
     parse_styles(&ptr);
 
-    polyc = get_ushort(&ptr);
+    num_polygons = get_ushort(&ptr);
+    polygons = malloc(num_polygons * sizeof(xp_polygon_t));
+    if (polygons == NULL) {
+	error("no memory for polygons");
+	exit(1);
+    }
 
-    for (i = 0; i < polyc; i++) {
-	poly.style = *ptr++;
-	current_estyle = polygon_styles[poly.style].def_edge_style;
+    for (i = 0; i < num_polygons; i++) {
+	poly = &polygons[i];
+	poly->style = *ptr++;
+	current_estyle = polygon_styles[poly->style].def_edge_style;
 	dx = 0;
 	dy = 0;
 	ecount = get_ushort(&ptr);
@@ -870,7 +933,7 @@ static int init_polymap(void)
 	    edgechange = INT_MAX;
 	ptr += ecount * 2;
 	pc = get_ushort(&ptr);
-	if ((points = malloc(pc * sizeof(ipos))) == NULL) {
+	if ((points = malloc(pc * sizeof(ipos_t))) == NULL) {
 	    error("no memory for points");
 	    exit(1);
 	}
@@ -920,17 +983,16 @@ static int init_polymap(void)
 	    if (styles)
 		styles[j] = current_estyle;
 	}
-	poly.points = points;
-	poly.edge_styles = styles;
-	poly.num_points = pc;
-	poly.bounds.x = min.x;
-	poly.bounds.y = min.y;
-	poly.bounds.w = max.x - min.x;
-	poly.bounds.h = max.y - min.y;
-	STORE(xp_polygon_t, polygons, num_polygons, max_polygons, poly);
+	poly->points = points;
+	poly->edge_styles = styles;
+	poly->num_points = pc;
+	poly->bounds.x = min.x;
+	poly->bounds.y = min.y;
+	poly->bounds.w = max.x - min.x;
+	poly->bounds.h = max.y - min.y;
     }
     num_bases = *ptr++;
-    bases = (homebase_t *) malloc(num_bases * sizeof(homebase_t));
+    bases = malloc(num_bases * sizeof(homebase_t));
     if (bases == NULL) {
 	error("No memory for Map bases (%d)", num_bases);
 	exit(1);
@@ -955,12 +1017,12 @@ static int init_polymap(void)
 	    bases[i].type = SETUP_BASE_DOWN;
 	else
 	    bases[i].type = SETUP_BASE_RIGHT;
-	bases[i].deathtime = -10000; /* kps hack */
+	bases[i].appeartime = 0;
 	ptr++;
     }
     num_fuels = get_ushort(&ptr);
     if (num_fuels != 0) {
-	fuels = (fuelstation_t *) malloc(num_fuels * sizeof(fuelstation_t));
+	fuels = malloc(num_fuels * sizeof(fuelstation_t));
 	if (fuels == NULL) {
 	    error("No memory for Map fuels (%d)", num_fuels);
 	    exit(1);
@@ -993,7 +1055,11 @@ static int init_polymap(void)
 	checks[i].bounds.h = BLOCK_SZ;
     }
 
-    if (Setup->data_url[0])
+    /*
+     * kps - hack.
+     * Player can disable downloading of textures by having texturedWalls off.
+     */
+    if (instruments.showTexturedWalls && Setup->data_url[0])
 	Mapdata_setup(Setup->data_url);
     Colors_init_style_colors();    
 
@@ -1041,7 +1107,7 @@ static int init_blockmap(void)
 	}
     }
     if (num_bases != 0) {
-	bases = (homebase_t *) malloc(num_bases * sizeof(homebase_t));
+	bases = malloc(num_bases * sizeof(homebase_t));
 	if (bases == NULL) {
 	    error("No memory for Map bases (%d)", num_bases);
 	    return -1;
@@ -1049,7 +1115,7 @@ static int init_blockmap(void)
 	num_bases = 0;
     }
     if (num_fuels != 0) {
-	fuels = (fuelstation_t *) malloc(num_fuels * sizeof(fuelstation_t));
+	fuels = malloc(num_fuels * sizeof(fuelstation_t));
 	if (fuels == NULL) {
 	    error("No memory for Map fuels (%d)", num_fuels);
 	    return -1;
@@ -1057,7 +1123,7 @@ static int init_blockmap(void)
 	num_fuels = 0;
     }
     if (num_targets != 0) {
-	targets = (target_t *) malloc(num_targets * sizeof(target_t));
+	targets = malloc(num_targets * sizeof(target_t));
 	if (targets == NULL) {
 	    error("No memory for Map targets (%d)", num_targets);
 	    return -1;
@@ -1065,7 +1131,7 @@ static int init_blockmap(void)
 	num_targets = 0;
     }
     if (num_cannons != 0) {
-	cannons = (cannontime_t *) malloc(num_cannons * sizeof(cannontime_t));
+	cannons = malloc(num_cannons * sizeof(cannontime_t));
 	if (cannons == NULL) {
 	    error("No memory for Map cannons (%d)", num_cannons);
 	    return -1;
@@ -1106,7 +1172,7 @@ static int init_blockmap(void)
 	    bases[num_bases].id = -1;
 	    bases[num_bases].team = type % 10;
 	    bases[num_bases].type = type - (type % 10);
-	    bases[num_bases].deathtime = -10000; /* kps hack */
+	    bases[num_bases].appeartime = 0;
 	    num_bases++;
 	    Setup->map_data[i] = type - (type % 10);
 	    break;
@@ -1130,31 +1196,19 @@ static int Map_init(void)
 static int Map_cleanup(void)
 {
     if (num_bases > 0) {
-	if (bases != NULL) {
-	    free(bases);
-	    bases = NULL;
-	}
+	XFREE(bases);
 	num_bases = 0;
     }
     if (num_fuels > 0) {
-	if (fuels != NULL) {
-	    free(fuels);
-	    fuels = NULL;
-	}
+	XFREE(fuels);
 	num_fuels = 0;
     }
     if (num_targets > 0) {
-	if (targets != NULL) {
-	    free(targets);
-	    targets = NULL;
-	}
+	XFREE(targets);
 	num_targets = 0;
     }
     if (num_cannons > 0) {
-	if (cannons != NULL) {
-	    free(cannons);
-	    cannons = NULL;
-	}
+	XFREE(cannons);
 	num_cannons = 0;
     }
     return 0;
@@ -1199,7 +1253,7 @@ other_t *Other_by_name(char *name, bool show_error_msg)
     /* Look for an exact match on player nickname. */
     for (i = 0; i < num_others; i++) {
 	other = &Others[i];
-	if (!strcasecmp(other->name, name))
+	if (!strcasecmp(other->nick_name, name))
 	    return other;
     }
 
@@ -1207,7 +1261,7 @@ other_t *Other_by_name(char *name, bool show_error_msg)
     for (i = 0; i < num_others; i++) {
 	other = &Others[i];
 
-	if (!strncasecmp(other->name, name, len)) {
+	if (!strncasecmp(other->nick_name, name, len)) {
 	    if (found_other)
 		goto match_several;
 	    found_other = other;
@@ -1224,8 +1278,8 @@ other_t *Other_by_name(char *name, bool show_error_msg)
 	int j;
 	other = &Others[i];
 
-	for (j = 0; j < 1 + (int)strlen(other->name) - (int)len; j++) {
-	    if (!strncasecmp(other->name + j, name, len)) {
+	for (j = 0; j < 1 + (int)strlen(other->nick_name) - (int)len; j++) {
+	    if (!strncasecmp(other->nick_name + j, name, len)) {
 		if (found_other)
 		    goto match_several;
 		found_other = other;
@@ -1259,7 +1313,7 @@ other_t *Other_by_name(char *name)
 	return NULL;
 
     for (i = 0; i < num_others; i++) {
-	if (!strcmp(name, Others[i].name))
+	if (!strcmp(name, Others[i].nick_name))
 	    return &Others[i];
     }
     return NULL;
@@ -1292,7 +1346,7 @@ int Handle_leave(int id)
 	 * Silent about tanks and robots.
 	 */
 	if (other->mychar != 'T' && other->mychar != 'R') {
-	    sprintf(msg, "%s left this world.", other->name);
+	    sprintf(msg, "%s left this world.", other->nick_name);
 	    Add_message(msg);
 	}
 	num_others--;
@@ -1300,21 +1354,21 @@ int Handle_leave(int id)
 	    *other = other[1];
 	    other++;
 	}
-	scoresChanged = true;
+	scoresChanged = 1;
     }
     for (i = 0; i < num_others; i++) {
 	other = &Others[i];
 	if (other->war_id == id) {
 	    other->war_id = -1;
-	    scoresChanged = true;
+	    scoresChanged = 1;
 	}
     }
     return 0;
 }
 
-int Handle_player(int id, int player_team, int mychar, char *player_name,
-		  char *real_name, char *host_name, char *shape,
-		  int myself)
+int Handle_player(int id, int player_team, int mychar,
+		  char *nick_name, char *user_name, char *host_name,
+		  char *shape, int myself)
 {
     other_t		*other;
 
@@ -1340,7 +1394,8 @@ int Handle_player(int id, int player_team, int mychar, char *player_name,
     }
     if (self == NULL
 	&& (myself
-	    || (version < 0x4F10 && strcmp(nickname, player_name) == 0))) {
+	    || (version < 0x4F10
+		&& strcmp(connectParam.nick_name, nick_name) == 0))) {
 	if (other != &Others[0]) {
 	    /* Make `self' the first member of Others[]. */
 	    *other = Others[0];
@@ -1358,14 +1413,11 @@ int Handle_player(int id, int player_team, int mychar, char *player_name,
     other->mychar = mychar;
     other->war_id = -1;
     other->name_width = 0;
-    strlcpy(other->name, player_name, sizeof(other->name));
-    if (BIT(instruments, SHOW_SHIP_ID))
-	sprintf(other->id_string, "%d", id);
-    else
-	strlcpy(other->id_string, player_name, sizeof(other->id_string));
-    strlcpy(other->real, real_name, sizeof(other->real));
-    strlcpy(other->host, host_name, sizeof(other->host));
-    scoresChanged = true;
+    strlcpy(other->nick_name, nick_name, sizeof(other->nick_name));
+    strlcpy(other->id_string, nick_name, sizeof(other->id_string));
+    strlcpy(other->user_name, user_name, sizeof(other->user_name));
+    strlcpy(other->host_name, host_name, sizeof(other->host_name));
+    scoresChanged = 1;
     other->ship = Convert_shape_str(shape);
     other->ignorelevel = 0;
     Calculate_shield_radius(other->ship);
@@ -1415,9 +1467,10 @@ int Handle_war(int robot_id, int killer_id)
 	return 0;
     }
     robot->war_id = killer_id;
-    sprintf(msg, "%s declares war on %s.", robot->name, killer->name);
+    sprintf(msg, "%s declares war on %s.",
+	    robot->nick_name, killer->nick_name);
     Add_message(msg);
-    scoresChanged = true;
+    scoresChanged = 1;
 
     return 0;
 }
@@ -1438,9 +1491,9 @@ int Handle_seek(int programmer_id, int robot_id, int sought_id)
     }
     robot->war_id = sought_id;
     sprintf(msg, "%s has programmed %s to seek %s.",
-	    programmer->name, robot->name, sought->name);
+	    programmer->nick_name, robot->nick_name, sought->nick_name);
     Add_message(msg);
-    scoresChanged = true;
+    scoresChanged = 1;
 
 
     return 0;
@@ -1463,7 +1516,7 @@ int Handle_score(int id, double score, int life, int mychar, int alliance)
 	other->life = life;
 	other->mychar = mychar;
 	other->alliance = alliance;
-	scoresChanged = true;
+	scoresChanged = 1;
     }
 
     return 0;
@@ -1473,13 +1526,13 @@ int Handle_team_score(int team, double score)
 {
     if (teamscores[team] != score) {
 	teamscores[team] = score;
-	scoresChanged = true;
+	scoresChanged = 1;
     }
 
     return 0;
 }
 
-int Handle_timing(int id, int check, int round)
+int Handle_timing(int id, int check, int round, long tloops)
 {
     other_t		*other;
 
@@ -1493,8 +1546,8 @@ int Handle_timing(int id, int check, int round)
 	other->check = check;
 	other->round = round;
 	other->timing = round * num_checks + check;
-	other->timing_loops = last_loops;
-	scoresChanged = true;
+	other->timing_loops = tloops;
+	scoresChanged = 1;
     }
 
     return 0;
@@ -1513,21 +1566,24 @@ int Handle_score_object(double score, int x, int y, char *msg)
     if (msg[0] != '\0') {
 	if (Using_score_decimals())
 	    sprintf(sobj->hud_msg, "%s %.*f", msg, showScoreDecimals, score);
-	else
-	    sprintf(sobj->hud_msg, "%s %d", msg, (int) rint(score));
+	else {
+	    int sc = rint(score);
+	    sprintf(sobj->hud_msg, "%s %d", msg, sc);
+	}
 	sobj->hud_msg_len = strlen(sobj->hud_msg);
-	sobj->hud_msg_width = XTextWidth(gameFont,
-					 sobj->hud_msg, sobj->hud_msg_len);
+	sobj->hud_msg_width = -1;
     } else
 	sobj->hud_msg_len = 0;
 
     /* Initialize sobj->msg data (is shown on game area) */
     if (Using_score_decimals())
 	sprintf(sobj->msg, "%.*f", showScoreDecimals, score);
-    else
-	sprintf(sobj->msg, "%d", (int) rint(score));
+    else {
+	int sc = rint(score);
+	sprintf(sobj->msg, "%d", sc);
+    }
     sobj->msg_len = strlen(sobj->msg);
-    sobj->msg_width = XTextWidth(gameFont, sobj->msg, sobj->msg_len);
+    sobj->msg_width = -1;
 
     /* Update global index variable */
     score_object = (score_object + 1) % MAX_SCORE_OBJECTS;
@@ -1535,77 +1591,566 @@ int Handle_score_object(double score, int x, int y, char *msg)
     return 0;
 }
 
-
-static void Print_roundend_messages(other_t **order)
+int Handle_start(long server_loops)
 {
-    static char		hackbuf[MSG_LEN];
-    static char		hackbuf2[MSG_LEN];
-    static char		kdratio[16];
-    static char		killsperround[16];
-    char		*s;
     int			i;
-    other_t		*other;
 
-    roundend = false;
+    start_loops = server_loops;
 
-    if (killratio_totalkills == 0)
-	sprintf(kdratio, "0");
-    else if (killratio_totaldeaths == 0)
-	sprintf(kdratio, "infinite");
-    else
-	sprintf(kdratio, "%.2f",
-		(double)killratio_totalkills / killratio_totaldeaths);
+    num_refuel = 0;
+    num_connector = 0;
+    num_missile = 0;
+    num_ball = 0;
+    num_ship = 0;
+    num_mine = 0;
+    num_itemtype = 0;
+    num_ecm = 0;
+    num_trans = 0;
+    num_paused = 0;
+    num_radar = 0;
+    num_vcannon = 0;
+    num_vfuel = 0;
+    num_vbase = 0;
+    num_vdecor = 0;
+    for (i = 0; i < DEBRIS_TYPES; i++)
+	num_debris[i] = 0;
 
-    if (rounds_played == 0)
-	sprintf(killsperround, "0");
-    else
-	sprintf(killsperround, "%.2f",
-		(double)killratio_totalkills / rounds_played);
+    damaged = 0;
+    destruct = 0;
+    shutdown_delay = 0;
+    shutdown_count = -1;
+    eyesId = (self != NULL) ? self->id : 0;
+    eyes = Other_by_id(eyesId);
+    thrusttime = -1;
+    shieldtime = -1;
+    phasingtime = -1;
+    return 0;
+}
 
-    sprintf(hackbuf, "Kill ratio - Round: %d/%d Total: %d/%d (%s) "
-	    "Rounds played: %d  Avg.kills/round: %s",
-	    killratio_kills, killratio_deaths,
-	    killratio_totalkills, killratio_totaldeaths, kdratio,
-	    rounds_played, killsperround);
+static void update_timing(void)
+{
+    static int    frame_counter = 0;
+    static time_t old_time = 0;
+    
+    frame_counter++;
+    currentTime = time(NULL);
+    if (currentTime != old_time) {
+	old_time = currentTime;
+	newSecond = true;
+	clientFPS = frame_counter > 1 ? frame_counter : 1;
+	frame_counter = 0;
+    } else
+	newSecond = false;
+}
 
-    killratio_kills = 0;
-    killratio_deaths = 0;
-    Add_message(hackbuf);
+int Handle_end(long server_loops)
+{
+    end_loops = server_loops;
+    snooping = (self && eyesId != self->id) ? true : false;
+    update_timing();    
+    Paint_frame();
+    return 0;
+}
 
-    sprintf(hackbuf, "Ballstats - Cash/Repl/Team/Lost: %d/%d/%d/%d",
-	    ballstats_cashes, ballstats_replaces,
-	    ballstats_teamcashes, ballstats_lostballs);
-    Add_message(hackbuf);
+int Handle_self_items(u_byte *newNumItems)
+{
+    memcpy(numItems, newNumItems, NUM_ITEMS * sizeof(u_byte));
+    return 0;
+}
 
-    s = hackbuf;
-    s += sprintf(s, "Points - ");
-    /*
-     * Scores are nice to see e.g. in cup recordings.
-     */
-    for (i = 0; i < num_others; i++) {
-	other = order[i];
-	if (other->mychar == 'P')
-	    continue;
+static void update_status(int status)
+{
+    static int old_status = 0;
 
-	if (Using_score_decimals()) {
-	    sprintf(hackbuf2, "%s: %.*f ", other->name,
-		    showScoreDecimals, other->score);
-	    if ((s - hackbuf) + strlen(hackbuf2) > MSG_LEN) {
-		Add_message(hackbuf);
-		s = hackbuf;
-	    }
-	    s += sprintf(s, "%s", hackbuf2);
-	} else {
-	    sprintf(hackbuf2, "%s: %d ", other->name,
-		    (int) rint(other->score));
-	    if ((s - hackbuf) + strlen(hackbuf2) > MSG_LEN) {
-		Add_message(hackbuf);
-		s = hackbuf;
-	    }
-	    s += sprintf(s,"%s",hackbuf2);
-	}
+    if (BIT(old_status, GAME_OVER) && !BIT(status, GAME_OVER)
+	&& !BIT(status,PAUSE))
+	Raise_window();
+
+    /* GAME_OVER -> PLAYING */
+    if (BIT(old_status, PLAYING|PAUSE|GAME_OVER) != PLAYING) {
+	if (BIT(status, PLAYING|PAUSE|GAME_OVER) == PLAYING)
+	    Reset_shields();
     }
-    Add_message(hackbuf);
+
+    old_status = status;
+}
+
+int Handle_self(int x, int y, int vx, int vy, int newHeading,
+		double newPower, double newTurnspeed, double newTurnresistance,
+		int newLockId, int newLockDist, int newLockBearing,
+		int newNextCheckPoint, int newAutopilotLight,
+		u_byte *newNumItems, int newCurrentTank,
+		double newFuelSum, double newFuelMax, int newPacketSize,
+		int status)
+{
+    selfPos.x = x;
+    selfPos.y = y;
+    selfVel.x = vx;
+    selfVel.y = vy;
+    heading = newHeading;
+    displayedPower = newPower;
+    displayedTurnspeed = newTurnspeed;
+    displayedTurnresistance = newTurnresistance;
+    lock_id = newLockId;
+    lock_dist = newLockDist;
+    lock_dir = newLockBearing;
+    nextCheckPoint = newNextCheckPoint;
+    autopilotLight = newAutopilotLight;
+    memcpy(numItems, newNumItems, NUM_ITEMS * sizeof(u_byte));
+    fuelCurrent = newCurrentTank;
+    if (newFuelSum > fuelSum && selfVisible)
+	fuelTime = FUEL_NOTIFY_TIME;
+    fuelSum = newFuelSum;
+    fuelMax = newFuelMax;
+    selfVisible = 0;
+    if (newPacketSize + 16 < packet_size)
+	packet_size -= 16;
+    else
+	packet_size = newPacketSize;
+    update_status(status);
+    return 0;
+}
+
+
+int Handle_eyes(int id)
+{
+    eyesId = id;
+    eyes = Other_by_id(eyesId);
+    return 0;
+}
+
+int Handle_damaged(int dam)
+{
+    damaged = dam;
+    return 0;
+}
+
+int Handle_modifiers(char *m)
+{
+    strlcpy(mods, m, MAX_CHARS);
+    return 0;
+}
+
+int Handle_destruct(int count)
+{
+    destruct = count;
+    return 0;
+}
+
+
+int Handle_shutdown(int count, int delay)
+{
+    shutdown_count = count;
+    shutdown_delay = delay;
+    return 0;
+}
+
+int Handle_thrusttime(int count, int max)
+{
+    thrusttime = count;
+    thrusttimemax = max;
+    return 0;
+}
+
+int Handle_shieldtime(int count, int max)
+{
+    shieldtime = count;
+    shieldtimemax = max;
+    return 0;
+}
+
+int Handle_phasingtime(int count, int max)
+{
+    phasingtime = count;
+    phasingtimemax = max;
+    return 0;
+}
+
+int Handle_rounddelay(int count, int max)
+{
+    roundDelay = count;
+    roundDelayMax = max;
+    return 0;
+}
+
+int Handle_refuel(int x_0, int y_0, int x_1, int y_1)
+{
+    refuel_t	t;
+
+    t.x0 = x_0;
+    t.x1 = x_1;
+    t.y0 = y_0;
+    t.y1 = y_1;
+    STORE(refuel_t, refuel_ptr, num_refuel, max_refuel, t);
+    return 0;
+}
+
+int Handle_connector(int x_0, int y_0, int x_1, int y_1, int tractor)
+{
+    connector_t	t;
+
+    t.x0 = x_0;
+    t.x1 = x_1;
+    t.y0 = y_0;
+    t.y1 = y_1;
+    t.tractor = tractor;
+    STORE(connector_t, connector_ptr, num_connector, max_connector, t);
+    return 0;
+}
+
+int Handle_laser(int color, int x, int y, int len, int dir)
+{
+    laser_t	t;
+
+    t.color = color;
+    t.x = x;
+    t.y = y;
+    t.len = len;
+    t.dir = dir;
+    STORE(laser_t, laser_ptr, num_laser, max_laser, t);
+    return 0;
+}
+
+int Handle_missile(int x, int y, int len, int dir)
+{
+    missile_t	t;
+
+    t.x = x;
+    t.y = y;
+    t.dir = dir;
+    t.len = len;
+    STORE(missile_t, missile_ptr, num_missile, max_missile, t);
+    return 0;
+}
+
+int Handle_ball(int x, int y, int id, int style)
+{
+    ball_t	t;
+
+    t.x = x;
+    t.y = y;
+    t.id = id;
+    t.style = style;
+    STORE(ball_t, ball_ptr, num_ball, max_ball, t);
+    return 0;
+}
+
+int Handle_ship(int x, int y, int id, int dir, int shield, int cloak,
+		int eshield, int phased, int deflector)
+{
+    ship_t	t;
+
+    t.x = x;
+    t.y = y;
+    t.id = id;
+    t.dir = dir;
+    t.shield = shield;
+    t.cloak = cloak;
+    t.eshield = eshield;
+    t.phased = phased;
+    t.deflector = deflector;
+    STORE(ship_t, ship_ptr, num_ship, max_ship, t);
+
+    /* if we see a ship in the center of the display, we may be watching
+     * it, especially if it's us!  consider any ship there to be our eyes
+     * until we see a ship that really is us.
+     * BG: XXX there was a bug here.  self was dereferenced at "self->id"
+     * while self could be NULL here.
+     */
+    if (!selfVisible
+	&& ((x == selfPos.x && y == selfPos.y) || (self && id == self->id))) {
+
+        eyesId = id;
+	eyes = Other_by_id(eyesId);
+	if (eyes != NULL)
+	    eyeTeam = eyes->team;
+	selfVisible = (self && (id == self->id));
+	return Handle_radar(x, y, 3);
+    }
+
+    return 0;
+}
+
+int Handle_mine(int x, int y, int teammine, int id)
+{
+    mine_t	t;
+
+    t.x = x;
+    t.y = y;
+    t.teammine = teammine;
+    t.id = id;
+    STORE(mine_t, mine_ptr, num_mine, max_mine, t);
+    return 0;
+}
+
+int Handle_item(int x, int y, int type)
+{
+    itemtype_t	t;
+
+    t.x = x;
+    t.y = y;
+    t.type = type;
+    STORE(itemtype_t, itemtype_ptr, num_itemtype, max_itemtype, t);
+    return 0;
+}
+
+#define STORE_DEBRIS(typ_e, _p, _n) \
+    if (_n > max_) {						\
+	if (max_ == 0) {						\
+	    ptr_ = (debris_t *)malloc(n * sizeof(*ptr_));		\
+	} else {						\
+	    ptr_ = (debris_t *)realloc(ptr_, _n * sizeof(*ptr_));	\
+	}							\
+	if (ptr_ == NULL) {					\
+	    error("No memory for debris");			\
+	    num_ = max_ = 0;					\
+	    return -1;						\
+	}							\
+	max_ = _n;						\
+    }								\
+    else if (_n <= 0) {						\
+	printf("debris %d < 0\n", _n);				\
+	return 0;						\
+    }								\
+    num_ = _n;							\
+    memcpy(ptr_, _p, _n * sizeof(*ptr_));				\
+    return 0;
+
+
+int Handle_fastshot(int type, u_byte *p, int n)
+{
+#define num_		(num_fastshot[type])
+#define max_		(max_fastshot[type])
+#define ptr_		(fastshot_ptr[type])
+    STORE_DEBRIS(type, p, n);
+#undef num_
+#undef max_
+#undef ptr_
+}
+
+int Handle_debris(int type, u_byte *p, int n)
+{
+#define num_		(num_debris[type])
+#define max_		(max_debris[type])
+#define ptr_		(debris_ptr[type])
+    STORE_DEBRIS(type, p, n);
+#undef num_
+#undef max_
+#undef ptr_
+}
+
+int Handle_wreckage(int x, int y, int wrecktype, int size, int rotation)
+{
+    wreckage_t	t;
+
+    t.x = x;
+    t.y = y;
+    t.wrecktype = wrecktype;
+    t.size = size;
+    t.rotation = rotation;
+    STORE(wreckage_t, wreckage_ptr, num_wreckage, max_wreckage, t);
+    return 0;
+}
+
+int Handle_asteroid(int x, int y, int type, int size, int rotation)
+{
+    asteroid_t	t;
+
+    t.x = x;
+    t.y = y;
+    t.type = type;
+    t.size = size;
+    t.rotation = rotation;
+    STORE(asteroid_t, asteroid_ptr, num_asteroids, max_asteroids, t);
+    return 0;
+}
+
+int Handle_wormhole(int x, int y)
+{
+    wormhole_t	t;
+
+    t.x = x - BLOCK_SZ / 2;
+    t.y = y - BLOCK_SZ / 2;
+    STORE(wormhole_t, wormhole_ptr, num_wormholes, max_wormholes, t);
+    return 0;
+}
+
+int Handle_ecm(int x, int y, int size)
+{
+    ecm_t	t;
+
+    t.x = x;
+    t.y = y;
+    t.size = size;
+    STORE(ecm_t, ecm_ptr, num_ecm, max_ecm, t);
+    return 0;
+}
+
+int Handle_trans(int x_1, int y_1, int x_2, int y_2)
+{
+    trans_t	t;
+
+    t.x1 = x_1;
+    t.y1 = y_1;
+    t.x2 = x_2;
+    t.y2 = y_2;
+    STORE(trans_t, trans_ptr, num_trans, max_trans, t);
+    return 0;
+}
+
+int Handle_paused(int x, int y, int count)
+{
+    paused_t	t;
+
+    t.x = x;
+    t.y = y;
+    t.count = count;
+    STORE(paused_t, paused_ptr, num_paused, max_paused, t);
+    return 0;
+}
+
+int Handle_appearing(int x, int y, int id, int count)
+{
+    appearing_t	t;
+
+    t.x = x;
+    t.y = y;
+    t.id = id;
+    t.count = count;
+    STORE(appearing_t, appearing_ptr, num_appearing, max_appearing, t);
+    return 0;
+}
+
+int Handle_fastradar(int x, int y, int size)
+{
+    radar_t t;
+    
+    t.x = x;
+    t.y = y;
+    t.type = normal;
+    
+    if ((size & 0x80) != 0) {
+	t.type = friend;
+	size &= ~0x80;
+    }
+    
+    t.size = size;
+    STORE(radar_t, radar_ptr, num_radar, max_radar, t);
+    return 0;
+}
+
+
+int Handle_radar(int x, int y, int size)
+{
+    return Handle_fastradar
+	((int)((double)(x * RadarWidth) / Setup->width + 0.5),
+	 (int)((double)(y * RadarHeight) / Setup->height + 0.5),
+	 size);
+}
+
+int Handle_message(char *msg)
+{
+    int i;
+    char ignoree[MAX_CHARS];
+    other_t *other;
+
+    if (msg[strlen(msg) - 1] == ']') {
+	for (i = strlen(msg) - 1; i > 0; i--) {
+	    if (msg[i - 1] == ' ' && msg[i] == '[')
+		break;
+	}
+
+	if (i == 0) {		/* Odd, but let it pass */
+	    Add_message(msg);
+	    return 0;
+	}
+
+	strcpy(ignoree, &msg[i + 1]);
+
+	for (i = 0; i < (int) strlen(ignoree); i++) {
+	    if (ignoree[i] == ']')
+		break;
+	}
+	ignoree[i] = '\0';
+
+	other = Other_by_name(ignoree, false);
+
+	if (other == NULL) {	/* Not in list, probably servermessage */
+	    Add_message(msg);
+	    return 0;
+	}
+
+	if (other->ignorelevel <= 0) {
+	    Add_message(msg);
+	    return 0;
+	}
+
+	if (other->ignorelevel >= 2)
+	    return 0;
+
+	/* ignorelevel must be 1 */
+
+	crippleTalk(msg);
+	Add_message(msg);
+    } else
+	Add_message(msg);
+    return 0;
+}
+
+int Handle_time_left(long sec)
+{
+    if (sec >= 0 && sec < 10 && (time_left > sec || sec == 0))
+	Play_beep();
+    time_left = (sec >= 0) ? sec : 0;
+    return 0;
+}
+
+int Handle_vcannon(int x, int y, int type)
+{
+    vcannon_t	t;
+
+    t.x = x;
+    t.y = y;
+    t.type = type;
+    STORE(vcannon_t, vcannon_ptr, num_vcannon, max_vcannon, t);
+    return 0;
+}
+
+int Handle_vfuel(int x, int y, double fuel)
+{
+    vfuel_t	t;
+
+    t.x = x;
+    t.y = y;
+    t.fuel = fuel;
+    STORE(vfuel_t, vfuel_ptr, num_vfuel, max_vfuel, t);
+    return 0;
+}
+
+int Handle_vbase(int x, int y, int xi, int yi, int type)
+{
+    vbase_t	t;
+
+    t.x = x;
+    t.y = y;
+    t.xi = xi;
+    t.yi = yi;
+    t.type = type;
+    STORE(vbase_t, vbase_ptr, num_vbase, max_vbase, t);
+    return 0;
+}
+
+int Handle_vdecor(int x, int y, int xi, int yi, int type)
+{
+    vdecor_t	t;
+
+    t.x = x;
+    t.y = y;
+    t.xi = xi;
+    t.yi = yi;
+    t.type = type;
+    STORE(vdecor_t, vdecor_ptr, num_vdecor, max_vdecor, t);
+    return 0;
 }
 
 bool Using_score_decimals(void)
@@ -1616,267 +2161,6 @@ bool Using_score_decimals(void)
     return false;
 }
 
-struct team_score {
-    double	score;
-    int		life;
-    int		playing;
-};
-
-
-static void Determine_team_order(struct team_score *team_order[],
-				 struct team_score team[])
-{
-    int i, j, k;
-
-    num_playing_teams = 0;
-    for (i = 0; i < MAX_TEAMS; i++) {
-	if (team[i].playing) {
-	    for (j = 0; j < num_playing_teams; j++) {
-		if (team[i].score > team_order[j]->score
-		    || (team[i].score == team_order[j]->score
-			&& ((BIT(Setup->mode, LIMITED_LIVES))
-			    ? (team[i].life > team_order[j]->life)
-			    : (team[i].life < team_order[j]->life)))) {
-		    for (k = i; k > j; k--)
-			team_order[k] = team_order[k - 1];
-		    break;
-		}
-	    }
-	    team_order[j] = &team[i];
-	    num_playing_teams++;
-	}
-    }
-}
-
-static void Determine_order(other_t **order, struct team_score team[])
-{
-    other_t		*other;
-    int			i, j, k;
-
-    for (i = 0; i < num_others; i++) {
-	other = &Others[i];
-	if (BIT(Setup->mode, TIMING)) {
-	    /*
-	     * Sort the score table on position in race.
-	     * Put paused and waiting players last as well as tanks.
-	     */
-	    if (strchr("PTW", other->mychar))
-		j = i;
-	    else {
-		for (j = 0; j < i; j++) {
-		    if (order[j]->timing < other->timing)
-			break;
-		    if (strchr("PTW", order[j]->mychar))
-			break;
-		    if (order[j]->timing == other->timing) {
-			if (order[j]->timing_loops > other->timing_loops)
-			    break;
-		    }
-		}
-	    }
-	}
-	else {
-	    for (j = 0; j < i; j++) {
-		if (order[j]->score < other->score)
-		    break;
-	    }
-	}
-	for (k = i; k > j; k--)
-	    order[k] = order[k - 1];
-	order[j] = other;
-
-	if (BIT(Setup->mode, TEAM_PLAY|TIMING) == TEAM_PLAY) {
-	    switch (other->mychar) {
-	    case 'P':
-	    case 'W':
-	    case 'T':
-		break;
-	    case ' ':
-	    case 'R':
-		if (BIT(Setup->mode, LIMITED_LIVES))
-		    team[other->team].life += other->life + 1;
-		else
-		    team[other->team].life += other->life;
-		/*FALLTHROUGH*/
-	    default:
-		team[other->team].playing++;
-		team[other->team].score += other->score;
-		break;
-	    }
-	}
-    }
-    return;
-}
-
-#define TEAM_PAUSEHACK 100
-
-static int Team_heading(int entrynum, int teamnum,
-			int teamlives, double teamscore)
-{
-    other_t tmp;
-    tmp.id = -1;
-    tmp.team = teamnum;
-    tmp.war_id = -1;
-    tmp.name_width = 0;
-    tmp.ship = NULL;
-    if (teamnum != TEAM_PAUSEHACK)
-	sprintf(tmp.name, "TEAM %d", tmp.team);
-    else
-	sprintf(tmp.name, "Pause Wusses");
-    strcpy(tmp.real, tmp.name);
-    strcpy(tmp.host, "");
-#if 0
-    if (BIT(Setup->mode, LIMITED_LIVES) && teamlives == 0)
-	tmp.mychar = 'D';
-    else
-	tmp.mychar = ' ';
-#else
-    tmp.mychar = ' ';
-#endif
-    tmp.score = teamscore;
-    tmp.life = teamlives;
-
-    Paint_score_entry(entrynum++, &tmp, true);
-    return entrynum;
-}
-
-static int Team_score_table(int entrynum, int teamnum,
-			    struct team_score team, other_t **order)
-{
-    other_t *other;
-    int i, j;
-    bool drawn = false;
-
-    for (i = 0; i < num_others; i++) {
-	other = order[i];
-
-	if (teamnum == TEAM_PAUSEHACK) {
-	    if (other->mychar != 'P')
-		continue;
-	} else {
-	    if (other->team != teamnum || other->mychar == 'P')
-		continue;
-	}
-
-	if (!drawn)
-	    entrynum = Team_heading(entrynum, teamnum, team.life, team.score);
-	j = other - Others;
-	Paint_score_entry(entrynum++, other, false);
-	drawn = true;
-    }
-
-    if (drawn)
-	entrynum += 1;
-    return entrynum;
-}
-
-
-void Client_score_table(void)
-{
-    struct team_score	team[MAX_TEAMS],
-			pausers,
-			*team_order[MAX_TEAMS];
-    other_t		*other,
-			**order;
-    int			i, j, entrynum = 0;
-
-    if (!scoresChanged || !players_exposed)
-	return;
-
-    if (num_others < 1) {
-	Paint_score_start();
-	scoresChanged = false;
-	return;
-    }
-
-    if ((order = (other_t **)malloc(num_others * sizeof(other_t *))) == NULL) {
-	error("No memory for score");
-	return;
-    }
-    if (BIT(Setup->mode, TEAM_PLAY|TIMING) == TEAM_PLAY) {
-	memset(&team[0], 0, sizeof team);
-	memset(&pausers, 0, sizeof pausers);
-    }
-    Determine_order(order, team);
-    Paint_score_start();
-    if (!(BIT(Setup->mode, TEAM_PLAY|TIMING) == TEAM_PLAY)) {
-	for (i = 0; i < num_others; i++) {
-	    other = order[i];
-	    j = other - Others;
-	    Paint_score_entry(i, other, false);
-	}
-    } else {
-	Determine_team_order(team_order, team);
-
-	/* add an empty line */
-	entrynum++;
-	for (i = 0; i < MAX_TEAMS; i++)
-	    entrynum = Team_score_table(entrynum, i, team[i], order);
-	/* paint pausers */
-	entrynum = Team_score_table(entrynum, TEAM_PAUSEHACK, pausers, order);
-#if 0
-	for (i = 0; i < num_playing_teams; i++) {
-	    entrynum = Team_heading(entrynum,
-				    team_order[i] - &team[0],
-				    team_order[i]->life,
-				    team_order[i]->score);
-	}
-#endif
-    }
-
-    if (roundend)
-	Print_roundend_messages(order);
-
-    free(order);
-
-    IFWINDOWS( MarkPlayersForRedraw() );
-
-    scoresChanged = false;
-}
-
-#ifndef _WINDOWS
-static int Alloc_history(void)
-{
-    char	*hist_ptr;
-    int		i;
-
-    /* maxLinesInHistory is a runtime constant */
-    if ((hist_ptr = (char *)malloc(maxLinesInHistory * MAX_CHARS)) == NULL) {
-	error("No memory for history");
-	return -1;
-    }
-    HistoryBlock	= hist_ptr;
-
-    for (i = 0; i < maxLinesInHistory; i++) {
-	HistoryMsg[i]	= hist_ptr;
-	hist_ptr[0]	= '\0';
-	hist_ptr	+= MAX_CHARS;
-    }
-    return 0;
-}
-
-static void Free_selectionAndHistory(void)
-{
-    if (HistoryBlock) {
-	free(HistoryBlock);
-	HistoryBlock = NULL;
-    }
-    if (selection.txt) {
-	free(selection.txt);
-	selection.txt = NULL;
-    }
-}
-#else
-static int Alloc_history(void)
-{
-    return 0;
-}
-
-static void Free_selectionAndHistory(void)
-{
-}
-#endif
-
 int Client_init(char *server, unsigned server_version)
 {
     version = server_version;
@@ -1886,18 +2170,8 @@ int Client_init(char *server, unsigned server_version)
 	oldServer = 0;
 
     Make_table();
-    Init_scale_array();
 
-    if (Init_wreckage() == -1)
-	return -1;
-
-    if (Init_asteroids() == -1)
-	return -1;
-
-    if (Bitmap_add_std_objects() == -1)
-	return -1;
-
-    if (Bitmap_add_std_textures() == -1)
+    if (Paint_init() == -1) 
 	return -1;
 
     strlcpy(servername, server, sizeof(servername));
@@ -1919,7 +2193,7 @@ int Client_setup(void)
 	 * without affecting old ones. It's still possible to turn in on
 	 * from the config menu during play for old maps.
 	 * -- But doesn't seem to work anyway if turned on? Well who cares */
-	CLR_BIT(instruments, SHOW_TEXTURED_WALLS);
+	instruments.showTexturedWalls = false;
     }
 
     RadarHeight = (RadarWidth * Setup->height) / Setup->width;
@@ -1940,10 +2214,6 @@ int Client_fps_request(void)
 {
     LIMIT(maxFPS, 1, 200);
     oldMaxFPS = maxFPS;
-	if (maxFPS < FPS)
-		FPSDivisor = (int)ceil(((float)FPS)/(float)(maxFPS));
-	else
-		FPSDivisor = 1;
     return Send_fps_request(maxFPS);
 }
 
@@ -1957,10 +2227,11 @@ int Client_power(void)
 	|| Send_turnspeed_s(turnspeed_s) == -1
 	|| Send_turnresistance(turnresistance) == -1
 	|| Send_turnresistance_s(turnresistance_s) == -1
-	|| Send_display() == -1
 	|| Startup_server_motd() == -1) {
 	return -1;
     }
+    if (Check_view_dimensions() == -1) 
+	return -1;
     for (i = 0; i < NUM_MODBANKS; i++) {
 	if (Send_modifier_bank(i) == -1)
 	    return -1;
@@ -1982,6 +2253,7 @@ void Client_cleanup(void)
 
     Quit();
     Free_selectionAndHistory();
+    Free_msgs();
     if (max_others > 0) {
 	for (i = 0; i < num_others; i++) {
 	    other_t* other = &Others[i];
@@ -1991,30 +2263,88 @@ void Client_cleanup(void)
 	num_others = 0;
 	max_others = 0;
     }
+    if (max_refuel > 0 && refuel_ptr) {
+	max_refuel = 0;
+	XFREE(refuel_ptr);
+    }
+    if (max_connector > 0 && connector_ptr) {
+	max_connector = 0;
+	XFREE(connector_ptr);
+    }
+    if (max_laser > 0 && laser_ptr) {
+	max_laser = 0;
+	XFREE(laser_ptr);
+    }
+    if (max_missile > 0 && missile_ptr) {
+	max_missile = 0;
+	XFREE(missile_ptr);
+    }
+    if (max_ball > 0 && ball_ptr) {
+	max_ball = 0;
+	XFREE(ball_ptr);
+    }
+    if (max_ship > 0 && ship_ptr) {
+	max_ship = 0;
+	XFREE(ship_ptr);
+    }
+    if (max_mine > 0 && mine_ptr) {
+	max_mine = 0;
+	XFREE(mine_ptr);
+    }
+    if (max_ecm > 0 && ecm_ptr) {
+	max_ecm = 0;
+	XFREE(ecm_ptr);
+    }
+    if (max_trans > 0 && trans_ptr) {
+	max_trans = 0;
+	XFREE(trans_ptr);
+    }
+    if (max_paused > 0 && paused_ptr) {
+	max_paused = 0;
+	XFREE(paused_ptr);
+    }
+    if (max_appearing > 0 && appearing_ptr) {
+	max_appearing = 0;
+	XFREE(appearing_ptr);
+    }
+    if (max_radar > 0 && radar_ptr) {
+	max_radar = 0;
+	XFREE(radar_ptr);
+    }
+    if (max_vcannon > 0 && vcannon_ptr) {
+	max_vcannon = 0;
+	XFREE(vcannon_ptr);
+    }
+    if (max_vfuel > 0 && vfuel_ptr) {
+	max_vfuel = 0;
+	XFREE(vfuel_ptr);
+    }
+    if (max_vbase > 0 && vbase_ptr) {
+	max_vbase = 0;
+	XFREE(vbase_ptr);
+    }
+    if (max_vdecor > 0 && vdecor_ptr) {
+	max_vdecor = 0;
+	XFREE(vdecor_ptr);
+    }
+    if (max_itemtype > 0 && itemtype_ptr) {
+	max_itemtype = 0;
+	XFREE(itemtype_ptr);
+    }
+    if (max_wreckage > 0 && wreckage_ptr) {
+	max_wreckage = 0;
+	XFREE(wreckage_ptr);
+    }
+    if (max_asteroids > 0 && asteroid_ptr) {
+	max_asteroids = 0;
+	XFREE(asteroid_ptr);
+    }
+    if (max_wormholes > 0 && wormhole_ptr) {
+	max_wormholes = 0;
+	XFREE(wormhole_ptr);
+    }
     Map_cleanup();
-}
-
-int Client_fd(void)
-{
-    return ConnectionNumber(dpy);
-}
-
-int Client_input(int new_input)
-{
-#ifndef _WINDOWS
-    return x_event(new_input);
-#else
-    return 0;
-#endif
-}
-void Client_flush(void)
-{
-    XFlush(dpy);
-}
-
-void Client_sync(void)
-{
-    XSync(dpy, False);
+    Paint_cleanup();
 }
 
 int Client_wrap_mode(void)
@@ -2027,10 +2357,6 @@ int Check_client_fps(void)
     if (oldMaxFPS != maxFPS) {
 	LIMIT(maxFPS, 1, 200);
 	oldMaxFPS = maxFPS;
-	if (maxFPS < FPS)
-		FPSDivisor = (int)ceil(((float)FPS)/(float)(maxFPS));
-	else
-		FPSDivisor = 1;
 	return Send_fps_request(maxFPS);
     }
     return 0;

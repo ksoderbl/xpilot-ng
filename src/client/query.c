@@ -1,5 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,7 +20,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpclient.h"
@@ -56,7 +58,7 @@ static int Query_subnet(sock_t *sock,
 			struct sockaddr_in *host_addr,
 			struct sockaddr_in *mask_addr,
 			char *msg,
-			int msglen)
+			size_t msglen)
 {
     int i, nbits, max;
     unsigned long bit, mask, dest, host, hostmask, hostbits[256];
@@ -118,7 +120,7 @@ static int Query_subnet(sock_t *sock,
 }
 
 
-static int Query_fudged(sock_t *sock, int port, char *msg, int msglen)
+static int Query_fudged(sock_t *sock, int port, char *msg, size_t msglen)
 {
     int			i, count = 0;
     unsigned char	*p;
@@ -173,7 +175,7 @@ static int Query_fudged(sock_t *sock, int port, char *msg, int msglen)
  * we get multiple responses from the same server.
  */
 
-int Query_all(sock_t *sock, int port, char *msg, int msglen)
+int Query_all(sock_t *sock, int port, char *msg, size_t msglen)
 {
 #ifdef QUERY_FUDGED
     return Query_fudged(sock, port, msg, msglen);
@@ -220,8 +222,9 @@ int Query_all(sock_t *sock, int port, char *msg, int msglen)
 	D( printf("\taddress family %d\n", ifreqp->ifr_addr.sa_family) );
 
 	len += sizeof(struct ifreq);
-#if BSD >= 199006 || HAVE_SA_LEN || defined(_SOCKADDR_LEN) || defined(_AIX)
-	/* kps - is this really needed ?????? */
+#if (defined(BSD) && BSD >= 199006) \
+     || (defined(HAVE_SA_LEN) && HAVE_SA_LEN != 0) \
+     || defined(_SOCKADDR_LEN) || defined(_AIX)
 	/*
 	 * Recent TCP/IP implementations have a sa_len member in the socket
 	 * address structure in order to support protocol families that have
@@ -300,8 +303,8 @@ int Query_all(sock_t *sock, int port, char *msg, int msglen)
 	     * Well, we have an address (at last).
 	     */
 	    addr.sin_port = htons(port);
-	    if (sendto(sock->fd, msg, msglen, 0,
-		       (struct sockaddr *)&addr, sizeof addr) == msglen) {
+	    if (sendto(sock->fd, msg, msglen, 0, (struct sockaddr *)&addr,
+		       sizeof addr) == (ssize_t)msglen) {
 		D(printf("\tsendto %s/%d\n", inet_ntoa(addr.sin_addr), port));
 		/*
 		 * Success!
@@ -368,8 +371,8 @@ int Query_all(sock_t *sock, int port, char *msg, int msglen)
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_addr = loopback.sin_addr;
 	addr.sin_port = htons(port);
-	if (sendto(sock->fd, msg, msglen, 0,
-		   (struct sockaddr *)&addr, sizeof addr) == msglen) {
+	if (sendto(sock->fd, msg, msglen, 0, (struct sockaddr *)&addr,
+		   sizeof addr) == (ssize_t)msglen) {
 	    D(printf("\tsendto %s/%d\n", inet_ntoa(addr.sin_addr), port));
 	    count++;
 	} else

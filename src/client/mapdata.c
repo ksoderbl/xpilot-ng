@@ -1,10 +1,7 @@
-/* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2003 by
+/*
+ * XPilotNG, an XPilot-like multiplayer space war game.
  *
- *      Bjørn Stabell        <bjoern@xpilot.org>
- *      Ken Ronny Schouten   <ken@xpilot.org>
- *      Bert Gijsbers        <bert@xpilot.org>
- *      Dick Balaska         <dick@xpilot.org>
+ * Copyright (C) 2001 Juha Lindström <juhal@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,7 +15,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpclient.h"
@@ -31,22 +28,26 @@ typedef struct {
     char *protocol;
     char *host;
     int   port;
-    char *path;
+    const char *path;
     char *query;
 } URL;
 
-static int Mapdata_extract (const char *name);
-static int Mapdata_download (const URL *url, const char *filePath);
-static int Url_parse (const char *urlstr, URL *url);
-static void Url_free_parsed (URL *url);
+static int Mapdata_extract(const char *name);
+static int Mapdata_download(const URL *url, const char *filePath);
+static int Url_parse(const char *urlstr, URL *url);
+static void Url_free_parsed(URL *url);
 
+static bool setup_done = false;
 
 int Mapdata_setup(const char *urlstr)
 {
     URL url;
-    char *name, *dir, *ptr;
-    char path[1024], buf[1024];
+    const char *name, *dir;
+    char path[1024], buf[1024], *ptr;
     int rv = false;
+
+    if (setup_done)
+	return true;
 
     memset(path, 0, sizeof(path));
     memset(buf, 0, sizeof(buf));
@@ -55,7 +56,7 @@ int Mapdata_setup(const char *urlstr)
 	warn("malformed URL: %s", urlstr);
 	return false;
     }
-	
+
     for (name = url.path + strlen(url.path) - 1; name > url.path; name--) {
 	if (*(name - 1) == '/')
 	    break;
@@ -74,9 +75,9 @@ int Mapdata_setup(const char *urlstr)
     for (dir = strtok(texturePath, ":"); dir; dir = strtok(NULL, ":"))
 	if (access(dir, R_OK | W_OK | X_OK) == 0)
 	    break;
-    
+
     if (dir == NULL) {
-	
+
 	/* texturePath hasn't got a directory with proper access rights */
 	/* so lets create one into users home dir */
 
@@ -85,13 +86,13 @@ int Mapdata_setup(const char *urlstr)
 	    error("couldn't access any dir in %s and HOME is unset", path);
 	    goto end;
 	}
-	
+
 	if (strlen(home) == 0)
 	    sprintf(buf, "%s", DATADIR);
-	else if (home[strlen(home) - 1] == '/') 
+	else if (home[strlen(home) - 1] == PATHNAME_SEP)
 	    sprintf(buf, "%s%s", home, DATADIR);
 	else
-	    sprintf(buf, "%s%c%s", home, '/', DATADIR);
+	    sprintf(buf, "%s%c%s", home, PATHNAME_SEP, DATADIR);
 
 	if (access(buf, F_OK) != 0) {
 	    if (mkdir(buf, S_IRWXU | S_IRWXG | S_IRWXO) == -1) {
@@ -102,19 +103,19 @@ int Mapdata_setup(const char *urlstr)
 
 	dir = buf;
     }
-    
+
     if (strlen(dir) == 0)
 	sprintf(path, "%s", name);
-    else if (dir[strlen(dir) - 1] == '/') 
+    else if (dir[strlen(dir) - 1] == PATHNAME_SEP)
 	sprintf(path, "%s%s", dir, name);
     else
-	sprintf(path, "%s%c%s", dir, '/', name);
+	sprintf(path, "%s%c%s", dir, PATHNAME_SEP, name);
 
     if (strrchr(path, '.') == NULL) {
 	error("no extension in file name %s.", name);
 	goto end;
     }
-    
+
     /* temporarily make path point to the directory name */
     ptr = strrchr(path, '.');
     *ptr = '\0';
@@ -154,6 +155,7 @@ int Mapdata_setup(const char *urlstr)
     }
 
     rv = true;
+    setup_done = true;
 
  end:
     Url_free_parsed(&url);
@@ -161,17 +163,17 @@ int Mapdata_setup(const char *urlstr)
 }
 
 
-static int Mapdata_extract (const char *name) {
-
+static int Mapdata_extract(const char *name)
+{
     gzFile in;
     FILE *out;
+    int retval;
     size_t rlen, wlen;
     char dir[256], buf[COPY_BUF_SIZE], fname[256], *ptr;
     long int size;
     int count, i;
 
-    dir[255] = '\0';
-    strncpy(dir, name, 255);
+    strlcpy(dir, name, sizeof dir);
     ptr = strrchr(dir, '.');
     if (ptr == NULL) {
 	error("file name has no extension %s", dir);
@@ -209,7 +211,7 @@ static int Mapdata_extract (const char *name) {
 	    return 0;
 	}
 
-	sprintf(fname, "%s%c", dir, '/');
+	sprintf(fname, "%s%c", dir, PATHNAME_SEP);
 
 	if (sscanf(buf, "%s\n%ld\n", fname + strlen(dir) + 1, &size) != 2) {
 	    error("failed to parse file info %s", buf);
@@ -218,7 +220,7 @@ static int Mapdata_extract (const char *name) {
 	}
 
 	/* security check */
-	if (strchr(fname + strlen(dir) + 1, '/') != NULL) {
+	if (strchr(fname + strlen(dir) + 1, PATHNAME_SEP) != NULL) {
 	    error("file name %s is illegal", fname);
 	    gzclose(in);
 	    return 0;
@@ -233,20 +235,21 @@ static int Mapdata_extract (const char *name) {
 	}
 
 	while (size > 0) {
-	    rlen = gzread(in, buf, MIN(COPY_BUF_SIZE, size));
-	    if (rlen == -1) {
+	    retval = gzread(in, buf, MIN(COPY_BUF_SIZE, (unsigned)size));
+	    if (retval == -1) {
 		error("error when reading %s", name);
 		gzclose(in);
 		fclose(out);
 		return 0;
 	    }
-	    if (rlen == 0) {
+	    if (retval == 0) {
 		error("unexpected end of file %s", name);
 		gzclose(in);
 		fclose(out);
 		return 0;
 	    }
 
+	    rlen = retval;
 	    wlen = fwrite(buf, 1, rlen, out);
 	    if (wlen != rlen) {
 		error("failed to write to %s", fname);
@@ -266,34 +269,26 @@ static int Mapdata_extract (const char *name) {
 }
 
 
-static int Mapdata_download (const URL *url, const char *filePath)
+static int Mapdata_download(const URL *url, const char *filePath)
 {
     char buf[1024];
-    int rv, header, c;
-    unsigned int i;
+    int rv, header, c, len, i;
     sock_t s;
-    FILE *f;
-    size_t len;
+    FILE *f = NULL;
+    size_t n;
 
     if (strncmp("http", url->protocol, 4) != 0) {
 	error("unsupported protocol %s", url->protocol);
 	return false;
     }
 
-    if ((f = fopen(filePath, "wb")) == NULL) {
-	error("failed to open %s", filePath);
-	return false;
-    }
-
     if (sock_open_tcp(&s) == SOCK_IS_ERROR) {
 	error("failed to create a socket");
-	fclose(f);
 	return false;
     }
     if (sock_connect(&s, url->host, url->port) == SOCK_IS_ERROR) {
 	error("couldn't connect to download address");
 	sock_close(&s);
-	fclose(f);
 	return false;
     }
 
@@ -302,7 +297,6 @@ static int Mapdata_download (const URL *url, const char *filePath)
 	     "GET %s?%s HTTP/1.1\r\nHost: %s:%d\r\nConnection: close\r\n\r\n",
 	     url->path, url->query, url->host, url->port) == -1) {
 	    error("too long URL");
-	    fclose(f);
 	    sock_close(&s);
 	    return false;
 	}
@@ -313,32 +307,57 @@ static int Mapdata_download (const URL *url, const char *filePath)
 	     url->path, url->host, url->port) == -1) {
 
 	    error("too long URL");
-	    fclose(f);
 	    sock_close(&s);
 	    return false;
 	}
     }
 
-    if (sock_write(&s, buf, strlen(buf)) == -1) {
+    if (sock_write(&s, buf, (int)strlen(buf)) == -1) {
 	error("socket write failed");
-	fclose(f);
 	sock_close(&s);
 	return false;
     }
 
-    header = 1;
+    header = 2;
     c = 0;
 
     for(;;) {
-	if ((len = sock_read(&s, buf, sizeof buf)) == -1) {
-	    error("socket read failed");
-	    rv = false;
-	    break;
+	len = 0;
+	while (len < 100) {
+	    if ((i = sock_read(&s, buf + len, sizeof(buf) - len)) == -1) {
+		error("socket read failed");
+		rv = false;
+		goto done;
+	    }
+	    if (i == 0)
+		break;
+	    len += i;
 	}
 
 	if (len == 0) {
-	    rv = true;
+	    rv = !header;
 	    break;
+	}
+
+	if (header == 2) {
+	    if (strncmp(buf, "HTTP", 4)) {
+		rv = false;
+		break;
+	    }
+	    i = 0;
+	    while (buf[i] != ' ') {
+		i++;
+		if (i >= len - 1) {
+		    rv = false;
+		    goto done;
+		}
+	    }
+	    i++;
+	    if (buf[i] != '2') {   /* HTTP status code starts with 2 */
+		rv = false;
+		break;
+	    }
+	    header = 1;
 	}
 
 	printf("#");
@@ -346,15 +365,23 @@ static int Mapdata_download (const URL *url, const char *filePath)
 
 	if (header) {
 	    for (i = 0; i < len; i++) {
-
-		if (c % 2 == 0 && buf[i] == '\r') c++;
-		else if (c % 2 == 1 && buf[i] == '\n') c++;
-		else c = 0;
+		if (c % 2 == 0 && buf[i] == '\r')
+		    c++;
+		else if (c % 2 == 1 && buf[i] == '\n')
+		    c++;
+		else
+		    c = 0;
 
 		if (c == 4) {
 		    header = 0;
+		    if ((f = fopen(filePath, "wb")) == NULL) {
+			error("failed to open %s", filePath);
+			rv = false;
+			goto done;
+		    }
 		    if (i < len - 1) {
-			memmove(buf, buf + i + 1, len - i - 1);
+			n = len - i - 1;
+			memmove(buf, buf + i + 1, n);
 			len = len - i - 1;
 		    }
 		}
@@ -362,21 +389,25 @@ static int Mapdata_download (const URL *url, const char *filePath)
 	}
 
 	if (!header) {
-	    if (fwrite(buf, 1, len, f) == -1) {
+	    n = len;
+	    if (fwrite(buf, 1, n, f) < n) {
 		error("file write failed");
 		rv =  false;
 		break;
 	    }
 	}
     }
+ done:
     printf("\n");
-    fclose(f);
+    if (f)
+	if (fclose(f) != 0)
+	    error("Error closing texture file %s", filePath);
     sock_close(&s);
     return rv;
 }
 
 
-static int Url_parse (const char *urlstr, URL *url)
+static int Url_parse(const char *urlstr, URL *url)
 {
     int len, i, beg, doPort;
     char *buf;
@@ -455,7 +486,7 @@ static int Url_parse (const char *urlstr, URL *url)
 }
 
 
-static void Url_free_parsed (URL *url)
+static void Url_free_parsed(URL *url)
 {
     free(url->protocol);
 }

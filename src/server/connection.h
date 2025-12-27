@@ -1,5 +1,7 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,7 +20,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef	CONNECTION_H
@@ -116,7 +118,8 @@ typedef struct {
     int			view_width, view_height;/* Viewable area dimensions */
     int			debris_colors;		/* Max. debris intensities */
     int			spark_rand;		/* Sparkling effect */
-    char		*real;			/* real login name of player */
+    int			last_mouse_pos;		/* value of last pointer pkt */
+    char		*user;			/* user name of player */
     char		*nick;			/* nickname of player */
     char		*dpy;			/* display of player */
     shipshape_t		*ship;			/* ship shape of player */

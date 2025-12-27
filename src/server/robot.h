@@ -1,5 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,12 +20,17 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
+
 /* Robot code originally submitted by Maurice Abraham. */
 
 #ifndef ROBOT_H
 #define ROBOT_H
+
+#ifndef MAP_H
+# include "map.h"
+#endif
 
 /*
  * We would like to support several different robot types.
@@ -87,15 +94,15 @@
  */
 typedef struct {
     const char		*name;
-    void		(*round_tick)(void);
-    void		(*create)(player *robot, char *str);
-    void		(*go_home)(player *robot);
-    void		(*play)(player *robot);
-    void		(*set_war)(player *victim, int killer);
-    int			(*war_on_player)(player *robot);
-    void		(*message)(player *robot, const char *str);
-    void		(*destroy)(player *robot);
-    void		(*invite)(player *robot, player *inviter);
+    void		(*round_tick)(world_t *world);
+    void		(*create)(player_t *robot, char *str);
+    void		(*go_home)(player_t *robot);
+    void		(*play)(player_t *robot);
+    void		(*set_war)(player_t *victim, int killer);
+    int			(*war_on_player)(player_t *robot);
+    void		(*message)(player_t *robot, const char *str);
+    void		(*destroy)(player_t *robot);
+    void		(*invite)(player_t *robot, player_t *inviter);
 } robot_type_t;
 
 /*
@@ -150,7 +157,7 @@ typedef struct robot_default_data {
     int		last_thrown_ball;	/* relative to robot_count */
     int		longterm_mode;		/* long term robot mode */
     int		lock_last_seen;		/* last time robot saw target */
-    position	lock_last_pos;		/* last known position of target */
+    position_t	lock_last_pos;		/* last known position of target */
 } robot_default_data_t;
 
 #endif

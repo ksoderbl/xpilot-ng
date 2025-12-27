@@ -1,12 +1,13 @@
-/*
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
  *
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
  *      Bert Gijsbers        <bert@xpilot.org>
  *      Dick Balaska         <dick@xpilot.org>
- *  	Kimiko Koopman       <kimiko@xpilot.org>
+ *      Kimiko Koopman       <kimiko@xpilot.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,11 +21,15 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef CANNON_H
 #define CANNON_H
+
+#ifndef MAP_H
+# include "map.h"
+#endif
 
 extern long CANNON_USE_ITEM;
 
@@ -60,7 +65,7 @@ extern long CANNON_USE_ITEM;
 /* base visibility distance (modified by sensors) */
 #define CANNON_DISTANCE		(VISIBILITY_DISTANCE * 0.5)
 
-/* chance of throwing an item upon death (multiplied by dropItemOnKillProb) */
+/* chance of throwing an item upon death (multiplied by options.dropItemOnKillProb) */
 #define CANNON_DROP_ITEM_PROB	0.7
 
 #define CANNON_MINE_MASS	(MINE_MASS * 0.6)
@@ -74,5 +79,7 @@ extern long CANNON_USE_ITEM;
 
 /* sector in which cannonfire is possible */
 #define CANNON_SPREAD		(RES / 3)
+
+extern void Cannon_update(world_t *world, bool do_less_frequent_update);
 
 #endif

@@ -1,5 +1,7 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,7 +20,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef CONST_H
@@ -53,7 +55,12 @@
 
 /* Not everyone has LINE_MAX either, *sigh* */
 #ifndef LINE_MAX
-#   define LINE_MAX 2048
+#   define LINE_MAX	2048
+#endif
+
+/* No comment. */
+#ifndef PATH_MAX
+#   define PATH_MAX	1023
 #endif
 
 #define RES		128
@@ -102,11 +109,18 @@ extern double		tbl_cos[];
 #  define MOD2(x, m)		( (x) & ((m) - 1) )
 #endif	/* MOD2 */
 
+/* borrowed from autobook */
+#define XFREE(ptr) \
+do { \
+    if (ptr) { free(ptr);  ptr = NULL; } \
+} while (0)
+
+/* Use this to remove unused parameter warning. */
+#define UNUSED_PARAM(x) x = x
+
 /* Do NOT change these! */
 #define OLD_MAX_CHECKS		26
 #define MAX_TEAMS		10
-
-#define MAX_OBSERVERS		8
 
 #define EXPIRED_MINE_ID		4096   /* assume no player has this id */
 
@@ -123,18 +137,9 @@ extern double		tbl_cos[];
 #define MAX_PLAYER_TURNRESISTANCE	1.0
 #define MIN_PLAYER_TURNRESISTANCE	0.0
 
-#define FUEL_SCALE_BITS         8
-#define FUEL_SCALE_FACT         (1<<FUEL_SCALE_BITS)
-#define MAX_STATION_FUEL	(500<<FUEL_SCALE_BITS)
-#define MAX_PLAYER_FUEL		(2600<<FUEL_SCALE_BITS)
-#define MIN_PLAYER_FUEL		(350<<FUEL_SCALE_BITS)
-#define ENERGY_PACK_FUEL        ((long)((500+(randomMT()&511)) \
-				    <<FUEL_SCALE_BITS))
-
-#define TARGET_DAMAGE		(250<<FUEL_SCALE_BITS)
-#define TARGET_UPDATE_DELAY	(TARGET_DAMAGE / (TARGET_REPAIR_PER_FRAME \
-				    * BLOCK_SZ))
-
+#define MAX_STATION_FUEL	500.0
+#define TARGET_DAMAGE		250.0
+#define SELF_DESTRUCT_DELAY	150.0
 
 /*
  * Size (pixels) of radius for legal HIT!
@@ -150,15 +155,8 @@ extern double		tbl_cos[];
 #define MISSILE_LEN		15
 
 #define TEAM_NOT_SET		0xffff
-#define TEAM_NOT_SET_STR	"4095"
 
 #define DEBRIS_TYPES		(8 * 4 * 4)
-
-#ifdef __GNUC__
-#define INLINE	inline
-#else
-#define INLINE
-#endif /* __GNUC__ */
 
 #undef rand
 #define rand()	please dont use rand.

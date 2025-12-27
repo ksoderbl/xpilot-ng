@@ -1,5 +1,7 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,14 +20,12 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpserver.h"
 
-
 char option_version[] = VERSION;
-
 
 /*
  * This module implements an in memory server option database.
@@ -151,10 +151,9 @@ static hash_value *Option_allocate_value(
     tmp->origin = origin;
     tmp->refcount = 0;
     if (value == NULL) {
-	if (desc != NULL && desc->defaultValue != NULL) {
+	if (desc != NULL && desc->defaultValue != NULL)
 	    /* might also simply point to default value instead. */
 	    tmp->value = xp_safe_strdup(desc->defaultValue);
-	}
 	else
 	    tmp->value = NULL;
     }
@@ -216,10 +215,9 @@ static void Option_add_node(hash_node *node)
     int		ix = Option_hash_string(node->name);
 
     for (np = Option_hash_array[ix]; np; np = np->next) {
-	if (!strcasecmp(node->name, np->name)) {
+	if (!strcasecmp(node->name, np->name))
 	    fatal("Option_add_node node exists (%s, %s)\n",
-		    node->name, np->name);
-	}
+		  node->name, np->name);
     }
 
     node->next = Option_hash_array[ix];
@@ -241,7 +239,7 @@ static hash_node *Get_hash_node_by_name(const char *name)
 	    return np;
     }
 
-    return (hash_node *)NULL;
+    return NULL;
 }
 
 
@@ -351,7 +349,7 @@ static void Option_change_node(
 			break;
 
 		    case OPT_PASSWORD:
-			/* never modify if set by password file. */
+			/* never modify if set by options.password file. */
 			break;
 
 		    case OPT_INIT:
@@ -382,7 +380,7 @@ static void Option_change_node(
 			break;
 
 		    case OPT_PASSWORD:
-			/* never modify if set by password file. */
+			/* never modify if set by options.password file. */
 			break;
 
 		    case OPT_INIT:
@@ -401,12 +399,12 @@ static void Option_change_node(
 			break;
 
 		    case OPT_DEFAULTS:
-			/* password file always wins over defaults. */
+			/* options.password file always wins over defaults. */
 			set_ok = true;
 			break;
 
 		    case OPT_MAP:
-			/* password file always wins over map. */
+			/* options.password file always wins over map. */
 			set_ok = true;
 			break;
 
@@ -471,14 +469,25 @@ static void Option_change_node(
  * to set option to the new value if permissions allow us to do so.
  */
 void Option_set_value(
-	const char	*name,
-	const char	*value,
-	int		override,
-	optOrigin	opt_origin)
+	const char *name,
+	const char *value,
+	int override,
+	optOrigin opt_origin)
 {
-    hash_node	*np;
-    hash_value	*vp;
-    int		ix = Option_hash_string(name);
+    hash_node *np;
+    hash_value *vp;
+    int ix = Option_hash_string(name);
+
+    /* Warn about obsolete behaviour. */
+    if (opt_origin == OPT_MAP && value) {
+	if ((!strcasecmp(name, "mineLife")
+	     || (!strcasecmp(name, "missileLife")))
+	    && atoi(value) == 0) {
+	    warn("WARNING: '%s: %s' in map.", name, value);
+	    warn("This is an obsolete way to set the default value.");
+	    warn("To fix, remove the option from the map file.");
+	}
+    }
 
     for (np = Option_hash_array[ix]; np; np = np->next) {
 	if (!strcasecmp(name, np->name)) {
@@ -518,7 +527,7 @@ char *Option_get_value(const char *name, optOrigin *origin_ptr)
 	return np->value->value;
     }
 
-    return (char *)NULL;
+    return NULL;
 }
 
 
@@ -537,19 +546,15 @@ static void Options_hash_free(void)
 	}
     }
 
-    if (hash_nodes_allocated != hash_nodes_freed) {
-	errno = 0;
-	error("hash nodes alloc = %d, hash nodes free = %d, delta = %d\n",
-		hash_nodes_allocated, hash_nodes_freed,
-		hash_nodes_allocated - hash_nodes_freed);
-    }
+    if (hash_nodes_allocated != hash_nodes_freed)
+	warn("hash nodes alloc = %d, hash nodes free = %d, delta = %d\n",
+	     hash_nodes_allocated, hash_nodes_freed,
+	     hash_nodes_allocated - hash_nodes_freed);
 
-    if (hash_values_allocated != hash_values_freed) {
-	errno = 0;
-	error("hash values alloc = %d, hash values free = %d, delta = %d\n",
-		hash_values_allocated, hash_values_freed,
-		hash_values_allocated - hash_values_freed);
-    }
+    if (hash_values_allocated != hash_values_freed)
+	warn("hash values alloc = %d, hash values free = %d, delta = %d\n",
+	     hash_values_allocated, hash_values_freed,
+	     hash_values_allocated - hash_values_freed);
 }
 
 
@@ -660,10 +665,10 @@ void Convert_list_to_string(list_t list, char **string)
 
     for (iter = List_begin(list);
 	 iter != List_end(list);
-	 LI_FORWARD(iter)) {
+	 LI_FORWARD(iter))
 	size += 1 + strlen((const char *) LI_DATA(iter));
-    }
-    *string = (char *) xp_safe_malloc(size);
+
+    *string = xp_safe_malloc(size);
     **string = '\0';
     for (iter = List_begin(list);
 	 iter != List_end(list);
@@ -701,9 +706,11 @@ void Convert_string_to_list(const char *value, list_t *list_ptr)
 	    end++;
 	/* copy non-zero results to list. */
 	if (start < end) {
-	    str = (char *) xp_safe_malloc((end - start) + 1);
-	    memcpy(str, start, (end - start));
-	    str[(end - start)] = '\0';
+	    size_t size = end - start;
+
+	    str = xp_safe_malloc(size + 1);
+	    memcpy(str, start, size);
+	    str[size] = '\0';
 	    if (NULL == List_push_back(*list_ptr, str))
 		fatal("Not enough memory for list element");
 	}
@@ -729,7 +736,7 @@ static void Option_parse_node(hash_node *np)
 	/* no value has been set, so get the option default value. */
 	value = desc->defaultValue;
 	if (value == NULL)
-	    /* no value at all.  (mapData or serverHost.) */
+	    /* no value at all.  (options.mapData or options.serverHost.) */
 	    return;
     }
 
@@ -783,7 +790,7 @@ static void Option_parse_node(hash_node *np)
 
     case valIPos:
 	{
-	    ipos	*ptr = (ipos *)desc->variable;
+	    ipos_t	*ptr = (ipos_t *)desc->variable;
 	    char	*s;
 
 	    s = strchr(value, ',');
@@ -809,20 +816,6 @@ static void Option_parse_node(hash_node *np)
 	    char	**ptr = (char **)desc->variable;
 
 	    *ptr = xp_safe_strdup(value);
-	    break;
-	}
-
-    case valSec:
-	{
-	    int		*ptr = (int *)desc->variable;
-	    double	seconds;
-
-	    if (Convert_string_to_float(value, &seconds) != true) {
-		warn("%s value '%s' not a number.",
-			np->name, value);
-		Convert_string_to_float(desc->defaultValue, &seconds);
-	    }
-	    *ptr = (int)(seconds * FPS);
 	    break;
 	}
 
@@ -854,12 +847,12 @@ static void Options_parse_expand(void)
     else
 	Option_parse_node(np);
 
-    if (expandList != NULL) {
+    if (options.expandList != NULL) {
 	char *name;
-	while ((name = (char *) List_pop_front(expandList)) != NULL)
+	while ((name = (char *) List_pop_front(options.expandList)) != NULL)
 	    expandKeyword(name);
-	List_delete(expandList);
-	expandList = NULL;
+	List_delete(options.expandList);
+	options.expandList = NULL;
     }
 }
 
@@ -880,7 +873,7 @@ static void Options_parse_FPS(void)
 	    warn("Invalid framesPerSecond specification '%s' in %s.",
 		fpsstr, Origin_name(value_origin));
 	else
-	    framesPerSecond = frames;
+	    options.framesPerSecond = frames;
     }
 
     if (FPS <= 0)
@@ -897,10 +890,10 @@ void Options_parse(void)
 {
     int		i;
     hash_node	*np;
-    option_desc	*options;
+    option_desc	*option_descs;
     int		option_count;
 
-    options = Get_option_descs(&option_count);
+    option_descs = Get_option_descs(&option_count);
 
     /*
      * Expand a possible "-expand" option.
@@ -908,16 +901,17 @@ void Options_parse(void)
     Options_parse_expand();
 
     /*
+     * kps - this might not be necessary.
      * This must be done in order that FPS will return the eventual
      * frames per second for computing valSec and valPerSec.
      */
     Options_parse_FPS();
 
     for (i = 0; i < option_count; i++) {
-	np = Get_hash_node_by_name(options[i].name);
+	np = Get_hash_node_by_name(option_descs[i].name);
 	if (np == NULL)
 	    dumpcore("Could not find option hash node for option '%s'.",
-		     options[i].name);
+		     option_descs[i].name);
 	else
 	    Option_parse_node(np);
     }

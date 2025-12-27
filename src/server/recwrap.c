@@ -1,10 +1,7 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2003 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
  *
- *      Bjørn Stabell        <bjoern@xpilot.org>
- *      Ken Ronny Schouten   <ken@xpilot.org>
- *      Bert Gijsbers        <bert@xpilot.org>
- *      Dick Balaska         <dick@xpilot.org>
+ * Copyright (C) 2000-2002 Uoti Urpala <uau@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,7 +15,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpserver.h"
@@ -77,7 +74,7 @@ int sock_receive_anyRec(sock_t *sock, char *rbuf, int size)
     if (playback) {
 	i = *(playback_shorts++);
 	if (i > 0) {
-	    memcpy(rbuf, playback_data, i);
+	    memcpy(rbuf, playback_data, (size_t)i);
 	    playback_data += i;
 	}
 	else
@@ -88,7 +85,7 @@ int sock_receive_anyRec(sock_t *sock, char *rbuf, int size)
     if (record) {
 	*(playback_shorts++) = i;
 	if (i > 0) {
-	    memcpy(playback_data, rbuf, i);
+	    memcpy(playback_data, rbuf, (size_t)i);
 	    playback_data += i;
 	}
 	else
@@ -105,7 +102,7 @@ int sock_readRec(sock_t *sock, char *rbuf, int size)
     if (playback) {
 	i = *(playback_shorts++);
 	if (i > 0) {
-	    memcpy(rbuf, playback_data, i);
+	    memcpy(rbuf, playback_data, (size_t)i);
 	    playback_data += i;
 	}
 	else
@@ -116,7 +113,7 @@ int sock_readRec(sock_t *sock, char *rbuf, int size)
     if (record) {
 	*(playback_shorts++) = i;
 	if (i > 0) {
-	    memcpy(playback_data, rbuf, i);
+	    memcpy(playback_data, rbuf, (size_t)i);
 	    playback_data += i;
 	}
 	else
@@ -341,14 +338,12 @@ int Sockbuf_writeRec(sockbuf_t *sbuf, char *buf, int len)
 		  sbuf->state, sbuf->size, sbuf->len, len);
 	    return -1;
 	}
-	if (Sockbuf_flushRec(sbuf) == -1) {
+	if (Sockbuf_flushRec(sbuf) == -1)
 	    return -1;
-	}
-	if (sbuf->size - sbuf->len < len) {
+	if (sbuf->size - sbuf->len < len)
 	    return 0;
-	}
     }
-    memcpy(sbuf->buf + sbuf->len, buf, len);
+    memcpy(sbuf->buf + sbuf->len, buf, (size_t)len);
     sbuf->len += len;
 
     return len;

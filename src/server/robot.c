@@ -1,5 +1,7 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,8 +20,9 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
+
 /* Robot code originally submitted by Maurice Abraham. */
 
 #include "xpserver.h"
@@ -45,333 +48,334 @@ static robot_t DefaultRobots[] = {
 	"Mad Max",
 	"94 20",
 	0,
-	"(15,8,7)(15,0)(7,1)(7,2)(2,4)(-1,11)"
-	"(-3,11)(-2,3)(-8,6)(-8,-6)(-2,-3)(-3,-11)"
-	"(-1,-11)(2,-4)(7,-2)(7,-1)"
+	"(SH: 15,0 7,1 7,2 2,4 -1,11 -3,11 -2,3 -8,6 -8,-6 -2,-3 -3,-11 "
+	"-1,-11 2,-4 7,-2 7,-1)"
+	"(EN: -8,0)(MG: 15,0)(LL: -8,-6)(RL: -8,6)(MR: 15,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Blackie",
 	"10 90",
 	0,
-	"(16,6,10)(15,0)(6,2)(-2,3)(-1,4)(-2,5)"
-	"(-10,8)(-13,8)(-13,1)(-15,0)(-13,-1)"
-	"(-13,-8)(-10,-8)(-2,-5)(-1,-4)(-2,-3)(6,-2)"
+	"(SH: 15,0 6,2 -2,3 -1,4 -2,5 -10,8 -13,8 -13,1 -15,0 -13,-1 "
+	"-13,-8 -10,-8 -2,-5 -1,-4 -2,-3 6,-2)"
+	"(EN: -13,0)(MG: 15,0)(LL: -13,8)(RL: -13,-8)(MR: 15,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Kryten",
 	"70 40",
 	0,
-	"(4,1,3)(15,0)(0,8)(-8,0)(0,-8)"
+	"(SH: 15,0 0,8 -8,0 0,-8)"
+	"(EN: 0,0)(MG: 15,0)(LL: 0,8)(RL: 0,-8)(MR: 15,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Marvin",
 	"30 70",
 	0,
-	"(15,4,5)(10,0)(10,7)(5,14)(-5,14)(-10,7)"
-	"(-10,-7)(-5,-14)(5,-14)(10,-7)(10,0)(5,5)"
-	"(2,7)(5,0)(2,-7)(5,-5)"
+	"(SH: 10,0 10,7 5,14 -5,14 -10,7 -10,-7 -5,-14 5,-14 10,-7 10,0 "
+	"5,5 2,7 5,0 2,-7 5,-5)"
+	"(EN: -10,0)(MG: 10,0)(LL: -10,7)(RL: -10,-7)(MR: 10,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"R2D2",
 	"50 60",
 	0,
-	"(15,8,9)(15,0)(14,1)(-1,2)(-2,9)(0,10)"
-	"(-4,10)(-7,2)(-8,2)(-8,-2)(-7,-2)(-4,-10)"
-	"(0,-10)(-2,-9)(-1,-2)(14,-1)"
+	"(SH: 15,0 14,1 -1,2 -2,9 0,10 -4,10 -7,2 -8,2 -8,-2 -7,-2 -4,-10 "
+	"0,-10 -2,-9 -1,-2 14,-1)"
+	"(EN: -7,-2)(MG: 15,0)(LL: -8,-2)(RL: -7,-2)(MR: 15,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"C3PO",
 	"60 50",
 	0,
-	"(16,1,15)(10,0)(0,5)(0,15)(15,10)(0,15)"
-	"(-15,10)(0,15)(0,5)(-7,0)(0,-5)(0,-15)"
-	"(-15,-10)(0,-15)(15,-10)(0,-15)(0,-5)"
+	"(SH: 10,0 0,5 0,15 15,10 0,15 -15,10 0,15 0,5 -7,0 0,-5 0,-15 "
+	"-15,-10 0,-15 15,-10 0,-15 0,-5)"
+	"(EN: 0,0)(MG: 10,0)(LL: 0,5)(RL: 0,-5)(MR: 10,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"K9",
 	"50 50",
 	0,
-	"(14,0,5)(15,0)(15,5)(5,5)(5,-5)(15,-5)"
-	"(15,0)(-15,0)(-15,5)(5,5)(5,-5)(-15,-5)"
-	"(-15,-8)(-15,8)(-15,0)"
+	"(SH: 15,0 15,5 5,5 5,-5 15,-5 15,0 -15,0 -15,5 5,5 5,-5 -15,-5 "
+	"-15,-8 -15,8 -15,0)"
+	"(EN: 15,0)(MG: 15,0)(LL: 15,0)(RL: 15,0)(MR: 15,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Robby",
 	"45 55",
 	0,
-	"(5,2,3)(15,0)(0,12)(-9,8)(-9,-8)(0,-12)"
+	"(SH: 15,0 0,12 -9,8 -9,-8 0,-12)"
+	"(EN: -9,0)(MG: 15,0)(LL: -9,8)(RL: -9,-8)(MR: 15,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Mickey",
 	"05 95",
 	0,
-	"(15,6,7)(5,-1)(8,-5)(7,-9)(4,-11)(-1,-10)"
-	"(-5,-6)(-8,-10)(-8,10)(-5,6)(-1,10)(4,11)"
-	"(7,9)(8,5)(5,1)(0,0)"
+	"(SH: 5,-1 8,-5 7,-9 4,-11 -1,-10 -5,-6 -8,-10 -8,10 -5,6 -1,10 "
+	"4,11 7,9 8,5 5,1 0,0)"
+	"(EN: -8,0)(MG: 5,-1)(LL: -8,-10)(RL: -8,10)(MR: 5,-1)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Hermes",
 	"15 85",
 	0,
-	"(16,12,11)(10,1)(12,8)(-11,8)(-10,3)"
-	"(-7,0)(-5,2)(-7,0)(-10,-1)(-10,-3)"
-	"(-13,-4)(-13,-7)(-15,-8)(-15,-13)(-5,-5)"
-	"(-2,-4)(5,-2)"
+	"(SH: 10,1 12,8 -11,8 -10,3 -7,0 -5,2 -7,0 -10,-1 -10,-3 -13,-4 "
+	"-13,-7 -15,-8 -15,-13 -5,-5 -2,-4 5,-2)"
+	"(EN: -15,-10)(MG: 10,1)(LL: -15,-13)(RL: -15,-8)(MR: 10,1)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Pan",
 	"60 60",
 	0,
-	"(14,6,5)(15,-1)(15,0)(5,0)(5,-1)(5,9)(-15,9)"
-	"(-15,-4)(-5,-7)(-3,-8)(-7,-8)(-5,-7)(5,-4)"
-	"(5,-1)(-15,-1)"
+	"(SH: 15,-1 15,0 5,0 5,-1 5,9 -15,9 -15,-4 -5,-7 -3,-8 -7,-8 -5,-7 "
+	"5,-4 5,-1 -15,-1)"
+	"(EN: -15,2)(MG: 15,-1)(LL: -15,-4)(RL: -15,9)(MR: 15,-1)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Azurion",
 	"40 30",
 	0,
-	"(6,2,4)(15,0)(0,2)(-9,8)(-3,0)(-9,-8)(0,-2)"
+	"(SH: 15,0 0,2 -9,8 -3,0 -9,-8 0,-2)"
+	"(EN: -3,0)(MG: 15,0)(LL: -9,8)(RL: -9,-8)(MR: 15,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Droidion",
 	"60 30",
 	0,
-	"(6,2,4)(9,0)(4,8)(-5,8)(-10,0)(-5,-8)(4,-8)"
+	"(SH: 10,0 5,9 -6,9 -11,0 -6,-9 5,-9 10,0)"
+	"(EN: -6,0)(MG: 10,0)(LL: -6,9)(RL: -6,-9)(MR: 10,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Terminator",
 	"80 40",
 	0,
-	"(6,2,4)(15,0)(0,2)(-9,8)(-3,0)"
-	"(-9,-8)(0,-2)"
+	"(SH: 15,0 0,2 -9,8 -3,0 -9,-8 0,-2)"
+	"(EN: -3,0)(MG: 15,0)(LL: -9,8)(RL: -9,-8)(MR: 15,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Sniper",
 	"30 90",
 	0,
-	"(15,6,9)(15,0)(4,2)(-2,8)(-4,7)(-3,2)"
-	"(-8,5)(-8,2)(-6,1)(-6,-1)(-8,-2)(-8,-5)"
-	"(-3,-2)(-4,-7)(-2,-8)(4,-2)"
+	"(SH: 15,0 4,2 -2,8 -4,7 -3,2 -8,5 -8,2 -6,1 -6,-1 -8,-2 -8,-5 "
+	"-3,-2 -4,-7 -2,-8 4,-2)"
+	"(EN: -6,0)(MG: 15,0)(LL: -8,2)(RL: -8,-2)(MR: 15,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Slugger",
 	"40 40",
 	0,
-	"(15,8,7)(13,0)(11,1)(3,2)(-1,8)(-3,8)"
-	"(-3,2)(-5,2)(-8,5)(-8,-5)(-5,-2)(-3,-2)"
-	"(-3,-8)(-1,-8)(3,-2)(11,-1)"
+	"(SH: 15,0 13,1 3,2 -1,8 -3,8 -3,2 -5,2 -8,5 -8,-5 -5,-2 -3,-2 "
+	"-3,-8 -1,-8 3,-2 13,-1 15,0)"
+	"(EN: -8,0)(MG: 15,0)(LL: -8,-5)(RL: -8,5)(MR: 15,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Uzi",
 	"95 5",
 	0,
-	"(16,9,8)(15,3)(7,3)(7,-8)(3,-8)(3,1)(-2,1)"
-	"(-3,-1)(-5,-1)(-14,-5)(-15,2)(-3,4)(-1,8)"
-	"(0,6)(13,6)(14,8)(15,6)"
+	"(SH: 15,3 7,3 7,-8 3,-8 3,1 -2,1 -3,-1 -5,-1 -14,-5 -15,2 -3,4 "
+	"-1,8 0,6 13,6 14,8 15,6)"
+	"(EN: -14,-1)(MG: 15,3)(LL: -15,2)(RL: -14,-5)(MR: 15,3)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Capone",
 	"80 50",
 	0,
-	"(15,9,6)(14,0)(2,2)(0,8)(1,8)(-3,8)(-3,2)"
-	"(-8,4)(-7,1)(-7,-1)(-8,-4)(-3,-2)(-3,-8)"
-	"(1,-8)(0,-8)(2,-2)"
+	"(SH: 14,0 2,2 0,8 1,8 -3,8 -3,2 -8,4 -7,1 -7,-1 -8,-4 -3,-2 "
+	"-3,-8 1,-8 0,-8 2,-2)"
+	"(EN: -7,0)(MG: 14,0)(LL: -8,-4)(RL: -8,4)(MR: 14,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Tanx",
 	"40 70",
 	0,
-	"(16,7,8)(15,1)(2,0)(1,-2)(6,-3)(6,-5)(3,-8)"
-	"(-10,-8)(-13,-6)(-13,-3)(-10,-2)(-11,2)(-7,2)"
-	"(-7,8)(-7,2)(1,2)(2,1)"
+	"(SH: 15,1 2,0 1,-2 6,-3 6,-5 3,-8 -10,-8 -13,-6 -13,-3 -10,-2 "
+	"-11,2 -7,2 -7,8 -7,2 1,2 2,1)"
+	"(EN: -13,-4)(MG: 15,1)(LL: -13,-6)(RL: -13,-3)(MR: 15,1)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Chrome Star",
 	"60 60",
 	0,
-	"(5,1,4)(8,0)(-8,5)(2,-8)(2,8)(-8,-5)"
+	"(SH: 10,0 -10,6 2,-10 2,10 -10,-6 10,0)"
+	"(EN: -6,0)(MG: 10,0)(LL: -10,6)(RL: -10,-6)(MR: 10,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Bully",
 	"80 10",
 	0,
-	"(15,6,9)(11,0)(12,-3)(9,-3)(8,-2)(-5,-5)"
-	"(-9,-11)(-14,-14)(-5,-3)(-5,3)(-14,14)"
-	"(-9,11)(-5,5)(8,2)(9,3)(12,3)"
+	"(SH: 11,0 12,-3 9,-3 8,-2 -5,-5 -9,-11 -14,-14 -5,-3 -5,3 -14,14 "
+	"-9,11 -5,5 8,2 9,3 12,3)"
+	"(EN: -5,0)(MG: 11,0)(LL: -14,-14)(RL: -14,14)(MR: 11,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Metal Hero",
 	"40 45",
 	0,
-	"(16,7,9)(15,5)(12,-2)(9,-2)(10,-1)"
-	"(-8,-1)(-4,-1)(1,-3)(-13,-9)(-9,0)"
-	"(-15,8)(1,3)(-4,1)(-8,1)(-8,-1)(-8,1)"
-	"(11,1)"
+	"(SH: 15,5 12,-2 9,-2 10,-1 -8,-1 -4,-1 1,-3 -13,-9 -9,0 -15,8 "
+	"1,3 -4,1 -8,1 -8,-1 -8,1 11,1)"
+	"(EN: -9,0)(MG: 15,5)(LL: -13,-9)(RL: -15,8)(MR: 15,5)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Aurora",
 	"60 55",
 	0,
-	"(16,5,11)(15,0)(-1,3)(-3,5)(-3,9)(7,10)"
-	"(-12,10)(-6,9)(-6,4)(-8,0)(-6,-4)(-6,-9)"
-	"(-12,-10)(7,-10)(-3,-9)(-3,-5)(-1,-3)"
+	"(SH: 15,0 -1,3 -3,5 -3,9 7,10 -12,10 -6,9 -6,4 -8,0 -6,-4 -6,-9 "
+	"-12,-10 7,-10 -3,-9 -3,-5 -1,-3)"
+	"(EN: -8,0)(MG: 15,0)(LL: -12,10)(RL: -12,-10)(MR: 15,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Dalt Wisney",
 	"30 75",
 	0,
-	"(16,10,6)(14,0)(7,-4)(0,-1)(-5,-4)"
-	"(2,-8)(0,-10)(-14,-10)(-5,-7)"
-	"(-14,0)(-5,7)(-14,10)(0,10)(2,8)"
-	"(-5,4)(0,1)(7,4)"
+	"(SH: 14,0 7,-4 0,-1 -5,-4 2,-8 0,-10 -14,-10 -5,-7 -14,0 -5,7 "
+	"-14,10 0,10 2,8 -5,4 0,1 7,4)"
+	"(EN: -14,0)(MG: 14,0)(LL: -14,10)(RL: -14,-10)(MR: 14,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Psycho",
 	"65 55",
 	0,
-	"(11,5,6)(8,0)(5,8)(3,12)(0,15)(0,0)"
-	"(-8,3)(-8,-3)(0,0)(0,-15)(3,-12)(5,-8)"
+	"(SH: 8,0 5,8 3,12 0,15 0,0 -8,3 -8,-3 0,0 0,-15 3,-12 5,-8)"
+	"(EN: -8,0)(MG: 8,0)(LL: -8,3)(RL: -8,-3)(MR: 8,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Gorgon",
 	"30 40",
 	0,
-	"(15,7,8)(15,0)(5,2)(3,8)(2,2)(-9,2)"
-	"(-10,4)(-12,2)(-14,4)(-14,-4)(-12,-2)"
-	"(-10,-4)(-9,-2)(2,-2)(3,-8)(5,-2)"
+	"(SH: 15,0 5,2 3,8 2,2 -9,2 -10,4 -12,2 -14,4 -14,-4 -12,-2 -10,-4 "
+	"-9,-2 2,-2 3,-8 5,-2)"
+	"(EN: -14,0)(MG: 15,0)(LL: -14,4)(RL: -14,-4)(MR: 15,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Pompel",
 	"50 50",
 	0,
-	"(15,7,8)(15,0)(14,4)(10,5)(5,2)(-7,3)"
-	"(-7,6)(5,8)(-9,8)(-9,-8)(5,-8)(-7,-6)"
-	"(-7,-3)(5,-2)(10,-5)(14,-4)"
+	"(SH: 15,0 14,4 10,5 5,2 -7,3 -7,6 5,8 -9,8 -9,-8 5,-8 -7,-6 "
+	"-7,-3 5,-2 10,-5 14,-4)"
+	"(EN: -9,0)(MG: 15,0)(LL: -9,8)(RL: -9,-8)(MR: 15,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Pilt",
 	"50 50",
 	0,
-	"(16,8,7)(15,0)(13,-2)(9,-3)(3,-3)(-3,-3)"
-	"(-5,-2)(-13,-2)(-15,-3)(-15,3)(-13,2)"
-	"(-5,2)(-3,3)(-3,-8)(-3,8)(-3,3)(8,3)"
+	"(SH: 15,0 13,-2 9,-3 3,-3 -3,-3 -5,-2 -13,-2 -15,-3 -15,3 -13,2 "
+	"-5,2 -3,3 -3,-8 -3,8 -3,3 8,3)"
+	"(EN: -15,0)(MG: 15,0)(LL: -15,3)(RL: -15,-3)(MR: 15,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Sparky",
 	"20 40",
 	0,
-	"(15,8,7)(15,-8)(6,-5)(7,-4)(1,-2)(2,-1)"
-	"(-4,0)(-3,2)(-15,8)(-15,2)(-8,0)(-9,-2)"
-	"(-3,-3)(-4,-4)(3,-5)(2,-7)"
+	"(SH:)"
+	"(EN: -8,0)(MG: 14,0)(LL: -8,8)(RL: -8,-8)(MR: 14,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Cobra",
 	"85 60",
 	0,
-	"(16,5,11)(8,0)(8,-6)(6,-8)(0,-7)(5,-6)"
-	"(-8,-4)(5,-2)(0,-1)(5,0)(0,1)(5,2)(-8,4)"
-	"(5,6)(0,7)(6,8)(8,6)"
+	"(SH: 8,0 8,-6 6,-8 0,-7 5,-6 -14,-4 5,-2 0,-1 5,0 0,1 5,2 "
+	"-14,4 5,6 0,7 6,8 8,6 8,0)"
+	"(EN: 5,0)(MG: 8,0)(LL: -14,-4)(RL: -14,4)(MR: 8,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Falcon",
 	"70 20",
 	0,
-	"(16,5,6)(14,2)(14,4)(2,10)(-5,10)(-10,8)"
-	"(-12,3)(-12,-3)(-10,-8)(-5,-10)(9,-11)"
-	"(10,-8)(7,-8)(14,-4)(14,-2)(4,-2)(4,2)"
+	"(SH: 14,2 14,4 2,10 -5,10 -10,8 -12,3 -12,-3 -10,-8 -5,-10 9,-11 "
+	"10,-8 7,-8 14,-4 14,-2 4,-2 4,2)"
+	"(EN: -12,0)(MG: 14,2)(LL: -12,3)(RL: -12,-3)(MR: 14,2)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Boson",
 	"25 35",
 	0,
-	"(16,11,12)(15,0)(10,-5)(4,-8)(7,-2)(7,2)"
-	"(4,8)(6,0)(4,-8)(-10,-8)(-10,8)(-10,-8)"
-	"(-15,-7)(-15,7)(-10,8)(4,8)(10,5)"
+	"(SH: 15,0 10,-5 4,-8 7,-2 7,2 4,8 6,0 4,-8 -10,-8 -10,8 -10,-8 "
+	"-15,-7 -15,7 -10,8 4,8 10,5)"
+	"(EN: -15,0)(MG: 15,0)(LL: -15,-7)(RL: -15,7)(MR: 15,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Blazy",
 	"40 40",
 	0,
-	"(12,4,8)(4,0)(2,4)(-5,11)(10,12)(-8,12)"
-	"(-4,6)(-2,0)(-4,-6)(-8,-12)(10,-12)"
-	"(-5,-11)(2,-4)"
+	"(SH: 4,0 2,4 -5,11 10,12 -8,12 -4,6 -2,0 -4,-6 -8,-12 10,-12 "
+	"-5,-11 2,-4)"
+	"(EN: -2,0)(MG: 4,0)(LL: -8,12)(RL: -8,-12)(MR: 4,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Pixie",
 	"15 93",
 	0,
-	"(13,6,7)(15,0)(7,4)(11,1)(-4,3)(3,5)"
-	"(-7,10)(-9,2)(-9,-2)(-7,-10)(3,-5)(-4,-3)"
-	"(11,-1)(7,-4)"
+	"(SH: 15,0 7,4 11,1 -4,3 3,5 -7,10 -9,2 -9,-2 -7,-10 3,-5 -4,-3 "
+	"11,-1 7,-4)"
+	"(EN: -9,0)(MG: 15,0)(LL: -9,2)(RL: -9,-2)(MR: 15,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Wimpy",
 	"5 98",
 	0,
-	"(16,9,7)(3,0)(6,5)(8,10)(5,11)(1,10)(-1,8)"
-	"(-4,9)(-8,6)(-5,0)(-8,-6)(-4,-9)(-1,-8)"
-	"(1,-10)(5,-11)(8,-10)(6,-5)"
+	"(SH: 3,0 6,5 8,10 5,11 1,10 -1,8 -4,9 -8,6 -5,0 -8,-6 -4,-9 "
+	"-1,-8 1,-10 5,-11 8,-10 6,-5)"
+	"(EN: -5,0)(MG: 3,0)(LL: -8,-6)(RL: -8,6)(MR: 3,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Bonnie",
 	"30 40",
 	0,
-	"(16,9,6)(13,3)(5,3)(5,1)(4,-1)(0,-1)"
-	"(-2,-8)(-8,-8)(-5,3)(-6,6)(-8,7)(-7,8)"
-	"(-4,7)(8,7)(10,8)(12,8)(13,7)"
+	"(SH: 15,3 5,3 5,1 4,-1 0,-1 -2,-8 -8,-8 -5,3 -6,6 -8,7 -7,8 -4,7 "
+	"10,7 12,8 14,8 15,7 15,3)"
+	"(EN: -6,0)(MG: 15,3)(LL: -8,7)(RL: -8,-8)(MR: 15,3)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Clyde",
 	"40 45",
 	0,
-	"(16,5,11)(14,0)(5,5)(6,2)(0,2)(0,8)(-13,8)"
-	"(-13,4)(-4,4)(-6,0)(-4,-4)(-13,-4)(-13,-8)"
-	"(0,-8)(0,-2)(6,-2)(5,-5)"
+	"(SH: 14,0 5,5 6,2 0,2 0,8 -13,8 -13,4 -4,4 -6,0 -4,-4 -13,-4 "
+	"-13,-8 0,-8 0,-2 6,-2 5,-5)"
+	"(EN: -6,0)(MG: 14,0)(LL: -13,8)(RL: -13,-8)(MR: 14,0)"
     },
     {
 	DEFAULT_ROBOT_TYPE,
 	"Neuro",
 	"70 70",
 	0,
-	"(16,7,5)(12,-7)(12,-12)(5,-12)(2,-10)"
-	"(1,-5)(-9,-4)(-11,2)(-8,8)(-3,11)(3,11)"
-	"(9,8)(11,2)(13,0)(12,-3)(12,-7)(7,-7)"
+	"(SH: 12,-7 12,-12 5,-12 2,-10 1,-5 -9,-4 -11,2 -8,8 -3,11 3,11 "
+	"9,8 11,2 13,0 12,-3 12,-7 7,-7)"
+	"(EN: -8,2)(MG: 12,-7)(LL: -8,8)(RL: -9,-4)(MR: 12,-7)"
     },
 };
 
@@ -405,8 +409,9 @@ static robot_type_t robot_types[NELEM(robot_type_setups)];
 
 void Parse_robot_file(void)
 {
-    if (robotFile && *robotFile) {
-	FILE *fp = fopen(robotFile, "r");
+    if (options.robotFile && *options.robotFile) {
+	FILE *fp = fopen(options.robotFile, "r");
+
 	if (fp) {
 	    char buf[1024];
 	    char name_buf[MAX_NAME_LEN];
@@ -421,9 +426,9 @@ void Parse_robot_file(void)
 	    /*
 	     * Fill in some default values.
 	     */
-	    strcpy(ship_buf, "(15,0)(-9,8)(-9,-8)");
-	    strcpy(type_buf, DEFAULT_ROBOT_TYPE);
-	    strcpy(para_buf, "");
+	    strlcpy(ship_buf, "(15,0)(-9,8)(-9,-8)", sizeof ship_buf);
+	    strlcpy(type_buf, DEFAULT_ROBOT_TYPE, sizeof type_buf);
+	    strlcpy(para_buf, "", sizeof para_buf);
 
 	    while (fp) {
 		int end_of_record = 0;
@@ -433,11 +438,10 @@ void Parse_robot_file(void)
 		    fclose(fp);
 		    fp = NULL;
 		}
-		else if (*buf == '\n') {
+		else if (*buf == '\n')
 		    end_of_record = 1;
-		}
 		else {
-		    int size = 0;
+		    size_t size = 0;
 		    int key = 0;
 		    char *dst = 0;
 
@@ -464,6 +468,7 @@ void Parse_robot_file(void)
 		    }
 		    if (key > 0) {
 			char *ptr = strchr(buf, ':') + 1;
+
 			while (isspace(*ptr))
 			    ptr++;
 			strlcpy(dst, ptr, size);
@@ -477,12 +482,10 @@ void Parse_robot_file(void)
 		    if (num_robs == max_robs) {
 			if (max_robs == 0) {
 			    max_robs = 10;
-			    robs = (robot_t *)
-				malloc(max_robs* sizeof(robot_t));
+			    robs = malloc(max_robs* sizeof(robot_t));
 			} else {
 			    max_robs += 10;
-			    robs = (robot_t *)
-				realloc(robs, max_robs * sizeof(robot_t));
+			    robs = realloc(robs, max_robs * sizeof(robot_t));
 			}
 			if (!robs) {
 			    error("Not enough memory to parse robotsfile");
@@ -490,10 +493,14 @@ void Parse_robot_file(void)
 			    break;
 			}
 		    }
-		    strcpy(robs[num_robs].driver, type_buf);
-		    strcpy(robs[num_robs].name, name_buf);
-		    strcpy(robs[num_robs].config, para_buf);
-		    strcpy(robs[num_robs].shape, ship_buf);
+		    strlcpy(robs[num_robs].driver, type_buf,
+			    sizeof robs[num_robs].driver);
+		    strlcpy(robs[num_robs].name, name_buf,
+			    sizeof robs[num_robs].name);
+		    strlcpy(robs[num_robs].config, para_buf,
+			    sizeof robs[num_robs].config);
+		    strlcpy(robs[num_robs].shape, ship_buf,
+			    sizeof robs[num_robs].shape);
 		    robs[num_robs].used = 0;
 		    num_robs++;
 		}
@@ -511,8 +518,8 @@ void Parse_robot_file(void)
 
 #ifdef DEVELOPMENT
     if (getenv("XPILOTS_DUMP_ROBOTS_TO_ROBOT_FILE") != NULL) {
-	if (robotFile && *robotFile) {
-	    FILE *fp = fopen(robotFile, "w");
+	if (options.robotFile && *options.robotFile) {
+	    FILE *fp = fopen(options.robotFile, "w");
 	    if (fp) {
 		int i;
 		for (i = 0; i < MAX_ROBOTS; i++) {
@@ -537,11 +544,11 @@ void Parse_robot_file(void)
 /*
  * First time initialization of all the robot stuff.
  */
-void Robot_init(void)
+void Robot_init(world_t *world)
 {
-    int         	i, result;
-    int			n;
+    int i, result, n;
 
+    UNUSED_PARAM(world);
     /*
      * For each robot driver call its initialization function.
      * If this function returns 0 then remember this robot driver.
@@ -551,16 +558,15 @@ void Robot_init(void)
     for (i = 0; i < num_robot_types; i++) {
 	memset(&robot_types[n], 0, sizeof(robot_type_t));
 	result = (*robot_type_setups[i].setup_func)(&robot_types[n]);
-	if (result == 0) {
+	if (result == 0)
 	    n++;
-	}
     }
     num_robot_types = n;
 
     Parse_robot_file();
 
-    if (robotTeam < 0 || robotTeam >= MAX_TEAMS)
-	robotTeam = 0;
+    if (options.robotTeam < 0 || options.robotTeam >= MAX_TEAMS)
+	options.robotTeam = 0;
 }
 
 
@@ -625,14 +631,12 @@ static void Robot_talks(enum robot_talk_t says_what,
 	"%s will be assimilated [%s]",
     };
 
-    static int		next_msg = -1;
-    const char		**msgsp;
-    int			two, i, n;
-    char		msg[MSG_LEN];
+    static int next_msg = -1;
+    const char **msgsp;
+    int two, i, n;
 
-    if (robotsTalk != true && says_what != ROBOT_TALK_ENTER) {
+    if (options.robotsTalk != true && says_what != ROBOT_TALK_ENTER)
 	return;
-    }
 
     switch (says_what) {
     case ROBOT_TALK_ENTER:
@@ -667,30 +671,26 @@ static void Robot_talks(enum robot_talk_t says_what,
 
     i = next_msg % n;
     if (two == 2)
-	sprintf(msg, msgsp[i], other_name, robot_name);
+	Set_message(msgsp[i], other_name, robot_name);
     else
-	sprintf(msg, msgsp[i], robot_name);
-    Set_message(msg);
+	Set_message(msgsp[i], robot_name);
 }
 
 
-static void Robot_create(void)
+static void Robot_create(world_t *world)
 {
-    player		*robot;
-    robot_t		*rob;
-    int			i,
-			num;
-    int			most_used,
-			least_used;
-    robot_data_t	*data, *new_data;
-    robot_type_t	*rob_type;
-    char		msg[MSG_LEN];
+    player_t *robot;
+    robot_t *rob;
+    team_t *teamp = NULL;
+    int i, num, most_used, least_used;
+    robot_data_t *data, *new_data;
+    robot_type_t *rob_type;
 
     if (peek_ID() == 0)
 	return;
 
-    if ((new_data = (robot_data_t *)malloc(sizeof(robot_data_t))) == NULL) {
-	perror("malloc robot_data");
+    if ((new_data = malloc(sizeof(robot_data_t))) == NULL) {
+	error("malloc robot_data");
 	return;
     }
     new_data->private_data = NULL;
@@ -701,8 +701,9 @@ static void Robot_create(void)
 	    most_used = i;
     }
     for (i = 0; i < NumPlayers; i++) {
-	player *pl_i = Players(i);
-	if (IS_ROBOT_PTR(pl_i)) {
+	player_t *pl_i = Players(i);
+
+	if (Player_is_robot(pl_i)) {
 	    data = (robot_data_t *)pl_i->robot_data_ptr;
 	    if (Robots[data->robots_ind].used < Robots[most_used].used)
 		Robots[data->robots_ind].used = Robots[most_used].used;
@@ -728,16 +729,16 @@ static void Robot_create(void)
     }
     rob_type = &robot_types[new_data->robot_types_ind];
 
-    Init_player(NumPlayers, (allowShipShapes)
-			    ? Parse_shape_str(rob->shape)
-			    : (shipshape_t *)NULL);
+    Init_player(world, NumPlayers,
+		options.allowShipShapes ? Parse_shape_str(rob->shape) : NULL);
+
     robot = Players(NumPlayers);
     SET_BIT(robot->type_ext, OBJ_EXT_ROBOT);
     robot->robot_data_ptr = new_data;
 
     strlcpy(robot->name, rob->name, MAX_CHARS);
-    strlcpy(robot->realname, robotRealName, MAX_CHARS);
-    strlcpy(robot->hostname, robotHostName, MAX_CHARS);
+    strlcpy(robot->username, options.robotUserName, MAX_CHARS);
+    strlcpy(robot->hostname, options.robotHostName, MAX_CHARS);
 
     robot->color = WHITE;
     robot->turnspeed = MAX_PLAYER_TURNSPEED;
@@ -747,17 +748,19 @@ static void Robot_create(void)
     robot->power = MAX_PLAYER_POWER;
     robot->power_s = MAX_PLAYER_POWER;
     robot->check = 0;
-    if (BIT(World.rules->mode, TEAM_PLAY)) {
+    if (BIT(world->rules->mode, TEAM_PLAY)) {
 	robot->team = Pick_team(PickForRobot);
-	World.teams[robot->team].NumMembers++;
-	World.teams[robot->team].NumRobots++;
+	teamp = Teams(world, robot->team);
+	assert(teamp); /* if teamplay, can't have TEAM_NOT_SET */
+	teamp->NumMembers++;
+	teamp->NumRobots++;
     }
     if (robot->mychar != 'W')
 	robot->mychar = 'R';
 
-    robot->fuel.l1 = 100 * FUEL_SCALE_FACT;
-    robot->fuel.l2 = 200 * FUEL_SCALE_FACT;
-    robot->fuel.l3 = 500 * FUEL_SCALE_FACT;
+    robot->fuel.l1 = 100.0;
+    robot->fuel.l2 = 200.0;
+    robot->fuel.l3 = 500.0;
 
     Pick_startpos(robot);
 
@@ -769,15 +772,18 @@ static void Robot_create(void)
     NumPlayers++;
     NumRobots++;
 
-    if (BIT(World.rules->mode, TEAM_PLAY) && teamShareScore) {
-	if (World.teams[robot->team].NumMembers == 1)
+    Rank_get_saved_score(robot);
+
+    if (BIT(world->rules->mode, TEAM_PLAY) && options.teamShareScore) {
+	if (teamp->NumMembers == 1)
 	    /* reset team score on first player */
-	    World.teams[robot->team].score = 0;
-	TEAM_SCORE(robot->team, 0);
+	    teamp->score = 0.0;
+	Team_score(world, robot->team, 0.0);
     }
 
     for (i = 0; i < NumPlayers - 1; i++) {
-	player *pl_i = Players(i);
+	player_t *pl_i = Players(i);
+
 	if (pl_i->conn != NULL) {
 	    Send_player(pl_i->conn, robot->id);
 	    Send_base(pl_i->conn, robot->id, robot->home_base->ind);
@@ -786,56 +792,49 @@ static void Robot_create(void)
 
     Robot_talks(ROBOT_TALK_ENTER, robot->name, "");
 
-#ifndef	SILENT
-    if (logRobots)
+    if (!options.silent && options.logRobots)
 	xpprintf("%s %s (%d, %s) starts at startpos %d.\n",
-		 showtime(), robot->name, NumPlayers, robot->realname,
+		 showtime(), robot->name, NumPlayers, robot->username,
 		 robot->home_base->ind);
-#endif
 
-    if (round_delay > 0 || NumPlayers == 1) {
-	round_delay = roundDelaySeconds * FPS;
-	round_delay_send = round_delay + FPS;  /* delay him an extra second */
-	if (maxRoundTime > 0 && roundDelaySeconds == 0)
-	    roundtime = maxRoundTime * FPS;
+    if (NumPlayers == 1) {
+	if (options.maxRoundTime > 0)
+	    roundtime = options.maxRoundTime * FPS;
 	else
 	    roundtime = -1;
-	sprintf(msg, "Player entered. Delaying %d seconds until next %s.",
-		roundDelaySeconds,
-		(BIT(World.rules->mode, TIMING)? "race" : "round"));
-	Set_message(msg);
+	Set_message("Player entered. Delaying 0 seconds until next %s.",
+		    (BIT(world->rules->mode, TIMING) ? "race" : "round"));
     }
 
     updateScores = true;
 }
 
 
-void Robot_destroy(player *pl)
+void Robot_destroy(player_t *pl)
 {
     (*robot_types[pl->robot_data_ptr->robot_types_ind].destroy)(pl);
-    free(pl->robot_data_ptr);
-    pl->robot_data_ptr = NULL;
+    XFREE(pl->robot_data_ptr);
 }
 
-void Robot_delete(player *pl, bool kicked)
+void Robot_delete(player_t *pl, bool kicked)
 {
-    int			i;
-    player		*low_pl = NULL;
-    double		low_score = (double)LONG_MAX;
-    char		msg[MSG_LEN];
+    int i;
 
     if (pl == NULL) {
+	player_t *low_pl = NULL;
+	double low_score = (double)LONG_MAX;
+
 	/*
 	 * Find the robot with the lowest score.
 	 */
 	for (i = 0; i < NumPlayers; i++) {
-	    player *pl2 = Players(i);
+	    player_t *pl_i = Players(i);
 
-	    if (!IS_ROBOT_PTR(pl2))
+	    if (!Player_is_robot(pl_i))
 		continue;
 
-	    if (pl2->score < low_score) {
-		low_pl = pl2;
+	    if (pl_i->score < low_score) {
+		low_pl = pl_i;
 		low_score = low_pl->score;
 	    }
 	}
@@ -844,11 +843,9 @@ void Robot_delete(player *pl, bool kicked)
     }
 
     if (pl) {
-	if (kicked) {
-	    sprintf(msg, "\"%s\" upset the gods and was kicked out "
-		    "of the game.", pl->name);
-	    Set_message(msg);
-	}
+	if (kicked)
+	    Set_message("%s upset the gods and was kicked out of the game.",
+			pl->name);
 	Delete_player(pl);
     }
 }
@@ -856,7 +853,7 @@ void Robot_delete(player *pl, bool kicked)
 /*
  * Ask a robot for an alliance
  */
-void Robot_invite(player *pl, player *inviter)
+void Robot_invite(player_t *pl, player_t *inviter)
 {
     (*robot_types[pl->robot_data_ptr->robot_types_ind].invite)(pl, inviter);
 }
@@ -864,7 +861,7 @@ void Robot_invite(player *pl, player *inviter)
 /*
  * Turn on a war lock.
  */
-static void Robot_set_war(player *pl, int victim_id)
+static void Robot_set_war(player_t *pl, int victim_id)
 {
     (*robot_types[pl->robot_data_ptr->robot_types_ind].set_war)(pl, victim_id);
 }
@@ -875,16 +872,16 @@ static void Robot_set_war(player *pl, int victim_id)
  * The only time when this can be called is if
  * a player a robot has war on leaves the game.
  */
-void Robot_reset_war(player *pl)
+void Robot_reset_war(player_t *pl)
 {
-    Robot_set_war(pl, -1);
+    Robot_set_war(pl, NO_ID);
 }
 
 
 /*
  * Someone has programmed a robot (using ECM) to seek some player.
  */
-void Robot_program(player *pl, int victim_id)
+void Robot_program(player_t *pl, int victim_id)
 {
     Robot_set_war(pl, victim_id);
 }
@@ -894,7 +891,7 @@ void Robot_program(player *pl, int victim_id)
  * Return the id of the player this robot has war on.
  * If the robot is not in peace mode then return -1.
  */
-int Robot_war_on_player(player *pl)
+int Robot_war_on_player(player_t *pl)
 {
     robot_type_t	*rob_type =
 			    &robot_types[pl->robot_data_ptr->robot_types_ind];
@@ -909,29 +906,31 @@ int Robot_war_on_player(player *pl)
  * Maybe this is enough reason for the killed robot to change
  * its behavior with respect to the player it has been killed by.
  */
-void Robot_war(player *pl, player *kp)
+void Robot_war(player_t *pl, player_t *kp)
 {
     int			i;
 
     if (kp->id == pl->id)
 	return;
 
-    if (IS_ROBOT_PTR(kp)) {
+    if (Player_is_robot(kp)) {
 	Robot_talks(ROBOT_TALK_KILL, kp->name, pl->name);
 
-	if (Robot_war_on_player(kp) == pl->id)
+	if (Robot_war_on_player(kp) == pl->id) {
 	    for (i = 0; i < NumPlayers; i++) {
-		player *pl_i = Players(i);
+		player_t *pl_i = Players(i);
+
 		if (pl_i->conn != NULL)
 		    Send_war(pl_i->conn, kp->id, NO_ID);
 	    }
-	Robot_set_war(kp, -1);
+	}
+	Robot_set_war(kp, NO_ID);
     }
 
-    if (IS_ROBOT_PTR(pl)
-	&& (int)(rfrac() * 100) < kp->score - pl->score
-	&& !TEAM(pl, kp)
-	&& !ALLIANCE(pl, kp)) {
+    if (Player_is_robot(pl)
+	&& rfrac() * 100.0 < kp->score - pl->score
+	&& !Players_are_teammates(pl, kp)
+	&& !Players_are_allies(pl, kp)) {
 
 	Robot_talks(ROBOT_TALK_WAR, pl->name, kp->name);
 
@@ -943,7 +942,8 @@ void Robot_war(player *pl, player *kp)
 
 	if (Robot_war_on_player(pl) != kp->id) {
 	    for (i = 0; i < NumPlayers; i++) {
-		player *pl_i = Players(i);
+		player_t *pl_i = Players(i);
+
 		if (pl_i->conn != NULL)
 		    Send_war(pl_i->conn, pl->id, kp->id);
 	    }
@@ -957,7 +957,7 @@ void Robot_war(player *pl, player *kp)
 /*
  * A robot starts on its homebase.
  */
-void Robot_go_home(player *pl)
+void Robot_go_home(player_t *pl)
 {
     (*robot_types[pl->robot_data_ptr->robot_types_ind].go_home)(pl);
 }
@@ -967,10 +967,10 @@ void Robot_go_home(player *pl)
  * Someone sends a message to a robot.
  * The format of the message is: "This is the real message [receiver]:[sender]"
  */
-void Robot_message(player *pl, const char *message)
+void Robot_message(player_t *pl, const char *message)
 {
-    robot_type_t	*rob_type =
-			    &robot_types[pl->robot_data_ptr->robot_types_ind];
+    robot_type_t *rob_type =
+	&robot_types[pl->robot_data_ptr->robot_types_ind];
 
     (*rob_type->message)(pl, message);
 }
@@ -979,7 +979,7 @@ void Robot_message(player *pl, const char *message)
 /*
  * A robot plays this frame.
  */
-static void Robot_play(player *pl)
+static void Robot_play(player_t *pl)
 {
     (*robot_types[pl->robot_data_ptr->robot_types_ind].play)(pl);
 }
@@ -990,26 +990,34 @@ static void Robot_play(player *pl)
  * Return false if robot continues playing,
  * return true if robot leaves the game.
  */
-static int Robot_check_leave(player *pl)
+static int Robot_check_leave(player_t *pl)
 {
-    char		msg[MSG_LEN];
+    bool leave = false;
+    world_t *world = pl->world;
 
-    if (robotsLeave
+    if (options.robotsLeave
 	&& pl->life > 0
-	&& !BIT(World.rules->mode, LIMITED_LIVES)
-	&& (BIT(pl->status, PLAYING) || pl->count <= 0)) {
-	msg[0] = '\0';
-	if (robotLeaveLife > 0 && pl->life >= robotLeaveLife)
-	    sprintf(msg, "%s retired.", pl->name);
-	else if (robotLeaveScore != 0 && pl->score < robotLeaveScore)
-	    sprintf(msg, "%s left out of disappointment.", pl->name);
-	else if (robotLeaveRatio != 0
-		 && pl->score / (pl->life + 1) < robotLeaveRatio)
-	    sprintf(msg, "%s played too badly.", pl->name);
+	&& !BIT(world->rules->mode, LIMITED_LIVES)
+	&& (BIT(pl->status, PLAYING) || pl->recovery_count <= 0)) {
 
-	if (msg[0] != '\0') {
+	if (options.robotLeaveLife > 0
+	    && pl->life >= options.robotLeaveLife) {
+	    Set_message("%s retired.", pl->name);
+	    leave = true;
+	}
+	else if (options.robotLeaveScore != 0
+		 && pl->score < options.robotLeaveScore) {
+	    Set_message("%s left out of disappointment.", pl->name);
+	    leave = true;
+	}
+	else if (options.robotLeaveRatio != 0
+		 && pl->score / (pl->life + 1) < options.robotLeaveRatio) {
+	    Set_message("%s played too badly.", pl->name);
+	    leave = true;
+	}
+
+	if (leave) {
 	    Robot_talks(ROBOT_TALK_LEAVE, pl->name, "");
-	    Set_message(msg);
 	    Robot_delete(pl, false);
 	    return true;
 	}
@@ -1022,14 +1030,13 @@ static int Robot_check_leave(player *pl)
 /*
  * On each round we call the robot type round ticker.
  */
-static void Robot_round_tick(void)
+static void Robot_round_tick(world_t *world)
 {
     int			i;
 
     if (NumRobots > 0) {
-	for (i = 0; i < num_robot_types; i++) {
-	    (*robot_types[i].round_tick)();
-	}
+	for (i = 0; i < num_robot_types; i++)
+	    (*robot_types[i].round_tick)(world);
     }
 }
 
@@ -1037,7 +1044,7 @@ static void Robot_round_tick(void)
 /*
  * Update tanks here.
  */
-static void Tank_play(player *pl)
+static void Tank_play(player_t *pl)
 {
     int		t = frame_loops % (TANK_NOTHRUST_TIME + TANK_THRUST_TIME);
 
@@ -1047,63 +1054,105 @@ static void Tank_play(player *pl)
 	CLR_BIT(pl->status, THRUSTING);
 }
 
-void Robot_update(void)
+void Robot_update(world_t *world)
 {
-    player		*pl;
-    int			i;
-    static double	new_robot_delay;
-    int			num_playing_ships;
-    int			num_any_ships;
+    int i;
+    static double new_robot_delay;
+    int num_playing_ships, num_any_ships;
+    bool tick_this_update = false;
+    static int ticks_per_second = 0;
 
     num_any_ships = NumPlayers + login_in_progress;
     num_playing_ships = num_any_ships - NumPseudoPlayers;
-    if ((num_playing_ships < maxRobots
-	 || NumRobots < minRobots)
-	&& num_playing_ships < World.NumBases
+    if ((num_playing_ships < options.maxRobots
+	 || NumRobots < options.minRobots)
+	&& num_playing_ships < world->NumBases
 	&& num_any_ships < NUM_IDS
 	&& NumRobots < MAX_ROBOTS
-	&& !(BIT(World.rules->mode, TEAM_PLAY)
-	     && restrictRobots
-	     && World.teams[robotTeam].NumMembers >=
-		World.teams[robotTeam].NumBases)) {
+	&& !(BIT(world->rules->mode, TEAM_PLAY)
+	     && options.restrictRobots
+	     && world->teams[options.robotTeam].NumMembers >=
+		world->teams[options.robotTeam].NumBases)) {
 
 	new_robot_delay += timeStep;
 	if (new_robot_delay >= ROBOT_CREATE_DELAY) {
-	    Robot_create();
+	    Robot_create(world);
 	    new_robot_delay = 0;
 	}
     }
     else {
 	new_robot_delay = 0;
 	if (NumRobots > 0) {
-	    if ((num_playing_ships > World.NumBases)
+	    if ((num_playing_ships > world->NumBases)
 		|| (num_any_ships > NUM_IDS)
-		|| (num_playing_ships > maxRobots && NumRobots > minRobots))
+		|| (num_playing_ships > options.maxRobots
+		    && NumRobots > options.minRobots))
 		Robot_delete(NULL, false);
 	}
     }
 
-    if (NumRobots <= 0 && NumPseudoPlayers <= 0) {
+    if (NumRobots <= 0 && NumPseudoPlayers <= 0)
 	return;
+
+    /*
+     * Robots play better the more updates they get. They can be made
+     * easier opponents by setting a lower value for option
+     * robotTicksPerSecond.
+     */
+    {
+	static time_t oldtime = 0;
+	static int updates_per_second = 0, updates_last_second;
+	static double seconds_per_update = 1.0, seconds_per_tick = 1.0;
+	static double seconds_since_last_update = 0.0;
+	time_t t = time(NULL);
+
+	updates_per_second++;
+
+	seconds_since_last_update += seconds_per_update;
+	if (seconds_since_last_update > seconds_per_tick) {
+	    tick_this_update = true;
+	    seconds_since_last_update -= seconds_per_tick;
+	    /* make sure seconds_since_last_update stays limited */
+	    if (seconds_since_last_update > seconds_per_tick)
+		seconds_since_last_update = seconds_per_tick;
+	}
+
+	/* another second has elapsed */
+	if (t != oldtime) {
+	    oldtime = t;
+	    assert(updates_per_second > 0);
+	    seconds_per_update = 1.0 / (double)updates_per_second;
+	    updates_last_second = updates_per_second;
+	    /*warn("updates_per_second = %d, ticks_per_second = %d",
+	      updates_per_second, ticks_per_second);*/
+	    ticks_per_second = 0;
+	    updates_per_second = 0;
+	    assert(options.robotTicksPerSecond > 0);
+	    seconds_per_tick = 1.0 / (double)options.robotTicksPerSecond;
+	}
     }
 
-    Robot_round_tick();
+    if (!tick_this_update)
+	return;
+
+    ticks_per_second++;
+    Robot_round_tick(world);
 
     for (i = 0; i < NumPlayers; i++) {
-	pl = Players(i);
+	player_t *pl = Players(i);
 
-	if (IS_TANK_PTR(pl)) {
+	if (Player_is_tank(pl)) {
 	    Tank_play(pl);
 	    continue;
 	}
 
-	if (!IS_ROBOT_PTR(pl))
+	if (!Player_is_robot(pl))
 	    /* Ignore non-robots. */
 	    continue;
 
 	if (BIT(pl->status, PLAYING|GAME_OVER) != PLAYING) {
 	    /* Only check for leave if not being transported to homebase. */
-	    if (!pl->count > 0) {
+	    if (pl->recovery_count <= 0) {
 		if (Robot_check_leave(pl))
 		    i--;
 	    }
@@ -1114,9 +1163,6 @@ void Robot_update(void)
 	    i--;
 	    continue;
 	}
-
-	if (round_delay > 0)
-	    continue;
 
 	/*
 	 * Let the robot code control this robot.

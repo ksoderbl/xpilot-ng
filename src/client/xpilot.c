@@ -1,5 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,19 +20,12 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "xpclient.h"
+#include "xpclient_x11.h"
 
 char xpilot_version[] = VERSION;
-
-#ifndef	lint
-char xpilot_versionid[] = "@(#)$" TITLE " $";
-#endif
-
-
-char			hostname[SOCK_HOSTNAME_LENGTH];
 
 char			**Argv;
 int			Argc;
@@ -44,7 +39,6 @@ static void printfile(const char *filename)
     FILE		*fp;
     int			c;
 
-
     if ((fp = fopen(filename, "r")) == NULL)
 	return;
 
@@ -54,6 +48,10 @@ static void printfile(const char *filename)
     fclose(fp);
 }
 
+char *Program_name(void)
+{
+    return "xpilot-ng-x11";
+}
 
 /*
  * Oh glorious main(), without thee we cannot exist.
@@ -61,14 +59,7 @@ static void printfile(const char *filename)
 int main(int argc, char *argv[])
 {
     int				result, retval = 1;
-    bool			auto_connect = false,
-				text = false,
-				list_servers = false,
-				auto_shutdown = false,
-				noLocalMotd = false;
-    char			*cp;
-    Connect_param_t		*conpar;
-    static char			shutdown_reason[MAX_CHARS];
+    bool			auto_shutdown = false;
 
     /*
      * --- Output copyright notice ---
@@ -83,7 +74,7 @@ int main(int argc, char *argv[])
 	       Conf_localguru());
     }
 
-    /*Conf_print();*/
+    Conf_print();
 
     Argc = argc;
     Argv = argv;
@@ -93,84 +84,71 @@ int main(int argc, char *argv[])
      */
     init_error(argv[0]);
 
-    seedMT( (unsigned)time((time_t *)0) ^ Get_process_id());
+    seedMT( (unsigned)time(NULL) ^ Get_process_id());
 
     Check_client_versions();
 
-    conpar = (Connect_param_t *) calloc(1, sizeof(Connect_param_t));
-    if (!conpar) {
-	error("Not enough memory");
-	exit(1);
-    }
-    conpar->contact_port = SERVER_PORT;
-    conpar->team = TEAM_NOT_SET;
+    memset(&connectParam, 0, sizeof(Connect_param_t));
 
-    *hostname = 0;
-    cp = getenv("XPILOTHOST");
-    if (cp)
-	strlcpy(hostname, cp, sizeof(hostname));
-    else
-        sock_get_local_hostname(hostname, sizeof hostname, 0);
-
-    cp = getenv("XPILOTUSER");
-    if (cp)
-	strlcpy(conpar->real_name, cp, sizeof(conpar->real_name));
-    else
-	Get_login_name(conpar->real_name, sizeof(conpar->real_name) - 1);
-
-    IFWINDOWS( conpar->disp_name[0] = '\0' );
+    /*
+     * --- Create global option array ---
+     */
+    Store_default_options();
+    Store_X_options();
+    Store_hud_options();
+    Store_paintradar_options();
+    Store_xpaint_options();
+    Store_guimap_options();
+    Store_guiobject_options();
+    Store_talk_macro_options();
+    Store_key_options();
+    Store_record_options();
+    Store_color_options();
 
     /*
      * --- Check commandline arguments and resource files ---
      */
-    Parse_options(&argc, argv, conpar->real_name,
-		  &conpar->contact_port, &conpar->team,
-		  &text, &list_servers,
-		  &auto_connect, &noLocalMotd,
-		  conpar->nick_name, conpar->disp_name,
-		  hostname, shutdown_reason);
+    memset(&xpArgs, 0, sizeof(xp_args_t));
+    Parse_options(&argc, argv);
+    /*strcpy(clientname,connectParam.nick_name); */
 
-    /*strcpy(clientname,conpar->nick_name); */
+    Config_init();
+    IFNWINDOWS(Handle_X_options();)
     
     /* CLIENTRANK */
     Init_saved_scores();
 
-    if (list_servers)
-	auto_connect = true;
+    if (xpArgs.list_servers)
+	xpArgs.auto_connect = true;
 
-    if (shutdown_reason[0] != '\0') {
+    if (xpArgs.shutdown_reason[0] != '\0') {
 	auto_shutdown = true;
-	auto_connect = true;
+	xpArgs.auto_connect = true;
     }
 
     /*
      * --- Message of the Day ---
      */
-    if (!noLocalMotd)
-	printfile(Conf_localmotdfile());
+    printfile(Conf_localmotdfile());
 
-    if (text || auto_connect || argv[1] || is_this_windows()) {
-	if (list_servers)
+    if (xpArgs.text || xpArgs.auto_connect || argv[1] || is_this_windows()) {
+	if (xpArgs.list_servers)
 	    printf("LISTING AVAILABLE SERVERS:\n");
 
 	result = Contact_servers(argc - 1, &argv[1],
-				 auto_connect, list_servers,
-				 auto_shutdown, shutdown_reason,
-				 0, 0, 0, 0,
-				 conpar);
+				 xpArgs.auto_connect, xpArgs.list_servers,
+				 auto_shutdown, xpArgs.shutdown_reason,
+				 0, NULL, NULL, NULL, NULL,
+				 &connectParam);
     }
     else {
-	IFNWINDOWS(result = Welcome_screen(conpar));
+	IFNWINDOWS(result = Welcome_screen(&connectParam));
     }
 
-    if (result == 1) {
-	retval =
-	  Join(conpar->server_addr, conpar->server_name,
-	       conpar->login_port, conpar->real_name, conpar->nick_name,
-	       conpar->team, conpar->disp_name, conpar->server_version);
-    }
+    if (result == 1)
+	retval = Join(&connectParam);
     
-    if (BIT(instruments, CLIENT_RANKER))
+    if (instruments.useClientRanker)
 	Print_saved_scores();
 
     return retval;
@@ -190,6 +168,8 @@ extern char bitmaps_version[];
 extern char caudio_version[];
 extern char checknames_version[];
 extern char client_version[];
+extern char clientcommand_version[];
+extern char clientrank_version[];
 extern char colors_version[];
 extern char config_version[];
 extern char configure_version[];
@@ -197,14 +177,17 @@ extern char datagram_version[];
 extern char dbuff_version[];
 extern char default_version[];
 extern char error_version[];
+extern char event_version[];
 extern char gfx2d_version[];
 extern char guimap_version[];
 extern char guiobjects_version[];
 extern char join_version[];
 extern char math_version[];
 extern char messages_version[];
+extern char meta_version[];
 extern char net_version[];
 extern char netclient_version[];
+extern char option_version[];
 extern char paint_version[];
 extern char paintdata_version[];
 extern char painthud_version[];
@@ -219,13 +202,13 @@ extern char socklib_version[];
 extern char talk_version[];
 extern char talkmacros_version[];
 extern char textinterface_version[];
-extern char texture_version[];
 extern char welcome_version[];
 extern char widget_version[];
+extern char xdefault_version[];
 extern char xevent_version[];
 extern char xeventhandlers_version[];
 extern char xinit_version[];
-extern char xpmread_version[];
+extern char xpaint_version[];
 
 
 static void Check_client_versions(void)
@@ -243,6 +226,8 @@ static void Check_client_versions(void)
 	{ "caudio", caudio_version },
 	{ "checknames", checknames_version },
 	{ "client", client_version },
+	{ "clientcommand", clientcommand_version },
+	{ "clientrank", clientrank_version },
 	{ "colors", colors_version },
 	{ "config", config_version },
 	{ "configure", configure_version },
@@ -250,14 +235,17 @@ static void Check_client_versions(void)
 	{ "dbuff", dbuff_version },
 	{ "default", default_version },
 	{ "error", error_version },
+	{ "event", event_version },
 	{ "gfx2d", gfx2d_version },
 	{ "guimap", guimap_version },
 	{ "guiobjects", guiobjects_version },
 	{ "join", join_version },
 	{ "math", math_version },
 	{ "messages", messages_version },
+	{ "meta", meta_version },
 	{ "net", net_version },
 	{ "netclient", netclient_version },
+	{ "option", option_version },
 	{ "paint", paint_version },
 	{ "paintdata", paintdata_version },
 	{ "painthud", painthud_version },
@@ -272,14 +260,14 @@ static void Check_client_versions(void)
 	{ "talk", talk_version },
 	{ "talkmacros", talkmacros_version },
 	{ "textinterface", textinterface_version },
-	{ "texture", texture_version },
 	{ "welcome", welcome_version },
 	{ "widget", widget_version },
+	{ "xdefault", xdefault_version },
 	{ "xevent", xevent_version },
 	{ "xeventhandlers", xeventhandlers_version },
 	{ "xinit", xinit_version },
+	{ "xpaint", xpaint_version },
 	{ "xpilot", xpilot_version },
-	{ "xpmread", xpmread_version },
     };
     int			i;
     int			oops = 0;

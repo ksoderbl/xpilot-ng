@@ -1,5 +1,12 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 2000-2004 by
+ *
+ *      Uoti Urpala          <uau@users.sourceforge.net>
+ *      Kristian Söderblom   <kps@users.sourceforge.net>
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,47 +25,53 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpserver.h"
 
-
 char score_version[] = VERSION;
 
-
-void Score(player *pl, double points, clpos pos, const char *msg)
+void Score(player_t *pl, double points, clpos_t pos, const char *msg)
 {
-    if (BIT(World.rules->mode, TEAM_PLAY)) {
-	if (!teamShareScore)
-	    Rank_AddScore(pl, points);
-	TEAM_SCORE(pl->team, points);
+    world_t *world = pl->world;
+
+    if (BIT(world->rules->mode, TEAM_PLAY)) {
+	if (!options.teamShareScore)
+	    Rank_add_score(pl, points);
+	Team_score(world, pl->team, points);
     } else {
-	if (pl->alliance != ALLIANCE_NOT_SET && teamShareScore)
+	if (pl->alliance != ALLIANCE_NOT_SET && options.teamShareScore)
 	    Alliance_score(pl->alliance, points);
 	else
-	    Rank_AddScore(pl, points);
+	    Rank_add_score(pl, points);
     }
 
     if (pl->conn != NULL)
-	Send_score_object(pl->conn, points, pos.cx, pos.cy, msg);
+	Send_score_object(pl->conn, points, pos, msg);
 
     updateScores = true;
 }
 
-void TEAM_SCORE(int team, double points)
+void Team_score(world_t *world, int team, double points)
 {
+    team_t *teamp;
+
     if (team == TEAM_NOT_SET)	/* could happen if teamCannons is off */
 	return;
 
-    World.teams[team].score += points;
-    if (teamShareScore) {
+    teamp = Teams(world, team);
+    teamp->score += points;
+
+    if (options.teamShareScore) {
 	int i;
-	double share = World.teams[team].score / World.teams[team].NumMembers;
+	double share = teamp->score / teamp->NumMembers;
+
 	for (i = 0; i < NumPlayers; i++) {
-	    player *pl_i = Players(i);
+	    player_t *pl_i = Players(i);
+
 	    if (pl_i->team == team)
-		Rank_SetScore(pl_i, share);
+		Rank_set_score(pl_i, share);
 	}
     }
 
@@ -67,14 +80,15 @@ void TEAM_SCORE(int team, double points)
 
 void Alliance_score(int id, double points)
 {
-    int		i;
-    int		member_count = Get_alliance_member_count(id);
-    double	share = points / member_count;
+    int i;
+    int member_count = Get_alliance_member_count(id);
+    double share = points / member_count;
 
     for (i = 0; i < NumPlayers; i++) {
-	player *pl_i = Players(i);
+	player_t *pl_i = Players(i);
+
 	if (pl_i->alliance == id)
-	    Rank_AddScore(pl_i, share);
+	    Rank_add_score(pl_i, share);
     }
 }
 
@@ -82,7 +96,7 @@ double Rate(double winner, double loser)
 {
     double t;
 
-    if (constantScoring)
+    if (options.constantScoring)
 	return RATE_SIZE / 2;
     t = ((RATE_SIZE / 2) * RATE_RANGE) / (ABS(loser - winner) + RATE_RANGE);
     if (loser > winner)
@@ -105,18 +119,33 @@ double Rate(double winner, double loser)
  * KK 28-4-98: Same for killing your own tank.
  * KK 7-11-1: And for killing a member of your alliance
  */
-void Score_players(player *winner_pl, double winner_score, char *winner_msg,
-		   player *loser_pl, double loser_score, char *loser_msg)
+void Score_players(player_t *winner_pl, double winner_score, char *winner_msg,
+		   player_t *loser_pl, double loser_score, char *loser_msg,
+		   bool transfer_tag)
 {
-    if (TEAM(winner_pl, loser_pl)
-	|| ALLIANCE(winner_pl, loser_pl)
-	|| (IS_TANK_PTR(loser_pl)
+    if (Players_are_teammates(winner_pl, loser_pl)
+	|| Players_are_allies(winner_pl, loser_pl)
+	|| (Player_is_tank(loser_pl)
 	    && loser_pl->lock.pl_id == winner_pl->id)) {
 	if (winner_score > 0)
 	    winner_score = -winner_score;
 	if (loser_score > 0)
 	    loser_score = -loser_score;
     }
+
+    if (options.tagGame
+	&& winner_score > 0.0 && loser_score < 0.0
+	&& transfer_tag) {
+	if (tagItPlayerId == winner_pl->id) {
+	    winner_score *= options.tagItKillScoreMult;
+	    loser_score *= options.tagItKillScoreMult;
+	} else if (tagItPlayerId == loser_pl->id) {
+	    winner_score *= options.tagKillItScoreMult;
+	    loser_score *= options.tagKillItScoreMult;
+	    Transfer_tag(loser_pl, winner_pl);
+	}
+    }
+
     Score(winner_pl, winner_score, loser_pl->pos, winner_msg);
     Score(loser_pl, loser_score, loser_pl->pos, loser_msg);
 }

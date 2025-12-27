@@ -1,10 +1,14 @@
 /*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
  *      Bert Gijsbers        <bert@xpilot.org>
  *      Dick Balaska         <dick@xpilot.org>
+ *
+ * Copyright (C) 2001 Uoti Urpala    <uau@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,7 +22,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpclient.h"
@@ -197,14 +201,11 @@ static void Command_help(void)
 	   "M    -   send a Message.               (only owner)\n"
 	   "L    -   Lock/unLock server access.    (only owner)\n"
 	   "D(*) -   shutDown/cancel shutDown.     (only owner)\n"
-	   "R(#) -   set maximum number of Robots. (only owner)\n"
 	   "O    -   Modify a server option.       (only owner)\n"
 	   "V    -   View the server options.\n"
 	   "J(&) or just Return enters the game.\n");
     printf("(*) If you don't specify any delay, you will signal that\n"
 	   "    the server should stop an ongoing shutdown.\n"
-	   "(#) Not specifying the maximum number of robots is\n"
-	   "    the same as specifying 0 robots.\n"
 	   "(&) You may specify a team number after the J.\n");
 }
 
@@ -225,9 +226,9 @@ static bool Process_commands(sockbuf_t *ibuf,
     char		c, status, reply_to;
     char		linebuf[MAX_LINE];
     unsigned short	port, qpos;
-    int			has_credentials = 0;
+    bool		has_credentials = false;
     int			cmd_credentials = 0;
-    int			privileged_cmd;
+    bool		privileged_cmd;
     int			max_replies;
     long		key = 0;
     time_t		qsent = 0;
@@ -285,7 +286,7 @@ static bool Process_commands(sockbuf_t *ibuf,
 	    ibuf->sock.fd = SOCK_FD_INVALID;
 	}
 
-	privileged_cmd = (strchr("DKLMOR", c) != NULL);
+	privileged_cmd = (strchr("DKLMOR", c) != NULL) ? true : false;
 	if (privileged_cmd) {
 	    if (!has_credentials) {
 		success = create_dgram_addr_socket(
@@ -327,11 +328,11 @@ static bool Process_commands(sockbuf_t *ibuf,
 
 	Sockbuf_clear(ibuf);
 	Packet_printf(ibuf, "%u%s%hu", VERSION2MAGIC(conpar->server_version),
-		      conpar->real_name, sock_get_port(&ibuf->sock));
+		      conpar->user_name, sock_get_port(&ibuf->sock));
 
-	if (privileged_cmd && !has_credentials) {
+	if (privileged_cmd && !has_credentials)
 	    Packet_printf(ibuf, "%c%ld", CREDENTIALS_pack, 0L);
-	} else {
+	else {
 
 	    switch (c) {
 
@@ -348,22 +349,6 @@ static bool Process_commands(sockbuf_t *ibuf,
 		}
 		linebuf[MAX_NAME_LEN - 1] = '\0';
 		Packet_printf(ibuf, "%c%ld%s", KICK_PLAYER_pack, key, linebuf);
-		break;
-
-	    case 'R':
-		printf("Enter maximum number of robots: ");
-		fflush(stdout);
-		if (!getline(linebuf, MAX_LINE, stdin)) {
-		    printf("Nothing changed.\n");
-		    continue;
-		}
-		if (sscanf(linebuf, "%d", &max_robots) <= 0
-		    || max_robots < 0) {
-		    printf("Invalid number of robots \"%s\".\n", linebuf);
-		    continue;
-		}
-		Packet_printf(ibuf, "%c%ld%d",
-			      MAX_ROBOT_pack, key, max_robots);
 		break;
 
 	    case 'M':				/* Send a message to server. */
@@ -442,12 +427,12 @@ static bool Process_commands(sockbuf_t *ibuf,
 		    conpar->team = TEAM_NOT_SET;
 		    printf("Team set to unspecified\n");
 		}
-		else if (linebuf[1] != '\0') {
+		else if (linebuf[1] != '\0')
 		    conpar->team = TEAM_NOT_SET;
-		}
+
 		Packet_printf(ibuf, "%c%s%s%s%d", ENTER_QUEUE_pack,
 			      conpar->nick_name, conpar->disp_name,
-			      hostname, conpar->team);
+			      conpar->host_name, conpar->team);
 		time(&qsent);
 		break;
 
@@ -471,19 +456,16 @@ static bool Process_commands(sockbuf_t *ibuf,
 		printf("Enter team: ");
 		fflush(stdout);
 		if (!getline(linebuf, MAX_LINE, stdin)
-		    || (len = strlen(linebuf)) == 0) {
+		    || (len = strlen(linebuf)) == 0)
 		    printf("Nothing changed.\n");
-		}
 		else {
 		    int newteam;
-		    if (sscanf(linebuf, " %d", &newteam) != 1) {
+		    if (sscanf(linebuf, " %d", &newteam) != 1)
 			printf("Invalid team specification: %s.\n", linebuf);
-		    }
 		    else if (newteam >= 0 && newteam <= 9) {
 			conpar->team = newteam;
 			printf("Team set to %d\n", conpar->team);
-		    }
-		    else {
+		    } else {
 			conpar->team = TEAM_NOT_SET;
 			printf("Team set to unspecified\n");
 		    }
@@ -510,9 +492,8 @@ static bool Process_commands(sockbuf_t *ibuf,
 	for (i = 0; i <= retries; i++) {
 	    if (i > 0) {
 		sock_set_timeout(&ibuf->sock, 1, 0);
-		if (sock_readable(&ibuf->sock)) {
+		if (sock_readable(&ibuf->sock))
 		    break;
-		}
 	    }
 	    if (sock_write(&ibuf->sock, ibuf->buf, ibuf->len) != ibuf->len) {
 		error("Couldn't send request to server.");
@@ -550,9 +531,8 @@ static bool Process_commands(sockbuf_t *ibuf,
 		switch (reply_to & 0xFF) {
 
 		case OPTION_LIST_pack:
-		    while (Packet_scanf(ibuf, "%S", linebuf) > 0) {
+		    while (Packet_scanf(ibuf, "%S", linebuf) > 0)
 			printf("%s\n", linebuf);
-		    }
 		    break;
 
 		case REPORT_STATUS_pack:
@@ -609,11 +589,11 @@ static bool Process_commands(sockbuf_t *ibuf,
 			Sockbuf_clear(ibuf);
 			Packet_printf(ibuf, "%u%s%hu",
 				      VERSION2MAGIC(conpar->server_version),
-				      conpar->real_name,
+				      conpar->user_name,
 				      sock_get_port(&ibuf->sock));
 			Packet_printf(ibuf, "%c%s%s%s%d", ENTER_QUEUE_pack,
 				      conpar->nick_name, conpar->disp_name,
-				      hostname, conpar->team);
+				      conpar->host_name, conpar->team);
 			if (sock_write(&ibuf->sock, ibuf->buf, ibuf->len)
 			    != ibuf->len) {
 			    error("Couldn't send request to server.");
@@ -629,7 +609,7 @@ static bool Process_commands(sockbuf_t *ibuf,
 		    if (Packet_scanf(ibuf, "%ld", &key) <= 0)
 			warn("Incomplete credentials reply from server");
 		    else {
-			has_credentials++;
+			has_credentials = true;
 			cmd_credentials = c;
 			continue;
 		    }
@@ -679,7 +659,8 @@ static bool Process_commands(sockbuf_t *ibuf,
 		warn("Requested operation is undefined, says the server");
 		break;
 	    default:
-		warn("Server answers with unknown error status '%02x'", status);
+		warn("Server answers with unknown error status '%02x'",
+		     status);
 		break;
 	    }
 
@@ -755,16 +736,17 @@ int Contact_servers(int count, char **servers,
 		    int auto_shutdown, char *shutdown_reason,
 		    int find_max, int *num_found,
 		    char **server_addresses, char **server_names,
+		    unsigned *server_versions,
 		    Connect_param_t *conpar)
 {
     int			connected = false;
     const int		max_retries = 2;
-    int			i;
+    int			i, ret;
     int			status;
     sock_t		sock;
     int			retries;
     int			contacted;
-    int			compat_mode = 0 /* kps - had not default value */, ret;
+    bool		compat_mode = false;
     sockbuf_t		sbuf;			/* contact buffer */
 
 
@@ -780,13 +762,14 @@ int Contact_servers(int count, char **servers,
     if (!count) {
 	retries = 0;
 	contacted = 0;
-	compat_mode = 0;
+	compat_mode = false;
 	do {
 	    Sockbuf_clear(&sbuf);
-	    Packet_printf(&sbuf, "%u%s%hu%c", MAGIC, conpar->real_name,
+	    Packet_printf(&sbuf, "%u%s%hu%c", MAGIC, conpar->user_name,
 			  sock_get_port(&sbuf.sock), CONTACT_pack);
+	    assert(sbuf.len >= 0);
 	    if (Query_all(&sbuf.sock, conpar->contact_port,
-			  sbuf.buf, sbuf.len) == -1) {
+			  sbuf.buf, (size_t)sbuf.len) == -1) {
 		error("Couldn't send contact requests");
 		exit(1);
 	    }
@@ -813,6 +796,8 @@ int Contact_servers(int count, char **servers,
 				    conpar->server_addr,
 				    MAX_HOST_LEN);
 			}
+			if (server_versions)
+			    server_versions[count] = conpar->server_version;
 			count++;
 		    }
 		    if (num_found)
@@ -823,9 +808,8 @@ int Contact_servers(int count, char **servers,
 						  auto_shutdown,
 						  shutdown_reason,
 						  conpar);
-		    if (connected != 0) {
+		    if (connected)
 			break;
-		    }
 		}
 	    }
 	} while (!contacted && retries++ < max_retries);
@@ -835,18 +819,20 @@ int Contact_servers(int count, char **servers,
 	    retries = 0;
 	    contacted = 0;
 	    do {
-	      IFWINDOWS( Progress("Contacting server %s", servers[i]) );
+		printf("Contacting server %s.\n", servers[i]);
+		IFWINDOWS( Progress("Contacting server %s", servers[i]) );
 		Sockbuf_clear(&sbuf);
 		Packet_printf(&sbuf, "%u%s%hu%c",
 			      compat_mode ? COMPATIBILITY_MAGIC : MAGIC,
-			      conpar->real_name, sock_get_port(&sbuf.sock),
+			      conpar->user_name, sock_get_port(&sbuf.sock),
 			      CONTACT_pack);
 		if (sock_send_dest(&sbuf.sock, servers[i],
 			      conpar->contact_port,
 			      sbuf.buf, sbuf.len) == -1) {
 		    if (sbuf.sock.error.call == SOCK_CALL_GETHOSTBYNAME) {
-			printf("Can't find %s\n", servers[i]);
-			IFWINDOWS( Progress("Can't find %s", servers[i]) );
+			printf("Can't find the server '%s'.\n", servers[i]);
+			IFWINDOWS( Progress("Can't find the server '%s'.",
+					    servers[i]) );
 			break;
 		    }
 		    error("Can't contact %s on port %d",
@@ -857,10 +843,10 @@ int Contact_servers(int count, char **servers,
 		    IFWINDOWS( Progress("Retrying %s...", servers[i]) );
 		}
 		ret = Get_contact_message(&sbuf, servers[i], conpar);
-		if (ret == 2 && compat_mode == 0) {
+		if (ret == 2 && !compat_mode) {
 		    printf("Trying compatibility version %04x\n",
 			   MAGIC2VERSION(COMPATIBILITY_MAGIC));
-		    compat_mode = 1;
+		    compat_mode = true;
 		    retries--;	/* a bit ugly, cancels the loop ++ */
 		    continue;
 		}
@@ -871,7 +857,7 @@ int Contact_servers(int count, char **servers,
 						  auto_shutdown,
 						  shutdown_reason,
 						  conpar);
-		    if (connected != 0)
+		    if (connected)
 			break;
 		}
 	    } while (!contacted && retries++ < max_retries);

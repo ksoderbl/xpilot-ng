@@ -1,5 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,10 +20,10 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "xpclient.h"
+#include "xpclient_x11.h"
 
 char about_version[] = VERSION;
 
@@ -57,7 +59,8 @@ int DrawShadowText(Display *display, Window w, GC gc,
 		   unsigned long fg, unsigned long bg)
 {
     XFontStruct		*font = XQueryFont(display, XGContextFromGC(gc));
-    int			y, x;
+    int			y, x, tmp;
+    int                 count = 1;
     XWindowAttributes	wattr;
 
     if (str == NULL || *str == '\0')
@@ -107,7 +110,11 @@ int DrawShadowText(Display *display, Window w, GC gc,
 	    }
     } while (*str != '\0');
 
-    return y + font->descent + 1;
+    tmp = font->descent+1;
+
+    XFreeFontInfo(NULL, font, count);
+
+    return y + tmp;
 }
 
 
@@ -169,7 +176,7 @@ void Expose_about_window(void)
 			   2*ITEM_SIZE+2*BORDER,
 			   (unsigned)box_end - box_start);
 	    XSetForeground(dpy, textGC, colors[RED].pixel);
-	    Paint_item((u_byte)i, aboutWindow, textGC, 2*BORDER + ITEM_SIZE,
+	    Gui_paint_item((u_byte)i, aboutWindow, textGC, 2*BORDER + ITEM_SIZE,
 		       old_y + ITEM_TRIANGLE_SIZE);
 	    XSetForeground(dpy, textGC, colors[WHITE].pixel);
 
@@ -187,7 +194,8 @@ void Expose_about_window(void)
 		XSetForeground(dpy, textGC, colors[windowColor].pixel);
 		XFillRectangle(dpy, aboutWindow, textGC,
 			       BORDER, box_start,
-			       ABOUT_WINDOW_WIDTH, box_end - box_start);
+			       ABOUT_WINDOW_WIDTH,
+			       (unsigned)box_end - box_start);
 		XSetForeground(dpy, textGC, colors[WHITE].pixel);
 		break;
 	    }
@@ -257,7 +265,7 @@ void Expose_about_window(void)
 	"\n"
 	"This an EXPERIMENTAL version of XPilot.\n"
 	"Look for more info at http://xpilot.sourceforge.net/\n"
-	"You can report any bug you find to <ksoderbl@cc.hut.fi>.\n"
+	"You can report any bug you find to <kps@users.sourceforge.net>.\n"
 	"\n\n"
 	"Good luck as a future xpilot,\n"
 	"Bjørn Stabell, Ken Ronny Schouten, Bert Gijsbers & Dick Balaska",
@@ -277,7 +285,7 @@ static void About_create_window(void)
 				buttonWindowHeight = 2*BTN_BORDER
 				    + buttonFont->ascent + buttonFont->descent,
 				windowHeight = ABOUT_WINDOW_HEIGHT;
-    int				textWidth;
+    unsigned			textWidth;
     XSetWindowAttributes	sattr;
     unsigned long		mask;
 
@@ -302,7 +310,7 @@ static void About_create_window(void)
 			DefaultRootWindow(dpy),
 			0, 0,
 			windowWidth, windowHeight,
-			2, dispDepth,
+			2, (int)dispDepth,
 			InputOutput, visual,
 			mask, &sattr);
     XStoreName(dpy, aboutWindow, "XPilot - information");
@@ -312,8 +320,9 @@ static void About_create_window(void)
     textWidth = XTextWidth(buttonFont, "CLOSE", 5);
     about_close_b
 	= XCreateSimpleWindow(dpy, aboutWindow,
-			      BORDER, (windowHeight - BORDER
-				       - buttonWindowHeight - 4),
+			      BORDER,
+			      (int)(windowHeight - BORDER
+				    - buttonWindowHeight - 4),
 			      2*BTN_BORDER + textWidth,
 			      buttonWindowHeight,
 			      0, 0,
@@ -322,19 +331,24 @@ static void About_create_window(void)
     /*
      * Create 'buttons' in the window.
      */
-    textWidth = XTextWidth(buttonFont, "NEXT", 4);
-    about_next_b
-	= XCreateSimpleWindow(dpy, aboutWindow,
-			      windowWidth/2 - BTN_BORDER - textWidth/2,
-			      windowHeight - BORDER - buttonWindowHeight - 4,
-			      2*BTN_BORDER + textWidth, buttonWindowHeight,
-			      0, 0,
-			      colors[buttonColor].pixel);
     textWidth = XTextWidth(buttonFont, "PREV", 4);
     about_prev_b
 	= XCreateSimpleWindow(dpy, aboutWindow,
-			      windowWidth - BORDER - 2*BTN_BORDER - textWidth,
-			      windowHeight - BORDER - buttonWindowHeight - 4,
+			      (int)(windowWidth / 2
+				    - BTN_BORDER - textWidth / 2),
+			      (int)(windowHeight
+				    - BORDER - buttonWindowHeight - 4),
+			      2*BTN_BORDER + textWidth, buttonWindowHeight,
+			      0, 0,
+			      colors[buttonColor].pixel);
+
+    textWidth = XTextWidth(buttonFont, "NEXT", 4);
+    about_next_b
+	= XCreateSimpleWindow(dpy, aboutWindow,
+			      (int)(windowWidth - BORDER
+				    - 2*BTN_BORDER - textWidth),
+			      (int)(windowHeight - BORDER
+				    - buttonWindowHeight - 4),
 			      2*BTN_BORDER + textWidth, buttonWindowHeight,
 			      0, 0,
 			      colors[buttonColor].pixel);
@@ -366,7 +380,8 @@ void Expose_button_window(int color, Window w)
 	XGetWindowAttributes(dpy, w, &wattr);	/* and width */
 
 	XSetForeground(dpy, buttonGC, colors[color].pixel);
-	XFillRectangle(dpy, w, buttonGC, 0, 0, wattr.width, wattr.height);
+	XFillRectangle(dpy, w, buttonGC, 0, 0,
+		       (unsigned)wattr.width, (unsigned)wattr.height);
 	XSetForeground(dpy, buttonGC, colors[WHITE].pixel);
     }
 
@@ -375,15 +390,15 @@ void Expose_button_window(int color, Window w)
 			 BTN_BORDER, buttonFont->ascent + BTN_BORDER,
 			 "CLOSE",
 			 colors[WHITE].pixel, colors[BLACK].pixel);
-    if (w == about_next_b)
-	ShadowDrawString(dpy, w, buttonGC,
-			 BTN_BORDER, buttonFont->ascent + BTN_BORDER,
-			 "NEXT",
-			 colors[WHITE].pixel, colors[BLACK].pixel);
     if (w == about_prev_b)
 	ShadowDrawString(dpy, w, buttonGC,
 			 BTN_BORDER, buttonFont->ascent + BTN_BORDER,
 			 "PREV",
+			 colors[WHITE].pixel, colors[BLACK].pixel);
+    if (w == about_next_b)
+	ShadowDrawString(dpy, w, buttonGC,
+			 BTN_BORDER, buttonFont->ascent + BTN_BORDER,
+			 "NEXT",
 			 colors[WHITE].pixel, colors[BLACK].pixel);
 }
 
@@ -418,7 +433,7 @@ void About(Window w)
 
 int About_callback(int widget_desc, void *data, const char **str)
 {
-    (void)widget_desc; (void)data; (void)str;
+    UNUSED_PARAM(widget_desc); UNUSED_PARAM(data); UNUSED_PARAM(str);
     if (about_created == false) {
 	About_create_window();
 	about_created = true;
@@ -428,61 +443,55 @@ int About_callback(int widget_desc, void *data, const char **str)
 }
 
 /*****************************************************************************/
-	   int		keys_viewer = NO_WIDGET;
-static bool		keys_created = false;
+int		keys_viewer = NO_WIDGET;
 
 int Keys_callback(int widget_desc, void *data, const char **unused)
 {
-    (void)widget_desc; (void)data; (void)unused;
-    if (keys_created == false) {
-	unsigned	bufsize = (maxKeyDefs * 64);
-	char		*buf = calloc(bufsize, 1),
-			*end = buf,
-			*help,
-			*str;
-	int		i,
-			len,
-			maxkeylen = 0;
+    unsigned	bufsize = (num_keydefs * 64);
+    char	*buf = calloc(bufsize, 1), *end = buf, *str;
+    const char	*help;
+    int		i, len, maxkeylen = 0;
 
-	for (i = 0; i < maxKeyDefs; i++) {
-	    if ((str = XKeysymToString(keyDefs[i].keysym)) != NULL
-		&& (len = strlen(str)) > maxkeylen) {
-		maxkeylen = len;
-	    }
-	}
-	for (i = 0; i < maxKeyDefs; i++) {
-	    if (!(str = XKeysymToString(keyDefs[i].keysym))
-		|| !(help = Get_keyHelpString(keyDefs[i].key))) {
-		continue;
-	    }
-	    if ((end - buf) + (maxkeylen + strlen(help) + 4) >= bufsize) {
-		bufsize += 4096;
-		xpprintf("realloc: %d\n", bufsize);
-		if (!(buf = (char *)realloc(buf, bufsize))) {
-		    error("No memory for key list");
-		    return 0;
-		}
-	    }
-	    sprintf(end, "%-*s  %s\n", maxkeylen, str, help);
-	    end += strlen(end);
-	}
-	keys_viewer =
-	    Widget_create_viewer(buf,
-				 end - buf,
-				 2*DisplayWidth(dpy, DefaultScreen(dpy))/3,
-				 4*DisplayHeight(dpy, DefaultScreen(dpy))/5,
-				 2,
-				 "XPilot - key reference", "XPilot:keys",
-				 motdFont);
-	if (keys_viewer == NO_WIDGET) {
-	    warn("Can't create key viewer");
-	    return 0;
-	}
+    UNUSED_PARAM(widget_desc); UNUSED_PARAM(data); UNUSED_PARAM(unused);
 
-	keys_created = true;
+    for (i = 0; i < num_keydefs; i++) {
+	if ((str = XKeysymToString((KeySym)keydefs[i].keysym)) != NULL
+	    && (len = strlen(str)) > maxkeylen) {
+	    maxkeylen = len;
+	}
     }
+    for (i = 0; i < num_keydefs; i++) {
+	if (!(str = XKeysymToString((KeySym)keydefs[i].keysym))
+	    || !(help = Get_keyHelpString(keydefs[i].key)))
+	    continue;
+
+	if ((end - buf) + (maxkeylen + strlen(help) + 4) >= bufsize) {
+	    bufsize += 4096;
+	    xpprintf("realloc: %d\n", bufsize);
+	    if (!(buf = realloc(buf, bufsize))) {
+		error("No memory for key list");
+		return 0;
+	    }
+	}
+	sprintf(end, "%-*s  %s\n", maxkeylen, str, help);
+	end += strlen(end);
+    }
+    keys_viewer =
+	Widget_create_viewer(buf,
+			     end - buf,
+			     2*DisplayWidth(dpy, DefaultScreen(dpy))/3,
+			     4*DisplayHeight(dpy, DefaultScreen(dpy))/5,
+			     2,
+			     "XPilot - key reference", "XPilot:keys",
+			     motdFont);
+    if (keys_viewer == NO_WIDGET) {
+	warn("Can't create key viewer");
+	return 0;
+    }
+#if 0
     else if (keys_viewer != NO_WIDGET)
 	Widget_map(keys_viewer);
+#endif
     return 0;
 }
 
@@ -490,25 +499,26 @@ void Keys_destroy(void)
 {
     Widget_destroy(keys_viewer);
     keys_viewer = NO_WIDGET;
-    keys_created = false;
+    /*keys_created = false;*/
 }
 
 
 #define MAX_MOTD_SIZE	(30*1024)
 
 static char		*motd_buf = NULL;
-static int		motd_size;
+static size_t		motd_size;
        int		motd_viewer = NO_WIDGET;
-static int		motd_auto_popup;
+static bool		motd_auto_popup;
 
 int Motd_callback(int widget_desc, void *data, const char **str)
 {
-    (void)widget_desc; (void)data; (void)str;
-    if (motd_buf == NULL || refreshMotd) {
-	motd_auto_popup = 0;
-	Net_ask_for_motd(0, MAX_MOTD_SIZE);
-	Net_flush();
-    }
+    UNUSED_PARAM(widget_desc); UNUSED_PARAM(data); UNUSED_PARAM(str);
+
+    /* always refresh motd */
+    motd_auto_popup = false;
+    Net_ask_for_motd(0, MAX_MOTD_SIZE);
+    Net_flush();
+
     if (motd_viewer != NO_WIDGET)
 	Widget_map(motd_viewer);
     return 0;
@@ -532,22 +542,22 @@ int Handle_motd(long off, char *buf, int len, long filesize)
     if (!motd_buf) {
 	motd_size = MIN(filesize, MAX_MOTD_SIZE);
 	i = MAX(motd_size, (long)(sizeof no_motd_msg)) + 1;
-	if (!(motd_buf = (char *) malloc(i))) {
+	if (!(motd_buf = malloc((size_t)i))) {
 	    error("No memory for MOTD");
 	    return -1;
 	}
 	memset(motd_buf, ' ', motd_size);
-	for (i = 39; i < motd_size; i += 40)
+	for (i = 39; i < (int)motd_size; i += 40)
 	    motd_buf[i] = '\n';
     }
-    else if (filesize < motd_size) {
+    else if (filesize < (long)motd_size) {
 	motd_size = filesize;
 	motd_buf[motd_size] = '\0';
     }
-    if (off < motd_size && len > 0) {
-	if (off + len > motd_size)
+    if (off < (long)motd_size && len > 0) {
+	if (off + len > (long)motd_size)
 	    len = motd_size - off;
-	memcpy(motd_buf + off, buf, len);
+	memcpy(motd_buf + off, buf, (size_t)len);
     }
     else if (len == 0 && off > 0)
 	return 0;
@@ -585,7 +595,7 @@ int Handle_motd(long off, char *buf, int len, long filesize)
 int Startup_server_motd(void)
 {
     if (autoServerMotdPopup) {
-	motd_auto_popup = 1;
+	motd_auto_popup = true;
 	return Net_ask_for_motd(0, MAX_MOTD_SIZE);
     }
     return 0;

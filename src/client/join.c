@@ -1,5 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,10 +20,12 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "xpclient.h"
+/* kps - this file could be made X11 independent easily. */
+
+#include "xpclient_x11.h"
 
 char join_version[] = VERSION;
 
@@ -29,8 +33,14 @@ char join_version[] = VERSION;
 # define SCORE_UPDATE_DELAY	4
 #endif
 
-void xpilotShutdown(void);
-
+static int Handle_input(int new_input)
+{
+#ifndef _WINDOWS
+    return x_event(new_input);
+#else
+    return 0;
+#endif
+}
 
 #ifndef _WINDOWS
 static void Input_loop(void)
@@ -48,13 +58,13 @@ static void Input_loop(void)
 	error("Bad server input");
 	return;
     }
-    if (Client_input(2) == -1)
+    if (Handle_input(2) == -1)
 	return;
 
     if (Net_flush() == -1)
 	return;
 
-    if ((clientfd = Client_fd()) == -1) {
+    if ((clientfd = ConnectionNumber(dpy)) == -1) {
 	error("Bad client filedescriptor");
 	return;
     }
@@ -71,7 +81,7 @@ static void Input_loop(void)
 	if ((scoresChanged != 0 && ++scoresChanged > SCORE_UPDATE_DELAY)
 	    || result > 1) {
 	    if (scoresChanged > 2 * SCORE_UPDATE_DELAY) {
-		Client_score_table();
+		Paint_score_table();
 		tv.tv_sec = 10;
 		tv.tv_usec = 0;
 	    } else {
@@ -90,8 +100,8 @@ static void Input_loop(void)
 	}
 	if (n == 0) {
 	    if (scoresChanged > SCORE_UPDATE_DELAY) {
-		Client_score_table();
-		if (Client_input(2) == -1)
+		Paint_score_table();
+		if (Handle_input(2) == -1)
 		    return;
 		continue;
 	    }
@@ -101,7 +111,7 @@ static void Input_loop(void)
 	    }
 	}
 	if (FD_ISSET(clientfd, &rfds)) {
-	    if (Client_input(1) == -1)
+	    if (Handle_input(1) == -1)
 		return;
 
 	    if (Net_flush() == -1) {
@@ -129,15 +139,15 @@ static void Input_loop(void)
 		 * keyboard events and then we wait until the X server
 		 * has finished the drawing of our current frame.
 		 */
-		if (Client_input(1) == -1)
+		if (Handle_input(1) == -1)
 		    return;
 
 		if (Net_flush() == -1) {
 		    error("Bad net flush before sync");
 		    return;
 		}
-		Client_sync();
-		if (Client_input(1) == -1)
+		XSync(dpy, False);
+		if (Handle_input(1) == -1)
 		    return;
 	    }
 	}
@@ -145,7 +155,8 @@ static void Input_loop(void)
 }
 #endif	/* _WINDOWS */
 
-void xpilotShutdown()
+/* MFC client needs this to be global */
+void xpilotShutdown(void)
 {
     Net_cleanup();
     Client_cleanup();
@@ -164,8 +175,8 @@ static void sigcatch(int signum)
     exit(1);
 }
 
-int Join(char *server_addr, char *server_name, int port, char *real,
-	 char *nick, int my_team, char *display, unsigned server_version)
+
+int Join(Connect_param_t *conpar)
 {
     signal(SIGINT, sigcatch);
     signal(SIGTERM, sigcatch);
@@ -176,16 +187,19 @@ int Join(char *server_addr, char *server_name, int port, char *real,
 
     IFWINDOWS( received_self = FALSE );
     IFWINDOWS( Progress("Client_init") );
-    if (Client_init(server_name, server_version) == -1)
+    if (Client_init(conpar->server_name, conpar->server_version) == -1)
 	return -1;
 
-    IFWINDOWS( Progress("Net_init %s", server_addr) );
-    if (Net_init(server_addr, port) == -1) {
+    IFWINDOWS( Progress("Net_init %s", conpar->server_addr) );
+    if (Net_init(conpar->server_addr, conpar->login_port) == -1) {
 	Client_cleanup();
 	return -1;
     }
-    IFWINDOWS( Progress("Net_verify '%s'= '%s'", nick, real) );
-    if (Net_verify(real, nick, display, my_team) == -1) {
+    IFWINDOWS( Progress("Net_verify '%s'= '%s'",
+			conpar->nick_name, conpar->user_name) );
+    if (Net_verify(conpar->user_name,
+		   conpar->nick_name,
+		   conpar->disp_name) == -1) {
 	Net_cleanup();
 	Client_cleanup();
 	return -1;

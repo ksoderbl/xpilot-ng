@@ -1,5 +1,7 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,7 +20,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpserver.h"
@@ -26,22 +28,21 @@
 char ship_version[] = VERSION;
 
 
-
 /******************************
  * Functions for ship movement.
  */
 
-void Thrust(player *pl)
+void Thrust(player_t *pl)
 {
-    const int		min_dir = (int)(pl->dir + RES/2 - RES*0.2 - 1);
-    const int		max_dir = (int)(pl->dir + RES/2 + RES*0.2 + 1);
-    const double	max_speed = 1 + (pl->power * 0.14);
-    const double	max_life = 3 + pl->power * 0.35;
-    clpos		engine = Ship_get_engine_clpos(pl->ship, pl->dir);
-    clpos		pos;
-    int			afterburners;
-    double		tot_sparks = (pl->power * 0.15 + 2.5) * timeStep;
-    double		alt_sparks;
+    const int min_dir = (int)(pl->dir + RES/2 - RES*0.2 - 1);
+    const int max_dir = (int)(pl->dir + RES/2 + RES*0.2 + 1);
+    const double max_speed = 1 + (pl->power * 0.14);
+    const double max_life = 3 + pl->power * 0.35;
+    clpos_t engine = Ship_get_engine_clpos(pl->ship, pl->dir);
+    clpos_t pos;
+    int afterburners;
+    double tot_sparks = (pl->power * 0.15 + 2.5) * timeStep;
+    double alt_sparks;
 
     pos.cx = pl->pos.cx + engine.cx;
     pos.cy = pl->pos.cy + engine.cy;
@@ -55,40 +56,38 @@ void Thrust(player *pl)
 
     /* floor(tot_sparks + rfrac()) randomly rounds up or down to an integer,
      * so that the expectation value of the result is tot_sparks */
-    Make_debris(
-	/* pos.x, pos.y   */ pos,
-	/* vel.x, vel.y   */ pl->vel,
-	/* owner id       */ pl->id,
-	/* owner team	  */ pl->team,
-	/* kind           */ OBJ_SPARK,
-	/* mass           */ THRUST_MASS,
-	/* status         */ GRAVITY | OWNERIMMUNE,
-	/* color          */ RED,
-	/* radius         */ 8,
-	/* num debris     */ (tot_sparks-alt_sparks) + rfrac(),
-	/* min,max dir    */ min_dir, max_dir,
-	/* min,max speed  */ 1.0, max_speed,
-	/* min,max life   */ 3, max_life
-	);
+    Make_debris(pl->world,
+		pos,
+		pl->vel,
+		pl->id,
+		pl->team,
+		OBJ_SPARK,
+		THRUST_MASS,
+		GRAVITY | OWNERIMMUNE,
+		RED,
+		8,
+		(int)((tot_sparks-alt_sparks) + rfrac()),
+		min_dir, max_dir,
+		1.0, max_speed,
+		3.0, max_life);
 
-    Make_debris(
-	/* pos.x, pos.y   */ pos,
-	/* vel.x, vel.y   */ pl->vel,
-	/* owner id       */ pl->id,
-	/* owner team	  */ pl->team,
-	/* kind           */ OBJ_SPARK,
-	/* mass           */ THRUST_MASS * ALT_SPARK_MASS_FACT,
-	/* status         */ GRAVITY | OWNERIMMUNE,
-	/* color          */ BLUE,
-	/* radius         */ 8,
-	/* num debris     */ alt_sparks + rfrac(),
-	/* min,max dir    */ min_dir, max_dir,
-	/* min,max speed  */ 1.0, max_speed,
-	/* min,max life   */ 3, max_life
-	);
+    Make_debris(pl->world,
+		pos,
+		pl->vel,
+		pl->id,
+		pl->team,
+		OBJ_SPARK,
+		THRUST_MASS * ALT_SPARK_MASS_FACT,
+		GRAVITY | OWNERIMMUNE,
+		BLUE,
+		8,
+		(int)(alt_sparks + rfrac()),
+		min_dir, max_dir,
+		1.0, max_speed,
+		3.0, max_life);
 }
 
-void Record_shove(player *pl, player *pusher, long shove_time)
+void Record_shove(player_t *pl, player_t *pusher, long shove_time)
 {
     shove_t		*shove = &pl->shove_record[pl->shove_next];
 
@@ -104,7 +103,7 @@ void Record_shove(player *pl, player *pusher, long shove_time)
  * objects remain stuck together (same velocity and direction.
  * Use this function if one of the objects will die in the
  * collision. */
-void Delta_mv(object *ship, object *obj)
+void Delta_mv(object_t *ship, object_t *obj)
 {
     double	vx, vy, m;
 
@@ -114,8 +113,8 @@ void Delta_mv(object *ship, object *obj)
     if (ship->type == OBJ_PLAYER
 	&& obj->id != NO_ID
 	&& BIT(obj->status, COLLISIONSHOVE)) {
-	player *pl = (player *)ship;
-	player *pusher = Player_by_id(obj->id);
+	player_t *pl = (player_t *)ship;
+	player_t *pusher = Player_by_id(obj->id);
 	if (pusher != pl)
 	    Record_shove(pl, pusher, frame_loops);
     }
@@ -129,7 +128,7 @@ void Delta_mv(object *ship, object *obj)
 /* And now for a completely elastic collision. Ie. the objects
  * will bounce off of eachother. Use this function if both
  * objects stay alive after the collision. */
-void Delta_mv_elastic(object *obj1, object *obj2)
+void Delta_mv_elastic(object_t *obj1, object_t *obj2)
 {
     double	m1 = (double)obj1->mass,
 		m2 = (double)obj2->mass,
@@ -150,15 +149,15 @@ void Delta_mv_elastic(object *obj1, object *obj2)
     if (obj1->type == OBJ_PLAYER
 	&& obj2->id != NO_ID
 	&& BIT(obj2->status, COLLISIONSHOVE)) {
-	player *pl = (player *)obj1;
-	player *pusher = Player_by_id(obj2->id);
+	player_t *pl = (player_t *)obj1;
+	player_t *pusher = Player_by_id(obj2->id);
 	if (pusher != pl)
 	    Record_shove(pl, pusher, frame_loops);
     }
 }
 
 
-void Obj_repel(object *obj1, object *obj2, int repel_dist)
+void Obj_repel(object_t *obj1, object_t *obj2, int repel_dist)
 {
     double		xd, yd,
 			force, dm,
@@ -175,7 +174,7 @@ void Obj_repel(object *obj1, object *obj2, int repel_dist)
 
     force = MIN(force, 10);
 
-    obj_theta = (int)findDir(xd, yd);
+    obj_theta = findDir(xd, yd);
 
     dm = obj1->mass / obj2->mass;
     dvx2 = tcos(obj_theta) * force * dm;
@@ -185,15 +184,15 @@ void Obj_repel(object *obj1, object *obj2, int repel_dist)
     dvy1 = -(tsin(obj_theta) * force / dm);
 
     if (obj1->type == OBJ_PLAYER && obj2->id != NO_ID) {
-	player *pl = (player *)obj1;
-	player *pusher = Player_by_id(obj2->id);
+	player_t *pl = (player_t *)obj1;
+	player_t *pusher = Player_by_id(obj2->id);
 	if (pusher != pl)
 	    Record_shove(pl, pusher, frame_loops);
     }
 
     if (obj2->type == OBJ_PLAYER && obj1->id != NO_ID) {
-	player *pl = (player *)obj2;
-	player *pusher = Player_by_id(obj1->id);
+	player_t *pl = (player_t *)obj2;
+	player_t *pusher = Player_by_id(obj1->id);
 	if (pusher != pl)
 	    Record_shove(pl, pusher, frame_loops);
     }
@@ -210,11 +209,11 @@ void Obj_repel(object *obj1, object *obj2, int repel_dist)
  * Add fuel to fighter's tanks.
  * Maybe use more than one of tank to store the fuel.
  */
-void Add_fuel(pl_fuel_t *ft, long fuel)
+void Add_fuel(pl_fuel_t *ft, double fuel)
 {
     if (ft->sum + fuel > ft->max)
 	fuel = ft->max - ft->sum;
-    else if (ft->sum + fuel < 0)
+    else if (ft->sum + fuel < 0.0)
 	fuel = -ft->sum;
     ft->sum += fuel;
     ft->tank[ft->current] += fuel;
@@ -229,25 +228,25 @@ void Update_tanks(pl_fuel_t *ft)
 {
     if (ft->num_tanks) {
 	int  t, check;
-	long low_level;
-	long fuel;
-	long *f;
+	double low_level;
+	double fuel;
+	double *f;
 	double frame_refuel = REFUEL_RATE * timeStep;
 
 	/* Set low_level to minimum fuel in each tank */
 	low_level = ft->sum / (ft->num_tanks + 1) - 1;
-	if (low_level < 0)
-	    low_level = 0;
+	if (low_level < 0.0)
+	    low_level = 0.0;
 	if (TANK_REFILL_LIMIT < low_level)
 	    low_level = TANK_REFILL_LIMIT;
 
 	t = ft->num_tanks;
-	check = MAX_TANKS<<2;
+	check = MAX_TANKS << 2;
 	fuel = 0;
 	f = ft->tank + t;
 
-	while (t>=0 && check--) {
-	    long m = TANK_CAP(t);
+	while (t >= 0 && check--) {
+	    double m = TANK_CAP(t);
 
 	    /* Add the previous over/underflow and do a new cut */
 	    *f += fuel;
@@ -312,10 +311,11 @@ void Update_tanks(pl_fuel_t *ft)
 /*
  * Use current tank as dummy target for heat seeking missles.
  */
-void Tank_handle_detach(player *pl)
+void Tank_handle_detach(player_t *pl)
 {
-    player		*dummy;
-    int			i, ct;
+    world_t *world = pl->world;
+    player_t *tank;
+    int i, ct;
 
     if (BIT(pl->used, HAS_PHASING_DEVICE))
 	return;
@@ -323,77 +323,79 @@ void Tank_handle_detach(player *pl)
     /* Return, if no more players or no tanks */
     if (pl->fuel.num_tanks == 0
 	|| NumPseudoPlayers == MAX_PSEUDO_PLAYERS
-	|| peek_ID() == 0) {
+	|| peek_ID() == 0)
 	return;
-    }
 
     /* If current tank is main, use another one */
     if ((ct = pl->fuel.current) == 0)
 	ct = pl->fuel.num_tanks;
 
     Update_tanks(&(pl->fuel));
+
     /* Fork the current player */
-    dummy               = Players(NumPlayers);
+    tank = Players(NumPlayers);
+
     /*
      * MWAAH: this was ... naieve at least:
-     * *dummy              = *pl;
+     * *tank = *pl;
      * Player structures contain pointers to dynamic memory...
      */
 
-    Init_player(NumPlayers, (allowShipShapes)
-			    ? Parse_shape_str(tankShipShape)
-			    : NULL);
+    Init_player(world, NumPlayers,
+		options.allowShipShapes
+		? Parse_shape_str(options.tankShipShape) : NULL);
+
     /* Released tanks don't have tanks... */
-    while (dummy->fuel.num_tanks > 0)
-	Player_remove_tank(dummy, dummy->fuel.num_tanks);
+    while (tank->fuel.num_tanks > 0)
+	Player_remove_tank(tank, tank->fuel.num_tanks);
 
-    SET_BIT(dummy->type_ext, OBJ_EXT_TANK);
-    Player_position_init_clicks(dummy, pl->pos.cx, pl->pos.cy);
-    dummy->vel		= pl->vel;
-    dummy->acc		= pl->acc;
-    dummy->dir		= pl->dir;
-    dummy->turnspeed	= pl->turnspeed;
-    dummy->velocity	= pl->velocity;
-    dummy->float_dir	= pl->float_dir;
-    dummy->turnresistance = pl->turnresistance;
-    dummy->turnvel	= pl->turnvel;
-    dummy->oldturnvel	= pl->oldturnvel;
-    dummy->turnacc	= pl->turnacc;
-    dummy->power	= pl->power;
+    SET_BIT(tank->type_ext, OBJ_EXT_TANK);
+    Player_position_init_clpos(tank, pl->pos);
+    tank->vel = pl->vel;
+    tank->acc = pl->acc;
+    tank->dir = pl->dir;
+    tank->turnspeed = pl->turnspeed;
+    tank->velocity = pl->velocity;
+    Player_set_float_dir(tank, pl->float_dir);
+    tank->turnresistance = pl->turnresistance;
+    tank->turnvel = pl->turnvel;
+    tank->oldturnvel = pl->oldturnvel;
+    tank->turnacc = pl->turnacc;
+    tank->power = pl->power;
 
-    strlcpy(dummy->name, pl->name, MAX_CHARS);
-    strlcat(dummy->name, "'s tank", MAX_CHARS);
-    strlcpy(dummy->realname, tankRealName, MAX_CHARS);
-    strlcpy(dummy->hostname, tankHostName, MAX_CHARS);
-    dummy->home_base	= pl->home_base;
-    dummy->team		= pl->team;
-    dummy->pseudo_team	= pl->pseudo_team;
-    dummy->alliance	= ALLIANCE_NOT_SET;
-    dummy->invite	= NO_ID;
-    dummy->mychar       = 'T';
-    dummy->score	= pl->score - tankScoreDecrement;
-    updateScores	= true;
+    strlcpy(tank->name, pl->name, MAX_CHARS);
+    strlcat(tank->name, "'s tank", MAX_CHARS);
+    strlcpy(tank->username, options.tankUserName, MAX_CHARS);
+    strlcpy(tank->hostname, options.tankHostName, MAX_CHARS);
+    tank->home_base = pl->home_base;
+    tank->team = pl->team;
+    tank->pseudo_team = pl->pseudo_team;
+    tank->alliance = ALLIANCE_NOT_SET;
+    tank->invite = NO_ID;
+    tank->mychar = 'T';
+    tank->score = pl->score - options.tankScoreDecrement;
 
     /* Fuel is the one from chosen tank */
-    dummy->fuel.sum     =
-    dummy->fuel.tank[0] = pl->fuel.tank[ct];
-    dummy->fuel.max     = TANK_CAP(ct);
-    dummy->fuel.current = 0;
-    dummy->fuel.num_tanks = 0;
+    tank->fuel.sum =
+    tank->fuel.tank[0] = pl->fuel.tank[ct];
+    tank->fuel.max = TANK_CAP(ct);
+    tank->fuel.current = 0;
+    tank->fuel.num_tanks = 0;
 
     /* Mass is only tank + fuel */
-    dummy->mass = (dummy->emptymass = ShipMass) + FUEL_MASS(dummy->fuel.sum);
-    dummy->power *= TANK_THRUST_FACT;
+    tank->emptymass = options.shipMass;
+    tank->mass = tank->emptymass + FUEL_MASS(tank->fuel.sum);
+    tank->power *= TANK_THRUST_FACT;
 
     /* Reset visibility. */
-    dummy->updateVisibility = 1;
+    tank->updateVisibility = 1;
     for (i = 0; i <= NumPlayers; i++) {
-	dummy->visibility[i].lastChange = 0;
+	tank->visibility[i].lastChange = 0;
 	Players(i)->visibility[NumPlayers].lastChange = 0;
     }
 
     /* Remember whose tank this is */
-    dummy->lock.pl_id = pl->id;
+    tank->lock.pl_id = pl->id;
 
     request_ID();
     NumPlayers++;
@@ -402,77 +404,78 @@ void Tank_handle_detach(player *pl)
 
     /* Possibly join alliance. */
     if (pl->alliance != ALLIANCE_NOT_SET)
-	Player_join_alliance(dummy, pl);
+	Player_join_alliance(tank, pl);
 
     sound_play_sensors(pl->pos, TANK_DETACH_SOUND);
 
     /* The tank uses shield and thrust */
-    dummy->status = (DEF_BITS & ~KILL_BITS) | PLAYING | GRAVITY | THRUSTING;
-    dummy->have = DEF_HAVE;
-    dummy->used = (DEF_USED & ~USED_KILL & pl->have) | HAS_SHIELD;
-    if (playerShielding == 0) {
-	dummy->shield_time = 30 * 12;
-	dummy->have |= HAS_SHIELD;
+    tank->status = (DEF_BITS & ~KILL_BITS) | PLAYING | GRAVITY | THRUSTING;
+    tank->have = DEF_HAVE;
+    tank->used = (DEF_USED & ~USED_KILL & pl->have) | HAS_SHIELD;
+
+    if (!options.playerShielding) {
+	tank->shield_time = 30 * 12;
+	tank->have |= HAS_SHIELD;
     }
 
     /* Maybe heat-seekers to retarget? */
     for (i = 0; i < NumObjs; i++) {
-	if (Obj[i]->type == OBJ_HEAT_SHOT
-	    && Obj[i]->info > 0
-	    && Player_by_id(Obj[i]->info) == pl) {
-	    Obj[i]->info = NumPlayers - 1;
-	}
+	object_t *obj = Obj[i];
+
+	if (obj->type == OBJ_HEAT_SHOT
+	    && obj->info > 0
+	    && Player_by_id(obj->info) == pl)
+	    obj->info = NumPlayers - 1; 	/* kps - is this right ? */
     }
 
     /* Remove tank, fuel and mass from myself */
     Player_remove_tank(pl, ct);
 
     for (i = 0; i < NumPlayers - 1; i++) {
-	player *pl_i = Players(i);
+	player_t *pl_i = Players(i);
 
 	if (pl_i->conn != NULL) {
-	    Send_player(pl_i->conn, dummy->id);
-	    Send_score(pl_i->conn, dummy->id,
-		       dummy->score, dummy->life,
-		       dummy->mychar, dummy->alliance);
+	    Send_player(pl_i->conn, tank->id);
+	    Send_score(pl_i->conn, tank->id,
+		       tank->score, (int)tank->life,
+		       tank->mychar, tank->alliance);
 	}
     }
 
-    for (i = 0; i < NumObservers - 1; i++) {
-	Send_player(Players(i + observerStart)->conn, dummy->id);
-	Send_score(Players(i + observerStart)->conn, dummy->id, dummy->score,
-		   dummy->life, dummy->mychar, dummy->alliance);
+    for (i = 0; i < NumSpectators - 1; i++) {
+	player_t *pl_i = Players(i + spectatorStart);
+
+	Send_player(pl_i->conn, tank->id);
+	Send_score(pl_i->conn, tank->id, tank->score,
+		   (int)tank->life, tank->mychar, tank->alliance);
     }
 }
 
 
-void Make_wreckage(
-    /* pos              */ clpos  pos,
-    /* vel              */ vector vel,
-    /* owner id         */ int    id,
-    /* owner team	*/ int    team,
-    /* min,max mass     */ double min_mass,     double max_mass,
-    /* total mass       */ double total_mass,
-    /* status           */ long   status,
-    /* color            */ int    color,
-    /* max wreckage     */ int    max_wreckage,
-    /* min,max dir      */ int    min_dir,      int    max_dir,
-    /* min,max speed    */ double min_speed,    double max_speed,
-    /* min,max life     */ double min_life,     double max_life
-)
+void Make_wreckage(world_t *world,
+		   clpos_t  pos,
+		   vector_t vel,
+		   int      owner_id,
+		   int      owner_team,
+		   double   min_mass,     double max_mass,
+		   double   total_mass,
+		   long     status,
+		   int      color,
+		   int      max_wreckage,
+		   int      min_dir,      int    max_dir,
+		   double   min_speed,    double max_speed,
+		   double   min_life,     double max_life)
 {
-    wireobject		*wreckage;
-    int			i, size;
-    double		life;
-    modifiers		mods;
-    double		mass, sum_mass = 0.0;
+    wireobject_t *wreckage;
+    int i, size;
+    double life, mass, sum_mass = 0.0;
+    modifiers_t mods;
 
-    if (!useWreckage)
+    if (!options.useWreckage)
 	return;
 
-    pos.cx = WRAP_XCLICK(pos.cx);
-    pos.cy = WRAP_YCLICK(pos.cy);
-    if (!INSIDE_MAP(pos.cx, pos.cy))
+    pos = World_wrap_clpos(world, pos);
+    if (!World_contains_clpos(world, pos))
 	return;
 
     if (max_life < min_life)
@@ -505,12 +508,12 @@ void Make_wreckage(
 	    break;
 
 	wreckage->color = color;
-	wreckage->id = id;
-	wreckage->team = team;
+	wreckage->id = owner_id;
+	wreckage->team = owner_team;
 	wreckage->type = OBJ_WRECKAGE;
 
 	/* Position */
-	Object_position_init_clicks(OBJ_PTR(wreckage), pos.cx, pos.cy);
+	Object_position_init_clpos(world, OBJ_PTR(wreckage), pos);
 
 	/* Direction */
 	dir = MOD2(min_dir + (int)(rfrac() * MOD2(max_dir - min_dir, RES)),
@@ -550,55 +553,52 @@ void Make_wreckage(
 	wreckage->pl_radius = radius;
 	wreckage->status = status;
 	wreckage->mods = mods;
-	Cell_add_object(OBJ_PTR(wreckage));
+	Cell_add_object(world, OBJ_PTR(wreckage));
     }
 }
 
-/* Explode a fighter */
-void Explode_fighter(player *pl)
+
+void Explode_fighter(player_t *pl)
 {
     int min_debris;
     double debris_range;
 
     sound_play_sensors(pl->pos, PLAYER_EXPLOSION_SOUND);
 
-    min_debris = (int)(1 + (pl->fuel.sum / (8.0 * FUEL_SCALE_FACT)));
+    min_debris = (int)(1 + (pl->fuel.sum / 8.0));
     debris_range = pl->mass;
     /* reduce debris since we also create wreckage objects */
     min_debris >>= 1; /* Removed *2.0 from range */
 
-    Make_debris(
-	/* pos            */ pl->pos,
-	/* vel            */ pl->vel,
-	/* owner id       */ pl->id,
-	/* owner team	  */ pl->team,
-	/* kind           */ OBJ_DEBRIS,
-	/* mass           */ 3.5,
-	/* status         */ GRAVITY,
-	/* color          */ RED,
-	/* radius         */ 8,
-	/* num debris     */ min_debris + debris_range * rfrac(),
-	/* min,max dir    */ 0, RES-1,
-	/* min,max speed  */ 20.0, 20 + (((int)(pl->mass))>>1),
-	/* min,max life   */ 5, 5 + (pl->mass * 1.5)
-	);
+    Make_debris(pl->world,
+		pl->pos,
+		pl->vel,
+		pl->id,
+		pl->team,
+		OBJ_DEBRIS,
+		3.5,
+		GRAVITY,
+		RED,
+		8,
+		(int)(min_debris + debris_range * rfrac()),
+		0, RES-1,
+		20.0, 20.0 + pl->mass * 0.5,
+		5.0, 5.0 + pl->mass * 1.5);
 
     if (!BIT(pl->status, KILLED))
 	return;
 
-    Make_wreckage(
-	/* pos.x, pos.y     */ pl->pos,
-	/* vel.x, vel.y     */ pl->vel,
-	/* owner id         */ pl->id,
-	/* owner team	    */ pl->team,
-	/* min,max mass     */ MAX(pl->mass/8.0, 0.33), pl->mass,
-	/* total mass       */ 2.0 * pl->mass,
-	/* status           */ GRAVITY,
-	/* color            */ WHITE,
-	/* max wreckage     */ 10,
-	/* min,max dir      */ 0, RES-1,
-	/* min,max speed    */ 10.0, 10 + (((int)(pl->mass))>>1),
-	/* min,max life     */ 5,5 + (pl->mass * 1.5)
-	);
-
+    Make_wreckage(pl->world,
+		  pl->pos,
+		  pl->vel,
+		  pl->id,
+		  pl->team,
+		  MAX(pl->mass/8.0, 0.33), pl->mass,
+		  2.0 * pl->mass,
+		  GRAVITY,
+		  WHITE,
+		  10,
+		  0, RES-1,
+		  10.0, 10.0 + pl->mass * 0.5,
+		  5.0, 5.0 + pl->mass * 1.5);
 }

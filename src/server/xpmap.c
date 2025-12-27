@@ -1,5 +1,9 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 2003-2004 Kristian Söderblom <kps@users.sourceforge.net>
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,22 +22,25 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpserver.h"
 
 char xpmap_version[] = VERSION;
 
+static int Compress_map(unsigned char *map, size_t size);
 
-static void Xpmap_treasure_to_polygon(int treasure_ind);
-static void Xpmap_target_to_polygon(int target_ind);
-static void Xpmap_cannon_to_polygon(int cannon_ind);
-static void Xpmap_wormhole_to_polygon(int wormhole_ind);
+static void Xpmap_treasure_to_polygon(world_t *world, int treasure_ind);
+static void Xpmap_target_to_polygon(world_t *world, int target_ind);
+static void Xpmap_cannon_to_polygon(world_t *world, int cannon_ind);
+static void Xpmap_wormhole_to_polygon(world_t *world, int wormhole_ind);
+static void Xpmap_friction_area_to_polygon(world_t *world, int fa_ind);
+
+static bool		compress_maps = true;
 
 static void Xpmap_extra_error(int line_num)
 {
-#ifndef SILENT
     static int prev_line_num, error_count;
     const int max_error = 5;
 
@@ -45,13 +52,11 @@ static void Xpmap_extra_error(int line_num)
 	else if (error_count - max_error == 1)
 	    xpprintf("And so on...\n");
     }
-#endif
 }
 
 
 static void Xpmap_missing_error(int line_num)
 {
-#ifndef SILENT
     static int prev_line_num, error_count;
     const int max_error = 5;
 
@@ -62,32 +67,428 @@ static void Xpmap_missing_error(int line_num)
 	else if (error_count - max_error == 1)
 	    xpprintf("And so on...\n");
     }
-#endif
 }
+
+
+
+/*
+ * Compress the map data using a simple Run Length Encoding algorithm.
+ * If there is more than one consecutive byte with the same type
+ * then we set the high bit of the byte and then the next byte
+ * gives the number of repetitions.
+ * This works well for most maps which have lots of series of the
+ * same map object and is simple enough to got implemented quickly.
+ */
+static int Compress_map(unsigned char *map, size_t size)
+{
+    int			i, j, k;
+
+    for (i = j = 0; i < (int)size; i++, j++) {
+	if (i + 1 < (int)size
+	    && map[i] == map[i + 1]) {
+	    for (k = 2; i + k < (int)size; k++) {
+		if (map[i] != map[i + k])
+		    break;
+		if (k == 255)
+		    break;
+	    }
+	    map[j] = (map[i] | SETUP_COMPRESSED);
+	    map[++j] = k;
+	    i += k - 1;
+	} else
+	    map[j] = map[i];
+    }
+    return j;
+}
+
+
+static void Xpmap_setup(world_t *world)
+{
+    assert(world->block);
+
+    if (options.mapData) {
+	Xpmap_grok_map_data(world);
+	Xpmap_tags_to_internal_data(world, false);
+    } else {
+	int i, j;
+	blkpos_t blk;
+	clpos_t pos;
+
+	/*
+	 * Create blocks out of polygons.
+	 */
+	for (blk.by = 0; blk.by < world->y; blk.by++)
+	    for (blk.bx = 0; blk.bx < world->x; blk.bx++)
+		World_set_block(world, blk, SPACE);
+
+	for (blk.by = 0; blk.by < world->y; blk.by++) {
+	    for (blk.bx = 0; blk.bx < world->x; blk.bx++) {
+		int num_inside = 0;
+		bool r_inside = false, u_inside = false;
+		bool l_inside = false, d_inside = false;
+
+		pos = Block_get_center_clpos(blk);
+
+		if (is_inside(pos.cx + BLOCK_CLICKS/3, pos.cy, 0, NULL) == 0) {
+		    r_inside = true;
+		    num_inside++;
+		}
+
+		if (is_inside(pos.cx, pos.cy + BLOCK_CLICKS/3, 0, NULL) == 0) {
+		    u_inside = true;
+		    num_inside++;
+		}
+
+		if (is_inside(pos.cx - BLOCK_CLICKS/3, pos.cy, 0, NULL) == 0) {
+		    l_inside = true;
+		    num_inside++;
+		}
+
+		if (is_inside(pos.cx, pos.cy - BLOCK_CLICKS/3, 0, NULL) == 0) {
+		    d_inside = true;
+		    num_inside++;
+		}
+
+		if (num_inside > 2)
+		    World_set_block(world, blk, FILLED);
+
+		if (num_inside == 2) {
+		    if (r_inside && u_inside)
+			World_set_block(world, blk, REC_RU);
+		    if (u_inside && l_inside)
+			World_set_block(world, blk, REC_LU);
+		    if (l_inside && d_inside)
+			World_set_block(world, blk, REC_LD);
+		    if (d_inside && r_inside)
+			World_set_block(world, blk, REC_RD);
+		}
+	    }
+	}
+
+	/*
+	 * Create blocks out of map objects. Note that some of these
+	 * may be in the same block, which might be an error.
+	 */
+	for (i = 0; i < world->NumFuels; i++) {
+	    fuel_t *fs = Fuels(world, i);
+
+	    blk = Clpos_to_blkpos(fs->pos);
+	    World_set_block(world, blk, FUEL);
+	}
+
+	for (i = 0; i < world->NumBases; i++) {
+	    base_t *base = Bases(world, i);
+
+	    blk = Clpos_to_blkpos(base->pos);
+	    World_set_block(world, blk, BASE);
+	}
+
+	/* find balltargets, only looks at middle point of block */
+	for (blk.by = 0; blk.by < world->y; blk.by++) {
+	    for (blk.bx = 0; blk.bx < world->x; blk.bx++) {
+		int group;
+		group_t *gp;
+		bool found;
+
+		pos = Block_get_center_clpos(blk);
+		found = false;
+
+		/* check 9 points per block for a balltarget */
+		for (j = -1; j <= 1; j++) {
+		    for (i = -1; i <= 1; i++) {
+			clpos_t pos2;
+			
+			pos2.cx = pos.cx + i * (BLOCK_CLICKS / 3);
+			pos2.cy = pos.cy + j * (BLOCK_CLICKS / 3);
+
+			group = is_inside(pos2.cx, pos2.cy, BALL_BIT, NULL);
+			if (group == NO_GROUP || group == 0)
+			    continue;
+			gp = groupptr_by_id(group);
+			if (gp == NULL)
+			    continue;
+			if (gp->type == TREASURE && gp->hitmask == NONBALL_BIT)
+			    found = true;
+		    }
+		}
+
+		if (found)
+		    World_set_block(world, blk, TREASURE);
+	    }
+	}
+
+    }
+}
+
+
+setup_t *Xpmap_init_setup(world_t *world)
+{
+    int i, x, y, team, type = -1, dir, wtype;
+    int wormhole = 0, treasure = 0, target = 0, base = 0, cannon = 0;
+    unsigned char *mapdata, *mapptr;
+    size_t size, numblocks;
+    setup_t *setup;
+
+    if (is_polygon_map)
+	Xpmap_setup(world);
+
+    numblocks = world->x * world->y;
+    if ((mapdata = malloc(numblocks)) == NULL) {
+	error("No memory for mapdata");
+	return NULL;
+    }
+    memset(mapdata, SETUP_SPACE, numblocks);
+    mapptr = mapdata;
+    errno = 0;
+    for (x = 0; x < world->x; x++) {
+	for (y = 0; y < world->y; y++, mapptr++) {
+	    type = world->block[x][y];
+	    switch (type) {
+	    case ACWISE_GRAV:
+	    case CWISE_GRAV:
+	    case POS_GRAV:
+	    case NEG_GRAV:
+	    case UP_GRAV:
+	    case DOWN_GRAV:
+	    case RIGHT_GRAV:
+	    case LEFT_GRAV:
+		if (!options.gravityVisible)
+		    type = SPACE;
+		break;
+	    case WORMHOLE:
+		if (!options.wormholeVisible)
+		    type = SPACE;
+		break;
+	    case ITEM_CONCENTRATOR:
+		if (!options.itemConcentratorVisible)
+		    type = SPACE;
+		break;
+	    case ASTEROID_CONCENTRATOR:
+		if (!options.asteroidConcentratorVisible)
+		    type = SPACE;
+		break;
+	    case FRICTION:
+		if (!options.blockFrictionVisible)
+		    type = SPACE;
+		else
+		    type = DECOR_FILLED;
+		break;
+	    default:
+		break;
+	    }
+	    switch (type) {
+	    case SPACE:		*mapptr = SETUP_SPACE; break;
+	    case FILLED:	*mapptr = SETUP_FILLED; break;
+	    case REC_RU:	*mapptr = SETUP_REC_RU; break;
+	    case REC_RD:	*mapptr = SETUP_REC_RD; break;
+	    case REC_LU:	*mapptr = SETUP_REC_LU; break;
+	    case REC_LD:	*mapptr = SETUP_REC_LD; break;
+	    case FUEL:		*mapptr = SETUP_FUEL; break;
+	    case ACWISE_GRAV:	*mapptr = SETUP_ACWISE_GRAV; break;
+	    case CWISE_GRAV:	*mapptr = SETUP_CWISE_GRAV; break;
+	    case POS_GRAV:	*mapptr = SETUP_POS_GRAV; break;
+	    case NEG_GRAV:	*mapptr = SETUP_NEG_GRAV; break;
+	    case UP_GRAV:	*mapptr = SETUP_UP_GRAV; break;
+	    case DOWN_GRAV:	*mapptr = SETUP_DOWN_GRAV; break;
+	    case RIGHT_GRAV:	*mapptr = SETUP_RIGHT_GRAV; break;
+	    case LEFT_GRAV:	*mapptr = SETUP_LEFT_GRAV; break;
+	    case ITEM_CONCENTRATOR:
+		*mapptr = SETUP_ITEM_CONCENTRATOR; break;
+
+	    case ASTEROID_CONCENTRATOR:
+		*mapptr = SETUP_ASTEROID_CONCENTRATOR; break;
+
+	    case DECOR_FILLED:	*mapptr = SETUP_DECOR_FILLED; break;
+	    case DECOR_RU:	*mapptr = SETUP_DECOR_RU; break;
+	    case DECOR_RD:	*mapptr = SETUP_DECOR_RD; break;
+	    case DECOR_LU:	*mapptr = SETUP_DECOR_LU; break;
+	    case DECOR_LD:	*mapptr = SETUP_DECOR_LD; break;
+
+	    case WORMHOLE:
+		if (wormhole >= world->NumWormholes) {
+		    /*
+		     * This can happen on an xp2 map if the block mapdata
+		     * contains more wormholes than is specified in the
+		     * xml data.
+		     */
+		    warn("Too many wormholes in block mapdata.");
+		    *mapptr = SETUP_SPACE;
+		    break;
+		}
+		wtype = world->wormholes[wormhole++].type;
+		switch (wtype) {
+		case WORM_NORMAL: *mapptr = SETUP_WORM_NORMAL; break;
+		case WORM_IN:     *mapptr = SETUP_WORM_IN; break;
+		case WORM_OUT:    *mapptr = SETUP_WORM_OUT; break;
+		default:
+		    warn("Bad wormhole (%d,%d).", x, y);
+		    *mapptr = SETUP_SPACE;
+		    break;
+		}
+		break;
+
+	    case TREASURE:
+		if (treasure >= world->NumTreasures) {
+		    warn("Too many treasures in block mapdata.");
+		    *mapptr = SETUP_SPACE;
+		    break;
+		}
+		team = world->treasures[treasure++].team;
+		if (team == TEAM_NOT_SET)
+		    team = 0;
+		*mapptr = SETUP_TREASURE + team;
+		break;
+
+	    case TARGET:
+		if (target >= world->NumTargets) {
+		    warn("Too many targets in block mapdata.");
+		    *mapptr = SETUP_SPACE;
+		    break;
+		}
+		team = world->targets[target++].team;
+		if (team == TEAM_NOT_SET)
+		    team = 0;
+		*mapptr = SETUP_TARGET + team;
+		break;
+
+	    case BASE:
+		if (base >= world->NumBases) {
+		    warn("Too many bases in block mapdata.");
+		    *mapptr = SETUP_SPACE;
+		    break;
+		}
+		team = world->bases[base].team;
+		if (team == TEAM_NOT_SET)
+		    team = 0;
+		dir = world->bases[base++].dir;
+		switch (dir) {
+		case DIR_UP:    *mapptr = SETUP_BASE_UP + team; break;
+		case DIR_RIGHT: *mapptr = SETUP_BASE_RIGHT + team; break;
+		case DIR_DOWN:  *mapptr = SETUP_BASE_DOWN + team; break;
+		case DIR_LEFT:  *mapptr = SETUP_BASE_LEFT + team; break;
+		default:
+		    warn("Bad base at (%d,%d), (dir = %d).", x, y, dir);
+		    *mapptr = SETUP_BASE_UP + team;
+		    break;
+		}
+		break;
+
+	    case CANNON:
+		if (cannon >= world->NumCannons) {
+		    warn("Too many cannons in block mapdata.");
+		    *mapptr = SETUP_SPACE;
+		    break;
+		}
+		dir = world->cannons[cannon++].dir;
+		switch (dir) {
+		case DIR_UP:	*mapptr = SETUP_CANNON_UP; break;
+		case DIR_RIGHT:	*mapptr = SETUP_CANNON_RIGHT; break;
+		case DIR_DOWN:	*mapptr = SETUP_CANNON_DOWN; break;
+		case DIR_LEFT:	*mapptr = SETUP_CANNON_LEFT; break;
+		default:
+		    warn("Bad cannon at (%d,%d), (dir = %d).", x, y, dir);
+		    *mapptr = SETUP_CANNON_UP;
+		    break;
+		}
+		break;
+
+	    case CHECK:
+		for (i = 0; i < world->NumChecks; i++) {
+		    check_t *check = Checks(world, i);
+		    blkpos_t bpos = Clpos_to_blkpos(check->pos);
+
+		    if (x != bpos.bx || y != bpos.by)
+			continue;
+		    *mapptr = SETUP_CHECK + i;
+		    break;
+		}
+		if (i >= world->NumChecks) {
+		    warn("Bad checkpoint at (%d,%d).", x, y);
+		    *mapptr = SETUP_SPACE;
+		    break;
+		}
+		break;
+
+	    default:
+		warn("Unknown map type (%d) at (%d,%d).", type, x, y);
+		*mapptr = SETUP_SPACE;
+		break;
+	    }
+	}
+    }
+    if (!compress_maps) {
+	type = SETUP_MAP_UNCOMPRESSED;
+	size = numblocks;
+    } else {
+	type = SETUP_MAP_ORDER_XY;
+	size = Compress_map(mapdata, numblocks);
+	if (size <= 0 || size > numblocks) {
+	    warn("Map compression error (%d)", size);
+	    free(mapdata);
+	    return NULL;
+	}
+	if ((mapdata = realloc(mapdata, size)) == NULL) {
+	    error("Cannot reallocate mapdata");
+	    return NULL;
+	}
+    }
+
+    if (!options.silent) {
+	if (type != SETUP_MAP_UNCOMPRESSED) {
+	    xpprintf("%s Block map compression ratio is %-4.2f%%\n",
+		     showtime(), 100.0 * size / numblocks);
+	}
+    }
+
+    if ((setup = malloc(sizeof(setup_t) + size)) == NULL) {
+	error("No memory to hold oldsetup");
+	free(mapdata);
+	return NULL;
+    }
+    memset(setup, 0, sizeof(setup_t) + size);
+    memcpy(setup->map_data, mapdata, size);
+    free(mapdata);
+    setup->setup_size = ((char *) &setup->map_data[0]
+			 - (char *) setup) + size;
+    setup->map_data_len = size;
+    setup->map_order = type;
+    setup->lives = world->rules->lives;
+    setup->mode = world->rules->mode;
+    setup->x = world->x;
+    setup->y = world->y;
+    strlcpy(setup->name, world->name, sizeof(setup->name));
+    strlcpy(setup->author, world->author, sizeof(setup->author));
+
+    return setup;
+}
+
+
 
 
 /*
  * Grok block based map data.
  *
- * Create World.block using mapData.
- * Free mapData.
+ * Create world->block using options.mapData.
+ * Free options.mapData.
  */
-void Xpmap_grok_map_data(void)
+void Xpmap_grok_map_data(world_t *world)
 {
-    int x, y, c;
-    char *s;
+    int x = -1, y = world->y - 1, c;
+    char *s = options.mapData;
+    blkpos_t blk;
 
-    x = -1;
-    y = World.y - 1;
+    if (options.mapData == NULL) {
+	warn("Map didn't have any mapData.");
+	return;
+    }
 
-    s = mapData;
     while (y >= 0) {
 
 	x++;
 
-	if (extraBorder && (x == 0 || x == World.x - 1
-	    || y == 0 || y == World.y - 1)) {
-	    if (x >= World.x) {
+	if (options.extraBorder && (x == 0 || x == world->x - 1
+	    || y == 0 || y == world->y - 1)) {
+	    if (x >= world->x) {
 		x = -1;
 		y--;
 		continue;
@@ -98,68 +499,39 @@ void Xpmap_grok_map_data(void)
 	else {
 	    c = *s;
 	    if (c == '\0' || c == EOF) {
-		if (x < World.x) {
+		if (x < world->x) {
 		    /* not enough map data on this line */
-		    Xpmap_missing_error(World.y - y);
+		    if (!options.silent)
+			Xpmap_missing_error(world->y - y);
 		    c = ' ';
 		} else
 		    c = '\n';
 	    } else {
-		if (c == '\n' && x < World.x) {
+		if (c == '\n' && x < world->x) {
 		    /* not enough map data on this line */
-		    Xpmap_missing_error(World.y - y);
+		    if (!options.silent)
+			Xpmap_missing_error(world->y - y);
 		    c = ' ';
 		} else
 		    s++;
 	    }
 	}
-	if (x >= World.x || c == '\n') {
+	if (x >= world->x || c == '\n') {
 	    y--; x = -1;
 	    if (c != '\n') {			/* Get rest of line */
-		Xpmap_extra_error(World.y - y);
+		if (!options.silent)
+		    Xpmap_extra_error(world->y - y);
 		while (c != '\n' && c != EOF)
 		    c = *s++;
 	    }
 	    continue;
 	}
-
-	World.block[x][y] = c;
+	blk.bx = x;
+	blk.by = y;
+	World_set_block(world, blk, c);
     }
 
-    free(mapData);
-    mapData = NULL;
-}
-
-
-void Xpmap_allocate_checks(void)
-{
-    int x, y;
-
-    if (!BIT(World.rules->mode, TIMING))
-	return;
-
-    /* count the checks */
-    for (y = 0; y < World.y; y++) {
-	for (x = 0; x < World.x; x++) {
-	    switch (World.block[x][y]) {
-	    case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
-	    case 'G': case 'H': case 'I': case 'J': case 'K': case 'L':
-	    case 'M': case 'N': case 'O': case 'P': case 'Q': case 'R':
-	    case 'S': case 'T': case 'U': case 'V': case 'W': case 'X':
-	    case 'Y': case 'Z':
-		World.NumChecks++;
-		break;
-	    default:
-		break;
-	    }
-	}
-    }
-
-    if ((World.checks = (check_t *)
-	 malloc(OLD_MAX_CHECKS * sizeof(check_t))) == NULL) {
-	error("Out of memory - checks");
-	exit(-1);
-    }
+    XFREE(options.mapData);
 }
 
 
@@ -167,26 +539,26 @@ void Xpmap_allocate_checks(void)
  * Determining which team these belong to is done later,
  * in Find_closest_team().
  */
-static void Xpmap_place_cannon(int x, int y, int dir, bool create)
+static void Xpmap_place_cannon(world_t *world, blkpos_t blk, int dir, bool create)
 {
-    clpos pos;
+    clpos_t pos;
 
     switch (dir) {
     case DIR_UP:
-	pos.cx = (x + 0.5) * BLOCK_CLICKS;
-	pos.cy = (y + 0.333) * BLOCK_CLICKS;
+	pos.cx = (blk.bx + 0.5) * BLOCK_CLICKS;
+	pos.cy = (blk.by + 0.333) * BLOCK_CLICKS;
 	break;
     case DIR_LEFT:
-	pos.cx = (x + 0.667) * BLOCK_CLICKS;
-	pos.cy = (y + 0.5) * BLOCK_CLICKS;
+	pos.cx = (blk.bx + 0.667) * BLOCK_CLICKS;
+	pos.cy = (blk.by + 0.5) * BLOCK_CLICKS;
 	break;
     case DIR_RIGHT:
-	pos.cx = (x + 0.333) * BLOCK_CLICKS;
-	pos.cy = (y + 0.5) * BLOCK_CLICKS;
+	pos.cx = (blk.bx + 0.333) * BLOCK_CLICKS;
+	pos.cy = (blk.by + 0.5) * BLOCK_CLICKS;
 	break;
     case DIR_DOWN:
-	pos.cx = (x + 0.5) * BLOCK_CLICKS;
-	pos.cy = (y + 0.667) * BLOCK_CLICKS;
+	pos.cx = (blk.bx + 0.5) * BLOCK_CLICKS;
+	pos.cy = (blk.by + 0.667) * BLOCK_CLICKS;
 	break;
     default:
  	/* can't happen */
@@ -194,9 +566,9 @@ static void Xpmap_place_cannon(int x, int y, int dir, bool create)
 	break;
     }
 
-    World.block[x][y] = CANNON;
+    World_set_block(world, blk, CANNON);
     if (create)
-	Map_place_cannon(pos, dir, TEAM_NOT_SET);
+	World_place_cannon(world, pos, dir, TEAM_NOT_SET);
 }
 
 /*
@@ -205,226 +577,240 @@ static void Xpmap_place_cannon(int x, int y, int dir, bool create)
  * is fixed in Find_base_dir() when the gravity has
  * been computed.
  */
-static clpos Xpmap_get_clpos(int x, int y)
+static void Xpmap_place_base(world_t *world, blkpos_t blk, int team, bool create)
 {
-    clpos pos;
-
-    pos.cx = BLOCK_CENTER(x);
-    pos.cy = BLOCK_CENTER(y);
-
-    return pos;
-}
-
-static void Xpmap_place_base(int x, int y, int team, bool create)
-{
-    World.block[x][y] = BASE;
+    World_set_block(world, blk, BASE);
     if (create)
-	Map_place_base(Xpmap_get_clpos(x, y), DIR_UP, team);
+	World_place_base(world, Block_get_center_clpos(blk), DIR_UP, team);
 }
 
-static void Xpmap_place_fuel(int x, int y, bool create)
+static void Xpmap_place_fuel(world_t *world, blkpos_t blk, bool create)
 {
-    World.block[x][y] = FUEL;
+    World_set_block(world, blk, FUEL);
     if (create)
-	Map_place_fuel(Xpmap_get_clpos(x, y), TEAM_NOT_SET);
+	World_place_fuel(world, Block_get_center_clpos(blk), TEAM_NOT_SET);
 }
 
-static void Xpmap_place_treasure(int x, int y, bool empty, bool create)
+static void Xpmap_place_treasure(world_t *world, blkpos_t blk, bool empty,
+				 bool create)
 {
-    World.block[x][y] = TREASURE;
+    World_set_block(world, blk, TREASURE);
     if (create)
-	Map_place_treasure(Xpmap_get_clpos(x, y), TEAM_NOT_SET, empty);
+	World_place_treasure(world, Block_get_center_clpos(blk),
+			     TEAM_NOT_SET, empty, 0xff);
 }
 
-static void Xpmap_place_wormhole(int x, int y, wormType type, bool create)
+static void Xpmap_place_wormhole(world_t *world, blkpos_t blk, wormType type,
+				 bool create)
 {
-    World.block[x][y] = WORMHOLE;
+    World_set_block(world, blk, WORMHOLE);
     if (create)
-	Map_place_wormhole(Xpmap_get_clpos(x, y), type);
+	World_place_wormhole(world, Block_get_center_clpos(blk), type);
 }
 
-static void Xpmap_place_target(int x, int y, bool create)
+static void Xpmap_place_target(world_t *world, blkpos_t blk, bool create)
 {
-    World.block[x][y] = TARGET;
+    World_set_block(world, blk, TARGET);
     if (create)
-	Map_place_target(Xpmap_get_clpos(x, y), TEAM_NOT_SET);
+	World_place_target(world, Block_get_center_clpos(blk), TEAM_NOT_SET);
 }
 
-static void Xpmap_place_check(int x, int y, int ind, bool create)
+static void Xpmap_place_check(world_t *world, blkpos_t blk, int ind, bool create)
 {
-    if (!BIT(World.rules->mode, TIMING)) {
-	World.block[x][y] = SPACE;
+    if (!BIT(world->rules->mode, TIMING)) {
+	World_set_block(world, blk, SPACE);
 	return;
     }
 
-    World.block[x][y] = CHECK;
+    World_set_block(world, blk, CHECK);
     if (create)
-	Map_place_check(Xpmap_get_clpos(x, y), ind);
+	World_place_check(world, Block_get_center_clpos(blk), ind);
 }
 
-static void Xpmap_place_item_concentrator(int x, int y, bool create)
+static void Xpmap_place_item_concentrator(world_t *world, blkpos_t blk,
+					  bool create)
 {
-    World.block[x][y] = ITEM_CONCENTRATOR;
+    World_set_block(world, blk, ITEM_CONCENTRATOR);
     if (create)
-	Map_place_item_concentrator(Xpmap_get_clpos(x, y));
+	World_place_item_concentrator(world, Block_get_center_clpos(blk));
 }
 
-static void Xpmap_place_asteroid_concentrator(int x, int y, bool create)
+static void Xpmap_place_asteroid_concentrator(world_t *world, blkpos_t blk,
+					      bool create)
 {
-    World.block[x][y] = ASTEROID_CONCENTRATOR;
+    World_set_block(world, blk, ASTEROID_CONCENTRATOR);
     if (create)
-	Map_place_asteroid_concentrator(Xpmap_get_clpos(x, y));
+	World_place_asteroid_concentrator(world, Block_get_center_clpos(blk));
 }
 
-static void Xpmap_place_grav(int x, int y, double force, int type, bool create)
+static void Xpmap_place_grav(world_t *world, blkpos_t blk,
+			     double force, int type, bool create)
 {
-    World.block[x][y] = type;
+    World_set_block(world, blk, type);
     if (create)
-	Map_place_grav(Xpmap_get_clpos(x, y), force, type);
+	World_place_grav(world, Block_get_center_clpos(blk), force, type);
 }
 
-static void Xpmap_place_block(int x, int y, int type)
+static void Xpmap_place_friction_area(world_t *world, blkpos_t blk, bool create)
 {
-    World.block[x][y] = type;
+    World_set_block(world, blk, FRICTION);
+    if (create)
+	World_place_friction_area(world,
+				  Block_get_center_clpos(blk),
+				  options.blockFriction);
+}
+
+static void Xpmap_place_block(world_t *world, blkpos_t blk, int type)
+{
+    World_set_block(world, blk, type);
 }
 
 /*
  * Change read tags to internal data, create objects if 'create' is true.
  */
-void Xpmap_tags_to_internal_data(bool create)
+void Xpmap_tags_to_internal_data(world_t *world, bool create)
 {
     int x, y;
     char c;
 
-    for (x = 0; x < World.x; x++) {
+    for (x = 0; x < world->x; x++) {
 
-	for (y = 0; y < World.y; y++) {
+	for (y = 0; y < world->y; y++) {
 
-	    c = World.block[x][y];
-	    
+	    blkpos_t blk;
+
+	    blk.bx = x;
+	    blk.by = y;
+
+	    c = world->block[x][y];
+
 	    switch (c) {
 	    case ' ':
 	    case '.':
 	    default:
-		Xpmap_place_block(x, y, SPACE);
+		Xpmap_place_block(world, blk, SPACE);
 		break;
-		
+
 	    case 'x':
-		Xpmap_place_block(x, y, FILLED);
+		Xpmap_place_block(world, blk, FILLED);
 		break;
 	    case 's':
-		Xpmap_place_block(x, y, REC_LU);
+		Xpmap_place_block(world, blk, REC_LU);
 		break;
 	    case 'a':
-		Xpmap_place_block(x, y, REC_RU);
+		Xpmap_place_block(world, blk, REC_RU);
 		break;
 	    case 'w':
-		Xpmap_place_block(x, y, REC_LD);
+		Xpmap_place_block(world, blk, REC_LD);
 		break;
 	    case 'q':
-		Xpmap_place_block(x, y, REC_RD);
+		Xpmap_place_block(world, blk, REC_RD);
 		break;
-		    
+
 	    case 'r':
-		Xpmap_place_cannon(x, y, DIR_UP, create);
+		Xpmap_place_cannon(world, blk, DIR_UP, create);
 		break;
 	    case 'd':
-		Xpmap_place_cannon(x, y, DIR_LEFT, create);
+		Xpmap_place_cannon(world, blk, DIR_LEFT, create);
 		break;
 	    case 'f':
-		Xpmap_place_cannon(x, y, DIR_RIGHT, create);
+		Xpmap_place_cannon(world, blk, DIR_RIGHT, create);
 		break;
 	    case 'c':
-		Xpmap_place_cannon(x, y, DIR_DOWN, create);
+		Xpmap_place_cannon(world, blk, DIR_DOWN, create);
 		break;
-		
+
 	    case '#':
-		Xpmap_place_fuel(x, y, create);
+		Xpmap_place_fuel(world, blk, create);
 		break;
-		
 	    case '*':
+		Xpmap_place_treasure(world, blk, false, create);
+		break;
 	    case '^':
-		Xpmap_place_treasure(x, y, (c == '^'), create);
+		Xpmap_place_treasure(world, blk, true, create);
 		break;
 	    case '!':
-		Xpmap_place_target(x, y, create);
+		Xpmap_place_target(world, blk, create);
 		break;
 	    case '%':
-		Xpmap_place_item_concentrator(x, y, create);
+		Xpmap_place_item_concentrator(world, blk, create);
 		break;
 	    case '&':
-		Xpmap_place_asteroid_concentrator(x, y, create);
+		Xpmap_place_asteroid_concentrator(world, blk, create);
 		break;
 	    case '$':
-		Xpmap_place_block(x, y, BASE_ATTRACTOR);
+		Xpmap_place_block(world, blk, BASE_ATTRACTOR);
 		break;
 	    case '_':
+		Xpmap_place_base(world, blk, TEAM_NOT_SET, create);
+		break;
 	    case '0': case '1': case '2': case '3': case '4':
 	    case '5': case '6': case '7': case '8': case '9':
-		Xpmap_place_base(x, y, (int) (c - '0'), create);
+		Xpmap_place_base(world, blk, (int) (c - '0'), create);
 		break;
-		
+
 	    case '+':
-		Xpmap_place_grav(x, y, -GRAVS_POWER, POS_GRAV, create);
+		Xpmap_place_grav(world, blk, -GRAVS_POWER, POS_GRAV, create);
 		break;
 	    case '-':
-		Xpmap_place_grav(x, y, GRAVS_POWER, NEG_GRAV, create);
+		Xpmap_place_grav(world, blk, GRAVS_POWER, NEG_GRAV, create);
 		break;
 	    case '>':
-		Xpmap_place_grav(x, y, GRAVS_POWER, CWISE_GRAV, create);
+		Xpmap_place_grav(world, blk, GRAVS_POWER, CWISE_GRAV, create);
 		break;
 	    case '<':
-		Xpmap_place_grav(x, y, -GRAVS_POWER, ACWISE_GRAV, create);
+		Xpmap_place_grav(world, blk, -GRAVS_POWER, ACWISE_GRAV,
+				 create);
 		break;
 	    case 'i':
-		Xpmap_place_grav(x, y, GRAVS_POWER, UP_GRAV, create);
+		Xpmap_place_grav(world, blk, GRAVS_POWER, UP_GRAV, create);
 		break;
 	    case 'm':
-		Xpmap_place_grav(x, y, -GRAVS_POWER, DOWN_GRAV, create);
+		Xpmap_place_grav(world, blk, -GRAVS_POWER, DOWN_GRAV, create);
 		break;
 	    case 'k':
-		Xpmap_place_grav(x, y, GRAVS_POWER, RIGHT_GRAV, create);
+		Xpmap_place_grav(world, blk, GRAVS_POWER, RIGHT_GRAV, create);
 		break;
 	    case 'j':
-		Xpmap_place_grav(x, y, -GRAVS_POWER, LEFT_GRAV, create);
+		Xpmap_place_grav(world, blk, -GRAVS_POWER, LEFT_GRAV, create);
 		break;
-		
+
 	    case '@':
-		Xpmap_place_wormhole(x, y, WORM_NORMAL, create);
+		Xpmap_place_wormhole(world, blk, WORM_NORMAL, create);
 		break;
 	    case '(':
-		Xpmap_place_wormhole(x, y, WORM_IN, create);
+		Xpmap_place_wormhole(world, blk, WORM_IN, create);
 		break;
 	    case ')':
-		Xpmap_place_wormhole(x, y, WORM_OUT, create);
+		Xpmap_place_wormhole(world, blk, WORM_OUT, create);
 		break;
-		
+
 	    case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
 	    case 'G': case 'H': case 'I': case 'J': case 'K': case 'L':
 	    case 'M': case 'N': case 'O': case 'P': case 'Q': case 'R':
 	    case 'S': case 'T': case 'U': case 'V': case 'W': case 'X':
 	    case 'Y': case 'Z':
-		Xpmap_place_check(x, y, (int) (c - 'A'), create);
+		Xpmap_place_check(world, blk, (int) (c - 'A'), create);
 		break;
-		
+
 	    case 'z':
-		Xpmap_place_block(x, y, FRICTION);
+		Xpmap_place_friction_area(world, blk, create);
 		break;
-		
+
 	    case 'b':
-		Xpmap_place_block(x, y, DECOR_FILLED);
+		Xpmap_place_block(world, blk, DECOR_FILLED);
 		break;
 	    case 'h':
-		Xpmap_place_block(x, y, DECOR_LU);
+		Xpmap_place_block(world, blk, DECOR_LU);
 		break;
 	    case 'g':
-		Xpmap_place_block(x, y, DECOR_RU);
+		Xpmap_place_block(world, blk, DECOR_RU);
 		break;
 	    case 'y':
-		Xpmap_place_block(x, y, DECOR_LD);
+		Xpmap_place_block(world, blk, DECOR_LD);
 		break;
 	    case 't':
-		Xpmap_place_block(x, y, DECOR_RD);
+		Xpmap_place_block(world, blk, DECOR_RD);
 		break;
 	    }
 	}
@@ -432,60 +818,56 @@ void Xpmap_tags_to_internal_data(bool create)
 }
 
 
-void Xpmap_find_map_object_teams(void)
+void Xpmap_find_map_object_teams(world_t *world)
 {
     int i;
+    clpos_t pos = { 0, 0 };
+
+    if (!BIT(world->rules->mode, TEAM_PLAY))
+	return;
+
+    /* This could return -1 */
+    if (Find_closest_team(world, pos) == TEAM_NOT_SET) {
+	warn("Broken map: Couldn't find teams for map objects.");
+	return;
+    }
 
     /*
-     * Determine which team a treasure belongs to.
+     * Determine which team a stuff belongs to.
      */
-    if (BIT(World.rules->mode, TEAM_PLAY)) {
-	int team = TEAM_NOT_SET;
+    for (i = 0; i < world->NumTreasures; i++) {
+	treasure_t *treasure = Treasures(world, i);
+	team_t *teamp;
 
-	for (i = 0; i < World.NumTreasures; i++) {
-	    treasure_t *treasure = Treasures(i);
+	treasure->team = Find_closest_team(world, treasure->pos);
+	teamp = Teams(world, treasure->team);
+	assert(teamp != NULL);
 
-	    team = Find_closest_team(treasure->pos.cx, treasure->pos.cy);
-	    treasure->team = team;
-	    if (team == TEAM_NOT_SET)
-		warn("Couldn't find a matching team for the treasure.");
-	    else {
-		World.teams[team].NumTreasures++;
-		if (!treasure->empty)
-		    World.teams[team].TreasuresLeft++;
-		else
-		    World.teams[team].NumEmptyTreasures++;
-	    }
+	teamp->NumTreasures++;
+	if (treasure->empty)
+	    teamp->NumEmptyTreasures++;
+	else
+	    teamp->TreasuresLeft++;
+    }
+
+    for (i = 0; i < world->NumTargets; i++) {
+	target_t *targ = Targets(world, i);
+
+	targ->team = Find_closest_team(world, targ->pos);
+    }
+
+    if (options.teamCannons) {
+	for (i = 0; i < world->NumCannons; i++) {
+	    cannon_t *cannon = Cannons(world, i);
+
+	    cannon->team = Find_closest_team(world, cannon->pos);
 	}
+    }
 
-	for (i = 0; i < World.NumTargets; i++) {
-	    target_t *targ = Targets(i);
+    for (i = 0; i < world->NumFuels; i++) {
+	fuel_t *fs = Fuels(world, i);
 
-	    team = Find_closest_team(targ->pos.cx, targ->pos.cy);
-	    if (team == TEAM_NOT_SET)
-		warn("Couldn't find a matching team for the target.");
-	    targ->team = team;
-	}
-
-	if (teamCannons) {
-	    for (i = 0; i < World.NumCannons; i++) {
-		cannon_t *cannon = Cannons(i);
-
-		team = Find_closest_team(cannon->pos.cx, cannon->pos.cy);
-		if (team == TEAM_NOT_SET)
-		    warn("Couldn't find a matching team for the cannon.");
-		cannon->team = team;
-	    }
-	}
-	
-	for (i = 0; i < World.NumFuels; i++) {
-	    fuel_t *fs = Fuels(i);
-
-	    team = Find_closest_team(fs->pos.cx, fs->pos.cy);
-	    if (team == TEAM_NOT_SET)
-		warn("Couldn't find a matching team for fuelstation.");
-	    fs->team = team;
-	}
+	fs->team = Find_closest_team(world, fs->pos);
     }
 }
 
@@ -497,14 +879,15 @@ void Xpmap_find_map_object_teams(void)
  * If a base attractor is adjacent to a base then the base will point
  * to the attractor.
  */
-void Xpmap_find_base_direction(void)
+void Xpmap_find_base_direction(world_t *world)
 {
     int	i;
+    blkpos_t blk;
 
-    for (i = 0; i < World.NumBases; i++) {
-	base_t *base = Bases(i);
+    for (i = 0; i < world->NumBases; i++) {
+	base_t *base = Bases(world, i);
 	int x, y, dir, att;
-	vector gravity = World_gravity(base->pos);
+	vector_t gravity = World_gravity(world, base->pos);
 
 	if (gravity.x == 0.0 && gravity.y == 0.0)
 	    /*
@@ -523,45 +906,45 @@ void Xpmap_find_base_direction(void)
 	y = CLICK_TO_BLOCK(base->pos.cy);
 
 	/* First check upwards attractor */
-	if (y == World.y - 1 && World.block[x][0] == BASE_ATTRACTOR
-	    && BIT(World.rules->mode, WRAP_PLAY)) {
+	if (y == world->y - 1 && world->block[x][0] == BASE_ATTRACTOR
+	    && BIT(world->rules->mode, WRAP_PLAY)) {
 	    if (att == -1 || dir == DIR_UP)
 		att = DIR_UP;
 	}
-	if (y < World.y - 1 && World.block[x][y + 1] == BASE_ATTRACTOR) {
+	if (y < world->y - 1 && world->block[x][y + 1] == BASE_ATTRACTOR) {
 	    if (att == -1 || dir == DIR_UP)
 		att = DIR_UP;
 	}
 
 	/* then downwards */
-	if (y == 0 && World.block[x][World.y-1] == BASE_ATTRACTOR
-	    && BIT(World.rules->mode, WRAP_PLAY)) {
+	if (y == 0 && world->block[x][world->y-1] == BASE_ATTRACTOR
+	    && BIT(world->rules->mode, WRAP_PLAY)) {
 	    if (att == -1 || dir == DIR_DOWN)
 		att = DIR_DOWN;
 	}
-	if (y > 0 && World.block[x][y - 1] == BASE_ATTRACTOR) {
+	if (y > 0 && world->block[x][y - 1] == BASE_ATTRACTOR) {
 	    if (att == -1 || dir == DIR_DOWN)
 		att = DIR_DOWN;
 	}
 
 	/* then rightwards */
-	if (x == World.x - 1 && World.block[0][y] == BASE_ATTRACTOR
-	    && BIT(World.rules->mode, WRAP_PLAY)) {
+	if (x == world->x - 1 && world->block[0][y] == BASE_ATTRACTOR
+	    && BIT(world->rules->mode, WRAP_PLAY)) {
 	    if (att == -1 || dir == DIR_RIGHT)
 		att = DIR_RIGHT;
 	}
-	if (x < World.x - 1 && World.block[x + 1][y] == BASE_ATTRACTOR) {
+	if (x < world->x - 1 && world->block[x + 1][y] == BASE_ATTRACTOR) {
 	    if (att == -1 || dir == DIR_RIGHT)
 		att = DIR_RIGHT;
 	}
 
 	/* then leftwards */
-	if (x == 0 && World.block[World.x-1][y] == BASE_ATTRACTOR
-	    && BIT(World.rules->mode, WRAP_PLAY)) {
+	if (x == 0 && world->block[world->x-1][y] == BASE_ATTRACTOR
+	    && BIT(world->rules->mode, WRAP_PLAY)) {
 	    if (att == -1 || dir == DIR_LEFT)
 		att = DIR_LEFT;
 	}
-	if (x > 0 && World.block[x - 1][y] == BASE_ATTRACTOR) {
+	if (x > 0 && world->block[x - 1][y] == BASE_ATTRACTOR) {
 	    if (att == -1 || dir == DIR_LEFT)
 		att = DIR_LEFT;
 	}
@@ -570,11 +953,10 @@ void Xpmap_find_base_direction(void)
 	    dir = att;
 	base->dir = dir;
     }
-    for (i = 0; i < World.x; i++) {
-	int j;
-	for (j = 0; j < World.y; j++) {
-	    if (World.block[i][j] == BASE_ATTRACTOR)
-		World.block[i][j] = SPACE;
+    for (blk.bx = 0; blk.bx < world->x; blk.bx++) {
+	for (blk.by = 0; blk.by < world->y; blk.by++) {
+	    if (World_get_block(world, blk) == BASE_ATTRACTOR)
+		World_set_block(world, blk, SPACE);
 	}
     }
 }
@@ -587,13 +969,13 @@ void Xpmap_find_base_direction(void)
 
 /* number of vertices in polygon */
 #define N (2 + 12)
-static void Xpmap_treasure_to_polygon(int treasure_ind)
+static void Xpmap_treasure_to_polygon(world_t *world, int treasure_ind)
 {
     int cx, cy, i, r, n;
     double angle;
     int polystyle, edgestyle;
-    treasure_t *treasure = Treasures(treasure_ind);
-    clpos pos[N + 1];
+    treasure_t *treasure = Treasures(world, treasure_ind);
+    clpos_t pos[N + 1];
 
     polystyle = P_get_poly_id("treasure_ps");
     edgestyle = P_get_edge_id("treasure_es");
@@ -625,7 +1007,7 @@ static void Xpmap_treasure_to_polygon(int treasure_ind)
     P_start_balltarget(treasure->team, treasure_ind);
     P_start_polygon(pos[0], polystyle);
     for (i = 1; i <= N; i++)
-	P_vertex(pos[i], edgestyle); 
+	P_vertex(pos[i], edgestyle);
     P_end_polygon();
     P_end_balltarget();
 
@@ -633,49 +1015,49 @@ static void Xpmap_treasure_to_polygon(int treasure_ind)
     P_start_ballarea();
     P_start_polygon(pos[0], polystyle);
     for (i = 1; i <= N; i++)
-	P_vertex(pos[i], edgestyle); 
+	P_vertex(pos[i], edgestyle);
     P_end_polygon();
     P_end_ballarea();
 }
 #undef N
 
 
-static void Xpmap_block_polygon(int cx, int cy, int polystyle, int edgestyle)
+static void Xpmap_block_polygon(clpos_t bpos, int polystyle, int edgestyle)
 {
-    clpos pos[5];
+    clpos_t pos[5];
     int i;
 
-    cx = CLICK_TO_BLOCK(cx) * BLOCK_CLICKS;
-    cy = CLICK_TO_BLOCK(cy) * BLOCK_CLICKS;
+    bpos.cx = CLICK_TO_BLOCK(bpos.cx) * BLOCK_CLICKS;
+    bpos.cy = CLICK_TO_BLOCK(bpos.cy) * BLOCK_CLICKS;
 
-    pos[0].cx = cx;
-    pos[0].cy = cy;
-    pos[1].cx = cx + (BLOCK_CLICKS - 1);
-    pos[1].cy = cy;
-    pos[2].cx = cx + (BLOCK_CLICKS - 1);
-    pos[2].cy = cy + (BLOCK_CLICKS - 1);
-    pos[3].cx = cx;
-    pos[3].cy = cy + (BLOCK_CLICKS - 1);
+    pos[0].cx = bpos.cx;
+    pos[0].cy = bpos.cy;
+    pos[1].cx = bpos.cx + (BLOCK_CLICKS - 1);
+    pos[1].cy = bpos.cy;
+    pos[2].cx = bpos.cx + (BLOCK_CLICKS - 1);
+    pos[2].cy = bpos.cy + (BLOCK_CLICKS - 1);
+    pos[3].cx = bpos.cx;
+    pos[3].cy = bpos.cy + (BLOCK_CLICKS - 1);
     pos[4] = pos[0];
 
     P_start_polygon(pos[0], polystyle);
     for (i = 1; i <= 4; i++)
-	P_vertex(pos[i], edgestyle); 
+	P_vertex(pos[i], edgestyle);
     P_end_polygon();
 }
 
 
-static void Xpmap_target_to_polygon(int target_ind)
+static void Xpmap_target_to_polygon(world_t *world, int target_ind)
 {
     int ps, es;
-    target_t *targ = Targets(target_ind);
+    target_t *targ = Targets(world, target_ind);
 
     ps = P_get_poly_id("target_ps");
     es = P_get_edge_id("target_es");
 
     /* create target polygon */
     P_start_target(target_ind);
-    Xpmap_block_polygon(targ->pos.cx, targ->pos.cy, ps, es);
+    Xpmap_block_polygon(targ->pos, ps, es);
     P_end_target();
 }
 
@@ -683,40 +1065,38 @@ static void Xpmap_target_to_polygon(int target_ind)
 static void Xpmap_cannon_polygon(cannon_t *cannon,
 				 int polystyle, int edgestyle)
 {
-    clpos pos[4];
-    int cx = cannon->pos.cx;
-    int cy = cannon->pos.cy;
+    clpos_t pos[4], cpos = cannon->pos;
     int i;
 
     pos[0] = cannon->pos;
 
-    cx = CLICK_TO_BLOCK(cx) * BLOCK_CLICKS;
-    cy = CLICK_TO_BLOCK(cy) * BLOCK_CLICKS;
+    cpos.cx = CLICK_TO_BLOCK(cpos.cx) * BLOCK_CLICKS;
+    cpos.cy = CLICK_TO_BLOCK(cpos.cy) * BLOCK_CLICKS;
 
     switch (cannon->dir) {
     case DIR_RIGHT:
-	pos[1].cx = cx;
-	pos[1].cy = cy + (BLOCK_CLICKS - 1);
-	pos[2].cx = cx;
-	pos[2].cy = cy;
+	pos[1].cx = cpos.cx;
+	pos[1].cy = cpos.cy + (BLOCK_CLICKS - 1);
+	pos[2].cx = cpos.cx;
+	pos[2].cy = cpos.cy;
 	break;
     case DIR_UP:
-	pos[1].cx = cx;
-	pos[1].cy = cy;
-	pos[2].cx = cx + (BLOCK_CLICKS - 1);
-	pos[2].cy = cy;
+	pos[1].cx = cpos.cx;
+	pos[1].cy = cpos.cy;
+	pos[2].cx = cpos.cx + (BLOCK_CLICKS - 1);
+	pos[2].cy = cpos.cy;
 	break;
     case DIR_LEFT:
-	pos[1].cx = cx + (BLOCK_CLICKS - 1);
-	pos[1].cy = cy;
-	pos[2].cx = cx + (BLOCK_CLICKS - 1);
-	pos[2].cy = cy + (BLOCK_CLICKS - 1);
+	pos[1].cx = cpos.cx + (BLOCK_CLICKS - 1);
+	pos[1].cy = cpos.cy;
+	pos[2].cx = cpos.cx + (BLOCK_CLICKS - 1);
+	pos[2].cy = cpos.cy + (BLOCK_CLICKS - 1);
 	break;
     case DIR_DOWN:
-	pos[1].cx = cx + (BLOCK_CLICKS - 1);
-	pos[1].cy = cy + (BLOCK_CLICKS - 1);
-	pos[2].cx = cx;
-	pos[2].cy = cy + (BLOCK_CLICKS - 1);
+	pos[1].cx = cpos.cx + (BLOCK_CLICKS - 1);
+	pos[1].cy = cpos.cy + (BLOCK_CLICKS - 1);
+	pos[2].cx = cpos.cx;
+	pos[2].cy = cpos.cy + (BLOCK_CLICKS - 1);
 	break;
     default:
  	/* can't happen */
@@ -727,15 +1107,15 @@ static void Xpmap_cannon_polygon(cannon_t *cannon,
 
     P_start_polygon(pos[0], polystyle);
     for (i = 1; i <= 3; i++)
-	P_vertex(pos[i], edgestyle); 
+	P_vertex(pos[i], edgestyle);
     P_end_polygon();
 }
 
 
-static void Xpmap_cannon_to_polygon(int cannon_ind)
+static void Xpmap_cannon_to_polygon(world_t *world, int cannon_ind)
 {
     int ps, es;
-    cannon_t *cannon = Cannons(cannon_ind);
+    cannon_t *cannon = Cannons(world, cannon_ind);
 
     ps = P_get_poly_id("cannon_ps");
     es = P_get_edge_id("cannon_es");
@@ -746,12 +1126,12 @@ static void Xpmap_cannon_to_polygon(int cannon_ind)
 }
 
 #define N 12
-static void Xpmap_wormhole_to_polygon(int wormhole_ind)
+static void Xpmap_wormhole_to_polygon(world_t *world, int wormhole_ind)
 {
-    int cx, cy, ps, es, i, r;
+    int ps, es, i, r;
     double angle;
-    wormhole_t *wormhole = Wormholes(wormhole_ind);
-    clpos pos[N + 1];
+    wormhole_t *wormhole = Wormholes(world, wormhole_ind);
+    clpos_t pos[N + 1], wpos;
 
     /* don't make a polygon for an out wormhole */
     if (wormhole->type == WORM_OUT)
@@ -760,25 +1140,36 @@ static void Xpmap_wormhole_to_polygon(int wormhole_ind)
     ps = P_get_poly_id("wormhole_ps");
     es = P_get_edge_id("wormhole_es");
 
-    cx = wormhole->pos.cx;
-    cy = wormhole->pos.cy;
-    r = (BLOCK_CLICKS / 2) - 1;
+    wpos = wormhole->pos;
+    r = WORMHOLE_RADIUS;
 
     for (i = 0; i < N; i++) {
 	angle = (((double)i)/ N) * 2 * PI;
-	pos[i].cx = cx + r * cos(angle);
-	pos[i].cy = cy + r * sin(angle);
+	pos[i].cx = wpos.cx + r * cos(angle);
+	pos[i].cy = wpos.cy + r * sin(angle);
     }
     pos[N] = pos[0];
 
     P_start_wormhole(wormhole_ind);
     P_start_polygon(pos[0], ps);
     for (i = 1; i <= N; i++)
-	P_vertex(pos[i], es); 
+	P_vertex(pos[i], es);
     P_end_polygon();
     P_end_wormhole();
 }
 
+static void Xpmap_friction_area_to_polygon(world_t *world, int fa_ind)
+{
+    int ps, es;
+    friction_area_t *fa = FrictionAreas(world, fa_ind);
+
+    ps = P_get_poly_id("fa_ps");
+    es = P_get_edge_id("fa_es");
+
+    P_start_friction_area(fa_ind);
+    Xpmap_block_polygon(fa->pos, ps, es);
+    P_end_friction_area();
+}
 
 /*
  * Add a wall polygon
@@ -807,15 +1198,12 @@ static void Xpmap_wall_poly(int bx, int by,
 			    int polystyle, int edgestyle)
 {
     int i;
-    clpos pos[5]; /* positions of vertices */
+    clpos_t pos[5]; /* positions of vertices */
 
     if (numblocks < 1)
 	return;
 
     /* first assume we have a rectangle */
-    /* kps - use -1 if you don't wan't the polygon corners to
-     * overlap other polygons
-     */
     pos[0].cx = bx * BLOCK_CLICKS;
     pos[0].cy = (by + 1) * BLOCK_CLICKS - 1;
     pos[1].cx = bx * BLOCK_CLICKS;
@@ -824,7 +1212,7 @@ static void Xpmap_wall_poly(int bx, int by,
     pos[2].cy = by * BLOCK_CLICKS;
     pos[3].cx = (bx + numblocks) * BLOCK_CLICKS - 1;
     pos[3].cy = (by + 1) * BLOCK_CLICKS - 1;
-    
+
     /* move the vertices depending on the startblock and endblock */
     switch (startblock) {
     case FILLED:
@@ -844,7 +1232,7 @@ static void Xpmap_wall_poly(int bx, int by,
     default:
 	return;
     }
-    
+
     switch (endblock) {
     case FILLED:
     case FUEL:
@@ -870,12 +1258,12 @@ static void Xpmap_wall_poly(int bx, int by,
 
     P_start_polygon(pos[0], polystyle);
     for (i = 1; i <= 4; i++)
-	P_vertex(pos[i], edgestyle); 
+	P_vertex(pos[i], edgestyle);
     P_end_polygon();
 }
 
 
-static void Xpmap_walls_to_polygons(void)
+static void Xpmap_walls_to_polygons(world_t *world)
 {
     int x, y, x0 = 0;
     int numblocks = 0;
@@ -889,16 +1277,16 @@ static void Xpmap_walls_to_polygons(void)
 
     /*
      * x, FILLED = solid wall
-     * s, REC_LU = wall triangle pointing left and up 
-     * a, REC_RU = wall triangle pointing right and up 
+     * s, REC_LU = wall triangle pointing left and up
+     * a, REC_RU = wall triangle pointing right and up
      * w, REC_LD = wall triangle pointing left and down
      * q, REC_RD = wall triangle pointing right and down
      * #, FUEL   = fuel block
      */
 
-    for (y = World.y - 1; y >= 0; y--) {
-	for (x = 0; x < World.x; x++) {
-	    block = World.block[x][y];
+    for (y = world->y - 1; y >= 0; y--) {
+	for (x = 0; x < world->x; x++) {
+	    block = world->block[x][y];
 
 	    if (!inside) {
 		switch (block) {
@@ -958,8 +1346,7 @@ static void Xpmap_walls_to_polygons(void)
 	    }
 
 	    /*
-	     * We don't want the polygon to have offsets
-	     * that is too big
+	     * We don't want the polygon to have offsets that are too big.
 	     */
 	    if (inside && numblocks == maxblocks) {
 		Xpmap_wall_poly(x0, y, startblock, endblock,
@@ -979,7 +1366,7 @@ static void Xpmap_walls_to_polygons(void)
 }
 
 
-void Xpmap_blocks_to_polygons(void)
+void Xpmap_blocks_to_polygons(world_t *world)
 {
     int i;
 
@@ -996,25 +1383,31 @@ void Xpmap_blocks_to_polygons(void)
     P_edgestyle("cannon_es", 3, 0xFFFFFF, 0);
     P_polystyle("cannon_ps", 0xFFFFFF, 2, P_get_edge_id("cannon_es"), 0);
 
-    P_edgestyle("wormhole_es", 2, 0x00FFFF, 0);
+    P_edgestyle("wormhole_es", -1, 0x00FFFF, 0);
     P_polystyle("wormhole_ps", 0x00FFFF, 2, P_get_edge_id("wormhole_es"), 0);
 
-    Xpmap_walls_to_polygons();
+    P_edgestyle("fa_es", 2, 0xFF1F00, 0);
+    P_polystyle("fa_ps", 0xCF1F00, 2, P_get_edge_id("fa_es"), 0);
 
-    if (polygonMode)
+    Xpmap_walls_to_polygons(world);
+
+    if (options.polygonMode)
 	is_polygon_map = true;
 
-    for (i = 0; i < World.NumTreasures; i++)
-	Xpmap_treasure_to_polygon(i);
+    for (i = 0; i < world->NumTreasures; i++)
+	Xpmap_treasure_to_polygon(world, i);
 
-    for (i = 0; i < World.NumTargets; i++)
-	Xpmap_target_to_polygon(i);
+    for (i = 0; i < world->NumTargets; i++)
+	Xpmap_target_to_polygon(world, i);
 
-    for (i = 0; i < World.NumCannons; i++)
-	Xpmap_cannon_to_polygon(i);
+    for (i = 0; i < world->NumCannons; i++)
+	Xpmap_cannon_to_polygon(world, i);
 
-    for (i = 0; i < World.NumWormholes; i++)
-	Xpmap_wormhole_to_polygon(i);
+    for (i = 0; i < world->NumWormholes; i++)
+	Xpmap_wormhole_to_polygon(world, i);
+
+    for (i = 0; i < world->NumFrictionAreas; i++)
+	Xpmap_friction_area_to_polygon(world, i);
 
     /*xpprintf("Created %d polygons.\n", num_polys);*/
 }

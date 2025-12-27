@@ -1,5 +1,7 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,7 +20,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef	NETCLIENT_H
@@ -32,12 +34,23 @@
 #define MIN_RECEIVE_WINDOW_SIZE		1
 #define MAX_RECEIVE_WINDOW_SIZE		4
 
-extern int	simulating;
-extern int	receive_window_size;
-extern long	last_loops;
+#define MAX_SUPPORTED_FPS		200
+
+typedef struct {
+    int view_width;
+    int view_height;
+    int spark_rand;
+    int num_spark_colors;
+} display_t;
+
+extern int	 simulating;
+extern int	 receive_window_size;
+extern long	 last_loops;
+extern bool      packetMeasurement;
+extern display_t server_display; /* the servers idea about our display */
 
 int Net_setup(void);
-int Net_verify(char *real, char *nick, char *dpy, int my_team);
+int Net_verify(char *real, char *nick, char *dpy);
 int Net_init(char *server, int port);
 void Net_cleanup(void);
 void Net_key_change(void);
@@ -110,7 +123,7 @@ int Send_pointer_move(int movement);
 int Receive_audio(void);
 int Receive_talk_ack(void);
 int Send_talk(void);
-int Send_display(void);
+int Send_display(int width, int height, int sparks, int spark_colors);
 int Send_modifier_bank(int);
 int Net_talk(char *str);
 int Net_ask_for_motd(long offset, long maxlen);

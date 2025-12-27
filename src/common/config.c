@@ -1,5 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,7 +20,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpcommon.h"
@@ -26,194 +28,184 @@
 char config_version[] = VERSION;
 
 
-char *Conf_libdir(void)
+char *Conf_datadir(void)
 {
-    static char conf[] = LIBDIR;
+    static char conf[] = CONF_DATADIR;
 
     return conf;
 }
 
 char *Conf_defaults_file_name(void)
 {
-    static char conf[] = DEFAULTS_FILE_NAME;
+    static char conf[] = CONF_DEFAULTS_FILE_NAME;
 
     return conf;
 }
 
 char *Conf_password_file_name(void)
 {
-    static char conf[] = PASSWORD_FILE_NAME;
+    static char conf[] = CONF_PASSWORD_FILE_NAME;
 
     return conf;
 }
 
+#if 0
 char *Conf_player_passwords_file_name(void)
 {
-    static char conf[] = PLAYER_PASSWORDS_FILE_NAME;
+    static char conf[] = CONF_PLAYER_PASSWORDS_FILE_NAME;
 
     return conf;
 }
-
+#endif
 
 char *Conf_mapdir(void)
 {
-    static char conf[] = MAPDIR;
+    static char conf[] = CONF_MAPDIR;
 
     return conf;
 }
 
-static char conf_default_map_string[] = DEFAULT_MAP;
+char *Conf_fontdir(void)
+{
+    static char conf[] = CONF_FONTDIR;
+
+    return conf;
+}
 
 char *Conf_default_map(void)
 {
-    return conf_default_map_string;
+    static char conf[] = CONF_DEFAULT_MAP;
+
+    return conf;
 }
 
 char *Conf_servermotdfile(void)
 {
-    static char conf[] = SERVERMOTDFILE;
+    static char conf[] = CONF_SERVERMOTDFILE;
     static char env[] = "XPILOTSERVERMOTD";
     char *filename;
 
     filename = getenv(env);
-    if (filename == NULL) {
+    if (filename == NULL)
 	filename = conf;
-    }
 
     return filename;
 }
 
 char *Conf_localmotdfile(void)
 {
-    static char conf[] = LOCALMOTDFILE;
+    static char conf[] = CONF_LOCALMOTDFILE;
 
     return conf;
 }
 
-char conf_logfile_string[] = LOGFILE;
+char conf_logfile_string[] = CONF_LOGFILE;
 
 char *Conf_logfile(void)
 {
     return conf_logfile_string;
 }
 
-/* needed by client/default.c */
-char conf_ship_file_string[] = SHIP_FILE;
-
 char *Conf_ship_file(void)
 {
-    return conf_ship_file_string;
-}
+    static char conf[] = CONF_SHIP_FILE;
 
-/* needed by client/default.c */
-char conf_texturedir_string[] = TEXTUREDIR;
+    return conf;
+}
 
 char *Conf_texturedir(void)
 {
-    return conf_texturedir_string;
-}
+    static char conf[] = CONF_TEXTUREDIR;
 
-/* needed by client/default.c */
-char conf_soundfile_string[] = SOUNDFILE;
-
-char *Conf_soundfile(void)
-{
-    return conf_soundfile_string;
+    return conf;
 }
 
 char *Conf_localguru(void)
 {
-    static char conf[] = LOCALGURU;
+    static char conf[] = CONF_LOCALGURU;
 
     return conf;
 }
 
 char *Conf_contactaddress(void)
 {
-    static char conf[] = CONTACTADDRESS;
+    static char conf[] = CONF_CONTACTADDRESS;
 
     return conf;
 }
 
-static char conf_robotfile_string[] = ROBOTFILE;
-
 char *Conf_robotfile(void)
 {
-    return conf_robotfile_string;
+    static char conf[] = CONF_ROBOTFILE;
+
+    return conf;
 }
 
 char *Conf_zcat_ext(void)
 {
-    static char conf[] = ZCAT_EXT;
+    static char conf[] = CONF_ZCAT_EXT;
 
     return conf;
 }
 
 char *Conf_zcat_format(void)
 {
-    static char conf[] = ZCAT_FORMAT;
+    static char conf[] = CONF_ZCAT_FORMAT;
 
     return conf;
 }
 
 char *Conf_sounddir(void)
 {
-    static char conf[] = SOUNDDIR;
+    static char conf[] = CONF_SOUNDDIR;
 
     return conf;
 }
 
-void Conf_print(void)
+char *Conf_soundfile(void)
 {
-    xpprintf("============================================================\n");
-    xpprintf("VERSION                   = %s\n", VERSION);
-    xpprintf("PACKAGE                   = %s\n", PACKAGE);
+    static char conf[] = CONF_SOUNDFILE;
 
-#ifdef DBE
-    xpprintf("DBE\n");
-#endif
-#ifdef MBX
-    xpprintf("MBX\n");
-#endif
-#ifdef SPARC_CMAP_HACK
-    xpprintf("SPARC_CMAP_HACK\n");
-#endif
-#ifdef LOG
-    xpprintf("LOG\n");
-#endif
-#ifdef SILENT
-    xpprintf("SILENT\n");
-#endif
-#ifdef SERVER_SOUND
-    xpprintf("SERVER_SOUND\n");
-#endif
-#ifdef PLOCKSERVER
-    xpprintf("PLOCKSERVER\n");
-#endif
-#ifdef DEVELOPMENT
-    xpprintf("DEVELOPMENT\n");
-#endif
-
-    xpprintf("Conf_libdir()             = %s\n", Conf_libdir());
-    xpprintf("Conf_defaults_file_name() = %s\n", Conf_defaults_file_name());
-    xpprintf("Conf_password_file_name() = %s\n", Conf_password_file_name());
-    xpprintf("Conf_player_passwords_file_name() = %s\n",
-	     Conf_player_passwords_file_name());
-    xpprintf("Conf_mapdir()             = %s\n", Conf_mapdir());
-    xpprintf("Conf_default_map()        = %s\n", Conf_default_map());
-    xpprintf("Conf_servermotdfile()     = %s\n", Conf_servermotdfile());
-    xpprintf("Conf_localmotdfile()      = %s\n", Conf_localmotdfile());
-    xpprintf("Conf_logfile()            = %s\n", Conf_logfile());
-    xpprintf("Conf_ship_file()          = %s\n", Conf_ship_file());
-    xpprintf("Conf_texturedir()         = %s\n", Conf_texturedir());
-    xpprintf("Conf_soundfile()          = %s\n", Conf_soundfile());
-    xpprintf("Conf_localguru()          = %s\n", Conf_localguru());
-    xpprintf("Conf_contactaddress()     = %s\n", Conf_contactaddress());
-    xpprintf("Conf_robotfile()          = %s\n", Conf_robotfile());
-    xpprintf("Conf_zcat_ext()           = %s\n", Conf_zcat_ext());
-    xpprintf("Conf_zcat_format()        = %s\n", Conf_zcat_format());
-    xpprintf("Conf_soundir()            = %s\n", Conf_sounddir());
-    xpprintf("============================================================\n");
+    return conf;
 }
 
 
+void Conf_print(void)
+{
+    warn("============================================================");
+    warn("VERSION                   = %s", VERSION);
+    warn("PACKAGE                   = %s", PACKAGE);
+
+#ifdef DBE
+    warn("DBE");
+#endif
+#ifdef MBX
+    warn("MBX");
+#endif
+#ifdef PLOCKSERVER
+    warn("PLOCKSERVER");
+#endif
+#ifdef DEVELOPMENT
+    warn("DEVELOPMENT");
+#endif
+
+    warn("Conf_localguru()          = %s", Conf_localguru());
+    warn("Conf_contactaddress()     = %s", Conf_contactaddress());
+    warn("Conf_datadir()            = %s", Conf_datadir());
+    warn("Conf_defaults_file_name() = %s", Conf_defaults_file_name());
+    warn("Conf_password_file_name() = %s", Conf_password_file_name());
+    warn("Conf_mapdir()             = %s", Conf_mapdir());
+    warn("Conf_default_map()        = %s", Conf_default_map());
+    warn("Conf_servermotdfile()     = %s", Conf_servermotdfile());
+    warn("Conf_robotfile()          = %s", Conf_robotfile());
+    warn("Conf_logfile()            = %s", Conf_logfile());
+    warn("Conf_localmotdfile()      = %s", Conf_localmotdfile());
+    warn("Conf_ship_file()          = %s", Conf_ship_file());
+    warn("Conf_texturedir()         = %s", Conf_texturedir());
+    warn("Conf_fontdir()            = %s", Conf_fontdir());
+    warn("Conf_sounddir()           = %s", Conf_sounddir());
+    warn("Conf_soundfile()          = %s", Conf_soundfile());
+    warn("Conf_zcat_ext()           = %s", Conf_zcat_ext());
+    warn("Conf_zcat_format()        = %s", Conf_zcat_format());
+    warn("============================================================");
+}

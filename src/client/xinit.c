@@ -1,5 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,10 +20,10 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "xpclient.h"
+#include "xpclient_x11.h"
 #include "icon.h"
 
 /*
@@ -66,32 +68,24 @@ char xinit_version[] = VERSION;
 #define ABOUT_WINDOW_WIDTH	600
 #define ABOUT_WINDOW_HEIGHT	700
 
-extern message_t	*TalkMsg[], *GameMsg[];
-extern message_t	*TalkMsg_pending[], *GameMsg_pending[];
-
 /*
  * Globals.
  */
 int			ButtonHeight;
 Atom			ProtocolAtom, KillAtom;
-int			buttonColor, windowColor, borderColor;
 bool			quitting = false;
-unsigned int		top_width, top_height, /*top_x, top_y, */ top_posmask;
-unsigned int		draw_width, draw_height;
-unsigned int		players_width, players_height;
-char			*geometry;
+unsigned		top_width, top_height;
+unsigned		players_width, players_height;
 bool			radar_score_mapped;
-bool			autoServerMotdPopup;
-bool			refreshMotd;
 Cursor			pointerControlCursor;
-char			sparkColors[MSG_LEN];
-int			spark_color[MAX_COLORS];
-int			num_spark_colors;
 bool			ignoreWindowManager;
 
-static message_t	*MsgBlock = NULL;
-static message_t	*MsgBlock_pending = NULL;
+/* For restoring the mouse back to normal */
+extern int pre_acc_num, pre_acc_denom, pre_threshold;
+extern bool pre_exists;
 
+/*static char myName[] = "xpilot";*/
+static char myClass[] = "XPilot";
 
 /*
  * NB!  Is dependent on the order of the items in item.h!
@@ -260,66 +254,11 @@ static XFontStruct* Set_font(Display* display, GC gc,
 }
 
 /*
- * Convert a string of color numbers into an array
- * of "colors[]" indices stored by "spark_color[]".
- * Initialize "num_spark_colors".
- */
-static void Init_spark_colors(void)
-{
-    char		buf[MSG_LEN];
-    char		*src, *dst;
-    unsigned		col;
-    int			i;
-
-    num_spark_colors = 0;
-    /*
-     * The sparkColors specification may contain
-     * any possible separator.  Only look at numbers.
-     */
-
-     /* hack but protocol will allow max 9 (MM) */ 
-    for (src = sparkColors; *src && (num_spark_colors < 9); src++) {
-	if (isascii(*src) && isdigit(*src)) {
-	    dst = &buf[0];
-	    do {
-		*dst++ = *src++;
-	    } while (*src &&
-		     isascii(*src) &&
-		     isdigit(*src) &&
-		     ((size_t)(dst - buf) < (sizeof(buf) - 1)));
-	    *dst = '\0';
-	    src--;
-	    if (sscanf(buf, "%u", &col) == 1) {
-		if (col < (unsigned)maxColors)
-		    spark_color[num_spark_colors++] = col;
-	    }
-	}
-    }
-    if (num_spark_colors == 0) {
-	if (maxColors <= 8) {
-	    /* 3 colors ranging from 5 up to 7 */
-	    for (i = 5; i < maxColors; i++)
-		spark_color[num_spark_colors++] = i;
-	}
-	else {
-	    /* 7 colors ranging from 5 till 11 */
-	    for (i = 5; i < 12; i++)
-		spark_color[num_spark_colors++] = i;
-	}
-	/* default spark colors always include RED. */
-	spark_color[num_spark_colors++] = RED;
-    }
-    for (i = num_spark_colors; i < MAX_COLORS; i++)
-	spark_color[i] = spark_color[num_spark_colors - 1];
-}
-
-/*
  * Initialize miscellaneous window hints and properties.
  */
 #ifndef _WINDOWS
 extern char		**Argv;
 extern int		Argc;
-extern char		myClass[];
 
 static void Init_disp_prop(Display *d, Window win,
 			   unsigned w, unsigned h, int x, int y,
@@ -370,7 +309,7 @@ static void Init_disp_prop(Display *d, Window win,
 	sprintf(msg, "%s -- Server at \"%s\".", TITLE, servername);
     XStoreName(d, win, msg);
 
-    sprintf(msg, "%s:%s", nickname, servername);
+    sprintf(msg, "%s:%s", connectParam.nick_name, servername);
     XSetIconName(d, win, msg);
 
     if (d != dpy)
@@ -395,9 +334,9 @@ static void Init_disp_prop(Display *d, Window win,
  */
 int Init_top(void)
 {
+    int					top_x, top_y;
 #ifndef _WINDOWS
     int					i;
-    int					top_x, top_y;
     int					x, y;
     unsigned				w, h;
     unsigned long			values;
@@ -406,156 +345,13 @@ int Init_top(void)
     XSetWindowAttributes		sattr;
     unsigned long			mask;
 
-    if (topWindow) {
-	error("Init_top called twice");
-	exit(1);
-    }
+    if (topWindow)
+	fatal("Init_top called twice");
 
     if (Colors_init() == -1)
 	return -1;
-
-    if (shieldDrawMode == -1) {
-	shieldDrawMode = 0;
-	/*
-	 * Default is solid for NCD X11 servers.  My NCD mono 19 inch
-	 * terminal, vendor release 2002 suffers from terrible slowness
-	 * when drawing dashed arcs with thick lines.
-	 */
-	if (strcmp (ServerVendor (dpy),
-		    "DECWINDOWS (Compatibility String) "
-		    "Network Computing Devices Inc.") == 0
-	    && ProtocolVersion (dpy) == 11)
-	    shieldDrawMode = 1;
-
-    }
 #endif
 
-    /* check that colors have sane values, if not, set a default */
-#define COLORCHECK(c, d) if (c >= maxColors || c < 0) { \
-      xpprintf("Value of option \"" #c "\" (%d) is out of range, " \
-               "setting default value " #d ".\n", c); c = d ; }
-
-    /* Color checks for colors with a default of 0-3. */
-    COLORCHECK(hudColor, 2);
-    COLORCHECK(hudHLineColor, 2);
-    COLORCHECK(hudVLineColor, 0);
-    COLORCHECK(hudItemsColor, 2);
-    COLORCHECK(hudLockColor, 0);
-    COLORCHECK(hudRadarOtherColor, 1);
-    COLORCHECK(hudRadarOtherColor, 2);
-    COLORCHECK(visibilityBorderColor, 2);
-    COLORCHECK(fuelGaugeColor, 2);
-    COLORCHECK(shipShapesHackColor, 0);
-    COLORCHECK(dirPtrColor, 0);
-    COLORCHECK(msgScanBallColor, 3);
-    COLORCHECK(msgScanCoverColor, 2);
-    COLORCHECK(zeroLivesColor, 1);
-    COLORCHECK(oneLifeColor, 3);
-    COLORCHECK(selfLWColor, 1);
-    COLORCHECK(teamLWColor, 2);
-    COLORCHECK(enemyLWColor, 1);
-    COLORCHECK(teamShotColor, 2);
-    COLORCHECK(shipNameColor, 2);
-    COLORCHECK(baseNameColor, 1);
-    COLORCHECK(mineNameColor, 2);
-    COLORCHECK(ballColor, 1);
-    COLORCHECK(connColor, 2);
-    COLORCHECK(fuelMeterColor, 3);
-    COLORCHECK(powerMeterColor, 3);
-    COLORCHECK(turnSpeedMeterColor, 3);
-    COLORCHECK(packetSizeMeterColor, 3);
-    COLORCHECK(packetLossMeterColor, 3);
-    COLORCHECK(packetDropMeterColor, 3);
-    COLORCHECK(packetLagMeterColor, 3);
-    COLORCHECK(temporaryMeterColor, 3);
-    COLORCHECK(meterBorderColor, 2);
-    COLORCHECK(buttonColor, 2);
-    COLORCHECK(borderColor, 1);
-    COLORCHECK(clockColor, 1);
-    COLORCHECK(scoreColor, 1);
-    COLORCHECK(scoreSelfColor, 3);
-    COLORCHECK(scoreObjectColor, hudColor);
-    COLORCHECK(wallColor, 2);
-    COLORCHECK(fuelColor, 3);
-    COLORCHECK(backgroundPointColor, 2);
-    COLORCHECK(team0Color, 0);
-    COLORCHECK(team1Color, 0);
-    COLORCHECK(team2Color, 0);
-    COLORCHECK(team3Color, 0);
-    COLORCHECK(team4Color, 0);
-    COLORCHECK(team5Color, 0);
-    COLORCHECK(team6Color, 0);
-    COLORCHECK(team7Color, 0);
-    COLORCHECK(team8Color, 0);
-    COLORCHECK(team9Color, 0);
-
-    /* Color checks for colors with a default of 4-7. */
-    if (maxColors > 4) {
-	COLORCHECK(msgScanSafeColor, 4);
-	COLORCHECK(decorColor, 6);
-	COLORCHECK(manyLivesColor, 4);
-	COLORCHECK(scoreOwnTeamColor, 4);
-    } else {
-	COLORCHECK(msgScanSafeColor, 2);
-	COLORCHECK(decorColor, 3);
-	COLORCHECK(manyLivesColor, 0);
-	COLORCHECK(scoreOwnTeamColor, 1);
-    }
-
-    /* Color checks for colors with a default of 8-15. */
-    if (maxColors > 8) {
-	COLORCHECK(msgScanPopColor, 11);
-	COLORCHECK(windowColor, 8);
-	COLORCHECK(scoreInactiveColor, 12);
-	COLORCHECK(scoreInactiveSelfColor, 12);
-	COLORCHECK(scoreEnemyTeamColor, 11);
-	COLORCHECK(messagesColor, 12);
-	COLORCHECK(oldMessagesColor, 13);
-	COLORCHECK(twoLivesColor, 11);
-    } else {
-	COLORCHECK(msgScanPopColor, 1);
-	COLORCHECK(windowColor, 2);
-	COLORCHECK(scoreInactiveColor, 1);
-	COLORCHECK(scoreInactiveSelfColor, 1);
-	COLORCHECK(scoreEnemyTeamColor, 1);
-	COLORCHECK(messagesColor, 3);
-	COLORCHECK(oldMessagesColor, 2);
-	COLORCHECK(twoLivesColor, 0);
-    }
-
-#undef COLORCHECK
-
-    if (wallRadarColor >= maxColors
-	|| ((wallRadarColor & 5) && colorSwitch))
-	wallRadarColor = BLUE;
-
-    if (targetRadarColor >= maxColors
-	|| ((targetRadarColor & 1) && colorSwitch))
-	/* should be & 5? !@# */
-	targetRadarColor = BLUE;
-
-    if (decorRadarColor >= maxColors
-	|| ((decorRadarColor & 5) && colorSwitch))
-	decorRadarColor = 2;
-
-#define OPTIONCHECK(o, cmp1, max, cmp2, min, fmt, d) \
-    if (o cmp1 (max) || o cmp2 (min)) { \
-      xpprintf("Value of option \"" #o "\" (" fmt ") is out of range, " \
-               "setting default value " #d ".\n", o); \
-      o = d ; }
-
-    OPTIONCHECK(hudRadarDotSize, >=, SHIP_SZ, <=, 0,   "%d",   6);
-    OPTIONCHECK(hudRadarScale,   >,  5.0,     <,  0.5, "%.2f", 1.5);
-    OPTIONCHECK(hudRadarLimit,   >,  5.0,     <,  0.0, "%.2f", 0.05);
-    OPTIONCHECK(hudSize,
-		>=, 6 * MIN_HUD_SIZE, <, MIN_HUD_SIZE, \
-		"%d", MIN_HUD_SIZE);
-    OPTIONCHECK(scoreObjectTime, >,  10.0,    <,  0.0, "%.2f", 3.0);
-    OPTIONCHECK(baseWarningType, >,  3,       <,  0,   "%d",   2);
-    OPTIONCHECK(charsPerSecond,  >,  255,     <,  10,  "%d",   50);
-#undef OPTIONCHECK
-
-    shieldDrawMode = shieldDrawMode ? LineSolid : LineOnOffDash;
     radarDrawRectanglePtr = XFillRectangle;
 
     /*
@@ -651,15 +447,10 @@ int Init_top(void)
 		       top_x, top_y, top_flags);
     }
 #else	/* _WINDOWS */
-    /* MFC already gave us a nice top window...use it */
-    {
-	XRectangle	rect;
-	WinXGetWindowRectangle(0, &rect);
-	top_x = rect.x;
-	top_y = rect.y;
-	top_width = rect.width;
-	top_height = rect.height;
-    }
+	/* Bucko seems to use 0 as the topWindow index */
+	topWindow = 0;
+	top_x = top_y = 0;
+	WinXParseGeometry(geometry, &top_width, &top_height);
 #endif	/* _WINDOWS */
 
 #ifndef _WINDOWS
@@ -786,7 +577,7 @@ int Init_playing_windows(void)
     WinXSetEventMask(drawWindow, NoEventMask);
     radar_exposures = 1;
     radarGC = WinXCreateWinDC(radarWindow);
-    gc = WinXCreateWinDC(drawWindow);
+    gameGC = WinXCreateWinDC(drawWindow);
 
     textWindow = XCreateSimpleWindow(dpy, topWindow, 0, 0,
 				     0, 0, 0, 0,
@@ -833,7 +624,7 @@ int Init_playing_windows(void)
 
     button_form
 	= Widget_create_form(0, topWindow,
-			     0, RadarHeight,
+			     0, (int)RadarHeight,
 			     256, ButtonHeight + 2,
 			     0);
     Widget_create_activate(button_form,
@@ -874,12 +665,12 @@ int Init_playing_windows(void)
     players_height = top_height - (RadarHeight + ButtonHeight + 2);
     playersWindow
 	= XCreateSimpleWindow(dpy, topWindow,
-			      0, RadarHeight + ButtonHeight + 2,
+			      0, (int)RadarHeight + ButtonHeight + 2,
 			      players_width, players_height,
 			      0, 0,
 			      colors[windowColor].pixel);
 #ifdef _WINDOWS
-    scoreListGC = WinXCreateWinDC(players);
+    scoreListGC = WinXCreateWinDC(playersWindow);
     scoreListFont
 	= Set_font(dpy, scoreListGC, scoreListFontName, "scoreListFont");
 #endif
@@ -973,6 +764,7 @@ int Init_playing_windows(void)
 void WinXCreateItemBitmaps(void)
 {
     int			i;
+	extern int hudColor;
 
     for (i = 0; i < NUM_ITEMS; i++) {
 	itemBitmaps[i][ITEM_HUD]
@@ -991,116 +783,53 @@ void WinXCreateItemBitmaps(void)
 }
 #endif
 
-int Alloc_msgs(void)
-{
-    message_t		*x, *x2 = 0;
-    int			i;
-
-    if ((x = (message_t *)malloc(2 * MAX_MSGS * sizeof(message_t))) == NULL){
-	error("No memory for messages");
-	return -1;
-    }
-
-#ifndef _WINDOWS
-    if (selectionAndHistory &&
-	((x2 = (message_t *)
-	  malloc(2 * MAX_MSGS * sizeof(message_t))) == NULL)){
-	error("No memory for history messages");
-	free(x);
-	return -1;
-    }
-    if (selectionAndHistory)
-	MsgBlock_pending = x2;
-#endif
-
-    MsgBlock = x;
-
-    for (i = 0; i < 2 * MAX_MSGS; i++) {
-	if (i < MAX_MSGS) {
-	    TalkMsg[i] = x;
-	    IFNWINDOWS( if (selectionAndHistory)
-			TalkMsg_pending[i] = x2 );
-	} else {
-	    GameMsg[i - MAX_MSGS] = x;
-	    IFNWINDOWS( if (selectionAndHistory)
-			GameMsg_pending[i - MAX_MSGS] = x2 );
-	}
-	x->txt[0] = '\0';
-	x->len = 0;
-	x->lifeTime = 0.0;
-	x++;
-
-#ifndef _WINDOWS
-	if (selectionAndHistory) {
-	    x2->txt[0] = '\0';
-	    x2->len = 0;
-	    x2->lifeTime = 0.0;
-	    x2++;
-	}
-#endif
-    }
-    return 0;
-}
-
-void Free_msgs(void)
-{
-    if (MsgBlock) {
-	free(MsgBlock);
-	MsgBlock = NULL;
-    }
-
-#ifndef _WINDOWS
-    if (MsgBlock_pending) {
-	free(MsgBlock_pending);
-	MsgBlock_pending = NULL;
-    }
-#endif
-}
-
-
 static int Config_callback(int widget_desc, void *data, const char **str)
 {
-    (void)widget_desc; (void)data; (void)str;
+    UNUSED_PARAM(widget_desc); UNUSED_PARAM(data); UNUSED_PARAM(str);
     Config(true, CONFIG_DEFAULT);
     return 0;
 }
 
 static int Colors_callback(int widget_desc, void *data, const char **str)
 {
-    (void)widget_desc; (void)data; (void)str;
+    UNUSED_PARAM(widget_desc); UNUSED_PARAM(data); UNUSED_PARAM(str);
     Config(true, CONFIG_COLORS);
     return 0;
 }
 
 static int Score_callback(int widget_desc, void *data, const char **str)
 {
-    (void)widget_desc; (void)data; (void)str;
+    UNUSED_PARAM(widget_desc); UNUSED_PARAM(data); UNUSED_PARAM(str);
     Config(false, CONFIG_NONE);
-    if (showRealName != false) {
-	showRealName = false;
-	scoresChanged = true;
+    if (showUserName != false) {
+	showUserName = false;
+	scoresChanged = 1;
     }
     return 0;
 }
 
 static int Player_callback(int widget_desc, void *data, const char **str)
 {
-    (void)widget_desc; (void)data; (void)str;
+    UNUSED_PARAM(widget_desc); UNUSED_PARAM(data); UNUSED_PARAM(str);
     Config(false, CONFIG_NONE);
-    if (showRealName != true) {
-	showRealName = true;
-	scoresChanged = true;
+    if (showUserName != true) {
+	showUserName = true;
+	scoresChanged = 1;
     }
     return 0;
 }
 
 static int Quit_callback(int widget_desc, void *data, const char **str)
 {
-    (void)widget_desc; (void)data; (void)str;
+    UNUSED_PARAM(widget_desc); UNUSED_PARAM(data); UNUSED_PARAM(str);
     quitting = true;
     return 0;
 }
 
+void Raise_window(void)
+{
+    XMapRaised(dpy, topWindow);
+}
 
 void Resize(Window w, unsigned width, unsigned height)
 {
@@ -1121,7 +850,7 @@ void Resize(Window w, unsigned width, unsigned height)
 	draw_width = top_width;
     draw_height = top_height;
 
-    Send_display();
+    Check_view_dimensions();
     Net_flush();
     XResizeWindow(dpy, drawWindow, draw_width, draw_height);
 #ifndef _WINDOWS
@@ -1148,6 +877,16 @@ void Resize(Window w, unsigned width, unsigned height)
 void Quit(void)
 {
 #ifndef _WINDOWS
+
+  /* Here we restore the mouse to its former self */
+  /* the option may have been toggled in game to  */
+  /* off so we cant trust that                    */
+
+  if (pre_exists) {
+    XChangePointerControl(dpy, True, True, pre_acc_num,
+			  pre_acc_denom, pre_threshold);
+  }
+
     if (dpy != NULL) {
 	XAutoRepeatOn(dpy);
 	Colors_cleanup();
@@ -1165,14 +904,13 @@ void Quit(void)
 	button_form = 0;
     }
 #endif
-    Free_msgs();
     Widget_cleanup();
 }
 
 
 int FatalError(Display *display)
 {
-    (void)display;
+    UNUSED_PARAM(display);
     Net_cleanup();
     /*
      * Quit(&client);
@@ -1184,6 +922,9 @@ int FatalError(Display *display)
 
 void Scale_dashes(void)
 {
+    if (dpy == NULL)
+	return;
+
     dashes[0] = WINSCALE(8);
     dashes[1] = WINSCALE(4);
 

@@ -1,5 +1,7 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,7 +20,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpserver.h"
@@ -34,10 +36,9 @@ static int      LineNumber;
 /*
  * Skips to the end of the line.
  */
-static void
-toeol(char **map_ptr)
+static void toeol(char **map_ptr)
 {
-    int             ich;
+    int ich;
 
     while (**map_ptr) {
 	ich = **map_ptr;
@@ -53,10 +54,9 @@ toeol(char **map_ptr)
 /*
  * Skips to the first non-whitespace character, returning that character.
  */
-static int
-skipspace(char **map_ptr)
+static int skipspace(char **map_ptr)
 {
-    int             ich;
+    int ich;
 
     while (**map_ptr) {
 	ich = **map_ptr;
@@ -75,14 +75,12 @@ skipspace(char **map_ptr)
 /*
  * Read in a multiline value.
  */
-static char    *
-getMultilineValue(char **map_ptr, char *delimiter)
+static char *getMultilineValue(char **map_ptr, char *delimiter)
 {
-    char           *s = malloc(32768);
-    size_t          i = 0;
-    size_t          slen = 32768;
-    char           *bol;
-    int             ich;
+    char *s = malloc(32768);
+    size_t i = 0, slen = 32768;
+    char *bol;
+    int ich;
 
     bol = s;
     for (;;) {
@@ -94,7 +92,7 @@ getMultilineValue(char **map_ptr, char *delimiter)
 	    return s;
 	}
 	if (i == slen) {
-	    char           *t = s;
+	    char *t = s;
 
 	    slen += (slen / 2) + 8192;
 	    s = realloc(s, slen);
@@ -103,7 +101,7 @@ getMultilineValue(char **map_ptr, char *delimiter)
 	if (ich == '\n') {
 	    s[i] = 0;
 	    if (delimiter && !strcmp(bol, delimiter)) {
-		char           *t = s;
+		char *t = s;
 
 		s = realloc(s, (size_t) (bol - s + 1));
 		s[bol - t] = '\0';
@@ -143,22 +141,14 @@ getMultilineValue(char **map_ptr, char *delimiter)
  *
  */
 #define EXPAND				\
-    if (i == slen) {			\
-	s = realloc(s, slen *= 2);	\
-    }
-static void
-parseLine(char **map_ptr, optOrigin opt_origin)
+    if (i == slen)			\
+	s = realloc(s, slen *= 2);
+
+static void parseLine(char **map_ptr, optOrigin opt_origin)
 {
-    int             ich;
-    char           *value,
-                   *head,
-                   *name,
-                   *s = malloc(128);
-    char           *p;
-    size_t          slen = 128;
-    size_t          i = 0;
-    int             override = 0;
-    int             multiline = 0;
+    int ich, override = 0, multiline = 0;
+    char *value, *head, *name, *s = malloc(128), *p;
+    size_t slen = 128, i = 0;
 
     ich = **map_ptr;
     (*map_ptr)++;
@@ -328,9 +318,6 @@ parseLine(char **map_ptr, optOrigin opt_origin)
     else
 	Option_set_value(name, value, override, opt_origin);
 
-    /*
-     * if (multiline) free (value);
-     */
     if (multiline)
 	free(value);
     free(name);
@@ -343,14 +330,11 @@ parseLine(char **map_ptr, optOrigin opt_origin)
 /*
  * Parse a file containing defaults (and possibly a map).
  */
-static bool
-parseOpenFile(FILE * ifile, optOrigin opt_origin)
+static bool parseOpenFile(FILE * ifile, optOrigin opt_origin, world_t *world)
 {
-    int             fd,
-                    n;
-    size_t          map_offset,
-                    map_size;
-    char           *map_buf;
+    int fd, n;
+    size_t map_offset, map_size;
+    char *map_buf;
 
     LineNumber = 1;
 
@@ -366,7 +350,7 @@ parseOpenFile(FILE * ifile, optOrigin opt_origin)
      */
     if (isXp2MapFile(fd)) {
 	is_polygon_map = true;
-	return parseXp2MapFile(fd, opt_origin);
+	return parseXp2MapFile(fd, opt_origin, world);
     }
 
     /*
@@ -416,7 +400,8 @@ parseOpenFile(FILE * ifile, optOrigin opt_origin)
 	/*
 	 * Parse all the lines in the file. 
 	 */
-	char           *map_ptr = map_buf;
+	char *map_ptr = map_buf;
+
 	while (*map_ptr)
 	    parseLine(&map_ptr, opt_origin);
     }
@@ -427,20 +412,18 @@ parseOpenFile(FILE * ifile, optOrigin opt_origin)
 }
 
 
-static int
-copyFilename(const char *file)
+static int copyFilename(const char *file)
 {
-    if (FileName)
-	free(FileName);
+    XFREE(FileName);
     FileName = xp_strdup(file);
     return (FileName != 0);
 }
 
 
-static FILE    *
-fileOpen(const char *file)
+static FILE *fileOpen(const char *file)
 {
-    FILE           *fp = fopen(file, "r");
+    FILE *fp = fopen(file, "r");
+
     if (fp) {
 	if (!copyFilename(file)) {
 	    fclose(fp);
@@ -451,22 +434,17 @@ fileOpen(const char *file)
 }
 
 
-static void
-fileClose(FILE * fp)
+static void fileClose(FILE *fp)
 {
     fclose(fp);
-    if (FileName) {
-	free(FileName);
-	FileName = NULL;
-    }
+    XFREE(FileName);
 }
 
 
 /*
  * Test if filename has the XPilot map extension.
  */
-static bool
-hasMapExtension(const char *filename)
+static bool hasMapExtension(const char *filename)
 {
     int             fnlen = strlen(filename);
     if (fnlen > 4 && !strcmp(&filename[fnlen - 4], ".xp2"))
@@ -482,8 +460,7 @@ hasMapExtension(const char *filename)
 /*
  * Test if filename has a directory component.
  */
-static bool
-hasDirectoryPrefix(const char *filename)
+static bool hasDirectoryPrefix(const char *filename)
 {
     static const char sep = '/';
 
@@ -495,11 +472,10 @@ hasDirectoryPrefix(const char *filename)
  * Combine a directory and a file.
  * Returns new path as dynamically allocated memory.
  */
-static char    *
-fileJoin(const char *dir, const char *file)
+static char *fileJoin(const char *dir, const char *file)
 {
     static const char sep = '/';
-    char           *path;
+    char *path;
 
     path = malloc(strlen(dir) + 1 + strlen(file) + 1);
     if (path)
@@ -512,10 +488,9 @@ fileJoin(const char *dir, const char *file)
  * Combine a file and a filename extension.
  * Returns new path as dynamically allocated memory.
  */
-static char    *
-fileAddExtension(const char *file, const char *ext)
+static char *fileAddExtension(const char *file, const char *ext)
 {
-    char           *path;
+    char *path;
 
     path = malloc(strlen(file) + strlen(ext) + 1);
     if (path)
@@ -524,56 +499,51 @@ fileAddExtension(const char *file, const char *ext)
 }
 
 
-#if defined(COMPRESSED_MAPS)
+#ifdef CONF_COMPRESSED_MAPS
 static bool     usePclose = false;
 
 
-static bool
-isCompressed(const char *filename)
+static bool isCompressed(const char *filename)
 {
-    int             fnlen = strlen(filename);
-    int             celen = strlen(ZCAT_EXT);
-    if (fnlen > celen && !strcmp(&filename[fnlen - celen], ZCAT_EXT))
+    int fnlen = strlen(filename);
+    int celen = strlen(Conf_zcat_ext());
+
+    if (fnlen > celen && !strcmp(&filename[fnlen - celen], Conf_zcat_ext()))
 	return true;
     return false;
 }
 
 
-static void
-closeCompressedFile(FILE * fp)
+static void closeCompressedFile(FILE * fp)
 {
     if (usePclose) {
 	pclose(fp);
 	usePclose = false;
-	if (FileName) {
-	    free(FileName);
-	    FileName = NULL;
-	}
+	XFREE(FileName);
     } else
 	fileClose(fp);
 }
 
 
-static FILE    *
-openCompressedFile(const char *filename)
+static FILE *openCompressedFile(const char *filename)
 {
-    FILE           *fp = NULL;
-    char           *cmdline = NULL;
-    char           *newname = NULL;
+    FILE *fp = NULL;
+    char *cmdline = NULL;
+    char *newname = NULL;
 
     usePclose = false;
     if (!isCompressed(filename)) {
 	if (access(filename, 4) == 0)
 	    return fileOpen(filename);
-	newname = fileAddExtension(filename, ZCAT_EXT);
+	newname = fileAddExtension(filename, Conf_zcat_ext());
 	if (!newname)
 	    return NULL;
 	filename = newname;
     }
     if (access(filename, 4) == 0) {
-	cmdline = malloc(strlen(ZCAT_FORMAT) + strlen(filename) + 1);
+	cmdline = malloc(strlen(CONF_ZCAT_FORMAT) + strlen(filename) + 1);
 	if (cmdline) {
-	    sprintf(cmdline, ZCAT_FORMAT, filename);
+	    sprintf(cmdline, CONF_ZCAT_FORMAT, filename);
 	    fp = popen(cmdline, "r");
 	    if (fp) {
 		usePclose = true;
@@ -593,20 +563,17 @@ openCompressedFile(const char *filename)
 
 #else
 
-static bool
-isCompressed(const char *filename)
+static bool isCompressed(const char *filename)
 {
     return false;
 }
 
-static void
-closeCompressedFile(FILE * fp)
+static void closeCompressedFile(FILE * fp)
 {
     fileClose(fp);
 }
 
-static FILE    *
-openCompressedFile(const char *filename)
+static FILE *openCompressedFile(const char *filename)
 {
     return fileOpen(filename);
 }
@@ -618,28 +585,26 @@ openCompressedFile(const char *filename)
  * or compress filename extension.
  * The search order should be:
  *      filename
- *      filename.gz              if COMPRESSED_MAPS is true
+ *      filename.gz                   if CONF_COMPRESSED_MAPS is true
  *      filename.xp2
- *      filename.xp2.gz          if COMPRESSED_MAPS is true
+ *      filename.xp2.gz               if CONF_COMPRESSED_MAPS is true
  *      filename.xp
- *      filename.xp.gz           if COMPRESSED_MAPS is true
+ *      filename.xp.gz                if CONF_COMPRESSED_MAPS is true
  *      filename.map
- *      filename.map.gz          if COMPRESSED_MAPS is true
- *      MAPDIR filename
- *      MAPDIR filename.gz       if COMPRESSED_MAPS is true
- *      MAPDIR filename.xp2
- *      MAPDIR filename.xp2.gz   if COMPRESSED_MAPS is true
- *      MAPDIR filename.xp
- *      MAPDIR filename.xp.gz    if COMPRESSED_MAPS is true
- *      MAPDIR filename.map
- *      MAPDIR filename.map.gz   if COMPRESSED_MAPS is true
+ *      filename.map.gz               if CONF_COMPRESSED_MAPS is true
+ *      CONF_MAPDIR filename
+ *      CONF_MAPDIR filename.gz       if CONF_COMPRESSED_MAPS is true
+ *      CONF_MAPDIR filename.xp2
+ *      CONF_MAPDIR filename.xp2.gz   if CONF_COMPRESSED_MAPS is true
+ *      CONF_MAPDIR filename.xp
+ *      CONF_MAPDIR filename.xp.gz    if CONF_COMPRESSED_MAPS is true
+ *      CONF_MAPDIR filename.map
+ *      CONF_MAPDIR filename.map.gz   if CONF_COMPRESSED_MAPS is true
  */
-static FILE    *
-openMapFile(const char *filename)
+static FILE *openMapFile(const char *filename)
 {
-    FILE           *fp = NULL;
-    char           *newname;
-    char           *newpath;
+    FILE *fp = NULL;
+    char *newname, *newpath;
 
     fp = openCompressedFile(filename);
     if (fp)
@@ -680,22 +645,19 @@ openMapFile(const char *filename)
 }
 
 
-static void
-closeMapFile(FILE * fp)
+static void closeMapFile(FILE *fp)
 {
     closeCompressedFile(fp);
 }
 
 
-static FILE    *
-openDefaultsFile(const char *filename)
+static FILE *openDefaultsFile(const char *filename)
 {
     return fileOpen(filename);
 }
 
 
-static void
-closeDefaultsFile(FILE * fp)
+static void closeDefaultsFile(FILE *fp)
 {
     fileClose(fp);
 }
@@ -704,15 +666,15 @@ closeDefaultsFile(FILE * fp)
 /*
  * Parse a file containing defaults.
  */
-bool
-parseDefaultsFile(const char *filename)
+bool parseDefaultsFile(const char *filename, world_t *world)
 {
-    FILE           *ifile;
-    bool            result;
+    FILE *ifile;
+    bool result;
 
     if ((ifile = openDefaultsFile(filename)) == NULL)
 	return false;
-    result = parseOpenFile(ifile, OPT_DEFAULTS);
+
+    result = parseOpenFile(ifile, OPT_DEFAULTS, world);
     closeDefaultsFile(ifile);
 
     return true;
@@ -722,15 +684,15 @@ parseDefaultsFile(const char *filename)
 /*
  * Parse a file containing password.
  */
-bool
-parsePasswordFile(const char *filename)
+bool parsePasswordFile(const char *filename, world_t *world)
 {
-    FILE           *ifile;
-    bool            result;
+    FILE *ifile;
+    bool result;
 
     if ((ifile = openDefaultsFile(filename)) == NULL)
 	return false;
-    result = parseOpenFile(ifile, OPT_PASSWORD);
+
+    result = parseOpenFile(ifile, OPT_PASSWORD, world);
     closeDefaultsFile(ifile);
 
     return true;
@@ -740,26 +702,25 @@ parsePasswordFile(const char *filename)
 /*
  * Parse a file containing a map.
  */
-bool
-parseMapFile(const char *filename)
+bool parseMapFile(const char *filename, world_t *world)
 {
-    FILE           *ifile;
-    bool            result;
+    FILE *ifile;
+    bool result;
 
     if ((ifile = openMapFile(filename)) == NULL)
 	return false;
-    result = parseOpenFile(ifile, OPT_MAP);
+
+    result = parseOpenFile(ifile, OPT_MAP, world);
     closeMapFile(ifile);
 
     return result;
 }
 
 
-void
-expandKeyword(const char *keyword)
+void expandKeyword(const char *keyword)
 {
-    optOrigin       expand_origin;
-    char           *p;
+    optOrigin expand_origin;
+    char *p;
 
     p = Option_get_value(keyword, &expand_origin);
     if (p == NULL)

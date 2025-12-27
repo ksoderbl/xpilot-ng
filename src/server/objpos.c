@@ -1,5 +1,7 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,7 +20,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpserver.h"
@@ -26,47 +28,42 @@
 char objpos_version[] = VERSION;
 
 
-void Object_position_set_clicks(object *obj, int cx, int cy)
+void Object_position_set_clpos(world_t *world, object_t *obj, clpos_t pos)
 {
-    clpos		*pos = (clpos *)&obj->pos;
-
-    if (!INSIDE_MAP(cx, cy)) {
+    if (!World_contains_clpos(world, pos)) {
 	if (0) {
-	    printf("BUG!  Illegal object position %d,%d\n", cx, cy);
+	    printf("BUG!  Illegal object position %d,%d\n", pos.cx, pos.cy);
 	    printf("      Type = %d (%s)\n", obj->type, Object_typename(obj));
 	    *(double *)(-1) = 4321.0;
 	    abort();
 	} else {
-	    struct move mv;
-
-	    Object_crash(obj, &mv, CrashUnknown, NO_IND);
+	    Object_crash(obj, CrashUnknown, NO_IND);
 	    return;
 	}
     }
 
-    pos->cx = cx;
-    pos->cy = cy;
+    obj->pos = pos;
 }
 
-void Object_position_init_clicks(object *obj, int cx, int cy)
+void Object_position_init_clpos(world_t *world, object_t *obj, clpos_t pos)
 {
-    Object_position_set_clicks(obj, cx, cy);
+    Object_position_set_clpos(world, obj, pos);
     Object_position_remember(obj);
     obj->collmode = 0;
 }
 
-void Player_position_restore(player *pl)
+void Player_position_restore(player_t *pl)
 {
-    Player_position_set_clicks(pl, pl->prevpos.cx, pl->prevpos.cy);
+    Player_position_set_clpos(pl, pl->prevpos);
 }
 
-void Player_position_set_clicks(player *pl, int cx, int cy)
+void Player_position_set_clpos(player_t *pl, clpos_t pos)
 {
-    clpos		*pos = (clpos *)&pl->pos;
+    world_t *world = pl->world;
 
-    if (!INSIDE_MAP(cx, cy)) {
+    if (!World_contains_clpos(world, pos)) {
 	if (0) {
-	    printf("BUG!  Illegal player position %d,%d\n", cx, cy);
+	    printf("BUG!  Illegal player position %d,%d\n", pos.cx, pos.cy);
 	    *(double *)(-1) = 4321.0;
 	    abort();
 	} else {
@@ -75,30 +72,29 @@ void Player_position_set_clicks(player *pl, int cx, int cy)
 	}
     }
 
-    pos->cx = cx;
-    pos->cy = cy;
+    pl->pos = pos;
 }
 
-void Player_position_init_clicks(player *pl, int cx, int cy)
+void Player_position_init_clpos(player_t *pl, clpos_t pos)
 {
-    Player_position_set_clicks(pl, cx, cy);
+    Player_position_set_clpos(pl, pos);
     Player_position_remember(pl);
     pl->collmode = 0;
 }
 
-void Player_position_limit(player *pl)
+void Player_position_limit(player_t *pl)
 {
-    int			cx = pl->pos.cx, ox = cx;
-    int			cy = pl->pos.cy, oy = cy;
+    clpos_t pos = pl->pos, oldpos = pos;
+    world_t *world = pl->world;
 
-    LIMIT(cx, 0, World.cwidth - 1);
-    LIMIT(cy, 0, World.cheight - 1);
-    if (cx != ox || cy != oy)
-	Player_position_set_clicks(pl, cx, cy);
+    LIMIT(pos.cx, 0, world->cwidth - 1);
+    LIMIT(pos.cy, 0, world->cheight - 1);
+    if (pos.cx != oldpos.cx || pos.cy != oldpos.cy)
+	Player_position_set_clpos(pl, pos);
 }
 
 #ifdef DEVELOPMENT
-void Player_position_debug(player *pl, const char *msg)
+void Player_position_debug(player_t *pl, const char *msg)
 {
     int			i;
 
@@ -115,8 +111,8 @@ void Player_position_debug(player *pl, const char *msg)
 	   pl->prevpos.cx,
 	   pl->prevpos.cy);
     for (i = 0; i < pl->ship->num_points; i++) {
-	clpos pts = Ship_get_point_clpos(pl->ship, i, pl->dir);
-	clpos pt;
+	clpos_t pts = Ship_get_point_clpos(pl->ship, i, pl->dir);
+	clpos_t pt;
 
 	pt.cx = pl->pos.cx + pts.cx;
 	pt.cy = pl->pos.cy + pts.cy;

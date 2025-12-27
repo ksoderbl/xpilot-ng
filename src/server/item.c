@@ -1,5 +1,12 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 2003-2004 by
+ *
+ *      Uoti Urpala          <uau@users.sourceforge.net>
+ *      Kristian Söderblom   <kps@users.sourceforge.net>
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,7 +25,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpserver.h"
@@ -26,7 +33,7 @@
 char item_version[] = VERSION;
 
 
-static void Item_update_flags(player *pl)
+static void Item_update_flags(player_t *pl)
 {
     if (pl->item[ITEM_CLOAK] <= 0
 	&& BIT(pl->have, HAS_CLOAKING_DEVICE)) {
@@ -74,21 +81,22 @@ static void Item_update_flags(player *pl)
  * The `prob' parameter gives the chance that items are lost
  * and, if they are lost, what percentage.
  */
-void Item_damage(player *pl, double prob)
+void Item_damage(player_t *pl, double prob)
 {
-    if (prob < 1.0f) {
+    if (prob < 1.0) {
 	int		i;
 	double		loss;
 
 	loss = prob;
-	LIMIT(loss, 0.0f, 1.0f);
+	LIMIT(loss, 0.0, 1.0);
 
 	for (i = 0; i < NUM_ITEMS; i++) {
 	    if (!BIT(1U << i, ITEM_BIT_FUEL|ITEM_BIT_TANK)) {
 		if (pl->item[i]) {
 		    double f = rfrac();
+
 		    if (f < loss)
-			pl->item[i] = (int)(pl->item[i] * loss + 0.5f);
+			pl->item[i] = (int)(pl->item[i] * loss + 0.5);
 		}
 	    }
 	}
@@ -97,19 +105,19 @@ void Item_damage(player *pl, double prob)
     }
 }
 
-int Choose_random_item(void)
+int Choose_random_item(world_t *world)
 {
-    int		i;
-    double	item_prob_sum = 0;
+    int i;
+    double item_prob_sum = 0;
 
     for (i = 0; i < NUM_ITEMS; i++)
-	item_prob_sum += World.items[i].prob;
+	item_prob_sum += world->items[i].prob;
 
     if (item_prob_sum > 0.0) {
 	double sum = item_prob_sum * rfrac();
 
 	for (i = 0; i < NUM_ITEMS; i++) {
-	    sum -= World.items[i].prob;
+	    sum -= world->items[i].prob;
 	    if (sum <= 0)
 		break;
 	}
@@ -120,12 +128,12 @@ int Choose_random_item(void)
     return i;
 }
 
-void Place_item(player *pl, int item)
+void Place_item(world_t *world, player_t *pl, int item)
 {
-    int			num_lose, num_per_pack, place_count, dist;
-    long		grav, rand_item;
-    clpos		pos;
-    vector		vel;
+    int num_lose, num_per_pack, place_count, dist;
+    long grav, rand_item;
+    clpos_t pos;
+    vector_t vel;
     item_concentrator_t	*con;
 
     if (NumObjs >= MAX_TOTAL_SHOTS) {
@@ -136,25 +144,25 @@ void Place_item(player *pl, int item)
 
     if (pl) {
 	if (BIT(pl->status, KILLED)) {
-	    num_lose = pl->item[item] - World.items[item].initial;
+	    num_lose = pl->item[item] - world->items[item].initial;
 	    if (num_lose <= 0)
 		return;
 	    pl->item[item] -= num_lose;
-	    num_per_pack = (int)(num_lose * dropItemOnKillProb);
-	    if (num_per_pack < World.items[item].min_per_pack)
+	    num_per_pack = (int)(num_lose * options.dropItemOnKillProb);
+	    if (num_per_pack < world->items[item].min_per_pack)
 		return;
 	}
 	else {
 	    num_lose = pl->item[item];
 	    if (num_lose <= 0)
 		return;
-	    if (World.items[item].min_per_pack
-		== World.items[item].max_per_pack)
-		num_per_pack = World.items[item].max_per_pack;
+	    if (world->items[item].min_per_pack
+		== world->items[item].max_per_pack)
+		num_per_pack = world->items[item].max_per_pack;
 	    else
-		num_per_pack = World.items[item].min_per_pack
-		    + (int)(rfrac() * (1 + World.items[item].max_per_pack
-				       - World.items[item].min_per_pack));
+		num_per_pack = world->items[item].min_per_pack
+		    + (int)(rfrac() * (1 + world->items[item].max_per_pack
+				       - world->items[item].min_per_pack));
 	    if (num_per_pack > num_lose)
 		num_per_pack = num_lose;
 	    else
@@ -162,12 +170,12 @@ void Place_item(player *pl, int item)
 	    pl->item[item] -= num_lose;
 	}
     } else {
-	if (World.items[item].min_per_pack == World.items[item].max_per_pack)
-	    num_per_pack = World.items[item].max_per_pack;
+	if (world->items[item].min_per_pack == world->items[item].max_per_pack)
+	    num_per_pack = world->items[item].max_per_pack;
 	else
-	    num_per_pack = World.items[item].min_per_pack
-		+ (int)(rfrac() * (1 + World.items[item].max_per_pack
-				   - World.items[item].min_per_pack));
+	    num_per_pack = world->items[item].min_per_pack
+		+ (int)(rfrac() * (1 + world->items[item].max_per_pack
+				   - world->items[item].min_per_pack));
     }
 
     if (pl) {
@@ -189,28 +197,27 @@ void Place_item(player *pl, int item)
 	    else
 		pos.cy += (BLOCK_CLICKS + (int)(rfrac() * 8 * CLICK));
 	}
-	pos.cx = WRAP_XCLICK(pos.cx);
-	pos.cy = WRAP_YCLICK(pos.cy);
-	if (!INSIDE_MAP(pos.cx, pos.cy))
+	pos = World_wrap_clpos(world, pos);
+	if (!World_contains_clpos(world, pos))
 	    return;
-	/*if (!BIT(1U << World.block[bx][by], SPACE_BLOCKS))*/
+
 	if (is_inside(pos.cx, pos.cy, NOTEAM_BIT | NONBALL_BIT, NULL)
 	    != NO_GROUP)
 	    return;
 
     } else {
-	if (rfrac() < movingItemProb)
+	if (rfrac() < options.movingItemProb)
 	    grav = GRAVITY;
 	else
 	    grav = 0;
 
-	if (rfrac() < randomItemProb)
+	if (rfrac() < options.randomItemProb)
 	    rand_item = RANDOM_ITEM;
 	else
 	    rand_item = 0;
 
-	if (World.NumItemConcs > 0 && rfrac() < itemConcentratorProb)
-	    con = ItemConcs((int)(rfrac() * World.NumItemConcs));
+	if (world->NumItemConcs > 0 && rfrac() < options.itemConcentratorProb)
+	    con = ItemConcs(world, (int)(rfrac() * world->NumItemConcs));
 	else
 	    con = NULL;
 	/*
@@ -229,20 +236,16 @@ void Place_item(player *pl, int item)
 	    if (con) {
 		int dir = (int)(rfrac() * RES);
 
-		dist = (int)(rfrac() * ((itemConcentratorRadius
+		dist = (int)(rfrac() * ((options.itemConcentratorRadius
 					 * BLOCK_CLICKS) + 1));
 		pos.cx = con->pos.cx + dist * tcos(dir);
 		pos.cy = con->pos.cy + dist * tsin(dir);
-		pos.cx = WRAP_XCLICK(pos.cx);
-		pos.cy = WRAP_YCLICK(pos.cy);
-		if (!INSIDE_MAP(pos.cx, pos.cy))
+		pos = World_wrap_clpos(world, pos);
+		if (!World_contains_clpos(world, pos))
 		    continue;
-	    } else {
-		pos.cx = (int)(rfrac() * World.cwidth);
-		pos.cy = (int)(rfrac() * World.cheight);
-	    }
+	    } else
+		pos = World_get_random_clpos(world);
 
-	    /*if (BIT(1U << World.block[bx][by], SPACE_BLOCKS|CANNON_BIT))*/
 	    if (is_inside(pos.cx, pos.cy, NOTEAM_BIT | NONBALL_BIT, NULL)
 		== NO_GROUP)
 		break;
@@ -276,28 +279,28 @@ void Place_item(player *pl, int item)
 		vel.y += tsin(dir) * v;
 	    }
 	} else {
-	    vector gravity = World_gravity(pos);
+	    vector_t gravity = World_gravity(world, pos);
 
-	    vel.x -= Gravity * gravity.x;
-	    vel.y -= Gravity * gravity.y;
+	    vel.x -= options.gravity * gravity.x;
+	    vel.y -= options.gravity * gravity.y;
 	    vel.x += (int)(rfrac() * 8) - 3;
 	    vel.y += (int)(rfrac() * 8) - 3;
 	}
     }
 
-    Make_item(pos, vel, item, num_per_pack, grav | rand_item);
+    Make_item(world, pos, vel, item, num_per_pack, grav | rand_item);
 }
 
-void Make_item(clpos pos, vector vel,
+void Make_item(world_t *world, clpos_t pos, vector_t vel,
 	       int item, int num_per_pack,
 	       long status)
 {
-    object *obj;
+    object_t *obj;
 
-    if (!INSIDE_MAP(pos.cx, pos.cy))
+    if (!World_contains_clpos(world, pos))
 	return;
 
-    if (World.items[item].num >= World.items[item].max)
+    if (world->items[item].num >= world->items[item].max)
 	return;
 
     if ((obj = Object_allocate()) == NULL)
@@ -309,7 +312,7 @@ void Make_item(clpos pos, vector vel,
     obj->status = status;
     obj->id = NO_ID;
     obj->team = TEAM_NOT_SET;
-    Object_position_init_clicks(obj, pos.cx, pos.cy);
+    Object_position_init_clpos(world, obj, pos);
     obj->vel = vel;
     obj->acc.x =
     obj->acc.y = 0.0;
@@ -319,26 +322,27 @@ void Make_item(clpos pos, vector vel,
     obj->pl_range = ITEM_SIZE/2;
     obj->pl_radius = ITEM_SIZE/2;
 
-    World.items[item].num++;
-    Cell_add_object(obj);
+    world->items[item].num++;
+    Cell_add_object(world, obj);
 }
 
-void Throw_items(player *pl)
+void Throw_items(player_t *pl)
 {
-    int			num_items_to_throw, remain, item;
+    int num_items_to_throw, remain, item;
+    world_t *world = pl->world;
 
-    if (!dropItemOnKillProb || !pl)
+    if (!options.dropItemOnKillProb || !pl)
 	return;
 
     for (item = 0; item < NUM_ITEMS; item++) {
 	if (!BIT(1U << item, ITEM_BIT_FUEL | ITEM_BIT_TANK)) {
 	    do {
 		num_items_to_throw
-		    = pl->item[item] - World.items[item].initial;
+		    = pl->item[item] - world->items[item].initial;
 		if (num_items_to_throw <= 0)
 		    break;
-		Place_item(pl, item);
-		remain = pl->item[item] - World.items[item].initial;
+		Place_item(world, pl, item);
+		remain = pl->item[item] - world->items[item].initial;
 	    } while (remain > 0 && remain < num_items_to_throw);
 	}
     }
@@ -351,17 +355,18 @@ void Throw_items(player *pl)
  * a random direction with a small life time (ie. magazine has
  * gone off).
  */
-void Detonate_items(player *pl)
+void Detonate_items(player_t *pl)
 {
-    player		*owner_pl;
-    int			i;
-    modifiers		mods;
+    player_t *owner_pl;
+    int i;
+    modifiers_t mods;
+    world_t *world = pl->world;
 
     if (!BIT(pl->status, KILLED))
 	return;
 
     /* ZE: Detonated items on tanks should belong to the tank's owner. */
-    if (IS_TANK_PTR(pl))
+    if (Player_is_tank(pl))
 	owner_pl = Player_by_id(pl->lock.pl_id);
     else
 	owner_pl = pl;
@@ -369,9 +374,9 @@ void Detonate_items(player *pl)
     /*
      * These are always immune to detonation.
      */
-    if ((pl->item[ITEM_MINE] -= World.items[ITEM_MINE].initial) < 0)
+    if ((pl->item[ITEM_MINE] -= world->items[ITEM_MINE].initial) < 0)
 	pl->item[ITEM_MINE] = 0;
-    if ((pl->item[ITEM_MISSILE] -= World.items[ITEM_MISSILE].initial) < 0)
+    if ((pl->item[ITEM_MISSILE] -= world->items[ITEM_MISSILE].initial) < 0)
 	pl->item[ITEM_MISSILE] = 0;
 
     /*
@@ -384,27 +389,27 @@ void Detonate_items(player *pl)
      * slowly out from the ship (velocity relative).
      */
     for (i = 0; i < pl->item[ITEM_MINE]; i++) {
-	if (rfrac() < detonateItemOnKillProb) {
+	if (rfrac() < options.detonateItemOnKillProb) {
 	    int dir = (int)(rfrac() * RES);
 	    double speed = rfrac() * 4.0f;
-	    vector vel;
+	    vector_t vel;
 
 	    mods = pl->mods;
 	    if (BIT(mods.nuclear, NUCLEAR)
-		&& pl->item[ITEM_MINE] < nukeMinMines)
+		&& pl->item[ITEM_MINE] < options.nukeMinMines)
 		CLR_BIT(mods.nuclear, NUCLEAR);
 
 	    vel.x = pl->vel.x + speed * tcos(dir);
 	    vel.y = pl->vel.y + speed * tsin(dir);
-	    Place_general_mine(owner_pl, pl->team, GRAVITY,
+	    Place_general_mine(world, owner_pl, pl->team, GRAVITY,
 			       pl->pos, vel, mods);
 	}
     }
     for (i = 0; i < pl->item[ITEM_MISSILE]; i++) {
-	if (rfrac() < detonateItemOnKillProb) {
+	if (rfrac() < options.detonateItemOnKillProb) {
 	    int	type;
 
-	    if (pl->shots >= ShotsMax)
+	    if (pl->shots >= options.maxPlayerShots)
 		break;
 
 	    /*
@@ -422,20 +427,19 @@ void Detonate_items(player *pl)
 
 	    mods = pl->mods;
 	    if (BIT(mods.nuclear, NUCLEAR)
-		&& pl->item[ITEM_MISSILE] < nukeMinSmarts)
+		&& pl->item[ITEM_MISSILE] < options.nukeMinSmarts)
 		CLR_BIT(mods.nuclear, NUCLEAR);
 
-	    Fire_general_shot(owner_pl, 0, pl->team, pl->pos,
+	    Fire_general_shot(world, owner_pl, 0, pl->team, pl->pos,
 			      type, (int)(rfrac() * RES), mods, NO_ID);
 	}
     }
 }
 
-void Tractor_beam(player *pl)
+void Tractor_beam(player_t *pl)
 {
-    double	maxdist, percent;
-    long	cost;
-    player	*locked_pl = Player_by_id(pl->lock.pl_id);
+    double maxdist, percent, cost;
+    player_t *locked_pl = Player_by_id(pl->lock.pl_id);
 
     maxdist = TRACTOR_MAX_RANGE(pl->item[ITEM_TRACTOR_BEAM]);
     if (BIT(pl->lock.tagged, LOCK_PLAYER|LOCK_VISIBLE)
@@ -448,39 +452,39 @@ void Tractor_beam(player *pl)
 	return;
     }
     percent = TRACTOR_PERCENT(pl->lock.distance, maxdist);
-    cost = (long)TRACTOR_COST(percent);
+    cost = TRACTOR_COST(percent);
     if (pl->fuel.sum < -cost) {
 	CLR_BIT(pl->used, HAS_TRACTOR_BEAM);
 	return;
     }
-    General_tractor_beam(pl, pl->pos, pl->item[ITEM_TRACTOR_BEAM],
+    General_tractor_beam(pl->world, pl, pl->pos, pl->item[ITEM_TRACTOR_BEAM],
 			 locked_pl, pl->tractor_is_pressor);
 }
 
-void General_tractor_beam(player *pl, clpos pos,
-			  int items, player *victim, bool pressor)
+void General_tractor_beam(world_t *world, player_t *pl, clpos_t pos,
+			  int items, player_t *victim, bool pressor)
 {
-    double	maxdist = TRACTOR_MAX_RANGE(items),
-		maxforce = TRACTOR_MAX_FORCE(items),
-		percent, force, dist;
-    long	cost;
-    int		theta;
+    double maxdist = TRACTOR_MAX_RANGE(items),
+	maxforce = TRACTOR_MAX_FORCE(items),
+	percent, force, dist, cost;
+    int theta;
 
+    UNUSED_PARAM(world);
     dist = Wrap_length(pos.cx - victim->pos.cx,
 		       pos.cy - victim->pos.cy) / CLICK;
     if (dist > maxdist)
 	return;
+
     percent = TRACTOR_PERCENT(dist, maxdist);
-    cost = (long)TRACTOR_COST(percent);
+    cost = TRACTOR_COST(percent);
     force = TRACTOR_FORCE(pressor, percent, maxforce);
 
     sound_play_sensors(pos, pressor ? PRESSOR_BEAM_SOUND : TRACTOR_BEAM_SOUND);
 
     if (pl)
-	Add_fuel(&(pl->fuel), cost);
+	Player_add_fuel(pl, cost);
 
-    theta = (int)Wrap_cfindDir(pos.cx - victim->pos.cx,
-			       pos.cy - victim->pos.cy);
+    theta = Wrap_cfindDir(pos.cx - victim->pos.cx, pos.cy - victim->pos.cy);
 
     if (pl) {
 	pl->vel.x += tcos(theta) * (force / pl->mass);
@@ -493,24 +497,22 @@ void General_tractor_beam(player *pl, clpos pos,
 }
 
 
-void Do_deflector(player *pl)
+void Do_deflector(player_t *pl)
 {
-    double	range = (pl->item[ITEM_DEFLECTOR] * 0.5 + 1) * BLOCK_CLICKS;
-    double	maxforce = pl->item[ITEM_DEFLECTOR] * 0.2;
-    object	*obj, **obj_list;
-    int		i, obj_count;
-    int		dx, dy;
-    double	dist;
+    double range = (pl->item[ITEM_DEFLECTOR] * 0.5 + 1) * BLOCK_CLICKS;
+    double maxforce = pl->item[ITEM_DEFLECTOR] * 0.2;
+    object_t *obj, **obj_list;
+    int i, obj_count;
+    double dx, dy, dist;
 
     if (pl->fuel.sum < -ED_DEFLECTOR) {
 	if (BIT(pl->used, HAS_DEFLECTOR))
 	    Deflector(pl, false);
 	return;
     }
-    Add_fuel(&(pl->fuel), (long)ED_DEFLECTOR);
+    Player_add_fuel(pl, ED_DEFLECTOR);
 
-    Cell_get_objects(OBJ_X_IN_BLOCKS(pl), OBJ_Y_IN_BLOCKS(pl),
-		     (int)(range / BLOCK_CLICKS + 1), 200,
+    Cell_get_objects(pl->world, pl->pos, (int)(range / BLOCK_CLICKS + 1), 200,
 		     &obj_list, &obj_count);
 
     for (i = 0; i < obj_count; i++) {
@@ -522,7 +524,7 @@ void Do_deflector(player *pl)
 	if (obj->id == pl->id) {
 	    if (BIT(obj->status, OWNERIMMUNE)
 		|| frame_time < obj->fusetime
-		|| selfImmunity)
+		|| options.selfImmunity)
 		continue;
 	} else {
 	    if (Team_immune(obj->id, pl->id))
@@ -541,7 +543,7 @@ void Do_deflector(player *pl)
 	dist = (double)(LENGTH(dx, dy) - PIXEL_TO_CLICK(SHIP_SZ));
 	if (dist < range
 	    && dist > 0) {
-	    int dir = (int)findDir(dx, dy);
+	    int dir = findDir(dx, dy);
 	    int idir = MOD2((int)(dir - findDir(obj->vel.x, obj->vel.y)), RES);
 
 	    if (idir > RES * 0.25
@@ -560,11 +562,11 @@ void Do_deflector(player *pl)
     }
 }
 
-void Do_transporter(player *pl)
+void Do_transporter(player_t *pl)
 {
-    player	*victim = NULL;
-    int		i;
-    double	dist, closest = TRANSPORTER_DISTANCE * CLICK;
+    player_t *victim = NULL;
+    int i;
+    double dist, closest = TRANSPORTER_DISTANCE * CLICK;
 
     /* if not available, fail silently */
     if (!pl->item[ITEM_TRANSPORTER]
@@ -574,11 +576,12 @@ void Do_transporter(player *pl)
 
     /* find victim */
     for (i = 0; i < NumPlayers; i++) {
-	player *pl_i = Players(i);
+	player_t *pl_i = Players(i);
+
 	if (pl_i == pl
 	    || !Player_is_active(pl_i)
 	    || Team_immune(pl->id, pl_i->id)
-	    || IS_TANK_PTR(pl_i)
+	    || Player_is_tank(pl_i)
 	    || BIT(pl_i->used, HAS_PHASING_DEVICE))
 	    continue;
 	dist = Wrap_length(pl->pos.cx - pl_i->pos.cx,
@@ -592,23 +595,22 @@ void Do_transporter(player *pl)
     /* no victims in range */
     if (!victim) {
 	sound_play_sensors(pl->pos, TRANSPORTER_FAIL_SOUND);
-	Add_fuel(&(pl->fuel), ED_TRANSPORTER);
+	Player_add_fuel(pl, ED_TRANSPORTER);
 	pl->item[ITEM_TRANSPORTER]--;
 	return;
     }
 
     /* victim found */
-    Do_general_transporter(pl, pl->pos, victim, NULL, NULL);
+    Do_general_transporter(pl->world, pl, pl->pos, victim, NULL, NULL);
 }
 
-void Do_general_transporter(player *pl, clpos pos, player *victim,
-			    int *itemp, long *amountp)
+void Do_general_transporter(world_t *world, player_t *pl, clpos_t pos,
+			    player_t *victim, int *itemp, double *amountp)
 {
-    char		msg[MSG_LEN];
-    const char		*what = NULL;
-    int			i;
-    int			item = ITEM_FUEL;
-    long		amount;
+    char msg[MSG_LEN];
+    const char *what = NULL;
+    int i, item = ITEM_FUEL;
+    double amount;
 
     /* choose item type to steal */
     for (i = 0; i < 50; i++) {
@@ -623,7 +625,7 @@ void Do_general_transporter(player *pl, clpos pos, player *victim,
 	/* you can't pluck from a bald chicken.. */
 	sound_play_sensors(pos, TRANSPORTER_FAIL_SOUND);
 	if (!pl) {
-	    *amountp = 0;
+	    *amountp = 0.0;
 	    *itemp = -1;
 	}
 	return;
@@ -642,7 +644,7 @@ void Do_general_transporter(player *pl, clpos pos, player *victim,
     }
 
     /* remove loot from victim */
-    amount = 1;
+    amount = 1.0;
     if (!(item == ITEM_MISSILE
 	  || item == ITEM_FUEL
 	  || item == ITEM_TANK))
@@ -657,13 +659,13 @@ void Do_general_transporter(player *pl, clpos pos, player *victim,
 	    CLR_BIT(victim->have, HAS_AFTERBURNER);
 	break;
     case ITEM_MISSILE:
-	amount = MIN(victim->item[item], 3);
-	if (amount == 1)
+	amount = (double)MIN(victim->item[item], 3);
+	if (amount == 1.0)
 	    sprintf(msg, "%s stole a missile from %s.",
 		    (pl ? pl->name : "A cannon"), victim->name);
 	else
-	    sprintf(msg, "%s stole %ld missiles from %s",
-		    (pl ? pl->name : "A cannon"), amount, victim->name);
+	    sprintf(msg, "%s stole %d missiles from %s",
+		    (pl ? pl->name : "A cannon"), (int)amount, victim->name);
         break;
     case ITEM_CLOAK:
 	what = "a cloaking device";
@@ -762,15 +764,13 @@ void Do_general_transporter(player *pl, clpos pos, player *victim,
     case ITEM_FUEL:
 	{
 	    /* choose percantage between 10 and 50. */
-	    double percent = 10.0f + 40.0f * rfrac();
-	    amount = (long)(victim->fuel.sum * percent / 100);
-	    sprintf(msg, "%s stole %ld units (%d%%) of fuel from %s.",
+	    double percent = 10.0 + 40.0 * rfrac();
+	    amount = victim->fuel.sum * percent / 100.0;
+	    sprintf(msg, "%s stole %.1f units (%.1f%%) of fuel from %s.",
 		    (pl ? pl->name : "A cannon"),
-		    amount >> FUEL_SCALE_BITS,
-		    (int)(percent + 0.5),
-		    victim->name);
+		    amount, percent, victim->name);
 	}
-	Add_fuel(&(victim->fuel), -amount);
+	Player_add_fuel(victim, -amount);
         break;
     default:
 	warn("Do_general_transporter: unknown item type.");
@@ -787,14 +787,12 @@ void Do_general_transporter(player *pl, clpos pos, player *victim,
     if (!pl) {
 	*itemp = item;
 	*amountp = amount;
-	if (item == ITEM_FUEL || item == ITEM_TANK)
-	    *amountp >>= FUEL_SCALE_BITS;
 	return;
     }
 
     /* don't forget the penalty for robbery */
     pl->item[ITEM_TRANSPORTER]--;
-    Add_fuel(&(pl->fuel), ED_TRANSPORTER);
+    Player_add_fuel(pl, ED_TRANSPORTER);
 
     /* update thief */
     if (!(item == ITEM_FUEL
@@ -842,27 +840,38 @@ void Do_general_transporter(player *pl, clpos pos, player *victim,
 	    Player_add_tank(pl, amount);
 	break;
     case ITEM_FUEL:
-	Add_fuel(&(pl->fuel), amount);
+	Player_add_fuel(pl, amount);
 	break;
     default:
 	break;
     }
 
-    LIMIT(pl->item[item], 0, World.items[item].limit);
+    LIMIT(pl->item[item], 0, world->items[item].limit);
 }
 
-void do_hyperjump(player *pl)
+/*
+ * Returns true if warp status was achieved.
+ */
+bool Initiate_hyperjump(player_t *pl)
 {
+    if (pl->item[ITEM_HYPERJUMP] <= 0)
+	return false;
+    if (pl->fuel.sum < -ED_HYPERJUMP)
+	return false;
+    pl->item[ITEM_HYPERJUMP]--;
+    Player_add_fuel(pl, ED_HYPERJUMP);
     SET_BIT(pl->status, WARPING);
     pl->wormHoleHit = -1;
+    return true;
 }
 
-void do_lose_item(player *pl)
+void do_lose_item(player_t *pl)
 {
-    int		item;
+    int item;
 
     if (!pl)
 	return;
+
     item = pl->lose_item;
     if (item < 0 || item >= NUM_ITEMS) {
 	error("BUG: do_lose_item %d", item);
@@ -874,8 +883,9 @@ void do_lose_item(player *pl)
     if (pl->item[item] <= 0)
 	return;
 
-    if (loseItemDestroys == false && !BIT(pl->used, HAS_PHASING_DEVICE))
-	Place_item(pl, item);
+    if (options.loseItemDestroys == false
+	&& !BIT(pl->used, HAS_PHASING_DEVICE))
+	Place_item(pl->world, pl, item);
     else
 	pl->item[item]--;
 
@@ -883,22 +893,22 @@ void do_lose_item(player *pl)
 }
 
 
-void Fire_general_ecm(player *pl, int team, clpos pos)
+void Fire_general_ecm(world_t *world, player_t *pl, int team, clpos_t pos)
 {
-    object		*shot;
-    mineobject		*closest_mine = NULL;
-    smartobject		*smart;
-    mineobject		*mine;
-    double		closest_mine_range = World.hypotenuse;
-    int			i, j;
-    double		range, perim, damage;
-    player		*p;
-    ecm_t		*ecm;
+    object_t *shot;
+    mineobject_t *closest_mine = NULL;
+    smartobject_t *smart;
+    mineobject_t *mine;
+    double closest_mine_range = world->hypotenuse;
+    int i, j;
+    double range, perim, damage;
+    player_t *p;
+    ecm_t *ecm;
 
     if (NumEcms >= MAX_TOTAL_ECMS)
 	return;
 
-    Ecms[NumEcms] = (ecm_t *)malloc(sizeof(ecm_t));
+    Ecms[NumEcms] = malloc(sizeof(ecm_t));
     if (Ecms[NumEcms] == NULL)
 	return;
 
@@ -910,7 +920,7 @@ void Fire_general_ecm(player *pl, int team, clpos pos)
     if (pl) {
 	pl->ecmcount++;
 	pl->item[ITEM_ECM]--;
-	Add_fuel(&(pl->fuel), ED_ECM);
+	Player_add_fuel(pl, ED_ECM);
 	sound_play_sensors(ecm->pos, ECM_SOUND);
     }
 
@@ -932,7 +942,8 @@ void Fire_general_ecm(player *pl, int team, clpos pos)
 	 * team members if team immunity is on.
 	 */
 	if (shot->id != NO_ID) {
-	    player *owner_pl = Player_by_id(shot->id);
+	    player_t *owner_pl = Player_by_id(shot->id);
+
 	    if (pl == owner_pl) {
 		if (shot->type == OBJ_MINE) {
 		    if (BIT(shot->status, OWNERIMMUNE))
@@ -943,7 +954,7 @@ void Fire_general_ecm(player *pl, int team, clpos pos)
 			continue;
 		}
 	    } else if ((pl && Team_immune(pl->id, owner_pl->id))
-		       || (BIT(World.rules->mode, TEAM_PLAY)
+		       || (BIT(world->rules->mode, TEAM_PLAY)
 			   && team == shot->team))
 		continue;
 	}
@@ -961,7 +972,7 @@ void Fire_general_ecm(player *pl, int team, clpos pos)
 	    if (pl
 		&& BIT(pl->lock.tagged, LOCK_PLAYER)
 		&& (pl->lock.distance <= pl->sensor_range
-		    || !BIT(World.rules->mode, LIMITED_VISIBILITY))
+		    || !BIT(world->rules->mode, LIMITED_VISIBILITY))
 		&& pl->visibility[GetInd(pl->lock.pl_id)].canSee)
 		smart->new_info = pl->lock.pl_id;
 	    else
@@ -1024,7 +1035,7 @@ void Fire_general_ecm(player *pl, int team, clpos pos)
      *  50		75
      *	 0 (closest)	100
      */
-    if (ecmsReprogramMines && closest_mine != NULL) {
+    if (options.ecmsReprogramMines && closest_mine != NULL) {
 	range = closest_mine_range;
 	if (range <= 0 || (int)(rfrac() * 100.0f) < (100 - (int)(50*range)))
 	    closest_mine->id = (pl ? pl->id : NO_ID);
@@ -1032,10 +1043,11 @@ void Fire_general_ecm(player *pl, int team, clpos pos)
     }
 
     /* in non-team mode cannons are immune to cannon ECMs */
-    if (BIT(World.rules->mode, TEAM_PLAY) || pl) {
-	for (i = 0; i < World.NumCannons; i++) {
-	    cannon_t *c = Cannons(i);
-	    if (BIT(World.rules->mode, TEAM_PLAY)
+    if (BIT(world->rules->mode, TEAM_PLAY) || pl) {
+	for (i = 0; i < world->NumCannons; i++) {
+	    cannon_t *c = Cannons(world, i);
+
+	    if (BIT(world->rules->mode, TEAM_PLAY)
 		&& c->team == team)
 		continue;
 	    range = Wrap_length(pos.cx - c->pos.cx,
@@ -1046,7 +1058,7 @@ void Fire_general_ecm(player *pl, int team, clpos pos)
 	    if (c->item[ITEM_LASER])
 		c->item[ITEM_LASER]
 		    -= (int)(damage * c->item[ITEM_LASER] + 0.5);
-	    c->damaged += 24 * range * pow(0.75, c->item[ITEM_SENSOR]);
+	    c->damaged += 24 * range * pow(0.75, (double)c->item[ITEM_SENSOR]);
 	}
     }
 
@@ -1060,10 +1072,10 @@ void Fire_general_ecm(player *pl, int team, clpos pos)
 	 * Team members are always immune from ECM effects from other
 	 * team members.  Its too nasty otherwise.
 	 */
-	if (BIT(World.rules->mode, TEAM_PLAY) && p->team == team)
+	if (BIT(world->rules->mode, TEAM_PLAY) && p->team == team)
 	    continue;
 
-	if (pl && ALLIANCE(pl, p))
+	if (pl && Players_are_allies(pl, p))
 	    continue;
 
 	if (BIT(p->used, HAS_PHASING_DEVICE))
@@ -1089,22 +1101,23 @@ void Fire_general_ecm(player *pl, int team, clpos pos)
 	     * should this be FPS dependant: damage = 4.0f * FPS * range; ?
 	     * No, i think.
 	     */
-	    damage = 24.0f * range;
+	    damage = 24.0 * range;
 
 	    if (p->item[ITEM_CLOAK] <= 1)
 		p->forceVisible += damage;
 	    else
-		p->forceVisible += damage * pow(0.75, (p->item[ITEM_CLOAK]-1));
+		p->forceVisible
+		    += damage * pow(0.75, (double)(p->item[ITEM_CLOAK]-1));
 
 	    /* ECM may cause balls to detach. */
 	    if (BIT(p->have, HAS_BALL)) {
 		for (j = 0; j < NumObjs; j++) {
 		    shot = Obj[j];
 		    if (BIT(shot->type, OBJ_BALL)) {
-			ballobject *ball = BALL_PTR(shot);
+			ballobject_t *ball = BALL_PTR(shot);
+
 			if (ball->owner == p->id) {
-			    if ((int)(rfrac() * 100.0f)
-				< ((int)(20*range)+5))
+			    if ((int)(rfrac() * 100.0) < ((int)(20*range)+5))
 				Detach_ball(p, ball);
 			}
 		    }
@@ -1116,17 +1129,17 @@ void Fire_general_ecm(player *pl, int team, clpos pos)
 		p->item[ITEM_LASER]
 		    -= (int)(range * p->item[ITEM_LASER] + 0.5);
 
-	    if (!IS_ROBOT_PTR(p) || !ecmsReprogramRobots || !pl) {
+	    if (!Player_is_robot(p) || !options.ecmsReprogramRobots || !pl) {
 		/* player is blinded by light flashes. */
-		long duration
-		    = (long)(damage * pow(0.75, p->item[ITEM_SENSOR]));
+		double duration
+		    = (damage * pow(0.75, (double)p->item[ITEM_SENSOR]));
 		p->damaged += duration;
 		if (pl)
-		    Record_shove(p, pl, frame_loops + duration);
+		    Record_shove(p, pl, frame_loops + (long)duration);
 	    } else {
 		if (BIT(pl->lock.tagged, LOCK_PLAYER)
 		    && (pl->lock.distance < pl->sensor_range
-			|| !BIT(World.rules->mode, LIMITED_VISIBILITY))
+			|| !BIT(world->rules->mode, LIMITED_VISIBILITY))
 		    && pl->visibility[GetInd(pl->lock.pl_id)].canSee
 		    && pl->lock.pl_id != p->id
 		    /*&& !TEAM_IMMUNE(ind, GetInd(pl->lock.pl_id))*/) {
@@ -1136,7 +1149,8 @@ void Fire_general_ecm(player *pl, int team, clpos pos)
 		     */
 		    Robot_program(p, pl->lock.pl_id);
 		    for (j = 0; j < NumPlayers; j++) {
-			player *pl_j = Players(j);
+			player_t *pl_j = Players(j);
+
 			if (pl_j->conn != NULL) {
 			    Send_seek(pl_j->conn, pl->id,
 				      p->id, pl->lock.pl_id);
@@ -1148,7 +1162,7 @@ void Fire_general_ecm(player *pl, int team, clpos pos)
     }
 }
 
-void Fire_ecm(player *pl)
+void Fire_ecm(player_t *pl)
 {
     if (pl->item[ITEM_ECM] == 0
 	|| pl->fuel.sum <= -ED_ECM
@@ -1156,7 +1170,5 @@ void Fire_ecm(player *pl)
 	|| BIT(pl->used, HAS_PHASING_DEVICE))
 	return;
 
-    Fire_general_ecm(pl, pl->team, pl->pos);
+    Fire_general_ecm(pl->world, pl, pl->team, pl->pos);
 }
-
-

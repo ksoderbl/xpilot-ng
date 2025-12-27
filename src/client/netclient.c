@@ -1,10 +1,14 @@
 /*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
  *      Bert Gijsbers        <bert@xpilot.org>
  *      Dick Balaska         <dick@xpilot.org>
+ *
+ * Copyright (C) 2000-2004 Uoti Urpala <uau@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,7 +22,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "xpclient.h"
@@ -40,9 +44,11 @@ typedef struct {
 /*
  * Exported variables.
  */
-setup_t			*Setup;
+setup_t			*Setup = NULL;
+display_t               server_display;
 int			receive_window_size;
 long			last_loops;
+bool                    packetMeasurement;
 #ifdef _WINDOWS
 int			received_self = FALSE;
 #endif
@@ -57,10 +63,10 @@ static int		(*receive_tbl[256])(void),
 			(*reliable_tbl[256])(void);
 static int		keyboard_delta;
 static unsigned		magic;
+static time_t           last_send_anything;
 static long		last_keyboard_change,
 			last_keyboard_ack,
 			last_keyboard_update,
-			last_send_anything,
 			reliable_offset,
 			talk_pending,
 			talk_sequence_num,
@@ -223,9 +229,9 @@ int Net_setup(void)
 {
     int		n,
 		len,
-		size,
 		done = 0,
 		retries;
+    size_t	size;
     long	todo = sizeof(setup_t);
     char	*ptr;
 
@@ -296,7 +302,8 @@ int Net_setup(void)
 		done = (char *) &Setup->map_data[0] - ptr;
 		todo = Setup->map_data_len;
 	    } else {
-		memcpy(&ptr[done], cbuf.ptr, len);
+		assert(len > 0);
+		memcpy(&ptr[done], cbuf.ptr, (size_t)len);
 		Sockbuf_advance(&cbuf, len + cbuf.ptr - cbuf.buf);
 		done += len;
 		todo -= len;
@@ -363,7 +370,7 @@ int Net_setup(void)
  * this info from the ENTER_GAME_pack.
  */
 #define	MAX_VERIFY_RETRIES	5
-int Net_verify(char *real, char *nick, char *disp, int my_team)
+int Net_verify(char *user_name, char *nick_name, char *disp)
 {
     int		n,
 		type,
@@ -379,18 +386,17 @@ int Net_verify(char *real, char *nick, char *disp, int my_team)
 	    }
 	    Sockbuf_clear(&wbuf);
 	    /* IFWINDOWS( Trace("Verifying to sock=%d\n", wbuf.sock) ); */
-	    n = Packet_printf(&wbuf, "%c%s%s%s", PKT_VERIFY, real, nick, disp);
+	    n = Packet_printf(&wbuf, "%c%s%s%s", PKT_VERIFY,
+			      user_name, nick_name, disp);
 	    if (n <= 0 || Sockbuf_flush(&wbuf) <= 0) {
 		error("Can't send verify packet");
 		return -1;
 	    }
 	    time(&last);
-#ifndef SILENT
 	    if (retries > 1) {
 		printf("Waiting for verify response\n");
 		IFWINDOWS( Progress("Waiting for verify response") );
 	    }
-#endif
 	}
 	sock_set_timeout(&rbuf.sock, 1, 0);
 	if (sock_readable(&rbuf.sock) == 0)
@@ -435,12 +441,10 @@ int Net_verify(char *real, char *nick, char *disp, int my_team)
 	}
 	break;
     }
-#ifndef SILENT
     if (retries > 1) {
 	printf("Verified correctly\n");
 	IFWINDOWS( Progress("Verified correctly") );
     }
-#endif
     return 0;
 }
 
@@ -456,7 +460,7 @@ int Net_verify(char *real, char *nick, char *disp, int my_team)
 int Net_init(char *server, int port)
 {
     int			i;
-    unsigned		size;
+    size_t		size;
     sock_t		sock;
 
     assert(server != NULL);
@@ -464,6 +468,11 @@ int Net_init(char *server, int port)
 #ifndef _WINDOWS
     signal(SIGPIPE, SIG_IGN);
 #endif
+
+    server_display.view_width = 0;
+    server_display.view_height = 0;
+    server_display.spark_rand = 0;
+    server_display.num_spark_colors = 0;
 
     Receive_init();
     if (!clientPortStart || !clientPortEnd ||
@@ -624,7 +633,7 @@ int Net_flush(void)
     if (Sockbuf_flush(&wbuf) == -1)
 	return -1;
     Sockbuf_clear(&wbuf);
-    last_send_anything = last_loops;
+    last_send_anything = time(NULL);
     return 1;
 }
 
@@ -757,19 +766,22 @@ int Net_start(void)
     return 0;
 }
 
+
 void Net_init_measurement(void)
 {
     packet_loss = 0;
     packet_drop = 0;
     packet_loop = 0;
-    if (packetLossMeterColor || packetDropMeterColor) {
+    if (packetMeasurement) {
 	if (packet_measure == NULL) {
-	    if ((packet_measure = (char *) malloc(FPS)) == NULL) {
+	    /*
+	     * Server FPS can change so we had better allocate enough.
+	     */
+	    if ((packet_measure = malloc(MAX_SUPPORTED_FPS)) == NULL) {
 		error("No memory for packet measurement");
-		packetLossMeterColor = 0;
-		packetDropMeterColor = 0;
+		packetMeasurement = false;
 	    } else
-		memset(packet_measure, PACKET_DRAW, FPS);
+		memset(packet_measure, PACKET_DRAW, MAX_SUPPORTED_FPS);
 	}
     }
     else if (packet_measure != NULL) {
@@ -963,7 +975,7 @@ static void Net_lag_measurement(long key_ack)
     for (i = 0; i < KEYBOARD_STORE; i++) {
 	if (keyboard_change[i] == key_ack
 	    && keyboard_acktime[i] == -1) {
-	    keyboard_acktime[i] = loops;
+	    keyboard_acktime[i] =last_loops - 1;
 #if 0
 	    printf("A;%d;%ld;%ld ",
 		   i, keyboard_change[i], keyboard_acktime[i]);
@@ -1066,6 +1078,7 @@ int Net_input(void)
 		*last_frame,
 		*oldest_frame = &Frames[0],
 		tmpframe;
+    time_t      time_now;
 
     for (i = 0; i < receive_window_size; i++) {
 	frame = &Frames[i];
@@ -1229,15 +1242,13 @@ int Net_input(void)
      * and we haven't updated it in the (previous) current time frame
      * or if we haven't sent anything for a while (keepalive)
      * then we send our current keyboard state.
-     *
-     * kps - Setup->frames_per_second was used here previously,
-     * instead of clientFPS.
      */
+    time_now = time(NULL);
     if ((last_keyboard_ack != last_keyboard_change
 	    && last_keyboard_update /*+ 1*/ < last_loops)
-	|| last_loops - last_send_anything > 5 * clientFPS) {
+	|| time_now - last_send_anything > 5) {
 	Key_update();
-	last_send_anything = last_loops;
+	last_send_anything = time_now;
     } else
 	/*
 	 * 4.5.4a2: flush if non-empty
@@ -1404,40 +1415,6 @@ int Net_ask_for_motd(long offset, long maxlen)
     return 0;
 }
 
-
-static void Check_view_dimensions(void)
-{
-    int			width_wanted = draw_width;
-    int			height_wanted = draw_height;
-    int			srv_width, srv_height;
-
-    width_wanted = (int)(width_wanted * scaleFactor + 0.5);
-    height_wanted = (int)(height_wanted * scaleFactor + 0.5);
-
-    srv_width = width_wanted;
-    srv_height = height_wanted;
-    LIMIT(srv_height, MIN_VIEW_SIZE, MAX_VIEW_SIZE);
-    LIMIT(srv_width, MIN_VIEW_SIZE, MAX_VIEW_SIZE);
-    if (ext_view_width != srv_width ||
-	ext_view_height != srv_height) {
-	Send_display();
-    }
-
-    active_view_width = ext_view_width;
-    active_view_height = ext_view_height;
-    ext_view_x_offset = 0;
-    ext_view_y_offset = 0;
-    if (width_wanted > ext_view_width) {
-	ext_view_width = width_wanted;
-	ext_view_x_offset = (width_wanted - active_view_width) / 2;
-    }
-    if (height_wanted > ext_view_height) {
-	ext_view_height = height_wanted;
-	ext_view_y_offset = (height_wanted - active_view_height) / 2;
-    }
-}
-
-
 /*
  * Receive the packet with counts for all the items.
  * New since pack version 4203.
@@ -1480,9 +1457,10 @@ int Receive_self(void)
 {
     int		n;
     short	x, y, vx, vy, lockId, lockDist,
-		sFuelSum, sFuelMax;
-    u_byte	ch, sHeading, sPower, sTurnSpeed, sTurnResistance,
-		sNextCheckPoint, lockDir, sAutopilotLight, currentTank, sStat;
+		sFuelSum, sFuelMax, sViewWidth, sViewHeight;
+    u_byte	ch, sNumSparkColors, sHeading, sPower, sTurnSpeed,
+		sTurnResistance, sNextCheckPoint, lockDir, sAutopilotLight,
+		currentTank, sStat;
     u_byte	num_items[NUM_ITEMS];
 
     n = Packet_scanf(&rbuf,
@@ -1505,26 +1483,36 @@ int Receive_self(void)
 		     "%c%c",
 
 		     &currentTank, &sFuelSum, &sFuelMax,
-		     &ext_view_width, &ext_view_height, &debris_colors,
+		     &sViewWidth, &sViewHeight, &sNumSparkColors,
 		     &sStat, &sAutopilotLight
 		     );
     if (n <= 0)
 	return n;
 
-    if (debris_colors > num_spark_colors)
-	debris_colors = num_spark_colors;
+    /*
+     * These assignments are done here because the server_display
+     * structure members are not of the type that Packet_scanf()
+     * expects, which breaks things on big endian architectures.
+     */
+    server_display.view_width = sViewWidth;
+    server_display.view_height = sViewHeight;
+    LIMIT(server_display.view_width, MIN_VIEW_SIZE, MAX_VIEW_SIZE);
+    if (sViewWidth != server_display.view_width)
+	warn("unsupported view width from server");
+    LIMIT(server_display.view_height, MIN_VIEW_SIZE, MAX_VIEW_SIZE);
+    if (sViewHeight != server_display.view_height)
+	warn("unsupported view height from server");
+    server_display.num_spark_colors = sNumSparkColors;
 
-    Check_view_dimensions();
-
-    Game_over_action(sStat);
     Handle_self(x, y, vx, vy, sHeading,
-		(float) sPower,
-		(float) sTurnSpeed,
-		(float) sTurnResistance / 255.0F,
+		(double) sPower,
+		(double) sTurnSpeed,
+		(double) sTurnResistance / 255.0,
 		lockId, lockDist, lockDir,
 		sNextCheckPoint, sAutopilotLight,
 		num_items,
-		currentTank, sFuelSum, sFuelMax, rbuf.len);
+		currentTank, (double)sFuelSum, (double)sFuelMax, rbuf.len,
+		(int)sStat);
 
 #ifdef _WINDOWS
     received_self = TRUE;
@@ -1607,11 +1595,17 @@ int Receive_ball(void)
 {
     int		n;
     short	x, y, id;
-    u_byte	ch;
+    u_byte	ch, style = 0xff /* no style */;
 
-    if ((n = Packet_scanf(&rbuf, "%c%hd%hd%hd", &ch, &x, &y, &id)) <= 0)
-	return n;
-    if ((n = Handle_ball(x, y, id)) == -1)
+    if (version < 0x4F14) {
+	if ((n = Packet_scanf(&rbuf, "%c%hd%hd%hd", &ch, &x, &y, &id)) <= 0)
+	    return n;
+    } else {
+	if ((n = Packet_scanf(&rbuf, "%c%hd%hd%hd%c", &ch, &x, &y, &id,
+			      &style)) <= 0)
+	    return n;
+    }
+    if ((n = Handle_ball(x, y, id, style)) == -1)
 	return -1;
     return 1;
 }
@@ -1888,9 +1882,6 @@ int Receive_radar(void)
     if ((n = Packet_scanf(&rbuf, "%c%hd%hd%c", &ch, &x, &y, &size)) <= 0)
 	return n;
 
-    x = (int)((double)(x * 256) / Setup->width + 0.5);
-    y = (int)((double)(y * RadarHeight) / Setup->height + 0.5);
-
     if ((n = Handle_radar(x, y, size)) == -1)
 	return -1;
     return 1;
@@ -1918,7 +1909,7 @@ int Receive_fastradar(void)
 	if (*ptr & 0x20)
 	    size |= 0x80;
 	ptr++;
-	r = Handle_radar(x, y, size);
+	r = Handle_fastradar(x, y, size);
 	if (r == -1)
 	    break;
     }
@@ -1985,21 +1976,21 @@ int Receive_player(void)
     int			n;
     short		id;
     u_byte		ch, myteam, mychar, myself = 0;
-    char		name[MAX_CHARS],
-			real[MAX_CHARS],
-			host[MAX_CHARS],
+    char		nick_name[MAX_CHARS],
+			user_name[MAX_CHARS],
+			host_name[MAX_CHARS],
 			shape[2*MSG_LEN],
 			*cbuf_ptr = cbuf.ptr;
 
     if ((n = Packet_scanf(&cbuf,
 			  "%c%hd%c%c" "%s%s%s" "%S",
 			  &ch, &id, &myteam, &mychar,
-			  name, real, host,
+			  nick_name, user_name, host_name,
 			  shape)) <= 0)
 	return n;
-    name[MAX_NAME_LEN - 1] = '\0';
-    real[MAX_NAME_LEN - 1] = '\0';
-    host[MAX_HOST_LEN - 1] = '\0';
+    nick_name[MAX_NAME_LEN - 1] = '\0';
+    user_name[MAX_NAME_LEN - 1] = '\0';
+    host_name[MAX_HOST_LEN - 1] = '\0';
 
     if (version < 0x4F10)
 	n = Packet_scanf(&cbuf, "%S", &shape[strlen(shape)]);
@@ -2010,7 +2001,7 @@ int Receive_player(void)
 	return n;
     }
 
-    if ((n = Handle_player(id, myteam, mychar, name, real, host,
+    if ((n = Handle_player(id, myteam, mychar, nick_name, user_name, host_name,
 			   shape, myself)) == -1)
 	return -1;
     return 1;
@@ -2114,7 +2105,7 @@ int Receive_timing(void)
 	return n;
     check = timing % num_checks;
     round = timing / num_checks;
-    if ((n = Handle_timing(id, check, round)) == -1)
+    if ((n = Handle_timing(id, check, round, last_loops)) == -1)
 	return -1;
     return 1;
 }
@@ -2127,7 +2118,7 @@ int Receive_fuel(void)
 
     if ((n = Packet_scanf(&rbuf, "%c%hu%hu", &ch, &num, &fuel)) <= 0)
 	return n;
-    if ((n = Handle_fuel(num, fuel << FUEL_SCALE_BITS)) == -1)
+    if ((n = Handle_fuel(num, (double)fuel)) == -1)
 	return -1;
     if (wbuf.len < MAX_MAP_ACK_LEN)
 	Packet_printf(&wbuf, "%c%ld%hu", PKT_ACK_FUEL, last_loops, num);
@@ -2160,7 +2151,7 @@ int Receive_target(void)
     if ((n = Packet_scanf(&rbuf, "%c%hu%hu%hu", &ch,
 			  &num, &dead_time, &damage)) <= 0)
 	return n;
-    if ((n = Handle_target(num, dead_time, damage)) == -1)
+    if ((n = Handle_target(num, dead_time, (double)damage / 256.0)) == -1)
 	return -1;
     if (wbuf.len < MAX_MAP_ACK_LEN)
 	Packet_printf(&wbuf, "%c%ld%hu", PKT_ACK_TARGET, last_loops, num);
@@ -2333,7 +2324,7 @@ int Send_keyboard(u_byte *keyboard_vector)
 	/* Not enough write buffer space for keyboard state */
 	return 0;
     Packet_printf(&wbuf, "%c%ld", PKT_KEYBOARD, last_keyboard_change);
-    memcpy(&wbuf.buf[wbuf.len], keyboard_vector, size);
+    memcpy(&wbuf.buf[wbuf.len], keyboard_vector, (size_t)size);
     wbuf.len += size;
     last_keyboard_update = last_loops;
     Net_keyboard_track();
@@ -2486,31 +2477,26 @@ int Send_talk(void)
 }
 
 
-int Send_display(void)
+int Send_display(int width, int height, int sparks, int spark_colors)
 {
-    int			width_wanted = draw_width;
-    int			height_wanted = draw_height;
+    int	width_wanted = width;
+    int	height_wanted = height;
 
-    width_wanted = (int)(width_wanted * scaleFactor + 0.5);
-    height_wanted = (int)(height_wanted * scaleFactor + 0.5);
-
-    LIMIT(width_wanted, MIN_VIEW_SIZE, MAX_VIEW_SIZE);
-    LIMIT(height_wanted, MIN_VIEW_SIZE, MAX_VIEW_SIZE);
-
-    if (width_wanted == ext_view_width &&
-	height_wanted == ext_view_height &&
-	debris_colors == num_spark_colors &&
-	spark_rand == old_spark_rand &&
+    if (width_wanted == server_display.view_width &&
+	height_wanted == server_display.view_height &&
+	spark_colors == server_display.num_spark_colors &&
+	sparks == server_display.spark_rand &&
 	last_loops != 0) {
 	return 0;
     }
 
     if (Packet_printf(&wbuf, "%c%hd%hd%c%c", PKT_DISPLAY,
 		      width_wanted, height_wanted,
-		      num_spark_colors, spark_rand) == -1)
+		      spark_colors,
+		      sparks) == -1)
 	return -1;
 
-    old_spark_rand = spark_rand;
+    server_display.spark_rand = sparks;
 
     return 0;
 }
@@ -2528,6 +2514,13 @@ int Send_modifier_bank(int bank)
 
 int Send_pointer_move(int movement)
 {
+    static int total;
+
+    if (version >= 0x4F13) {
+	total += movement;
+	movement = total;
+    }
+
     if (Packet_printf(&wbuf, "%c%hd", PKT_POINTER_MOVE, movement) == -1)
 	return -1;
     return 0;

@@ -1,5 +1,7 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,41 +20,22 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef XEVENT_H
 #define XEVENT_H
 
+extern int		talk_key_repeating;
+extern XEvent		talk_key_repeat_event;
+extern struct timeval	talk_key_repeat_time;
+
+extern ipos_t		mousePosition;	/* position of mouse pointer. */
+extern int		mouseMovement;	/* horizontal mouse movement. */
+
+bool Key_binding_callback(keys_t key, const char *str);
 keys_t Lookup_key(XEvent *event, KeySym ks, bool reset);
-void Pointer_control_set_state(int on);
-int Key_init(void);
-int Key_update(void);
-bool Key_check_talk_macro(keys_t key);
-bool Key_press_id_mode(keys_t key);
-bool Key_press_autoshield_hack(keys_t key);
-bool Key_press_shield(keys_t key);
-bool Key_press_fuel(keys_t key);
-bool Key_press_swap_settings(keys_t key);
-bool Key_press_swap_scalefactor(keys_t key);
-bool Key_press_increase_power(keys_t key);
-bool Key_press_decrease_power(keys_t key);
-bool Key_press_increase_turnspeed(keys_t key);
-bool Key_press_decrease_turnspeed(keys_t key);
-bool Key_press_talk(keys_t key);
-bool Key_press_show_items(keys_t key);
-bool Key_press_show_messages(keys_t key);
-bool Key_press_pointer_control(keys_t key);
-bool Key_press_toggle_record(keys_t key);
-bool Key_press_toggle_radar_score(keys_t key);
-bool Key_press_msgs_stdout(keys_t key);
-bool Key_press_select_lose_item(keys_t key);
-bool Key_press(keys_t key);
-bool Key_release(keys_t key);
 void Key_event(XEvent *event);
-void Reset_shields(void);
-void Set_auto_shield(int on);
-void Set_toggle_shield(int on);
 void Talk_event(XEvent *event);
 void xevent_keyboard(int queued);
 void xevent_pointer(void);

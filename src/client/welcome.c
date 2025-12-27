@@ -1,10 +1,14 @@
 /* 
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
  *      Bert Gijsbers        <bert@xpilot.org>
  *      Dick Balaska         <dick@xpilot.org>
+ *
+ * Copyright (C) 2003-2004 Darel Cullen <darelcullen@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,84 +22,18 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 /* Changelog: CB Added metaserver interface improvements */
 /*            CB Fixed Warnings                          */
 
-#include "xpclient.h"
-
+#include "xpclient_x11.h"
 
 char welcome_version[] = VERSION;
 
-/*
- * max number of servers we can find on the local network.
- */
-#define MAX_LOCAL_SERVERS	10
-
-/*
- * Some constants for describing access to the meta servers.
- * XXX These are also defined in some other file.
- */
-#define NUM_METAS		2
-#define META_HOST		"meta.xpilot.org"
-#define META_HOST_TWO		"meta2.xpilot.org"
-#define META_IP			"129.242.13.151"
-#define META_IP_TWO		"132.235.197.27"
-#define META_PROG_PORT		4401
-#define META_USER_PORT		4400
-#define NUM_META_DATA_FIELDS	18
-
-/*
- * Access the data field of one of the servers
- * which is listed by the meta servers.
- */
-#define SI_DATA(it)		((server_info_t *)LI_DATA(it))
-
 #ifndef _WINDOWS
 
-/*
- * All the fields for a server in one line of meta output.
- * the strings in this structure should really be an array
- * of char pointers to reduce the amount of code.
- */
-struct ServerInfo {
-    char *version,
-	*hostname,
-	*users_str,
-	*mapname,
-	*mapsize,
-	*author,
-	*status,
-	*bases_str,
-	*fps_str,
-	*playlist,
-	*sound,
-	*teambases_str,
-	*timing, *ip_str, *freebases, *queue_str, *domain, pingtime_str[5];
-    unsigned port,
-	ip, users, bases, fps, uptime, teambases, queue, pingtime;
-    struct timeval start;
-    unsigned char serial;
-};
-
-
-typedef struct ServerInfo server_info_t;
-
-#define PING_UNKNOWN	10000	/* never transmitted a ping to it */
-#define PING_NORESP	9999	/* never responded to our ping */
-#define PING_SLOW	9998	/* responded to first ping after
-				 * we had already retried (ie slow!) */
-
-/*
- * Here we hold the servers which are listed by the meta servers.
- * We record the time we contacted Meta so as to not overload Meta.
- * server_it is an iterator pointing at the first server for the next page.
- */
-static list_t server_list;
-static time_t server_list_creation_time;
-static list_iter_t server_it;
 
 /*
  * Are we in the process of quitting, or joining a game.
@@ -118,21 +56,22 @@ struct Label {
 };
     
 struct Label labels[] = {
-	/*  0 */ {"server", 0, 0, 0},
-	/*  1 */ {"version", 0, 0, 0},
-	/*  2 */ {"users", 0, 0, 0},
-	/*  3 */ {"map name", 0, 0, 0},
-	/*  4 */ {"map size", 0, 0, 0},
-	/*  5 */ {"map author", 0, 0, 0},
-	/*  6 */ {"status", 0, 0, 0},
-	/*  7 */ {"bases", 0, 0, 0},
-	/*  8 */ {"teambases", 0, 0, 0},
-	/*  9 */ {"free bases", 0, 0, 0},
-	/* 10 */ {"queued players", 0, 0, 0},
-	/* 11 */ {"FPS", 0, 0, 0},
-	/* 12 */ {"sound", 0, 0, 0},
-	/* 13 */ {"timing", 0, 0, 0},
-	/* 14 */ {"playlist", 1, 0, 0}
+	{"Server", 0, 0, 0},
+	{"IP:Port", 0, 0, 0},
+	{"Version", 0, 0, 0},
+	{"Users", 0, 0, 0},
+	{"Map name", 0, 0, 0},
+	{"Map size", 0, 0, 0},
+	{"Map author", 0, 0, 0},
+	{"Status", 0, 0, 0},
+	{"Bases", 0, 0, 0},
+	{"Teambases", 0, 0, 0},
+	{"Free bases", 0, 0, 0},
+	{"Queued players", 0, 0, 0},
+	{"FPS", 0, 0, 0},
+	{"Sound", 0, 0, 0},
+	{"Timing", 0, 0, 0},
+	{"Playlist", 1, 0, 0}
     };
 
 /*
@@ -149,7 +88,7 @@ static int form_y = 0;
 static int subform_x;
 static int subform_y;
 static int subform_width;
-static int subform_height;
+static int subform_height; 
 static int subform_border;
 
 static int next_page_widget = NO_WIDGET;
@@ -163,29 +102,7 @@ static Connect_param_t *global_conpar;
 static Connect_param_t *localnet_conpars;
 static server_info_t *global_sip;
 
-/*
- * States a connection tso a meta server can be in.
- */
-enum MetaState {
-    MetaConnecting = 0,
-    MetaReadable = 1,
-    MetaReceiving = 2
-};
 
-/*
- * Structure describing a meta server.
- * Hostname, IP address, and socket filedescriptor.
- */
-struct Meta {
-    char name[MAX_HOST_LEN];
-    char addr[16];
-    sock_t sock;
-    enum MetaState state;	/* connecting, readable, receiving */
-};
-static struct Meta metas[NUM_METAS] = {
-    {META_HOST, META_IP, {-2}, MetaConnecting},
-    {META_HOST_TWO, META_IP_TWO, {-2}, MetaConnecting}
-};
 
 /*
  * Enum for different modes the welcome screen can be in.
@@ -222,7 +139,8 @@ static const char map_header[] = "Map Name";
 static const char server_header[] = "Server";
 static const char ping_header[] = "Ping";
 static const char stat_header[] = "Status";
-
+static char err[MSG_LEN] = {0};
+static char buf[MSG_LEN] = {0};
 /*
  * Other prototypes.
  */
@@ -232,14 +150,7 @@ static int Welcome_show_server_list(Connect_param_t * conpar);
 static void Internet_widget_cleanup(void);
 static int Internet_cb(int widget, void *user_data, const char **text);
 
-/*
- * Print a message that we do not have enough memory.
- * Also useful for debugging to set a breakpoint here.
- */
-static void Not_enough_memory(void)
-{
-    error("Not enough memory.");
-}
+
 
 /*
  * Process only exposure events.
@@ -263,13 +174,15 @@ static void Welcome_process_exposure_events(Connect_param_t * conpar)
 static int Welcome_create_label(int pos, const char *label_text)
 {
     int label_x, label_y, label_width, label_height;
-    int subform_width = 0;
-    int subform_height = 0;
+
     Connect_param_t *conpar = (Connect_param_t *) global_conpar;
 
     Widget_destroy_children(subform_widget);	/*? */
     subform_label_widget = NO_WIDGET;
-    Widget_get_dimensions(subform_widget, &subform_width, &subform_height);
+    (void) Widget_get_dimensions(subform_widget, 
+				 &subform_width, 
+				 &subform_height);
+
     label_width = XTextWidth(textFont, label_text, (int)strlen(label_text));
     label_width += 40;
     label_height = textFont->ascent + textFont->descent;
@@ -298,9 +211,9 @@ static int Welcome_create_label(int pos, const char *label_text)
 			    label_text);
     if (subform_label_widget != NO_WIDGET) {
 	/* map children */
-	Widget_map_sub(subform_widget);
+	(void) Widget_map_sub(subform_widget);
 	/* wait until mapped */
-	XSync(dpy, False);
+	(void) XSync(dpy, False);
 	/* draw widgets */
 	Welcome_process_exposure_events(conpar);
     }
@@ -316,7 +229,7 @@ static int Local_join_cb(int widget, void *user_data, const char **text)
     Connect_param_t *conpar = (Connect_param_t *) user_data;
     int result;
 
-    (void)widget; (void)text;
+    UNUSED_PARAM(widget); UNUSED_PARAM(text);
     result = Connect_to_server(1, 0, 0, NULL, conpar);
     if (result) {
 	joining = true;
@@ -334,7 +247,7 @@ static int Local_status_cb(int widget, void *user_data, const char **text)
 {
     /* Connect_param_t          *conpar = (Connect_param_t *) user_data; */
 
-    (void)widget; (void)user_data; (void)text;
+    UNUSED_PARAM(widget); UNUSED_PARAM(user_data); UNUSED_PARAM(text);
     return 0;
 }
 
@@ -376,12 +289,12 @@ static int Localnet_cb(int widget, void *user_data, const char **text)
     int n = 0;
     int label;
     int label_y, label_height;
-    int subform_width = 0;
-    int subform_height = 0;
+
     char *server_names;
     char *server_addrs;
     char *name_ptrs[MAX_LOCAL_SERVERS];
     char *addr_ptrs[MAX_LOCAL_SERVERS];
+    unsigned server_versions[MAX_LOCAL_SERVERS];
     int max_width = 0;
     int button;
     int button_width;
@@ -389,19 +302,13 @@ static int Localnet_cb(int widget, void *user_data, const char **text)
     int button_x;
     int button_y;
     
-    int button2;
-    int button2_width;
-    int button2_height;
-    int button2_x;
-    int button2_y;
-    
     int button3;
     int button3_width;
     int button3_height;
     int button3_x;
     int button3_y;
 
-    (void)widget; (void)text;
+    UNUSED_PARAM(widget); UNUSED_PARAM(text);
 
     Internet_widget_cleanup();
 
@@ -415,7 +322,7 @@ static int Localnet_cb(int widget, void *user_data, const char **text)
     server_names = (char *) malloc(MAX_LOCAL_SERVERS * MAX_HOST_LEN);
     server_addrs = (char *) malloc(MAX_LOCAL_SERVERS * MAX_HOST_LEN);
     if (!server_names || !server_addrs) {
-	Not_enough_memory();
+        error("Not enough memory\n");
 	quitting = true;
 	return 0;
     }
@@ -424,7 +331,8 @@ static int Localnet_cb(int widget, void *user_data, const char **text)
 	addr_ptrs[i] = &server_addrs[i * MAX_HOST_LEN];
     }
     Contact_servers(0, NULL, 0, 2, 0, NULL,
-		    MAX_LOCAL_SERVERS, &n, addr_ptrs, name_ptrs, conpar);
+		    MAX_LOCAL_SERVERS, &n,
+		    addr_ptrs, name_ptrs, server_versions, conpar);
     LIMIT(n, 0, MAX_LOCAL_SERVERS);
 
     Widget_destroy_children(subform_widget);
@@ -444,7 +352,7 @@ static int Localnet_cb(int widget, void *user_data, const char **text)
 	localnet_conpars =
 	    (Connect_param_t *) malloc(n * sizeof(Connect_param_t));
 	if (!localnet_conpars) {
-	    Not_enough_memory();
+	    error("Not enough memory\n");
 	    free(server_names);
 	    free(server_addrs);
 	    quitting = true;
@@ -463,40 +371,42 @@ static int Localnet_cb(int widget, void *user_data, const char **text)
 		    MAX_HOST_LEN);
 	    strlcpy(localnet_conpars[i].server_addr, addr_ptrs[i],
 		    MAX_HOST_LEN);
+	    localnet_conpars[i].server_version = server_versions[i];
 	    button_width = max_width + 20;
 	    button_height = textFont->ascent + textFont->descent + 10;
 	    button_x = 20;
 	    button_y =
 		label_y * 2 + label_height + i * (button_height + label_y);
 	    button =
-		Widget_create_label(subform_widget, button_x, button_y,
-				    button_width, button_height, true, 1,
-				    localnet_conpars[i].server_name);
+	      Widget_create_colored_label(subform_widget, button_x, button_y,
+				          button_width, button_height, true, 1,
+					  2, 0,
+				           localnet_conpars[i].server_name);
+	    
 
+	    /* button2_x = button_x + button_width + button_x;
+	     button2_y = button_y;
+	     button2_width = XTextWidth(buttonFont, "Status", 6) + 40;
+	     button2_height = buttonFont->ascent + buttonFont->descent + 10;
+	     button2 =
+	      Widget_create_activate(subform_widget,
+	    			     button2_x, button2_y,
+	    			     button2_width, button2_height,
+	    	 		     1, "Status",
+	    			     Local_status_cb,
+	     			     (void *) &localnet_conpars[i]);  */
 
-	    button2_x = button_x + button_width + button_x;
-	    button2_y = button_y;
-	    button2_width = XTextWidth(buttonFont, "Status", 6) + 40;
-	    button2_height = buttonFont->ascent + buttonFont->descent + 10;
-	    button2 =
-		Widget_create_activate(subform_widget,
-				       button2_x, button2_y,
-				       button2_width, button2_height,
-				       1, "Status",
-				       Local_status_cb,
-				       (void *) &localnet_conpars[i]);
-
-	    button3_x = button2_x + button2_width + button_x;
-	    button3_y = button2_y;
+	    button3_x = button_x + button_width + button_x;
+	    button3_y = button_y;
 	    button3_width = XTextWidth(buttonFont, "Join game", 7) + 40;
 	    button3_height = buttonFont->ascent + buttonFont->descent + 10;
 	    button3 =
-		Widget_create_activate(subform_widget,
-				       button3_x, button3_y,
-				       button3_width, button3_height,
-				       1, "Join game",
-				       Local_join_cb,
-				       (void *) &localnet_conpars[i]);
+	      Widget_create_activate(subform_widget,
+				     button3_x, button3_y,
+				     button3_width, button3_height,
+				     1, "Join game",
+				     Local_join_cb,
+				     (void *) &localnet_conpars[i]);
 	}
     }
     Widget_map_sub(subform_widget);
@@ -504,755 +414,6 @@ static int Localnet_cb(int widget, void *user_data, const char **text)
     free(server_addrs);
 
     return 0;
-}
-
-/*
- * Deallocate a ServerInfo structure.
- */
-static void Delete_server_info(server_info_t * sip)
-{
-    if (sip) {
-	if (sip->version) {
-	    free(sip->version);
-	    sip->version = NULL;
-	}
-	free(sip);
-    }
-}
-
-/*
- * Deallocate the server list.
- */
-static void Delete_server_list(void)
-{
-    server_info_t *sip;
-
-    if (server_list) {
-	while ((sip =
-		(server_info_t *) List_pop_front(server_list)) != NULL)
-	    Delete_server_info(sip);
-	List_delete(server_list);
-	server_list = NULL;
-	server_list_creation_time = 0;
-    }
-    server_it = NULL;
-}
-
-/*
- * Convert a string to lowercase.
- */
-static void string_to_lower(char *s)
-{
-    for (; *s; s++)
-	*s = tolower(*s);
-}
-
-/*
- * From a hostname return the part after the last dot.
- * E.g.: Vincent.CS.Berkeley.EDU will return EDU.
- */
-static char *Get_domain_from_hostname(char *host_name)
-{
-    static char last_domain[] = "\x7E\x7E";
-    char *dom;
-
-    if ((dom = strrchr(host_name, '.')) != NULL) {
-	if (dom[1] == '\0') {
-	    dom[0] = '\0';
-	    dom = strrchr(host_name, '.');
-	}
-    }
-    if (dom && !isdigit(dom[1]) && strlen(dom + 1) >= 2)
-	return dom + 1;
-
-    if (dom) {
-	dom++;			/* skip dot */
-	/* test toplevel domain for validity */
-	if (!isdigit(*dom) && strlen(dom) >= 2 && strlen(dom) <= 3)
-	    return dom;
-    }
-
-    return last_domain;
-}
-
-/*
- * Sort servers based on:
- *	1) number of players.
- *	2) pingtime.
- *	3) country.
- *	4) hostname.
- */
-static int Welcome_sort_server_list(void)
-{
-    list_t old_list = server_list;
-    list_t new_list = List_new();
-    list_iter_t it;
-    int delta;
-    void *vp;
-    server_info_t *sip_old;
-    server_info_t *sip_new;
-
-    if (!new_list) {
-	Not_enough_memory();
-	return -1;
-    }
-    while ((vp = List_pop_front(old_list)) != NULL) {
-	sip_old = (server_info_t *) vp;
-	string_to_lower(sip_old->hostname);
-	if (!strncmp(sip_old->hostname, "xpilot", 6)) {
-	    sip_old->hostname[0] = 'X';
-	    sip_old->hostname[1] = 'P';
-	}
-	sip_old->domain = Get_domain_from_hostname(sip_old->hostname);
-	for (it = List_begin(new_list); it != List_end(new_list);
-	     LI_FORWARD(it)) {
-	    sip_new = SI_DATA(it);
-	    delta = sip_new->users - sip_old->users;
-	    if (delta < 0)
-		break;
-	    else if (delta > 0)
-		continue;
-	    delta = sip_old->pingtime - sip_new->pingtime;
-	    if (delta < 0)
-		break;
-	    else if (delta > 0)
-		continue;
-	    delta = strcmp(sip_old->domain, sip_new->domain);
-	    if (delta < 0)
-		break;
-	    else if (delta > 0)
-		continue;
-	    delta = strcmp(sip_old->hostname, sip_new->hostname);
-	    if (delta < 0)
-		break;
-	    else if (delta > 0)
-		continue;
-	    if (sip_old->port < sip_new->port)
-		break;
-	}
-	if (!List_insert(new_list, it, sip_old)) {
-	    Not_enough_memory();
-	    Delete_server_info(sip_old);
-	}
-    }
-
-#if 0
-    /* print for debugging */
-    printf("\n");
-    printf("Printing server list:\n");
-    for (it = List_begin(new_list); it != List_end(new_list);
-	 LI_FORWARD(it)) {
-	sip_new = SI_DATA(it);
-	printf("%2d %5s %-31s %u", sip_new->users, sip_new->domain,
-	       sip_new->hostname, sip_new->port);
-	if (sip_new->pingtime == PING_UNKNOWN)
-	    printf("%8s", "unknown");
-	else if (sip_new->pingtime == PING_NORESP)
-	    printf("%8s", "no resp");
-	else if (sip_new->pingtime == PING_SLOW)
-	    printf("%8s", "s-l-o-w");
-	else
-	    printf("%8u", sip_new->pingtime);
-	printf("\n");
-    }
-    printf("\n");
-#endif
-
-    List_delete(old_list);
-    server_list = new_list;
-
-    return 0;
-}
-
-/*
- * Put server info on a sorted list.
- */
-static int Add_server_info(server_info_t * sip)
-{
-    list_iter_t it;
-    server_info_t *it_sip;
-
-    if (!server_list) {
-	server_list = List_new();
-	if (!server_list) {
-	    Not_enough_memory();
-	    return -1;
-	}
-    }
-    for (it = List_begin(server_list); it != List_end(server_list);
-	 LI_FORWARD(it)) {
-	it_sip = SI_DATA(it);
-	/* sort on IP. */
-	if (it_sip->ip < sip->ip)
-	    continue;
-
-	if (it_sip->ip == sip->ip) {
-	    /* same server when same IP + port. */
-	    if (it_sip->port < sip->port)
-		continue;
-
-	    if (it_sip->port == sip->port) {
-		/* work around bug in meta: keep server with highest uptime. */
-		if (it_sip->uptime > sip->uptime) {
-		    return -1;
-		} else {
-		    it = List_erase(server_list, it);
-		}
-	    }
-	}
-	break;
-    }
-    if (!List_insert(server_list, it, sip)) {
-	Not_enough_memory();
-	return -1;
-    }
-
-    /* print for debugging */
-    D(printf("list size = %d after %08x, %d\n",
-	     List_size(server_list), sip->ip, sip->port));
-
-    return 0;
-}
-
-/*
- * Variant on strtok which does not skip empty fields.
- * Two delimiters after another returns the empty string ("").
- */
-static char *my_strtok(char *buf, const char *sep)
-{
-    static char *oldbuf;
-    char *ptr;
-    char *start;
-
-
-    if (buf)
-	oldbuf = buf;
-
-    start = oldbuf;
-    if (!start || !*start)
-	return NULL;
-
-    for (ptr = start; *ptr; ptr++) {
-	if (strchr(sep, *ptr))
-	    break;
-    }
-    oldbuf = (*ptr) ? (ptr + 1) : (ptr);
-    *ptr = '\0';
-    return start;
-}
-
-/*
- * Parse one line of meta output and
- * put the fields in a structure.
- * The structure is put on a sorted list.
- */
-static void Add_meta_line(char *meta_line)
-{
-    char *fields[NUM_META_DATA_FIELDS];
-    int i;
-    int num = 0;
-    char *p;
-    unsigned ip0, ip1, ip2, ip3;
-    char *text = xp_strdup(meta_line);
-    server_info_t *sip;
-
-    if (!text) {
-	Not_enough_memory();
-	return;
-    }
-
-    /* split line into fields. */
-    for (p = my_strtok(text, ":"); p; p = my_strtok(NULL, ":")) {
-	if (num < NUM_META_DATA_FIELDS) {
-	    fields[num++] = p;
-	}
-    }
-    if (num < NUM_META_DATA_FIELDS) {
-	/* should not happen, except maybe for last line. */
-	free(text);
-	return;
-    }
-    if (fields[0] != text) {
-	/* sanity check, should not happen. */
-	free(text);
-	return;
-    }
-
-    if ((sip = (server_info_t *) malloc(sizeof(server_info_t))) == NULL) {
-	Not_enough_memory();
-	free(text);
-	return;
-    }
-    memset(sip, 0, sizeof(*sip));
-    sip->pingtime = PING_UNKNOWN;
-    sip->version = fields[0];
-    sip->hostname = fields[1];
-    sip->users_str = fields[3];
-    sip->mapname = fields[4];
-    sip->mapsize = fields[5];
-    sip->author = fields[6];
-    sip->status = fields[7];
-    sip->bases_str = fields[8];
-    sip->fps_str = fields[9];
-    sip->playlist = fields[10];
-    sip->sound = fields[11];
-    sip->teambases_str = fields[13];
-    sip->timing = fields[14];
-    sip->ip_str = fields[15];
-    sip->freebases = fields[16];
-    sip->queue_str = fields[17];
-    if (sscanf(fields[i = 2], "%u", &sip->port) != 1 ||
-	sscanf(fields[i = 3], "%u", &sip->users) != 1 ||
-	sscanf(fields[i = 8], "%u", &sip->bases) != 1 ||
-	sscanf(fields[i = 9], "%u", &sip->fps) != 1 ||
-	sscanf(fields[i = 12], "%u", &sip->uptime) != 1 ||
-	sscanf(fields[i = 13], "%u", &sip->teambases) != 1 ||
-	sscanf(fields[i = 15], "%u.%u.%u.%u", &ip0, &ip1, &ip2, &ip3) != 4
-	|| (ip0 | ip1 | ip2 | ip3) > 255
-	|| sscanf(fields[i = 17], "%u", &sip->queue) != 1) {
-	printf("error %d in: %s\n", i, meta_line);
-	free(sip);
-	free(text);
-	return;
-    } else {
-	sip->ip = (ip0 << 24) | (ip1 << 16) | (ip2 << 8) | ip3;
-	if (Add_server_info(sip) == -1) {
-	    free(sip);
-	    free(text);
-	    return;
-	}
-    }
-}
-
-/*
- * Connect to the meta servers asynchronously.
- * Return the number of connections made,
- * and the highest fd.
- */
-static void Meta_connect(int *connections_ptr, int *maxfd_ptr)
-{
-    int i;
-    int status;
-    int connections = 0;
-    int max = -1;
-    char buf[MSG_LEN];
-
-    for (i = 0; i < NUM_METAS; i++) {
-	if (metas[i].sock.fd != SOCK_FD_INVALID)
-	    sock_close(&metas[i].sock);
-
-	status = sock_open_tcp_connected_non_blocking(&metas[i].sock,
-						      metas[i].addr,
-						      META_PROG_PORT);
-	if (status == SOCK_IS_ERROR) {
-	    sprintf(buf, "Could not establish connection with %s",
-		    metas[i].name);
-	    error(buf);
-	    Welcome_create_label(1, buf);
-	} else {
-	    connections++;
-	    if (metas[i].sock.fd > max)
-		max = metas[i].sock.fd;
-	}
-    }
-    if (connections_ptr)
-	*connections_ptr = connections;
-
-    if (maxfd_ptr)
-	*maxfd_ptr = max;
-}
-
-/*
- * Lookup the IPs of the metas.
- */
-static void Meta_dns_lookup(void)
-{
-    int i;
-    char *addr;
-    char buf[MSG_LEN];
-
-    for (i = 0; i < NUM_METAS; i++) {
-	if (metas[i].sock.fd == -2) {
-	    metas[i].sock.fd = SOCK_FD_INVALID;
-	    sprintf(buf, "Doing a DNS lookup on %s ... ", metas[i].name);
-	    Welcome_create_label(1, buf);
-	    addr = sock_get_addr_by_name(metas[i].name);
-	    if (addr)
-		strlcpy(metas[i].addr, addr, sizeof(metas[i].addr));
-	}
-    }
-}
-
-static void Ping_servers(void)
-{
-    static int serial;		/* mark pings to identify stale reply */
-    const int interval = 1000 / 14;	/* assumes we can do 14fps of pings */
-    const int tries = 1;	/* at least 1 ping for ever server.
-				 * in practice we get several */
-    int maxwait = tries * interval * List_size(server_list);
-    sock_t sock;
-    fd_set input_mask, readmask;
-    struct timeval start, end, timeout;
-    list_iter_t it, that;
-    server_info_t *it_sip;
-    sockbuf_t sbuf, rbuf;
-    int ms;
-    char *reply_ip;
-    int reply_port;
-    unsigned reply_magic;
-    unsigned char reply_serial, reply_status;
-    int outstanding;
-    char buf[MSG_LEN];
-
-
-
-    sprintf(buf, "Pinging servers (%d seconds)...",
-	    (maxwait + 500) / 1000);
-    Welcome_create_label(1, buf);
-
-    if (sock_open_udp(&sock, NULL, 0) == -1) {
-	return;
-    }
-    if (sock_set_non_blocking(&sock, 1) == -1) {
-	sock_close(&sock);
-	return;
-    }
-    if (Sockbuf_init(&sbuf, &sock, CLIENT_RECV_SIZE,
-		     SOCKBUF_WRITE | SOCKBUF_DGRAM) == -1) {
-	sock_close(&sock);
-	return;
-    }
-    if (Sockbuf_init(&rbuf, &sock, CLIENT_RECV_SIZE,
-		     SOCKBUF_READ | SOCKBUF_DGRAM) == -1) {
-	Sockbuf_cleanup(&sbuf);
-	sock_close(&sock);
-	return;
-    }
-
-    FD_ZERO(&input_mask);
-    FD_SET(sock.fd, &input_mask);
-
-    it = List_end(server_list);
-    outstanding = 0;
-    ms = 0;
-    gettimeofday(&start, NULL);
-    do {
-	while (outstanding < (ms / interval + 1)) {
-	    if (it == List_end(server_list)) {
-		++serial;
-		serial &= 0xFF;
-		if (serial == 0)
-		    serial = 1;
-
-		/*
-		 * Send a packet to the contact port with
-		 * a valid magic number but client version
-		 * zero.  The server will reply to this
-		 * so that the client can tell the user
-		 * what version they need.
-
-		 * Normally this would be a CONTACT_pack but
-		 * we cheat and use the packet type field as
-		 * a serial number, since the server is
-		 * nice enough to send back whatever we send.
-		 */
-		Sockbuf_clear(&sbuf);
-		Packet_printf(&sbuf, "%u%s%hu%c",
-			      MAGIC & 0xffff, "p",
-			      sock_get_port(&sock), serial);
-
-		/*
-		 * Assuming sort order is the most to least
-		 * desirable servers, give the interesting
-		 * servers first crack at more pings, making
-		 * their results more accurate.
-		 */
-		Welcome_sort_server_list();
-		it = List_begin(server_list);
-	    }
-	    it_sip = SI_DATA(it);
-	    sock_send_dest(&sock, it_sip->ip_str, it_sip->port,
-			   sbuf.buf, sbuf.len);
-	    gettimeofday(&it_sip->start, NULL);
-	    /* if it has never been pinged (pung?) mark it now
-	     * as "not responding" instead of just blank.
-	     */
-	    if (it_sip->pingtime == PING_UNKNOWN)
-		it_sip->pingtime = PING_NORESP;
-
-	    it_sip->serial = serial;
-	    outstanding++;
-	    LI_FORWARD(it);
-	}
-	timeout.tv_sec = 0;
-	timeout.tv_usec = (interval - (ms % interval)) * 1000;
-	readmask = input_mask;
-	if (select(sock.fd + 1, &readmask, 0, 0, &timeout) == -1
-	    && errno != EINTR) {
-	    break;
-	}
-	gettimeofday(&end, NULL);
-	ms = (end.tv_sec - start.tv_sec) * 1000 +
-	    (end.tv_usec - start.tv_usec) / 1000;
-
-	Sockbuf_clear(&rbuf);
-	if ((rbuf.len = sock_receive_any(&sock, rbuf.buf, rbuf.size)) < 4) {
-	    continue;
-	}
-	if (outstanding > 0) {
-	    --outstanding;
-	}
-	if (Packet_scanf(&rbuf, "%u%c%c",
-			 &reply_magic, &reply_serial,
-			 &reply_status) <= 0) {
-	    continue;
-	}
-	reply_ip = sock_get_last_addr(&sock);
-	reply_port = sock_get_last_port(&sock);
-	for (that = List_begin(server_list);
-	     that != List_end(server_list); LI_FORWARD(that)) {
-	    it_sip = SI_DATA(that);
-	    if (!strcmp(it_sip->ip_str, reply_ip)
-		&& reply_port == it_sip->port) {
-		int n;
-
-		if (reply_serial != it_sip->serial) {
-		    /* replied to an old ping, alive but
-		     * slower than `interval' at least
-		     */
-		    it_sip->pingtime = MIN(it_sip->pingtime, PING_SLOW);
-		} else {
-		    n = (end.tv_sec -
-			 it_sip->start.tv_sec) * 1000 +
-			(end.tv_usec - it_sip->start.tv_usec) / 1000;
-		    it_sip->pingtime = MIN(it_sip->pingtime, n);
-		}
-		break;
-	    }
-	}
-    } while (ms < maxwait);
-
-    Sockbuf_cleanup(&sbuf);
-    Sockbuf_cleanup(&rbuf);
-    sock_close(&sock);
-}
-
-/*
- * User pressed the Internet button.
- */
-static int Get_meta_data(void)
-{
-    int i;
-    int max = -1;
-    int connections = 0;
-    int descriptor_count;
-    int readers = 0;
-    int senders = 0;
-    int bytes_read;
-    int buffer_space;
-    int total_bytes_read = 0;
-    int server_count;
-    time_t start, now;
-    fd_set rset_in, wset_in;
-    fd_set rset_out, wset_out;
-    struct timeval tv;
-    char *newline;
-    char buf[MSG_LEN];
-
-    /*
-     * Buffer to hold data from a socket connection to a Meta.
-     * The ptr points to the first byte of the unprocessed data.
-     * The end points to where the next new data should be loaded.
-     */
-    struct MetaData {
-	char *ptr;
-	char *end;
-	char buf[4096];
-    };
-    struct MetaData md[NUM_METAS];
-
-    /* lookup addresses. */
-    Meta_dns_lookup();
-
-    /* connect asynchronously. */
-    Meta_connect(&connections, &max);
-    if (!connections) {
-	Welcome_create_label(1,
-			     "Could not establish connections with any metaserver" \
-			     ", either the meta is not responding or you have" \
-			     " network problems" );
-	return -1;
-    }
-
-    sprintf(buf, "Establishing %s with %d metaserver%s ... ",
-	    ((connections > 1) ? "connections" : "a connection"),
-	    connections, ((connections > 1) ? "s" : ""));
-    Welcome_create_label(1, buf);
-
-    /* setup select(2) structures. */
-    FD_ZERO(&rset_in);
-    FD_ZERO(&wset_in);
-    for (i = 0; i < NUM_METAS; i++) {
-	metas[i].state = MetaConnecting;
-	if (metas[i].sock.fd != SOCK_FD_INVALID)
-	    FD_SET(metas[i].sock.fd, &wset_in);
-
-	md[i].ptr = NULL;
-	md[i].end = NULL;
-    }
-    /*
-     * First wait for the asynchronously connected sockets to become writable.
-     * When a socket becomes writable it means that the connection attempt
-     * has completed.  After that has happened we can test the socket for
-     * readability.  When the connection attempt failed the read will
-     * return -1 and probably set errno to ENOTCONN.
-     *
-     * We try to connect and read for a limited number of seconds.
-     * Whenever a connection has succeeded we add another 5 seconds.
-     * Whenever a read has succeeded we also add another 5 seconds.
-     *
-     * Keep administration of the number of sockets in the connected state,
-     * the readability state, or the meta-is-sending-data state.
-     */
-    for (start = time(&now) + 5;
-	 connections > 0 && now < start + 5; time(&now)) {
-	tv.tv_sec = start + 5 - now;
-	tv.tv_usec = 0;
-
-	D(printf("select for %ld (con %d, read %d, send %d) at %ld\n",
-		 tv.tv_sec, connections, readers, senders, time(0)));
-
-	rset_out = rset_in;
-	wset_out = wset_in;
-	descriptor_count =
-	    select(max + 1, &rset_out, &wset_out, NULL, &tv);
-
-	D(printf("select = %d at %ld\n", descriptor_count, time(0)));
-
-	if (descriptor_count <= 0)
-	    break;
-
-	for (i = 0; i < NUM_METAS; i++) {
-	    if (metas[i].sock.fd == SOCK_FD_INVALID)
-		continue;
-	    else if (FD_ISSET(metas[i].sock.fd, &wset_out)) {
-		/* promote socket from writable to readable. */
-		FD_CLR(metas[i].sock.fd, &wset_in);
-		FD_SET(metas[i].sock.fd, &rset_in);
-		metas[i].state = MetaReadable;
-		readers++;
-		if (!senders) {
-		    sprintf(buf, "%d metaserver%s accepted a connection.",
-			    readers, (readers > 1) ? "s have" : " has");
-		    Welcome_create_label(1, buf);
-		    D(printf("%s\n", buf));
-		}
-		time(&start);
-	    } else if (FD_ISSET(metas[i].sock.fd, &rset_out)) {
-		if (md[i].ptr == NULL && md[i].end == NULL) {
-		    md[i].ptr = md[i].buf;
-		    md[i].end = md[i].buf;
-		    sprintf(buf, "%d metaserver%s sending data now.",
-			    senders, (senders > 1) ? "s are" : " is");
-		    Welcome_create_label(1, buf);
-		    time(&start);
-		}
-		buffer_space = &md[i].buf[sizeof(md[i].buf)] - md[i].end;
-		bytes_read =
-		    read(metas[i].sock.fd, md[i].end, buffer_space);
-		if (bytes_read <= 0) {
-		    if (bytes_read == -1)
-			error("Error while reading data from meta %d\n",
-			      i + 1);
-
-		    FD_CLR(metas[i].sock.fd, &rset_in);
-		    close(metas[i].sock.fd);
-		    metas[i].sock.fd = SOCK_FD_INVALID;
-		    --connections;
-		    --readers;
-		    if (metas[i].state == MetaReceiving) {
-			--senders;
-			if (senders == 0 &&
-			    server_list && List_size(server_list) >= 30) {
-			    /*
-			     * Assume that this meta has sent us all there is
-			     */
-			    connections = 0;
-			}
-		    }
-		    if (connections == 0)
-			break;
-		} else {
-		    /* Received some bytes from this connection. */
-		    total_bytes_read += bytes_read;
-
-		    /* If this connection wasn't marked
-		     * as receiving do so now.
-		     */
-		    if (metas[i].state != MetaReceiving) {
-			metas[i].state = MetaReceiving;
-			++senders;
-		    }
-#if 0
-		    sprintf(buf, "Received %d bytes from %d metaserver%s.",
-			    total_bytes_read,
-			    senders, ((senders == 1) ? "" : "s")
-			);
-		    Welcome_create_label(1, buf);
-#endif
-		    D(printf("%s\n", buf));
-
-		    /* adjust buffer for newly read bytes. */
-		    md[i].end += bytes_read;
-
-		    /* process data up to the last line ending in a '\n'.
-		     */
-		    while ((newline
-			    = (char *) memchr(md[i].ptr, '\n',
-					      md[i].end - md[i].ptr))
-			   != NULL) {
-			*newline = '\0';
-			if (newline > md[i].ptr && newline[-1] == '\r')
-			    newline[-1] = '\0';
-
-			Add_meta_line(md[i].ptr);
-			md[i].ptr = newline + 1;
-		    }
-		    /* move partial data to the start of the buffer. */
-		    if (md[i].ptr > md[i].buf) {
-			int incomplete_data = (md[i].end - md[i].ptr);
-			memmove(md[i].buf, md[i].ptr, incomplete_data);
-			md[i].ptr = md[i].buf;
-			md[i].end = md[i].ptr + incomplete_data;
-		    }
-		    /* allow more time to receive more data */
-		    time(&start);
-		}
-	    }
-	}
-    }
-
-    for (i = 0; i < NUM_METAS; i++) {
-	if (metas[i].sock.fd != SOCK_FD_INVALID) {
-	    close(metas[i].sock.fd);
-	    metas[i].sock.fd = SOCK_FD_INVALID;
-	}
-    }
-
-    server_count = 0;
-    if (server_list)
-	server_count = List_size(server_list);
-
-    if (server_count > 0) {
-	sprintf(buf, "Received information about %d Internet servers",
-		server_count);
-	server_list_creation_time = time(NULL);
-    } else
-	sprintf(buf, "Could not contact any Internet Meta server");
-
-    Welcome_create_label(1, buf);
-
-    return server_count;
 }
 
 
@@ -1268,7 +429,7 @@ static int Internet_server_join_cb(int widget, void *user_data,
     int result;
     char *server_addr_ptr = conpar->server_addr;
 
-    (void)widget; (void)text;
+    UNUSED_PARAM(widget); UNUSED_PARAM(text);
 
     /* structure copy */
     *conpar = *global_conpar;
@@ -1277,7 +438,7 @@ static int Internet_server_join_cb(int widget, void *user_data,
     strlcpy(conpar->server_addr, sip->ip_str, sizeof(conpar->server_addr));
     conpar->contact_port = sip->port;
     result = Contact_servers(1, &server_addr_ptr, 1, 0, 0, NULL,
-			     0, NULL, NULL, NULL, conpar);
+			     0, NULL, NULL, NULL, NULL, conpar);
     if (result) {
 	/* structure copy */
 	*global_conpar = *conpar;
@@ -1318,13 +479,17 @@ static int Internet_server_show_cb(int widget, void *user_data,
     int data_label_width;
     int player_label_width = 200;	/* fixed length */
     int host_label_width = 400;
-    char *p = NULL;
+    /* large enough for ipv6 static, as the data is rendered after the closure
+       of this routine, so memory has to be persistant */
+    static char ipport[MAX_HOST_LEN];
+    static char *p = NULL;
     char *eqptr = NULL;
     char *playslist = xp_strdup(sip->playlist);
     static char longest_text[] = "                                 ";
 
     char *s;
 
+    UNUSED_PARAM(widget); UNUSED_PARAM(text);
     global_sip = sip;
 
     Widget_destroy_children(subform_widget);
@@ -1368,12 +533,23 @@ static int Internet_server_show_cb(int widget, void *user_data,
     }
 
     label_width = max_label_width + 2 * label_space;
-
+    
     for (i = 0; i < NELEM(labels); i++)
-	Widget_create_colored_label(subform_widget,
-				    label_x, labels[i].yoff,
-				    label_width, labels[i].height, true,
-				    label_border, 9, WHITE , labels[i].label);
+      {
+	/* if there are no players dont print the playlist label */
+
+	if (!strncmp(labels[i].label,"playlist",sizeof(labels[i].label)) 
+	    && (sip->users == 0)) {
+	  continue;	  
+	}
+	else
+	  {
+	    (void) Widget_create_colored_label(subform_widget,
+					       label_x, labels[i].yoff,
+					       label_width, labels[i].height, true,
+					       label_border, 9, WHITE , labels[i].label);
+	  }
+      }
 
 
     /* if the meta string data was indexable this would be easier */
@@ -1381,14 +557,14 @@ static int Internet_server_show_cb(int widget, void *user_data,
     i = 0;
 
 
-    Widget_create_colored_label(subform_widget,
-				label_x + label_width, labels[i].yoff,
-				data_label_width, labels[i].height, true,
-				label_border, BLACK, WHITE, sip->hostname);
-    
+    (void) Widget_create_colored_label(subform_widget,
+			label_x + label_width, labels[i].yoff,
+			data_label_width, labels[i].height, true,
+			label_border, BLACK, WHITE, sip->hostname);
+
     /* Create a join button to join this server */
 
-    Widget_create_activate(subform_widget,
+    (void) Widget_create_activate(subform_widget,
 			   label_x + label_width + data_label_width +
 			   label_space,
 			   labels[i].yoff,
@@ -1397,16 +573,19 @@ static int Internet_server_show_cb(int widget, void *user_data,
 			   Internet_server_join_cb,(void *) sip);
     i++;
 
-    /* Version label */
+    
+    /* Port and IP address */
 
-    Widget_create_colored_label(subform_widget,
-			label_x + label_width, labels[i].yoff,
-			data_label_width, labels[i].height, true,
-			label_border,  BLACK, WHITE,sip->version);
+    sprintf(ipport,"%s:%d",sip->ip_str,sip->port);
 
-    /* back to list button */
-
-    Widget_create_activate(subform_widget,
+    (void) Widget_create_colored_label(subform_widget,
+			       label_x + label_width, labels[i].yoff,
+			       data_label_width, labels[i].height, true,
+			       label_border, BLACK, WHITE, ipport);
+    
+    /* Back to list button */
+    
+    (void) Widget_create_activate(subform_widget,
 			   label_x + label_width + data_label_width +
 			   label_space,
 			   labels[i].yoff,
@@ -1414,11 +593,21 @@ static int Internet_server_show_cb(int widget, void *user_data,
 			   label_border, "Back to List",
 			   Internet_cb, (void *) global_conpar);
 
+
+    i++;
+
+    /* Version label */
+
+    (void) Widget_create_colored_label(subform_widget,
+			label_x + label_width, labels[i].yoff,
+			data_label_width, labels[i].height, true,
+			label_border,  BLACK, WHITE,sip->version);
+
     i++;
 
     /* Number of users label */
 
-    Widget_create_colored_label(subform_widget,
+    (void) Widget_create_colored_label(subform_widget,
 			label_x + label_width, labels[i].yoff,
 			data_label_width, labels[i].height, true,
 			label_border,  BLACK, WHITE,sip->users ? sip->users_str : "");
@@ -1426,7 +615,7 @@ static int Internet_server_show_cb(int widget, void *user_data,
 
     /* Map name label */
 
-    Widget_create_colored_label(subform_widget,
+    (void) Widget_create_colored_label(subform_widget,
 			label_x + label_width, labels[i].yoff,
 			data_label_width, labels[i].height, true,
 			label_border, BLACK, WHITE, sip->mapname);
@@ -1434,7 +623,7 @@ static int Internet_server_show_cb(int widget, void *user_data,
 
     /* Map size label */
 
-    Widget_create_colored_label(subform_widget,
+    (void) Widget_create_colored_label(subform_widget,
 			label_x + label_width, labels[i].yoff,
 			data_label_width, labels[i].height, true,
 			label_border, BLACK, WHITE, sip->mapsize);
@@ -1442,7 +631,7 @@ static int Internet_server_show_cb(int widget, void *user_data,
 
     /* Map author label */
 
-    Widget_create_colored_label(subform_widget,
+    (void) Widget_create_colored_label(subform_widget,
 			label_x + label_width, labels[i].yoff,
 			data_label_width, labels[i].height, true,
 			label_border, BLACK, WHITE, sip->author);
@@ -1452,7 +641,7 @@ static int Internet_server_show_cb(int widget, void *user_data,
 
     /* Map status label */
 
-    Widget_create_colored_label(subform_widget,
+    (void) Widget_create_colored_label(subform_widget,
 			label_x + label_width, labels[i].yoff,
 			data_label_width, labels[i].height, true,
 			label_border,  BLACK, WHITE,sip->status);
@@ -1461,7 +650,7 @@ static int Internet_server_show_cb(int widget, void *user_data,
 
     /* Number of bases label */
 
-    Widget_create_colored_label(subform_widget,
+    (void) Widget_create_colored_label(subform_widget,
 			label_x + label_width, labels[i].yoff,
 			data_label_width, labels[i].height, true,
 			label_border,  BLACK, WHITE, sip->bases_str);
@@ -1469,7 +658,7 @@ static int Internet_server_show_cb(int widget, void *user_data,
 
     /* Number of teambases label */
 
-    Widget_create_colored_label(subform_widget,
+    (void) Widget_create_colored_label(subform_widget,
 			label_x + label_width, labels[i].yoff,
 			data_label_width, labels[i].height, true,
 			label_border, BLACK, WHITE, sip->teambases_str);
@@ -1478,7 +667,7 @@ static int Internet_server_show_cb(int widget, void *user_data,
 
     /* Freebases label */
 
-    Widget_create_colored_label(subform_widget,
+    (void) Widget_create_colored_label(subform_widget,
 			label_x + label_width, labels[i].yoff,
 			data_label_width, labels[i].height, true,
 			label_border,  BLACK, WHITE, sip->freebases);
@@ -1486,7 +675,7 @@ static int Internet_server_show_cb(int widget, void *user_data,
 
     /* Number in Queue label */
 
-    Widget_create_colored_label(subform_widget,
+    (void) Widget_create_colored_label(subform_widget,
 			label_x + label_width, labels[i].yoff,
 			data_label_width, labels[i].height, true,
 			label_border,  BLACK, WHITE, sip->queue_str);
@@ -1494,14 +683,14 @@ static int Internet_server_show_cb(int widget, void *user_data,
 
     /* Number of frames per second label */
 
-    Widget_create_colored_label(subform_widget,
+    (void) Widget_create_colored_label(subform_widget,
 			label_x + label_width, labels[i].yoff,
 			data_label_width, labels[i].height, true,
 			label_border,  BLACK, WHITE, sip->fps_str);
     i++;
     /* Is there sound label */
 
-    Widget_create_colored_label(subform_widget,
+    (void) Widget_create_colored_label(subform_widget,
 			label_x + label_width, labels[i].yoff,
 			data_label_width, labels[i].height, true,
 			label_border,  BLACK, WHITE, sip->sound);
@@ -1509,7 +698,7 @@ static int Internet_server_show_cb(int widget, void *user_data,
 
     /* Is this a race map label  */
 
-    Widget_create_colored_label(subform_widget,
+    (void) Widget_create_colored_label(subform_widget,
 			label_x + label_width, labels[i].yoff,
 			data_label_width, labels[i].height, true,
 				label_border, BLACK, WHITE,
@@ -1527,38 +716,46 @@ static int Internet_server_show_cb(int widget, void *user_data,
     /* my_strtok destroys playslist */
     /* Could introduce new resources here, but lets force some color */
     /* changes instead */
+    if (sip->users != 0) {
 
-    Widget_create_colored_label(subform_widget,
-				label_x + label_width,
-				label_y,
-				player_label_width, label_height, true,
-				label_border, 9, WHITE, "Player Name");
+      (void) Widget_create_colored_label(subform_widget,
+					 label_x + label_width,
+					 label_y,
+					 player_label_width, label_height, true,
+					 label_border, 9, WHITE, "Player Name");
+      
+      (void) Widget_create_colored_label(subform_widget,
+					 label_x + label_width + player_label_width,
+					 label_y,
+					 host_label_width, label_height, true,
+					 label_border, 9, WHITE, "Player Host");
+      
+      label_y += label_height + label_space;
+    }
     
-    Widget_create_colored_label(subform_widget,
-				label_x + label_width + player_label_width,
-				label_y,
-				host_label_width, label_height, true,
-				label_border, 9, WHITE, "Player Host");
-
-    label_y += label_height + label_space;
-
 
     for (p = my_strtok(playslist, ","); p; p = my_strtok(NULL, ",")) {
 
 	eqptr = strchr(p, '=');
 	if (eqptr != NULL) {
 	    *eqptr = '\0';
+	} else {
+	  /* currently xpilot allows "," in nicks quit here */
+	  /* until they fix their protocol problem */
+	  continue;
 	}
+	  
+	
 
 
-	Widget_create_colored_label(subform_widget,
+	(void) Widget_create_colored_label(subform_widget,
 			    label_x + label_width,
 			    label_y,
 			    player_label_width, label_height, false,
 			    label_border, BLACK, WHITE, p);
 	p = eqptr + 1;
 
-	Widget_create_colored_label(subform_widget,
+	(void) Widget_create_colored_label(subform_widget,
 			    label_x + label_width + player_label_width,
 			    label_y,
 			    host_label_width, label_height, false,
@@ -1581,7 +778,7 @@ static int Internet_next_page_cb(int widget, void *user_data,
 {
     Connect_param_t *conpar = (Connect_param_t *) user_data;
 
-    (void)widget; (void)text;
+    UNUSED_PARAM(widget); UNUSED_PARAM(text);
     Welcome_show_server_list(conpar);
 
     return 0;
@@ -1595,7 +792,7 @@ static int Internet_first_page_cb(int widget, void *user_data,
 {
     Connect_param_t *conpar = (Connect_param_t *) user_data;
 
-    (void)widget; (void)text;
+    UNUSED_PARAM(widget); UNUSED_PARAM(text);
     server_it = List_begin(server_list);
 
     Welcome_show_server_list(conpar);
@@ -1609,8 +806,14 @@ static int Internet_first_page_cb(int widget, void *user_data,
 static int Internet_ping_cb(int widget, void *user_data, const char **text)
 {
     Connect_param_t *conpar = (Connect_param_t *) user_data;
+   
+    
+    UNUSED_PARAM(widget); UNUSED_PARAM(text);
+    
+    sprintf(buf, "Pinging servers...");
+	    
+    Welcome_create_label(1, buf);
 
-    (void)widget; (void)text;
     Ping_servers();
 
     if (Welcome_sort_server_list() == -1) {
@@ -1681,8 +884,7 @@ static int Welcome_show_server_list(Connect_param_t * conpar)
 	server_offset + server_width + server_border_width + space_width;
     int stat_offset = ping_offset + ping_width + space_width;
     int w;
-    int subform_width = 0;
-    int subform_height = 0;
+
     int all_offset = 0;
     server_info_t *sip;
     list_iter_t start_server_it = server_it;
@@ -1919,7 +1121,9 @@ static void Internet_cleanup(void)
 static int Internet_cb(int widget, void *user_data, const char **text)
 {
     Connect_param_t *conpar = (Connect_param_t *) user_data;
+    
 
+    UNUSED_PARAM(widget); UNUSED_PARAM(text);
     Welcome_set_mode(ModeInternet);
 
     if (!server_list ||
@@ -1927,9 +1131,12 @@ static int Internet_cb(int widget, void *user_data, const char **text)
 	server_list_creation_time + 5 < time(NULL)) {
 
 	Delete_server_list();
-
-	if (Get_meta_data() <= 0)
+        sprintf(buf, "Doing a DNS lookup .. ");
+	Welcome_create_label(1, buf);
+	if (Get_meta_data(err) <= 0) {
+	  Welcome_create_label(1, err);
 	    return 0;
+	}
 
 	/* Ping_servers(); */
 
@@ -1941,6 +1148,19 @@ static int Internet_cb(int widget, void *user_data, const char **text)
 
     server_it = List_begin(server_list);
     Welcome_show_server_list(conpar);
+
+    return 0;
+}
+
+
+/*
+ * User pressed the Configure button.
+ */
+static int Configure_cb(int widget, void *user_data, const char **text)
+{
+    UNUSED_PARAM(widget); UNUSED_PARAM(text);
+
+    Config(true, CONFIG_DEFAULT);
 
     return 0;
 }
@@ -1981,6 +1201,7 @@ static int Help_cb(int widget, void *user_data, const char **text)
  */
 static int Quit_cb(int widget, void *user_data, const char **text)
 {
+    UNUSED_PARAM(widget); UNUSED_PARAM(user_data); UNUSED_PARAM(text);
     Welcome_set_mode(ModeQuit);
 
     quitting = true;
@@ -2019,6 +1240,7 @@ static int Welcome_create_windows(Connect_param_t * conpar)
     struct MyButton my_buttons[] = {
 	{"Local", Localnet_cb},
 	{"Internet", Internet_cb},
+	/*	{"Config", Configure_cb}, */
 #if 0
 /* XXX TODO add server page to select a map and start a server. */
 	{"Server", Server_cb},
@@ -2089,6 +1311,8 @@ static int Welcome_create_windows(Connect_param_t * conpar)
 	return -1;
     Widget_set_background(subform_widget, BLACK);
 
+   
+
     Widget_map_sub(form_widget);
     XMapSubwindows(dpy, topWindow);
 
@@ -2126,7 +1350,7 @@ static void Welcome_cleanup(void)
  */
 static void Welcome_set_mode(enum Welcome_mode new_welcome_mode)
 {
-    int old_welcome_mode = welcome_mode;
+    enum Welcome_mode old_welcome_mode = welcome_mode;
 
     Widget_destroy_children(subform_widget);
 
@@ -2214,7 +1438,7 @@ static int Welcome_process_one_event(XEvent * event,
 	break;
 
     case ConfigureNotify:
-
+      
 	conf = &event->xconfigure;
 	if (conf->window == topWindow) {
 	    if ((top_width == conf->width) && (top_height == conf->height)) {
@@ -2229,24 +1453,16 @@ static int Welcome_process_one_event(XEvent * event,
 	    switch (welcome_mode) {
 	    case ModeInternet:
 	    case ModeStatus:
-		Welcome_destroy_windows();
-		Delete_server_list();
-		if (Welcome_create_windows(conpar) == -1)
-		    return -1;
-
-		Welcome_set_mode(ModeInternet);
-
-		/* Popup an initial server list */
-		if (Get_meta_data() > 0) {
-
-		    if (Welcome_sort_server_list() == -1) {
-			Welcome_create_label(1, "Not enough memory.");
-		    }
-		    server_it = List_begin(server_list);
-		    Welcome_show_server_list(conpar);
-		}
-		break;
-
+	      Welcome_destroy_windows(); 
+		
+	      if (Welcome_create_windows(conpar) == -1)
+		return -1;
+	      
+	      Welcome_set_mode(ModeInternet); 
+	      server_it = List_begin(server_list);
+	      Welcome_show_server_list(conpar);
+	      
+	      break;
 	    case ModeLocalnet:
 		Welcome_destroy_windows();
 		Delete_server_list();
@@ -2260,6 +1476,12 @@ static int Welcome_process_one_event(XEvent * event,
 		break;
 	    case ModeQuit:
 		break;
+	    case ModeWaiting:
+	      Welcome_destroy_windows();
+	      if (Welcome_create_windows(conpar) == -1)
+		return -1;
+	      Welcome_set_mode(ModeWaiting);
+	      
 	    default:
 		break;
 	    }
@@ -2308,20 +1530,10 @@ static int Welcome_input_loop(Connect_param_t * conpar)
     int result;
     XEvent event;
 
-    Welcome_set_mode(ModeInternet);
-
-    /* Popup an initial server list */
-    if (Get_meta_data() > 0) {
-
-	if (Welcome_sort_server_list() == -1) {
-	    Delete_server_list();
-	    Welcome_create_label(1, "Not enough memory.");
-	}
-	server_it = List_begin(server_list);
-	Welcome_show_server_list(conpar);
-    }
+    Welcome_set_mode(ModeWaiting);
 
     /* Start main loop */
+    Welcome_create_label(1, "Welcome to Improved XPilot!");
 
     while (!quitting && !joining) {
 	XNextEvent(dpy, &event);
@@ -2379,13 +1591,7 @@ int Welcome_screen(Connect_param_t * conpar)
 
     if (!quitting && joining) {
 	Welcome_cleanup();
-	result = Join(conpar->server_addr,
-		      conpar->server_name,
-		      conpar->login_port,
-		      conpar->real_name,
-		      conpar->nick_name,
-		      conpar->team,
-		      conpar->disp_name, conpar->server_version);
+	result = Join(conpar);
     } else
 	Quit();
 

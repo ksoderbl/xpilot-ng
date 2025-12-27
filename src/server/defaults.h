@@ -1,5 +1,7 @@
-/*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+/* 
+ * XPilotNG, an XPilot-like multiplayer space war game.
+ *
+ * Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -18,11 +20,15 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef DEFAULTS_H
 #define DEFAULTS_H
+
+#ifndef MAP_H
+# include "map.h"
+#endif
 
 enum valType {
     valVoid,		/* variable is not a variable */
@@ -31,7 +37,6 @@ enum valType {
     valBool,		/* variable is type bool */
     valIPos,		/* variable is type ipos */
     valString,		/* variable is type char* */
-    valSec,		/* variable is type int (converted to frames) */
     valList		/* variable is a list of elements of type char* */
 };
 
@@ -65,7 +70,7 @@ typedef struct _option_desc {
     const char		*defaultValue;
     void		*variable;
     enum valType	type;
-    void		(*tuner)(void);
+    void		(*tuner)(world_t *world);
     const char		*helpLine;
     int			flags;		/* allowable option origins. */
 } option_desc;

@@ -1,7 +1,9 @@
 /*
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
+ * XPilotNG, an XPilot-like multiplayer space war game.
  *
- *      BjÃ¸rn Stabell        <bjoern@xpilot.org>
+ * Copyright (C) 1991-2001 by
+ *
+ *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
  *      Bert Gijsbers        <bert@xpilot.org>
  *      Dick Balaska         <dick@xpilot.org>
@@ -18,14 +20,18 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "xpclient.h"
+#include "xpclient_x11.h"
 
 
 char guimap_version[] = VERSION;
 
+static int baseNameColor;		/* Color index for base name drawing */
+static int backgroundPointColor;	/* background point drawing */
+static int fuelColor;			/* fuel station drawing */
+static int visibilityBorderColor;	/* visibility border drawing */
 
 void Gui_paint_walls(int x, int y, int type)
 {
@@ -92,6 +98,26 @@ void Gui_paint_walls(int x, int y, int type)
 	    Bitmap_paint(drawPixmap, BM_WALL_UL, WINSCALE(X(x)),
 			WINSCALE(Y(y + BLOCK_SZ)), 0);
     }
+}
+
+
+void Gui_paint_filled_slice(int bl, int tl, int tr, int br, int y)
+{
+    XPoint        points[5];
+
+    SET_FG(colors[wallColor].pixel);
+
+    points[0].x = WINSCALE(X(bl));
+    points[0].y = WINSCALE(Y(y));
+    points[1].x = WINSCALE(X(tl));
+    points[1].y = WINSCALE(Y(y + BLOCK_SZ));
+    points[2].x = WINSCALE(X(tr));
+    points[2].y = WINSCALE(Y(y + BLOCK_SZ));
+    points[3].x = WINSCALE(X(br));
+    points[3].y = WINSCALE(Y(y));
+    points[4] = points[0];
+    rd.fillPolygon(dpy, drawPixmap, gameGC, points, 5, Convex,
+		   CoordModeOrigin);
 }
 
 
@@ -167,7 +193,7 @@ void Gui_paint_cannon(int x, int y, int type)
 }
 
 
-void Gui_paint_fuel(int x, int y, int fuel)
+void Gui_paint_fuel(int x, int y, double fuel)
 {
     /* fuel box drawing can be disabled */
     if (fuelColor == BLACK)
@@ -190,12 +216,12 @@ void Gui_paint_fuel(int x, int y, int fuel)
 		> WINSCALE(BLOCK_SZ) + 2;
 	}
 	SET_FG(colors[fuelColor].pixel);
-	size = (BLOCK_SZ - 2*FUEL_BORDER) * fuel / MAX_STATION_FUEL;
+	size = (int)((BLOCK_SZ - 2*FUEL_BORDER) * fuel / MAX_STATION_FUEL);
 	rd.fillRectangle(dpy, drawPixmap, gameGC,
 			 SCALEX(x + FUEL_BORDER),
 			 SCALEY(y + FUEL_BORDER + size),
-			 WINSCALE(BLOCK_SZ - 2*FUEL_BORDER + 1),
-			 WINSCALE(size + 1));
+			 (unsigned)WINSCALE(BLOCK_SZ - 2*FUEL_BORDER + 1),
+			 (unsigned)WINSCALE(size + 1));
 
 	/* Draw F in fuel cells */
 	XSetFunction(dpy, gameGC, GXxor);
@@ -210,7 +236,7 @@ void Gui_paint_fuel(int x, int y, int fuel)
 
 	int fuel_images = ABS(pixmaps[BM_FUEL].count);
 	int size, image;
-	irec area;
+	irec_t area;
 	bbox_t *box;
 	xp_bitmap_t *bit;
 
@@ -231,7 +257,8 @@ void Gui_paint_fuel(int x, int y, int fuel)
 
 	size = (BLOCK_SZ - 2 * BITMAP_FUEL_BORDER) * fuel / MAX_STATION_FUEL;
 
-	Bitmap_paint(drawPixmap, BM_FUELCELL, SCALEX(x), SCALEY(y + BLOCK_SZ), 0);
+	Bitmap_paint(drawPixmap, BM_FUELCELL,
+		     SCALEX(x), SCALEY(y + BLOCK_SZ), 0);
 
 	bit = Bitmap_get(drawPixmap, BM_FUEL, image);
 	if (bit != NULL) {
@@ -253,8 +280,6 @@ void Gui_paint_fuel(int x, int y, int fuel)
 void Gui_paint_base(int x, int y, int id, int team, int type)
 {
     int color = 0;
-    int lifeColor = 0;
-    int previousLifeColor = 0;
     const int BORDER = 4;		/* in pixels */
     int size = 0, size2 = 0;
     other_t *other;
@@ -265,12 +290,9 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
 
     other = Other_by_id(id);
     base = Homebase_by_id(id);
-    /* If life coloring is valid we get something here (Mara)*/
-    if ((lifeColor = Life_color(other)) != 0)
-	previousLifeColor = Life_color_by_life((other->life)+1);
-    
+
     if (baseNameColor) {
-	if (!(color = lifeColor))
+	if (!(color = Life_color(other)))
 	    color = baseNameColor;
     } else
 	color = WHITE;
@@ -280,45 +302,30 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
 	 * Hacks to support Mara's base warning on new servers and
 	 * the red "meter" basewarning on old servers.
 	 */
-	if (version >= 0x4F12) {
-	    /*
-	     * Since this is the next (displayed) frame add FPSDivisor
-	     */
-	    if (loops <= base->deathtime + FPSDivisor)
-		do_basewarning = true;
-	} else {
-	    if (base->deathtime > loops - 3 * clientFPS) {
-		do_basewarning = true;
-		if (baseWarningType & 1) {
-		    int count = (360
-				 * (base->deathtime + 3 * clientFPS - loops))
-			/ (3 * clientFPS);
-		    LIMIT(count, 0, 360);
-		    /* red box basewarning */
-		    if (count > 0 && (baseWarningType & 1))
-			Gui_paint_appearing(x + BLOCK_SZ / 2, y + BLOCK_SZ / 2,
-					    id, count);
-		}
+	if (loops < base->appeartime)
+	    do_basewarning = true;
+
+	if (version < 0x4F12 && do_basewarning) {
+	    if (baseWarningType & 1) {
+		/* We assume the ship will appear after 3 seconds. */
+		int count = 360 * (base->appeartime - loops) / (3 * clientFPS);
+		LIMIT(count, 0, 360);
+		/* red box basewarning */
+		if (count > 0 && (baseWarningType & 1))
+		    Gui_paint_appearing(x + BLOCK_SZ / 2, y + BLOCK_SZ / 2,
+					id, count);
 	    }
 	}
-
     }
 
     /* Mara's flashy basewarning */
     if (do_basewarning && (baseWarningType & 2)) {
-	/* If same color it won't flash properly */
-	if (lifeColor == previousLifeColor) {
-	    lifeColor = WHITE;
-	    previousLifeColor = RED;
-	}
 	if (loopsSlow & 1) {
-	    if (!(color = lifeColor))
-		color = baseNameColor;
-	    if (!color)
+	    if (color != WHITE)
 		color = WHITE;
-	} else
-	    if (!(color = previousLifeColor))
-		color = RED;
+	    else
+		color = BLUE;
+	}
     }
 
     SET_FG(colors[color].pixel);
@@ -447,12 +454,12 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
     }
     if (other) {
 	rd.drawString(dpy, drawPixmap, gameGC, x, y,
-		      other->name, other->name_len);
+		      other->nick_name, other->name_len);
 	x += other->name_width;
     }
     /* Extra base info */
     if (size2)
-	rd.drawString(dpy, drawPixmap, gameGC, x, y, info, strlen(info));
+	rd.drawString(dpy, drawPixmap, gameGC, x, y, info, (int)strlen(info));
 }
 
 
@@ -466,9 +473,6 @@ void Gui_paint_decor(int x, int y, int xi, int yi, int type,
 			    fill_top_right = -1,
 			    fill_bottom_left = -1,
 			    fill_bottom_right = -1;
-    static int		    decorTileReady = 0;
-    static Pixmap	    decorTile = None;
-    int			    decorTileDoit = false;
     static unsigned char    decor[256];
     static int		    decorReady = 0;
 
@@ -486,23 +490,9 @@ void Gui_paint_decor(int x, int y, int xi, int yi, int type,
 	    = DECOR_LEFT | DECOR_DOWN | DECOR_CLOSED | DECOR_BELOW;
     }
 
-    if (BIT(instruments, SHOW_TEXTURED_DECOR)) {
-	if (!decorTileReady) {
-	    decorTile = Texture_decor();
-	    decorTileReady = (decorTile == None) ? -1 : 1;
-	}
-	if (decorTileReady == 1) {
-	    decorTileDoit = true;
-	    XSetTile(dpy, gameGC, decorTile);
-	    XSetTSOrigin(dpy, gameGC,
-			 -WINSCALE(realWorld.x), WINSCALE(realWorld.y));
-	    XSetFillStyle(dpy, gameGC, FillTiled);
-	}
-    }
-
     mask = decor[type];
 
-    if (!BIT(instruments, SHOW_FILLED_DECOR|SHOW_TEXTURED_DECOR)) {
+    if (!(instruments.showFilledDecor||instruments.showTexturedDecor)) {
 	if (mask & DECOR_LEFT) {
 	    if ((xi == 0)
 		? (!BIT(Setup->mode, WRAP_PLAY) ||
@@ -532,7 +522,7 @@ void Gui_paint_decor(int x, int y, int xi, int yi, int type,
 	    }
 	}
 	if (mask & DECOR_RIGHT) {
-	    if (!BIT(instruments, SHOW_OUTLINE_DECOR)
+	    if (!instruments.showOutlineDecor
 		|| ((xi == Setup->x - 1)
 		    ? (!BIT(Setup->mode, WRAP_PLAY)
 		       || !(decor[Setup->map_data[yi]]
@@ -547,7 +537,7 @@ void Gui_paint_decor(int x, int y, int xi, int yi, int type,
 	    }
 	}
 	if (mask & DECOR_UP) {
-	    if (!BIT(instruments, SHOW_OUTLINE_DECOR)
+	    if (!instruments.showOutlineDecor
 		|| ((yi == Setup->y - 1)
 		    ? (!BIT(Setup->mode, WRAP_PLAY)
 		       || !(decor[Setup->map_data[xi * Setup->y]]
@@ -622,8 +612,6 @@ void Gui_paint_decor(int x, int y, int xi, int yi, int type,
 	    fill_bottom_left = fill_bottom_right = -1;
 	}
     }
-    if (decorTileDoit && last)
-        XSetFillStyle(dpy, gameGC, FillSolid);
 }
 
 
@@ -669,7 +657,7 @@ void Gui_paint_border(int x, int y, int xi, int yi)
 }
 
 
-void Gui_paint_visible_border(int x, int y, int xi, int yi, int color)
+static void Gui_paint_rectangle(int x, int y, int xi, int yi, int color)
 {
     Segment_add(color,
 		X(x), Y(y),
@@ -686,6 +674,19 @@ void Gui_paint_visible_border(int x, int y, int xi, int yi, int color)
     Segment_add(color,
 		X(x), Y(yi),
 		X(xi), Y(yi));
+}
+
+
+void Gui_paint_visible_border(int x, int y, int xi, int yi)
+{
+    if (visibilityBorderColor)
+	Gui_paint_rectangle(x, y, xi, yi, visibilityBorderColor);
+}
+
+
+void Gui_paint_hudradar_limit(int x, int y, int xi, int yi)
+{
+    Gui_paint_rectangle(x, y, xi, yi, BLUE);
 }
 
 
@@ -851,8 +852,9 @@ void Gui_paint_setup_left_grav(int x, int y)
 }
 
 
-void Gui_paint_setup_worm(int x, int y, int wormDrawCount)
+void Gui_paint_setup_worm(int x, int y)
 {
+    int wormDrawCount = loops & 7;
     if (!texturedObjects) {
 	static const int	INSIDE_BL = BLOCK_SZ - 2;
 	static int wormOffset[8][3] = {
@@ -1035,7 +1037,7 @@ void Gui_paint_decor_dot(int x, int y, int size)
 }
 
 
-void Gui_paint_setup_target(int x, int y, int team, int damage, bool own)
+void Gui_paint_setup_target(int x, int y, int team, double damage, bool own)
 {
     int	    size, a1, a2, b1, b2, color;
     char    s[2];
@@ -1063,8 +1065,8 @@ void Gui_paint_setup_target(int x, int y, int team, int damage, bool own)
     rd.drawRectangle(dpy, drawPixmap, gameGC,
 		     WINSCALE(X(x+(BLOCK_SZ+2)/4)),
 		     WINSCALE(Y(y+3*BLOCK_SZ/4)),
-		     WINSCALE(BLOCK_SZ/2),
-		     WINSCALE(BLOCK_SZ/2));
+		     UWINSCALE(BLOCK_SZ/2),
+		     UWINSCALE(BLOCK_SZ/2));
 
     if (BIT(Setup->mode, TEAM_PLAY)) {
 	s[0] = '0' + team; s[1] = '\0';
@@ -1160,7 +1162,7 @@ void Gui_paint_polygon(int i, int xoff, int yoff)
     static XPoint points[10000];
 
     int j, x, y, sindex, width, did_fill;
-    ipos ship;
+    ipos_t ship;
     xp_polygon_t polygon;
     polygon_style_t style;
     bool textured, filled;
@@ -1170,8 +1172,8 @@ void Gui_paint_polygon(int i, int xoff, int yoff)
 
     if (BIT(style.flags, STYLE_INVISIBLE)) return;
 
-    textured = BIT(instruments, SHOW_TEXTURED_WALLS) && fullColor;
-    filled = BIT(instruments, SHOW_FILLED_WORLD);
+    textured = instruments.showTexturedWalls && fullColor;
+    filled = instruments.showFilledWorld;
 
     x = xoff * Setup->width;
     y = yoff * Setup->height;
@@ -1191,7 +1193,7 @@ void Gui_paint_polygon(int i, int xoff, int yoff)
     if ((filled || textured) && (BIT(style.flags,
 				     STYLE_TEXTURED | STYLE_FILLED))) {
         if (textured && BIT(style.flags, STYLE_TEXTURED)) {
-	    xp_bitmap_t *bmp = Bitmap_get(drawPixmap, style.texture, 0);
+	    xp_bitmap_t *bmp = Bitmap_get(drawPixmap, NUM_BITMAPS + style.texture, 0);
 	    if (bmp == NULL)
 		goto notexture; /* Print an error here? */
 	    XSetTile(dpy, gameGC, bmp->bitmap);
@@ -1223,7 +1225,7 @@ void Gui_paint_polygon(int i, int xoff, int yoff)
 		width = 0;
             width = WINSCALE(width);
             if (width == 1) width = 0; 
-	    XSetLineAttributes(dpy, gameGC, width,
+	    XSetLineAttributes(dpy, gameGC, (unsigned)width,
 		edge_styles[sindex].style, CapButt, JoinMiter);
 
 	    if (fullColor)
@@ -1254,7 +1256,7 @@ void Gui_paint_polygon(int i, int xoff, int yoff)
 		    width = 0;
                 width = WINSCALE(width);
                 if (width == 1) width = 0;
-		XSetLineAttributes(dpy, gameGC, width,
+		XSetLineAttributes(dpy, gameGC, (unsigned)width,
 			      edge_styles[sindex].style, CapButt, JoinMiter);
 
 		if (fullColor)
@@ -1270,4 +1272,36 @@ void Gui_paint_polygon(int i, int xoff, int yoff)
         }
     }
     XSetLineAttributes(dpy, gameGC, 0, LineSolid, CapButt, JoinMiter);
+}
+
+xp_option_t guimap_options[] = {
+    COLOR_INDEX_OPTION(
+	"baseNameColor",
+	2,
+	&baseNameColor,
+	"Which color number to use for drawing names of bases\n"
+	"(unless drawn in one of the life colors).\n"),
+
+    COLOR_INDEX_OPTION(
+	"backgroundPointColor",
+	2,
+	&backgroundPointColor,
+	"Which color number to use for drawing background points.\n"),
+
+    COLOR_INDEX_OPTION(
+	"fuelColor",
+	5,
+	&fuelColor,
+	"Which color number to use for drawing fuel stations.\n"),
+
+    COLOR_INDEX_OPTION(
+	"visibilityBorderColor",
+	2,
+	&visibilityBorderColor,
+	"Which color number to use for drawing the visibility border.\n"),
+};
+
+void Store_guimap_options(void)
+{
+    STORE_OPTIONS(guimap_options);
 }
