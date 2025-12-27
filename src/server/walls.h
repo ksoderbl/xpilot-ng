@@ -1,11 +1,11 @@
-/* 
+/*
  * XPilot NG, a multiplayer space war game.
  *
  * Copyright (C) 2000-2004 Uoti Urpala <uau@users.sourceforge.net>
  *
  * Copyright (C) 1991-2001 by
  *
- *      Bjørn Stabell        <bjoern@xpilot.org>
+ *      Bjï¿½rn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
  *      Bert Gijsbers        <bert@xpilot.org>
  *      Dick Balaska         <dick@xpilot.org>
@@ -28,12 +28,14 @@
 #ifndef WALLS_H
 #define WALLS_H
 
+#include <stdint.h>
+
 #ifndef CLICK_H
-# include "click.h"
+#include "click.h"
 #endif
 
 #ifndef OBJECT_H
-# include "object.h"
+#include "object.h"
 #endif
 
 /*
@@ -48,10 +50,11 @@
  * Therefore a fixed point sub-pixel resolution is used called clicks.
  */
 
-#define FLOAT_TO_INT(F)		((F) < 0 ? -(int)(0.5f-(F)) : (int)((F)+0.5f))
-#define DOUBLE_TO_INT(D)	((D) < 0 ? -(int)(0.5-(D)) : (int)((D)+0.5))
+#define FLOAT_TO_INT(F) ((F) < 0 ? -(int)(0.5f - (F)) : (int)((F) + 0.5f))
+#define DOUBLE_TO_INT(D) ((D) < 0 ? -(int)(0.5 - (D)) : (int)((D) + 0.5))
 
-typedef enum {
+typedef enum
+{
     NotACrash = 0,
     CrashUniverse = 0x01,
     CrashWall = 0x02,
@@ -65,48 +68,52 @@ typedef enum {
     CrashWallAngle = 0x200
 } move_crash_t;
 
-typedef struct {
-    int			edge_wrap;
-    int			edge_bounce;
-    int			wall_bounce;
-    int			cannon_crashes;
-    int			target_crashes;
-    int			treasure_crashes;
-    int			wormhole_warps;
-    int			phased;
-    object_t		*obj;
-    player_t		*pl;
+typedef struct
+{
+    int edge_wrap;
+    int edge_bounce;
+    int wall_bounce;
+    int cannon_crashes;
+    int target_crashes;
+    int treasure_crashes;
+    int wormhole_warps;
+    int phased;
+    object_t *obj;
+    player_t *pl;
 } move_info_t;
 
-typedef struct {
-    const move_info_t	*mip;
-    move_crash_t	crash;
-    clpos_t		pos;
-    vector_t		vel;
-    clvec_t		todo;
-    clvec_t		done;
-    int			dir;
-    int			cannon;
-    int			wormhole;
-    int			target;
-    int			treasure;
+typedef struct
+{
+    const move_info_t *mip;
+    move_crash_t crash;
+    clpos_t pos;
+    vector_t vel;
+    clvec_t todo;
+    clvec_t done;
+    int dir;
+    int cannon;
+    int wormhole;
+    int target;
+    int treasure;
 } move_state_t;
 
-struct move_parameters {
-    click_t		click_width;		/* Map width in clicks */
-    click_t		click_height;		/* Map width in clicks */
+struct move_parameters
+{
+    click_t click_width;  /* Map width in clicks */
+    click_t click_height; /* Map width in clicks */
 
-    int			max_shielded_angle;	/* max player bounce angle */
-    int			max_unshielded_angle;	/* max player bounce angle */
+    int max_shielded_angle;   /* max player bounce angle */
+    int max_unshielded_angle; /* max player bounce angle */
 
-    unsigned long	obj_bounce_mask;	/* which objects bounce? */
-    unsigned long	obj_cannon_mask;	/* objects crash cannons? */
-    unsigned long	obj_target_mask;	/* object target hit? */
-    unsigned long	obj_treasure_mask;	/* objects treasure crash? */
+    unsigned long obj_bounce_mask;   /* which objects bounce? */
+    unsigned long obj_cannon_mask;   /* objects crash cannons? */
+    unsigned long obj_target_mask;   /* object target hit? */
+    unsigned long obj_treasure_mask; /* objects treasure crash? */
 };
 
 /* kps change 100, 30 etc to something sane */
-struct polystyle {
+struct polystyle
+{
     char id[100];
     int color;
     int texture_id;
@@ -114,20 +121,23 @@ struct polystyle {
     int flags;
 };
 
-struct edgestyle {
+struct edgestyle
+{
     char id[100];
     int width;
     int color;
     int style;
 };
 
-struct bmpstyle {
+struct bmpstyle
+{
     char id[100];
     char filename[32];
     int flags;
 };
 
-typedef struct {
+typedef struct
+{
     int style;
     int current_style;
     int destroyed_style;
@@ -145,14 +155,15 @@ typedef struct {
 /*
  * Hitmasks are 32 bits.
  */
-#define ALL_BITS		0xffffffffU
-#define BALL_BIT		(1U << 11)
-#define NONBALL_BIT		(1U << 12)
-#define NOTEAM_BIT		(1U << 10)
+#define ALL_BITS 0xffffffffU
+#define BALL_BIT (1U << 11)
+#define NONBALL_BIT (1U << 12)
+#define NOTEAM_BIT (1U << 10)
 #define HITMASK(team) ((team) == TEAM_NOT_SET ? NOTEAM_BIT : 1U << (team))
 typedef uint32_t hitmask_t;
 
-typedef struct move {
+typedef struct move
+{
     clvec_t start;
     clvec_t delta;
     hitmask_t hitmask;
@@ -161,7 +172,8 @@ typedef struct move {
 
 typedef struct group group_t;
 
-struct group {
+struct group
+{
     int type;
     int team;
     hitmask_t hitmask;
@@ -171,7 +183,7 @@ struct group {
 
 extern struct polystyle pstyles[256];
 extern struct edgestyle estyles[256];
-extern struct bmpstyle  bstyles[256];
+extern struct bmpstyle bstyles[256];
 extern poly_t *pdata;
 extern int *estyleptr;
 extern int *edgeptr;
@@ -181,10 +193,17 @@ extern int num_groups, max_groups;
 static inline group_t *groupptr_by_id(int group)
 {
     if (group >= 0 && group < num_groups)
-	return &groups[group];
+        return &groups[group];
     return NULL;
 }
 
 extern int num_polys, num_pstyles, num_estyles, num_bstyles;
+
+struct collans
+{
+    int line;
+    int point;
+    clvec_t moved;
+};
 
 #endif

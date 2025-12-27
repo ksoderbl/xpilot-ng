@@ -30,11 +30,11 @@
 #ifndef	VERSION_H
 #define	VERSION_H
 
-#define TITLE			"XPilot NG 4.7.2"
+#define TITLE			"XPilot NG 4.7.3"
 #ifndef VERSION
-#  define VERSION		"4.7.2"
+#  define VERSION		"4.7.3"
 #endif
-#define AUTHORS			"Bjørn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska, Uoti Urpala, Juha Lindström, Kristian Söderblom and Erik Andersson"
-#define COPYRIGHT		"Copyright © 1991-2005 by Bjørn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska, Uoti Urpala, Juha Lindström, Kristian Söderblom and Erik Andersson"
+#define AUTHORS			"BjÃ¸rn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska, Uoti Urpala, Juha LindstrÃ¶m, Kristian SÃ¶derblom and Erik Andersson"
+#define COPYRIGHT		"Copyright Â© 1991-2005 by BjÃ¸rn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska, Uoti Urpala, Juha LindstrÃ¶m, Kristian SÃ¶derblom and Erik Andersson"
 
 #endif /* VERSION_H */

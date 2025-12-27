@@ -52,3 +52,8 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# misc stuff
+.deps
+autom4te.cache
+*~
