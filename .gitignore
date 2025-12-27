@@ -60,3 +60,4 @@ dkms.conf
 .deps
 autom4te.cache
 *~
+config.log

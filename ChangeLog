@@ -3,6 +3,13 @@
 ====                       XPilot NG Change Log                            ====
 ===============================================================================
 
+This is a summary of changes of release 4.8.0 compared to release 4.7.3.
+
+Mapedit:
+  * Removed because it is a block map editor and available elsewhere.
+
+===============================================================================
+
 This is a summary of changes of release 4.7.3 compared to release 4.7.2.
 
 Common:
