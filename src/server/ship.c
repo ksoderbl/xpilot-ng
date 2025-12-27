@@ -333,7 +333,7 @@ void Tank_handle_detach(player_t *pl)
     Update_tanks(&(pl->fuel));
 
     /* Fork the current player */
-    tank = Players(NumPlayers);
+    tank = Player_by_index(NumPlayers);
 
     /*
      * MWAAH: this was ... naieve at least:
@@ -391,7 +391,7 @@ void Tank_handle_detach(player_t *pl)
     tank->updateVisibility = 1;
     for (i = 0; i <= NumPlayers; i++) {
 	tank->visibility[i].lastChange = 0;
-	Players(i)->visibility[NumPlayers].lastChange = 0;
+	Player_by_index(i)->visibility[NumPlayers].lastChange = 0;
     }
 
     /* Remember whose tank this is */
@@ -413,7 +413,7 @@ void Tank_handle_detach(player_t *pl)
     tank->have = DEF_HAVE;
     tank->used = (DEF_USED & ~USED_KILL & pl->have) | HAS_SHIELD;
 
-    if (!options.playerShielding) {
+    if (!options.allowShields) {
 	tank->shield_time = 30 * 12;
 	tank->have |= HAS_SHIELD;
     }
@@ -432,7 +432,7 @@ void Tank_handle_detach(player_t *pl)
     Player_remove_tank(pl, ct);
 
     for (i = 0; i < NumPlayers - 1; i++) {
-	player_t *pl_i = Players(i);
+	player_t *pl_i = Player_by_index(i);
 
 	if (pl_i->conn != NULL) {
 	    Send_player(pl_i->conn, tank->id);
@@ -443,7 +443,7 @@ void Tank_handle_detach(player_t *pl)
     }
 
     for (i = 0; i < NumSpectators - 1; i++) {
-	player_t *pl_i = Players(i + spectatorStart);
+	player_t *pl_i = Player_by_index(i + spectatorStart);
 
 	Send_player(pl_i->conn, tank->id);
 	Send_score(pl_i->conn, tank->id, tank->score,

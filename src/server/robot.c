@@ -701,7 +701,7 @@ static void Robot_create(world_t *world)
 	    most_used = i;
     }
     for (i = 0; i < NumPlayers; i++) {
-	player_t *pl_i = Players(i);
+	player_t *pl_i = Player_by_index(i);
 
 	if (Player_is_robot(pl_i)) {
 	    data = (robot_data_t *)pl_i->robot_data_ptr;
@@ -732,7 +732,7 @@ static void Robot_create(world_t *world)
     Init_player(world, NumPlayers,
 		options.allowShipShapes ? Parse_shape_str(rob->shape) : NULL);
 
-    robot = Players(NumPlayers);
+    robot = Player_by_index(NumPlayers);
     SET_BIT(robot->type_ext, OBJ_EXT_ROBOT);
     robot->robot_data_ptr = new_data;
 
@@ -750,7 +750,7 @@ static void Robot_create(world_t *world)
     robot->check = 0;
     if (BIT(world->rules->mode, TEAM_PLAY)) {
 	robot->team = Pick_team(PickForRobot);
-	teamp = Teams(world, robot->team);
+	teamp = Team_by_index(world, robot->team);
 	assert(teamp); /* if teamplay, can't have TEAM_NOT_SET */
 	teamp->NumMembers++;
 	teamp->NumRobots++;
@@ -758,13 +758,9 @@ static void Robot_create(world_t *world)
     if (robot->mychar != 'W')
 	robot->mychar = 'R';
 
-    robot->fuel.l1 = 100.0;
-    robot->fuel.l2 = 200.0;
-    robot->fuel.l3 = 500.0;
-
     Pick_startpos(robot);
 
-    (*rob_type->create)(robot, rob->config);
+    (*rob_type->robot_create)(robot, rob->config);
 
     Go_home(robot);
 
@@ -782,7 +778,7 @@ static void Robot_create(world_t *world)
     }
 
     for (i = 0; i < NumPlayers - 1; i++) {
-	player_t *pl_i = Players(i);
+	player_t *pl_i = Player_by_index(i);
 
 	if (pl_i->conn != NULL) {
 	    Send_player(pl_i->conn, robot->id);
@@ -812,7 +808,9 @@ static void Robot_create(world_t *world)
 
 void Robot_destroy(player_t *pl)
 {
-    (*robot_types[pl->robot_data_ptr->robot_types_ind].destroy)(pl);
+    robot_type_t *rob_type = &robot_types[pl->robot_data_ptr->robot_types_ind];
+
+    (*rob_type->robot_destroy)(pl);
     XFREE(pl->robot_data_ptr);
 }
 
@@ -828,7 +826,7 @@ void Robot_delete(player_t *pl, bool kicked)
 	 * Find the robot with the lowest score.
 	 */
 	for (i = 0; i < NumPlayers; i++) {
-	    player_t *pl_i = Players(i);
+	    player_t *pl_i = Player_by_index(i);
 
 	    if (!Player_is_robot(pl_i))
 		continue;
@@ -855,7 +853,9 @@ void Robot_delete(player_t *pl, bool kicked)
  */
 void Robot_invite(player_t *pl, player_t *inviter)
 {
-    (*robot_types[pl->robot_data_ptr->robot_types_ind].invite)(pl, inviter);
+    robot_type_t *rob_type = &robot_types[pl->robot_data_ptr->robot_types_ind];
+
+    (*rob_type->robot_invite)(pl, inviter);
 }
 
 /*
@@ -863,7 +863,9 @@ void Robot_invite(player_t *pl, player_t *inviter)
  */
 static void Robot_set_war(player_t *pl, int victim_id)
 {
-    (*robot_types[pl->robot_data_ptr->robot_types_ind].set_war)(pl, victim_id);
+    robot_type_t *rob_type = &robot_types[pl->robot_data_ptr->robot_types_ind];
+
+    (*rob_type->robot_set_war)(pl, victim_id);
 }
 
 
@@ -893,10 +895,9 @@ void Robot_program(player_t *pl, int victim_id)
  */
 int Robot_war_on_player(player_t *pl)
 {
-    robot_type_t	*rob_type =
-			    &robot_types[pl->robot_data_ptr->robot_types_ind];
+    robot_type_t *rob_type = &robot_types[pl->robot_data_ptr->robot_types_ind];
 
-    return (*rob_type->war_on_player)(pl);
+    return (*rob_type->robot_war_on_player)(pl);
 }
 
 
@@ -918,7 +919,7 @@ void Robot_war(player_t *pl, player_t *kp)
 
 	if (Robot_war_on_player(kp) == pl->id) {
 	    for (i = 0; i < NumPlayers; i++) {
-		player_t *pl_i = Players(i);
+		player_t *pl_i = Player_by_index(i);
 
 		if (pl_i->conn != NULL)
 		    Send_war(pl_i->conn, kp->id, NO_ID);
@@ -942,7 +943,7 @@ void Robot_war(player_t *pl, player_t *kp)
 
 	if (Robot_war_on_player(pl) != kp->id) {
 	    for (i = 0; i < NumPlayers; i++) {
-		player_t *pl_i = Players(i);
+		player_t *pl_i = Player_by_index(i);
 
 		if (pl_i->conn != NULL)
 		    Send_war(pl_i->conn, pl->id, kp->id);
@@ -959,7 +960,9 @@ void Robot_war(player_t *pl, player_t *kp)
  */
 void Robot_go_home(player_t *pl)
 {
-    (*robot_types[pl->robot_data_ptr->robot_types_ind].go_home)(pl);
+    robot_type_t *rob_type = &robot_types[pl->robot_data_ptr->robot_types_ind];
+
+    (*rob_type->robot_go_home)(pl);
 }
 
 
@@ -969,10 +972,9 @@ void Robot_go_home(player_t *pl)
  */
 void Robot_message(player_t *pl, const char *message)
 {
-    robot_type_t *rob_type =
-	&robot_types[pl->robot_data_ptr->robot_types_ind];
+    robot_type_t *rob_type = &robot_types[pl->robot_data_ptr->robot_types_ind];
 
-    (*rob_type->message)(pl, message);
+    (*rob_type->robot_message)(pl, message);
 }
 
 
@@ -981,7 +983,9 @@ void Robot_message(player_t *pl, const char *message)
  */
 static void Robot_play(player_t *pl)
 {
-    (*robot_types[pl->robot_data_ptr->robot_types_ind].play)(pl);
+    robot_type_t *rob_type = &robot_types[pl->robot_data_ptr->robot_types_ind];
+
+    (*rob_type->robot_play)(pl);
 }
 
 
@@ -1036,7 +1040,7 @@ static void Robot_round_tick(world_t *world)
 
     if (NumRobots > 0) {
 	for (i = 0; i < num_robot_types; i++)
-	    (*robot_types[i].round_tick)(world);
+	    (*robot_types[i].robot_round_tick)(world);
     }
 }
 
@@ -1139,7 +1143,7 @@ void Robot_update(world_t *world)
     Robot_round_tick(world);
 
     for (i = 0; i < NumPlayers; i++) {
-	player_t *pl = Players(i);
+	player_t *pl = Player_by_index(i);
 
 	if (Player_is_tank(pl)) {
 	    Tank_play(pl);

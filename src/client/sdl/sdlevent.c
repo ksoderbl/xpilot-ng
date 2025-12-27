@@ -33,61 +33,12 @@ char sdlevent_version[] = VERSION;
 bool            initialPointerControl = false;
 bool            pointerControl = false;
 
-/* horizontal mouse movement. */
-int	mouseMovement;
-struct timeval next_time = {0,0};
+static int	mouseMovement;	/* horizontal mouse movement. */
 
 GLWidget *target[NUM_MOUSE_BUTTONS];
 GLWidget *hovertarget = NULL;
 
 int Process_event(SDL_Event *evt);
-
-#ifndef __GNUC__
-#define EPOCHFILETIME (116444736000000000i64)
-#else
-#define EPOCHFILETIME (116444736000000000LL)
-#endif
-
-#ifndef HAVE_GETTIMEOFDAY
-struct timezone {
-    int tz_minuteswest; /* minutes W of Greenwich */
-    int tz_dsttime;     /* type of dst correction */
-};
-
-__inline int gettimeofday(struct timeval *tv, struct timezone *tz)
-{
-    FILETIME        ft;
-    LARGE_INTEGER   li;
-    __int64         t;
-    static int      tzflag;
-
-    if (tv)
-    {
-        GetSystemTimeAsFileTime(&ft);
-        li.LowPart  = ft.dwLowDateTime;
-        li.HighPart = ft.dwHighDateTime;
-        t  = li.QuadPart;       /* In 100-nanosecond intervals */
-        t -= EPOCHFILETIME;     /* Offset to the Epoch time */
-        t /= 10;                /* In microseconds */
-        tv->tv_sec  = (long)(t / 1000000);
-        tv->tv_usec = (long)(t % 1000000);
-    }
-
-    if (tz)
-    {
-        if (!tzflag)
-        {
-            _tzset();
-            tzflag++;
-        }
-        tz->tz_minuteswest = _timezone / 60;
-        tz->tz_dsttime = _daylight;
-    }
-
-    return 0;
-
-}
-#endif /* HAVE_GETTIMEOFDAY */
 
 bool Key_press_swap_scalefactor(void)
 {
@@ -136,32 +87,6 @@ bool Key_press_toggle_radar_score(void)
     return false;
 }
 
-static bool find_size(int *w, int *h)
-{
-    extern int videoFlags;
-    SDL_Rect **modes;
-    int i;
-
-    modes = SDL_ListModes(NULL, videoFlags);
-    if (modes == NULL) return false;
-    if (modes == (SDL_Rect**)-1) return true;
-
-    if (!modes[1]) {
-	*w = modes[0]->w;
-	*h = modes[0]->h;
-    } else {
-	for (i = 1; modes[i]; i++) {
-	    if (*w > modes[i]->w) {
-		*w = modes[i - 1]->w;
-		*h = modes[i - 1]->h;
-		break;
-	    }
-	}
-    }
-
-    return true;
-}
-
 #ifndef _WINDOWS
 bool Key_press_toggle_fullscreen(void)
 {
@@ -184,9 +109,8 @@ bool Key_press_toggle_fullscreen(void)
     h = initial_h = draw_height;
 
     videoFlags ^= SDL_FULLSCREEN;
-    if (find_size(&w, &h)
-	&& Resize_Window(w, h) == 0)
-	return false;
+    if (Resize_Window(w, h) == 0)
+		return false;
     
     videoFlags ^= SDL_FULLSCREEN;
     Resize_Window(initial_w, initial_h);
@@ -204,7 +128,8 @@ bool Key_press_toggle_fullscreen(void)
 int Process_event(SDL_Event *evt)
 {
     int button;
-    static struct timeval now = {0,0};
+
+    mouseMovement = 0;
 
     if (Console_process(evt)) return 1;
     
@@ -294,18 +219,8 @@ int Process_event(SDL_Event *evt)
     }
     
     if (mouseMovement) {
-    	gettimeofday(&now,NULL);
-    	if (!movement_interval || (now.tv_sec > next_time.tv_sec) || (now.tv_usec > next_time.tv_usec)) {
-	    next_time.tv_sec = now.tv_sec;
-	    next_time.tv_usec = now.tv_usec + movement_interval;
-	    while ( next_time.tv_usec > 1000000 ) {
-	    	++next_time.tv_sec;
-		next_time.tv_usec -= 1000000;
-	    }
-	    Send_pointer_move(mouseMovement);
-	    Net_flush();
-    	    mouseMovement = 0;
-	}
+	Client_pointer_move(mouseMovement);
+	Net_flush();
     }
     return 1;
 }

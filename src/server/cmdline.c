@@ -651,7 +651,7 @@ static option_desc opts[] = {
 	"allowPlayerCrashes",
 	"allowPlayerCrashes",
 	"yes",
-	&options.crashWithPlayer,
+	&options.allowPlayerCrashes,
 	valBool,
 	Set_world_rules,
 	"Can players overrun other players?\n",
@@ -661,7 +661,7 @@ static option_desc opts[] = {
 	"allowPlayerBounces",
 	"allowPlayerBounces",
 	"yes",
-	&options.bounceWithPlayer,
+	&options.allowPlayerBounces,
 	valBool,
 	Set_world_rules,
 	"Can players bounce with other players?\n",
@@ -671,7 +671,7 @@ static option_desc opts[] = {
 	"allowPlayerKilling",
 	"killings",
 	"yes",
-	&options.playerKillings,
+	&options.allowPlayerKilling,
 	valBool,
 	Set_world_rules,
 	"Should players be allowed to kill one other?\n",
@@ -681,9 +681,9 @@ static option_desc opts[] = {
 	"allowShields",
 	"shields",
 	"yes",
-	&options.playerShielding,
+	&options.allowShields,
 	valBool,
-	tuner_playershielding,
+	tuner_allowshields,
 	"Are shields allowed?\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
@@ -819,16 +819,6 @@ static option_desc opts[] = {
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
-	"cloakedShield",
-	"cloakedShield",
-	"yes",
-	&options.cloakedShield,
-	valBool,
-	tuner_dummy,
-	"Can players use shields when cloaked?\n",
-	OPT_ORIGIN_ANY | OPT_VISIBLE
-    },
-    {
 	"maxObjectWallBounceSpeed",
 	"maxObjectBounceSpeed",
 	"40.0",
@@ -865,7 +855,18 @@ static option_desc opts[] = {
 	&options.playerWallBrakeFactor,
 	valReal,
 	Move_init,
-	"Factor to slow down players when they hit the wall (0 to 1).\n",
+	"Factor to slow down ship in direction perpendicular to the wall\n"
+	"when a wall is hit (0 to 1).\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
+	"playerWallFriction",
+	"playerWallFriction",
+	"0.5",
+	&options.playerWallFriction,
+	valReal,
+	Move_init,
+	"Player-wall friction (0 to 1).\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
@@ -928,6 +929,16 @@ static option_desc opts[] = {
 	tuner_none,
 	"Keep the meta server informed about our game?\n",
 	OPT_COMMAND | OPT_DEFAULTS | OPT_VISIBLE
+    },
+    {
+	"metaUpdateMaxSize",
+	"metaUpdateMaxSize",
+	"4096",
+	&options.metaUpdateMaxSize,
+	valInt,
+	Meta_update_max_size_tuner,
+	"Maximum size of meta update messages.\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
 	"searchDomainForXPilot",
@@ -1286,6 +1297,17 @@ static option_desc opts[] = {
 	tuner_dummy,
 	"Does a team's treasure have to be safe before enemy balls can be\n"
 	"cashed?\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
+	"specialBallTeam",
+	"specialBall",
+	"-1",
+	&options.specialBallTeam,
+	valInt,
+	tuner_dummy,
+	"Balls that belong to this team are 'special' balls that score\n"
+	"against all other teams.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
@@ -3157,6 +3179,16 @@ static option_desc opts[] = {
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
+	"useDebris",
+	"useSparks",
+	"true",
+	&options.useDebris,
+	valBool,
+	tuner_dummy,
+	"Are debris particles (sparks) created where appropriate?\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
 	"useWreckage",
 	"useWreckage",
 	"true",
@@ -3250,18 +3282,6 @@ static option_desc opts[] = {
 	"Does the server send sound events to players that request sound.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     }, 
-    {
-	"timerResolution",
-	"timerResolution",
-	"0",
-	&options.timerResolution,
-	valInt,
-	Timing_setup,
-	"If set to nonzero xpilots will requests signals from the OS at\n"
-	"1/timerResolution second intervals.  The server will then compute\n"
-	"a new frame FPS times out of every timerResolution signals.\n",
-	OPT_COMMAND | OPT_DEFAULTS | OPT_VISIBLE
-    },
     {
 	"password",
 	"password",
@@ -3462,18 +3482,6 @@ static option_desc opts[] = {
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
-	"maraTurnqueue",
-	"maraTurnqueue",
-	"false",
-	&options.maraTurnqueue,
-	valBool,
-	tuner_dummy,
-	"This is a temporary option to test Mara's \"turnqueue\" hack.\n"
-	"The idea is that if a ship is turning when it hits the wall,\n"
-	"the turn will be completed after the bounce.\n",
-	OPT_ORIGIN_ANY | OPT_VISIBLE
-    },
-    {
 	"ngControls",
 	"ngControls",
 	"true",
@@ -3481,6 +3489,22 @@ static option_desc opts[] = {
 	valBool,
 	tuner_dummy,
 	"Enable improved precision steering and aiming of main gun.\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
+	"maraWallBounce",
+	"maraWallBounce",
+	"true",
+	&options.maraWallBounce,
+	valBool,
+	tuner_dummy,
+	"Use mara's suggestion for the speed change in the direction\n"
+	"parallel to the wall.\n"
+	"Vtangent2 = (1-Vnormal1/Vtotal1*wallfriction)*Vtangent1\n"
+	"If not, uau's suggestion is used:\n"
+	"change the parallel one by\n"
+	"MIN(C1*perpendicular_change, C2*parallel_speed)\n"
+	"if you assume the wall has a coefficient of friction C1.\n.",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
@@ -3589,8 +3613,18 @@ static option_desc opts[] = {
 	tuner_dummy,
 	"The number of the teamcup match.\n",
 	OPT_COMMAND | OPT_VISIBLE
+    },
+    {
+	"mainLoopTime",
+	"mainLoopTime",
+	"0",
+	&options.mainLoopTime,
+	valReal,
+	tuner_none,
+	"Duration of last Main_loop() function call (in milliseconds).\n"
+	"This option is read only.\n",
+	OPT_COMMAND | OPT_VISIBLE
     }
-    /* end of options.teamcup related options */
 };
 
 
@@ -3710,21 +3744,8 @@ static void Check_baseless(world_t *world)
 
 void Timing_setup(world_t *world)
 {
-    if (FPS > 100)
-	FPS = 100;
-    if (FPS < 1)
-	FPS = 1;
-
-    if (options.timerResolution > 100)
-	options.timerResolution = 100;
-    if (options.timerResolution < 0)
-	options.timerResolution = 0;
-
-    if (options.gameSpeed > FPS)
-	options.gameSpeed = FPS;
-    if (options.gameSpeed < 0.0)
-	options.gameSpeed = 0.0;
-
+    LIMIT(FPS, 1, MAX_SERVER_FPS);
+    LIMIT(options.gameSpeed, 0.0, FPS);
     if (options.gameSpeed == 0.0)
 	options.gameSpeed = FPS;
     if (options.gameSpeed < FPS / 50.)
@@ -3757,7 +3778,7 @@ void Timing_setup(world_t *world)
 	LIMIT(options.blockFriction, -1.0, 1.0);
 
 	for (i = 0; i < world->NumFrictionAreas; i++) {
-	    friction_area_t *fa = FrictionAreas(world, i);
+	    friction_area_t *fa = FrictionArea_by_index(world, i);
 	    double fric;
 
 	    /*
@@ -3791,7 +3812,5 @@ void Timing_setup(world_t *world)
     if (options.robotTicksPerSecond == 0)
 	options.robotTicksPerSecond = FPS;
     LIMIT(options.robotTicksPerSecond, 1, FPS);
-
-    install_timer_tick(NULL, options.timerResolution ? options.timerResolution
-		       : FPS);
+    install_timer_tick(NULL, FPS);
 }

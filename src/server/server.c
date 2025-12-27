@@ -57,14 +57,13 @@ int			game_lock = false;
 int			mute_baseless;
 
 time_t			gameOverTime = 0;
-time_t			serverTime = 0;
+time_t			serverStartTime = 0;
 
 static void Check_server_versions(void);
 static void Handle_signal(int sig_no);
 
 int main(int argc, char **argv)
 {
-    int timer_tick_rate;
     char *addr;
     world_t *world = &World;
 
@@ -173,7 +172,7 @@ int main(int argc, char **argv)
     /*
      * Set the time the server started
      */
-    serverTime = time(NULL);
+    serverStartTime = time(NULL);
 
     if (!options.silent)
 	xpprintf("%s Server runs at %d frames per second\n",
@@ -182,21 +181,11 @@ int main(int argc, char **argv)
     teamcup_open_score_file();
     teamcup_round_start();
 
-    if (options.timerResolution > 0)
-	timer_tick_rate = options.timerResolution;
-    else
-	timer_tick_rate = FPS;
-
-#ifdef _WINDOWS
-    /* Windows returns here, we let the worker thread call sched() */
-    install_timer_tick(ServerThreadTimerProc, timer_tick_rate);
-#else
-    install_timer_tick(Main_loop, timer_tick_rate);
+    install_timer_tick(Main_loop, FPS);
 
     sched();
     xpprintf("sched returned!?");
     End_game();
-#endif
 
     return 1;
 }
@@ -208,7 +197,7 @@ void Main_loop(void)
     main_loops++;
 
     if ((main_loops & 0x3F) == 0)
-	Meta_update(0);
+	Meta_update(false);
 
     /*
      * Check for possible shutdown, the server will
@@ -252,7 +241,7 @@ void Main_loop(void)
 	if (!NoPlayersEnteredYet)
 	    End_game();
 
-	if (serverTime + 5*60 < time(NULL)) {
+	if (serverStartTime + 5*60 < time(NULL)) {
 	    error("First player has yet to show his butt, I'm bored... Bye!");
 	    Log_game("NOSHOW");
 	    End_game();
@@ -306,7 +295,7 @@ int End_game(void)
     teamcup_close_score_file();
 
     while (NumPlayers > 0) {	/* Kick out all remaining players */
-	pl = Players(NumPlayers - 1);
+	pl = Player_by_index(NumPlayers - 1);
 	if (pl->conn == NULL)
 	    Delete_player(pl);
 	else
@@ -315,7 +304,7 @@ int End_game(void)
 
     record = playback = 0;
     while (NumSpectators > 0) {
-	pl = Players(spectatorStart + NumSpectators - 1);
+	pl = Player_by_index(spectatorStart + NumSpectators - 1);
 	Destroy_connection(pl->conn, msg);
     }
     record = rrecord;
@@ -407,7 +396,7 @@ int Pick_team(int pick_for_type)
      * And calculate the score for each team.
      */
     for (i = 0; i < NumPlayers; i++) {
-	pl = Players(i);
+	pl = Player_by_index(i);
 	if (Player_is_tank(pl))
 	    continue;
 	if (BIT(pl->status, PAUSE))
@@ -526,7 +515,7 @@ void Server_info(char *str, size_t max_size)
 	return;
     }
     for (i = 0; i < NumPlayers; i++) {
-	pl = Players(i);
+	pl = Player_by_index(i);
 
 	for (j = 0; j < i; j++) {
 	    if (order[j]->score < pl->score) {
@@ -643,7 +632,7 @@ void Game_Over(void)
 	    teamscore[i] = 1234567; /* These teams are not used... */
 
 	for (i = 0; i < NumPlayers; i++) {
-	    player_t *pl = Players(i);
+	    player_t *pl = Player_by_index(i);
 	    int team;
 
 	    if (Player_is_human(pl)) {
@@ -686,7 +675,7 @@ void Game_Over(void)
     minsc = 1e6;
 
     for (i = 0; i < NumPlayers; i++) {
-	player_t *pl_i = Players(i);
+	player_t *pl_i = Player_by_index(i);
 
 	SET_BIT(pl_i->status, GAME_OVER);
 	if (Player_is_human(pl_i)) {

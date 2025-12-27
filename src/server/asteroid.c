@@ -305,19 +305,14 @@ static void Make_asteroid(world_t *world, clpos_t pos,
 static void Place_asteroid(world_t *world)
 {
     int place_count, dir, dist, i;
-    unsigned space;
     bool okay = false;
     asteroid_concentrator_t *con;
     clpos_t pos;
 
-    space = SPACE_BLOCKS;
-    space &= ~(BASE_BIT | WORMHOLE_BIT);
-    space |= FRICTION_BIT;
-    /* would be dubious: space |= CANNON_BIT; */
-
     if (world->NumAsteroidConcs > 0
 	&& rfrac() < options.asteroidConcentratorProb)
-	con = AsteroidConcs(world, (int)(rfrac() * world->NumAsteroidConcs));
+	con = AsteroidConc_by_index(world,
+				    (int)(rfrac() * world->NumAsteroidConcs));
     else
 	con = NULL;
 
@@ -344,7 +339,7 @@ static void Place_asteroid(world_t *world)
 	okay = true;
 
 	for (i = 0; i < NumPlayers; i++) {
-	    player_t *pl = Players(i);
+	    player_t *pl = Player_by_index(i);
 
 	    if (!Player_is_playing(pl))
 		continue;

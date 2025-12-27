@@ -47,7 +47,6 @@ char sdlpaint_version[] = VERSION;
 /*
  * Globals.
  */
-static double       time_counter = 0.0;
 static TTF_Font     *scoreListFont;
 static char         *scoreListFontName = CONF_FONTDIR "VeraMoBd.ttf";
 static sdl_window_t scoreListWin;
@@ -58,42 +57,6 @@ double scale;              /* The opengl scale factor */
 int paintSetupMode;
 
 GLWidget *MainWidget = NULL;
-
-/* function to reset our viewport after a window resize */
-int Resize_Window( int width, int height )
-{
-    extern int videoFlags;
-    SDL_Rect b = {0,0,0,0};
-    
-    b.w = draw_width = width;
-    b.h = draw_height = height;
-    
-    SetBounds_GLWidget(MainWidget,&b);
-    
-    if (!SDL_SetVideoMode( width,
-			   height,
-			   draw_depth, 
-			   videoFlags ))
-	return -1;
-    
-
-    /* change to the projection matrix and set our viewing volume. */
-    glMatrixMode( GL_PROJECTION );
-
-    glLoadIdentity( );
-
-    gluOrtho2D(0, draw_width, 0, draw_height);
-    
-    /* Make sure we're chaning the model view and not the projection */
-    glMatrixMode( GL_MODELVIEW );
-    
-    /* Reset The View */
-    glLoadIdentity( );
-
-    /* Setup our viewport. */
-    glViewport( 0, 0, ( GLint )draw_width, ( GLint )draw_height );
-    return 0;
-}
 
 static void Scorelist_button(Uint8 button, Uint8 state, Uint16 x, Uint16 y, void *data)
 {
@@ -150,7 +113,7 @@ static void Scorelist_paint(GLWidget *widget)
 			      + 2 * SCORE_BORDER);
 	    /* Unfortunately the resize loses the surface
 	     * so I have to repaint it */
-	    scoresChanged = 1;
+	    scoresChanged = true;
 	    Paint_score_table();
 	    widget->bounds.w = scoreListWin.w+2;
 	    widget->bounds.h = scoreListWin.h+2;
@@ -243,7 +206,7 @@ int Paint_init(void)
     for (i=0;i<MAX_METERS;++i)
     	meter_texs[i].texture = 0;
     
-    scoresChanged = 1;
+    scoresChanged = true;
     players_exposed = true;
     
     return 0;
@@ -305,50 +268,7 @@ void setupPaint_HUD(void)
 
 void Paint_frame(void)
 {
-    Check_view_dimensions();
-    
-    world.x = selfPos.x - (ext_view_width / 2);
-    world.y = selfPos.y - (ext_view_height / 2);
-    realWorld = world;
-    if (BIT(Setup->mode, WRAP_PLAY)) {
-	if (world.x < 0 && world.x + ext_view_width < Setup->width)
-	    world.x += Setup->width;
-	else if (world.x > 0 && world.x + ext_view_width >= Setup->width)
-	    realWorld.x -= Setup->width;
-	if (world.y < 0 && world.y + ext_view_height < Setup->height)
-	    world.y += Setup->height;
-	else if (world.y > 0 && world.y + ext_view_height >= Setup->height)
-	    realWorld.y -= Setup->height;
-    }
-
-    if (start_loops != end_loops)
-	warn("Start neq. End (%ld,%ld,%ld)", start_loops, end_loops, loops);
-    loops = end_loops;
-
-
-    /*
-     * If time() changed from previous value, assume one second has passed.
-     */
-    if (newSecond) {
-	/* kps - improve */
-	timePerFrame = 1.0 / clientFPS;
-
-	/* TODO: move this somewhere else */
-	/* check once per second if we are playing */
-	if (newSecond && self && !strchr("PW", self->mychar))
-	    played_this_round = true;
-    }
-
-    /*
-     * Instead of using loops to determining if things are drawn this frame,
-     * loopsSlow should be used. We don't want things to be drawn too fast
-     * at high fps.
-     */
-    time_counter += timePerFrame;
-    if (time_counter >= 1.0 / 12) {
-	loopsSlow++;
-	time_counter -= (1.0 / 12);
-    }
+    Paint_frame_start();
 
     if (damaged <= 0) {
     	/*glClear(GL_COLOR_BUFFER_BIT);*/

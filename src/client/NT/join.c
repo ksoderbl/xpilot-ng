@@ -29,10 +29,6 @@
 
 char join_version[] = VERSION;
 
-#ifndef SCORE_UPDATE_DELAY
-# define SCORE_UPDATE_DELAY	4
-#endif
-
 static int Handle_input(int new_input)
 {
 #ifndef _WINDOWS
@@ -45,15 +41,9 @@ static int Handle_input(int new_input)
 #ifndef _WINDOWS
 static void Input_loop(void)
 {
-    fd_set		rfds;
-    fd_set		tfds;
-    int			max,
-			n,
-			netfd,
-			result,
-			clientfd;
-    struct timeval	tv;
-    long    	    	waitingtime;
+    fd_set rfds, tfds;
+    int max, n, netfd, result, clientfd;
+    struct timeval tv;
 
     if ((result = Net_input()) == -1) {
 	error("Bad server input");
@@ -79,29 +69,18 @@ static void Input_loop(void)
     FD_SET(netfd, &rfds);
     max = (clientfd > netfd) ? clientfd : netfd;
     for (tfds = rfds; ; rfds = tfds) {
-	if(!movement_interval && mouseMovement) {
-	    gettimeofday(&tv,NULL);
-	    waitingtime = next_time.tv_usec - tv.tv_usec + 1000000*(next_time.tv_sec - tv.tv_sec);
-    	    tv.tv_sec = 0;
-	    if (waitingtime > 0) {
-	    	tv.tv_usec = waitingtime%1000000;
-	    } else {
-	    	tv.tv_usec = 0;
-	    }
-	} else if ((scoresChanged != 0 && ++scoresChanged > SCORE_UPDATE_DELAY)
-	    || result > 1) {
-	    if (scoresChanged > 2 * SCORE_UPDATE_DELAY) {
-		Paint_score_table();
-		tv.tv_sec = 10;
-		tv.tv_usec = 0;
-	    } else {
-		tv.tv_sec = 0;
-		tv.tv_usec = 0;
-	    }
-	} else {
-	    tv.tv_sec = 10;
-	    tv.tv_usec = 0;
+
+	tv.tv_sec = 1;
+	tv.tv_usec = 0;
+
+	if (maxMouseTurnsPS > 0) {
+	    int t = Client_check_pointer_move_interval();
+
+	    assert(t > 0);
+	    tv.tv_sec = t / 1000000;
+	    tv.tv_usec = t % 1000000;
 	}
+
 	if ((n = select(max + 1, &rfds, NULL, NULL, &tv)) == -1) {
 	    if (errno == EINTR)
 		continue;
@@ -109,19 +88,11 @@ static void Input_loop(void)
 	    return;
 	}
 	if (n == 0) {
-	    if (!movement_interval && mouseMovement) {
-	    	Send_pointer_move(mouseMovement);
-		mouseMovement = 0;
-		if (Net_flush() == -1) {
-		    error("Bad net flush");
-		    return;
-		}
-	    } else if (scoresChanged > SCORE_UPDATE_DELAY) {
-		Paint_score_table();
-		if (Handle_input(2) == -1)
-		    return;
+	    if (maxMouseTurnsPS > 0 &&
+		cumulativeMouseMovement != 0)
 		continue;
-	    } else if (result <= 1) {
+
+	    if (result <= 1) {
 		warn("No response from server");
 		continue;
 	    }

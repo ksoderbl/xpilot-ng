@@ -23,25 +23,22 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef XEVENT_H
-#define XEVENT_H
+#ifndef XEVENTHANDLERS_H
+#define XEVENTHANDLERS_H
 
-extern int		talk_key_repeating;
-extern XEvent		talk_key_repeat_event;
-extern struct timeval	talk_key_repeat_time;
+/* avoid trouble with Atoms and 64 bit archs */
+typedef CARD32  Atom32;
 
-extern ipos_t		mousePosition;	/* position of mouse pointer. */
-
-bool Key_binding_callback(keys_t key, const char *str);
-keys_t Lookup_key(XEvent *event, KeySym ks, bool reset);
-void Key_event(XEvent *event);
-void Talk_event(XEvent *event);
-void xevent_keyboard(int queued);
-void xevent_pointer(void);
-int x_event(int new_input);
-
-#ifdef _WINDOWS
-int win_xevent(XEvent event);
-#endif
-
+void SelectionNotify_event(XEvent *event);
+void SelectionRequest_event(XEvent *event);
+void MapNotify_event(XEvent *event);
+int ClientMessage_event(XEvent *event);
+void FocusIn_event(XEvent *event);
+void UnmapNotify_event(XEvent *event);
+void ConfigureNotify_event(XEvent *event);
+void Expose_event(XEvent *event);
+void KeyChanged_event(XEvent *event);
+void ButtonPress_event(XEvent *xevent);
+void MotionNotify_event(XEvent *event);
+int ButtonRelease_event(XEvent *event);
 #endif

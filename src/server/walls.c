@@ -29,16 +29,6 @@
 
 char walls_version[] = VERSION;
 
-/* kps - remove when all code has been polygonized */
-unsigned SPACE_BLOCKS = (
-	SPACE_BIT | BASE_BIT | WORMHOLE_BIT |
-	POS_GRAV_BIT | NEG_GRAV_BIT | CWISE_GRAV_BIT | ACWISE_GRAV_BIT |
-	UP_GRAV_BIT | DOWN_GRAV_BIT | RIGHT_GRAV_BIT | LEFT_GRAV_BIT |
-	DECOR_LU_BIT | DECOR_LD_BIT | DECOR_RU_BIT | DECOR_RD_BIT |
-	DECOR_FILLED_BIT | CHECK_BIT | ITEM_CONCENTRATOR_BIT |
-	FRICTION_BIT | ASTEROID_CONCENTRATOR_BIT
-    );
-
 struct move_parameters mp;
 double wallBounceExplosionMult;
 static char msg[MSG_LEN];
@@ -147,6 +137,7 @@ void Move_init(world_t *world)
     LIMIT(options.maxUnshieldedWallBounceSpeed, 0, world->hypotenuse);
 
     LIMIT(options.playerWallBrakeFactor, 0, 1);
+    LIMIT(options.playerWallFriction, 0, 1);
     LIMIT(options.objectWallBrakeFactor, 0, 1);
     LIMIT(options.objectWallBounceLifeFactor, 0, 1);
     LIMIT(options.wallBounceFuelDrainMult, 0, 1000);
@@ -206,7 +197,7 @@ void Object_crash(object_t *obj, int crashtype, int mapobj_ind)
 
     case CrashTarget:
 	obj->life = 0;
-	Object_hits_target(obj, Targets(world, mapobj_ind), -1.0);
+	Object_hits_target(obj, Target_by_index(world, mapobj_ind), -1.0);
 	break;
 
     case CrashWall:
@@ -220,7 +211,7 @@ void Object_crash(object_t *obj, int crashtype, int mapobj_ind)
 
     case CrashCannon:
         {
-	    cannon_t *c = Cannons(world, mapobj_ind);
+	    cannon_t *c = Cannon_by_index(world, mapobj_ind);
 
 	    obj->life = 0;
 	    if (BIT(obj->type, OBJ_ITEM))
@@ -292,7 +283,7 @@ void Player_crash(player_t *pl, int crashtype, int mapobj_ind, int pt)
 	howfmt = "%s smashed%s against a target";
 	hudmsg = "[Target]";
 	sound_play_sensors(pl->pos, PLAYER_HIT_WALL_SOUND);
-	Object_hits_target(OBJ_PTR(pl), Targets(world, mapobj_ind), -1.0);
+	Object_hits_target(OBJ_PTR(pl), Target_by_index(world, mapobj_ind), -1.0);
 	break;
 
     case CrashTreasure:
@@ -303,7 +294,7 @@ void Player_crash(player_t *pl, int crashtype, int mapobj_ind, int pt)
 
     case CrashCannon:
         {
-	    cannon_t *cannon = Cannons(world, mapobj_ind);
+	    cannon_t *cannon = Cannon_by_index(world, mapobj_ind);
 
 	    if (!Player_used_emergency_shield(pl)) {
 		howfmt = "%s smashed%s against a cannon";
@@ -438,7 +429,7 @@ void Player_crash(player_t *pl, int crashtype, int mapobj_ind, int pt)
     }
 
     if (BIT(pl->status, KILLED) && pl->score < 0 && Player_is_robot(pl)) {
-	pl->home_base = Bases(world, 0);
+	pl->home_base = Base_by_index(world, 0);
 	Pick_startpos(pl);
     }
 }
@@ -507,12 +498,12 @@ static int Bounce_object(object_t *obj, move_t *move, int line, int point)
     mapobj_ind = groups[group].mapobj_ind;
 
     if (obj->collmode == 1) {
-	fx = ABS(obj->vel.x) + ABS(obj->vel.y);
-	/* If fx<1, there is practically no movement. Object
+	fx = ABS(obj->extmove.cx) + ABS(obj->extmove.cy);
+	/* If fx <= 64, there is practically no movement. Object
 	   collision detection can ignore the bounce. */
-	if (fx > 1) {
+	if (fx > 64) {
 	    obj->wall_time = 1 -
-		CLICK_TO_FLOAT(ABS(move->delta.cx) + ABS(move->delta.cy)) / fx;
+		(ABS(move->delta.cx) + ABS(move->delta.cy)) / fx;
 	    obj->collmode = 2;
 	}
     }
@@ -526,7 +517,7 @@ static int Bounce_object(object_t *obj, move_t *move, int line, int point)
 
     if (type == TARGET) {
 	obj->life = 0;
-	Object_hits_target(obj, Targets(world, mapobj_ind), -1.0);
+	Object_hits_target(obj, Target_by_index(world, mapobj_ind), -1.0);
 	return 0;
     }
 
@@ -614,26 +605,24 @@ static int Bounce_object(object_t *obj, move_t *move, int line, int point)
 
 static void Bounce_player(player_t *pl, move_t *move, int line, int point)
 {
-    double fx, fy;
-    double c, s;
+    double c, s;		/* cosine and sine of 2 times line angle */
+    double cl, sl;		/* cosine and sine of line angle */
+    double x, y, l2, l;
     int group, type, mapobj_ind;
     world_t *world = &World;
+    bool constant_speed_subtracted
+	= (pl->last_wall_touch == frame_loops ? true : false);
 
-    if (line >= num_lines) {
-	double x, y, l2;
+    x = linet[line].delta.cx;
+    y = linet[line].delta.cy;
+    l2 = (x*x + y*y);
+    c = (x*x - y*y) / l2;
+    s = 2*x*y / l2;
+    l = sqrt(l2);
+    cl = x / l;
+    sl = y / l;
 
-	x = linet[line].delta.cx;
-	y = linet[line].delta.cy;
-	l2 = (x*x + y*y);
-	c = (x*x - y*y) / l2;
-	s = 2*x*y / l2;
-	group = linet[point].group;
-    }
-    else {
-	group = linet[line].group;
-	c = linet[line].c;
-	s = linet[line].s;
-    }
+    group = linet[line >= num_lines ? point : line].group;
     type = groups[group].type;
     mapobj_ind = groups[group].mapobj_ind;
     if (type == TREASURE) {
@@ -723,18 +712,113 @@ static void Bounce_player(player_t *pl, move_t *move, int line, int point)
 	    sound_play_sensors(pl->pos, PLAYER_BOUNCED_SOUND);
 	    if (type == TARGET) {
 		cost *= options.wallBounceFuelDrainMult / 4.0;
-		Object_hits_target(OBJ_PTR(pl), Targets(world, mapobj_ind), cost);
+		Object_hits_target(OBJ_PTR(pl),
+				   Target_by_index(world, mapobj_ind), cost);
 	    }
 	}
     }
-    fx = move->delta.cx * c + move->delta.cy * s;
-    fy = move->delta.cx * s - move->delta.cy * c;
-    move->delta.cx = fx * options.playerWallBrakeFactor;
-    move->delta.cy = fy * options.playerWallBrakeFactor;
-    fx = pl->vel.x * c + pl->vel.y * s;
-    fy = pl->vel.x * s - pl->vel.y * c;
-    pl->vel.x = fx * options.playerWallBrakeFactor;
-    pl->vel.y = fy * options.playerWallBrakeFactor;
+
+    /*
+     * Remove constantSpeed before bounce.
+     * Otherwise constantSpeed will accelerate your ship when you
+     * slide along a wall.
+     */
+    if (options.constantSpeed && !constant_speed_subtracted) {
+	pl->vel.x -= options.constantSpeed * pl->acc.x;
+	pl->vel.y -= options.constantSpeed * pl->acc.y;
+    }
+
+#if 1
+    /*
+     * Determine new velocity vector and move->delta after bounce.
+     * The vector move->delta is the remaining amount left to move
+     * in this frame.
+     */
+
+    {
+	vector_t vel, vel1, mvd, mvd1;
+
+	/*
+	 * i. Rotate velocity and move->delta clockwise by line angle.
+	 */
+	vel.x = pl->vel.x *   cl  + pl->vel.y * sl;
+	vel.y = pl->vel.x * (-sl) + pl->vel.y * cl;
+	vel1 = vel;
+	mvd.x = move->delta.cx *   cl  + move->delta.cy * sl;
+	mvd.y = move->delta.cx * (-sl) + move->delta.cy * cl;
+	mvd1 = mvd;
+
+	/* ii. Reverse direction of perpendicular component. */
+	vel.y = -vel.y;
+	mvd.y = -mvd.y;
+
+	/*
+	 * iii. Determine how much perpendicular and parallel components
+	 * change.
+	 */
+	vel.y *= options.playerWallBrakeFactor;
+	mvd.y *= options.playerWallBrakeFactor;
+
+	if (options.maraWallBounce) {
+	    double vtotal1 = VECTOR_LENGTH(vel1);
+	    double vnormal1 = ABS(vel1.y);
+	    double wallfriction = options.playerWallFriction;
+	    double factor = 1.0 - vnormal1 / vtotal1 * wallfriction;
+	    /*
+	     * mara:
+	     * Vtangent2 = (1-Vnormal1/Vtotal1*wallfriction)*Vtangent1;
+	     */
+	    vel.x *= factor;
+	    mvd.x *= factor;
+	}
+	else {
+	    double change;
+	    double C1 = options.playerWallFriction;
+	    double C2 = 1.0 - options.playerWallBrakeFactor;
+	    double perpendicular_change, parallel_speed;
+	    /*
+	     * uau:
+	     * change the parallel one by
+	     * MIN(C1*perpendicular_change, C2*parallel_speed)
+	     * if you assume the wall has a coefficient of friction C1
+	     */
+	    perpendicular_change = ABS(vel1.y - vel.y);
+	    parallel_speed = ABS(vel.x);
+	    change = MIN(C1*perpendicular_change, C2*parallel_speed);
+	    if (vel.x > 0)
+		vel.x -= change;
+	    else
+		vel.x += change;
+
+	    perpendicular_change = ABS(mvd1.y - mvd.y);
+	    parallel_speed = ABS(mvd.x);
+	    change = MIN(C1*perpendicular_change, C2*parallel_speed);
+	    if (mvd.x > 0)
+		mvd.x -= change;
+	    else
+		mvd.x += change;
+	}
+
+	/* iv. Rotate the whole thing anti-clockwise. */
+	pl->vel.x = vel.x * cl + vel.y * (-sl);
+	pl->vel.y = vel.x * sl + vel.y *   cl;
+	move->delta.cx = mvd.x * cl + mvd.y * (-sl);
+	move->delta.cy = mvd.x * sl + mvd.y *   cl;
+    }
+#else
+    {
+	double fx, fy;
+
+	fx = move->delta.cx * c + move->delta.cy * s;
+	fy = move->delta.cx * s - move->delta.cy * c;
+	move->delta.cx = fx * options.playerWallBrakeFactor;
+	move->delta.cy = fy * options.playerWallBrakeFactor;
+	fx = pl->vel.x * c + pl->vel.y * s;
+	fy = pl->vel.x * s - pl->vel.y * c;
+	pl->vel.x = fx * options.playerWallBrakeFactor;
+	pl->vel.y = fy * options.playerWallBrakeFactor;
+    }
+#endif
 }
 
 
@@ -2379,7 +2463,7 @@ void Treasure_init(world_t *world)
     int i;
 
     for (i = 0; i < world->NumTreasures; i++)
-	Make_treasure_ball(world, Treasures(world, i));
+	Make_treasure_ball(world, Treasure_by_index(world, i));
 }
 
 
@@ -2624,7 +2708,7 @@ void Move_player(player_t *pl)
 	group = is_inside(pl->pos.cx, pl->pos.cy, NONBALL_BIT, (object_t *)pl);
 	if (group != NO_GROUP) {
 	    for (i = 0; i < world->NumFrictionAreas; i++) {
-		friction_area_t *fa = FrictionAreas(world, i);
+		friction_area_t *fa = FrictionArea_by_index(world, i);
 
 		if (fa->group == group) {
 		    fric = fa->friction;
@@ -2759,8 +2843,7 @@ void Turn_player(player_t *pl)
 	if (Shape_morph((shape_t *)pl->ship, pl->dir, (shape_t *)pl->ship,
 			next_dir, hitmask, OBJ_PTR(pl),
 			pl->pos.cx, pl->pos.cy) != NO_GROUP) {
-	    if (!options.maraTurnqueue)
-		Player_set_float_dir(pl, (double)pl->dir);
+	    Player_set_float_dir(pl, (double)pl->dir);
 	    break;
 	}
 	pl->dir = next_dir;

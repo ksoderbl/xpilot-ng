@@ -122,7 +122,7 @@ int World_place_cannon(world_t *world, clpos_t pos, int dir, int team)
     t.conn_mask = (unsigned)-1;
     t.group = NO_GROUP;
     STORE(cannon_t, world->cannons, world->NumCannons, world->MaxCannons, t);
-    cannon = Cannons(world, ind);
+    cannon = Cannon_by_index(world, ind);
     Cannon_init(cannon);
     return ind;
 }
@@ -210,7 +210,7 @@ int World_place_target(world_t *world, clpos_t pos, int team)
     return ind;
 }
 
-int World_place_wormhole(world_t *world, clpos_t pos, wormType type)
+int World_place_wormhole(world_t *world, clpos_t pos, wormtype_t type)
 {
     wormhole_t t;
     int ind = world->NumWormholes;
@@ -218,7 +218,6 @@ int World_place_wormhole(world_t *world, clpos_t pos, wormType type)
     t.pos = pos;
     t.countdown = 0;
     t.lastdest = NO_IND;
-    t.temporary = false;
     t.type = type;
     t.lastblock = SPACE;
     t.lastID = NO_ID;
@@ -271,8 +270,11 @@ int World_place_check(world_t *world, clpos_t pos, int ind)
 	if (world->NumChecks == 0)
 	    alloc_old_checks(world);
 
-	check = Checks(world, ind);
-
+	/*
+	 * kps hack - we can't use Check_by_index because it might return
+	 * NULL since ind can here be >= world->NumChecks.
+	 */
+	check = &world->checks[ind];
 	if (World_contains_clpos(world, check->pos)) {
 	    warn("Map contains too many '%c' checkpoints.", 'A' + ind);
 	    return NO_IND;
@@ -336,6 +338,31 @@ int World_place_friction_area(world_t *world, clpos_t pos, double fric)
     return ind;
 }
 
+shape_t filled_wire;
+shapepos_t filled_coords[4];
+
+static void Filled_wire_init(void)
+{
+    int i, h;
+
+    filled_wire.num_points = 4;
+
+    for (i = 0; i < 4; i++)
+	filled_wire.pts[i] = &filled_coords[i];
+
+    h = BLOCK_CLICKS / 2;
+
+    /* whole (filled) block */
+    filled_coords[0].clk.cx = -h;
+    filled_coords[0].clk.cy = -h;
+    filled_coords[1].clk.cx = h - 1;
+    filled_coords[1].clk.cy = -h;
+    filled_coords[2].clk.cx = h - 1;
+    filled_coords[2].clk.cy = h - 1;
+    filled_coords[3].clk.cx = -h;
+    filled_coords[3].clk.cy = h - 1;
+}
+
 void World_init(world_t *world)
 {
     int i;
@@ -343,7 +370,9 @@ void World_init(world_t *world)
     memset(world, 0, sizeof(world_t));
 
     for (i = 0; i < MAX_TEAMS; i++)
-	Teams(world, i)->SwapperId = NO_ID;
+	Team_by_index(world, i)->SwapperId = NO_ID;
+
+    Filled_wire_init();
 }
 
 void World_free(world_t *world)
@@ -445,7 +474,7 @@ static void Verify_wormhole_consistency(world_t *world)
 
 	xpprintf("Inconsistent use of wormholes, removing them.\n");
 	for (i = 0; i < world->NumWormholes; i++)
-	    World_remove_wormhole(world, Wormholes(world, i));
+	    World_remove_wormhole(world, Wormhole_by_index(world, i));
 	world->NumWormholes = 0;
     }
 
@@ -453,9 +482,9 @@ static void Verify_wormhole_consistency(world_t *world)
 	for (i = 0; i < world->NumWormholes; i++) {
 	    int j = (int)(rfrac() * world->NumWormholes);
 
-	    while (Wormholes(world, j)->type == WORM_IN)
+	    while (Wormhole_by_index(world, j)->type == WORM_IN)
 		j = (int)(rfrac() * world->NumWormholes);
-	    Wormholes(world, i)->lastdest = j;
+	    Wormhole_by_index(world, i)->lastdest = j;
 	}
     }
 }
@@ -607,7 +636,8 @@ int Find_closest_team(world_t *world, clpos_t pos)
     double closest = FLT_MAX, l;
 
     for (i = 0; i < world->NumBases; i++) {
-	base_t *base = Bases(world, i);
+	base_t *base = Base_by_index(world, i);
+
 	if (base->team == TEAM_NOT_SET)
 	    continue;
 
@@ -843,97 +873,4 @@ void Wormhole_line_init(world_t *world)
     }
 
     return;
-}
-
-void add_temp_wormholes(world_t *world, int xin, int yin, int xout, int yout)
-{
-    wormhole_t inhole, outhole, *wwhtemp;
-
-    if ((wwhtemp = realloc(world->wormholes,
-			   (world->NumWormholes + 2) * sizeof(wormhole_t)))
-	== NULL) {
-	error("No memory for temporary wormholes.");
-	return;
-    }
-    world->wormholes = wwhtemp;
-
-    inhole.pos.cx = BLOCK_CENTER(xin);
-    inhole.pos.cy = BLOCK_CENTER(yin);
-    inhole.countdown = options.wormholeStableTicks;
-    inhole.lastdest = world->NumWormholes + 1;
-    inhole.temporary = true;
-    inhole.type = WORM_IN;
-    inhole.lastblock = world->block[xin][yin];
-    /*inhole.lastID = Map_get_itemid(xin, yin);*/
-    world->wormholes[world->NumWormholes] = inhole;
-    world->block[xin][yin] = WORMHOLE;
-    /*Map_set_itemid(xin, yin, world->NumWormholes);*/
-
-    outhole.pos.cx = BLOCK_CENTER(xout);
-    outhole.pos.cy = BLOCK_CENTER(yout);
-    outhole.countdown = options.wormholeStableTicks;
-    outhole.temporary = true;
-    outhole.type = WORM_OUT;
-    outhole.lastblock = world->block[xout][yout];
-    /*outhole.lastID = Map_get_itemid(xout, yout);*/
-    world->wormholes[world->NumWormholes + 1] = outhole;
-    world->block[xout][yout] = WORMHOLE;
-    /*Map_set_itemid(xout, yout, world->NumWormholes + 1);*/
-
-    world->NumWormholes += 2;
-}
-
-
-void remove_temp_wormhole(world_t *world, int ind)
-{
-    World_remove_wormhole(world, Wormholes(world, ind));
-
-    world->NumWormholes--;
-    if (ind != world->NumWormholes)
-	world->wormholes[ind] = world->wormholes[world->NumWormholes];
-
-    world->wormholes = realloc(world->wormholes,
-			      world->NumWormholes * sizeof(wormhole_t));
-}
-
-void World_add_temporary_wormholes(world_t *world, clpos_t pos1, clpos_t pos2)
-{
-
-#if 0
-
-#if 0 /* kps - temporary wormholes disabled currently */
-    if (counter
-	&& options.wormTime
-	&& BIT(1U << world->block[OBJ_X_IN_BLOCKS(pl)]
-	       [OBJ_Y_IN_BLOCKS(pl)],
-	       SPACE_BIT)
-	&& BIT(1U << world->block[CLICK_TO_BLOCK(dest.cx)]
-	       [CLICK_TO_BLOCK(dest.cy)],
-	       SPACE_BIT))
-	add_temp_wormholes(OBJ_X_IN_BLOCKS(pl),
-			   OBJ_Y_IN_BLOCKS(pl),
-			   CLICK_TO_BLOCK(dest.cx),
-			   CLICK_TO_BLOCK(dest.cy));
-#endif
-
-
-    if (is_polygon_map) {
-	;
-    } else {
-	blpos blk1, blk2;
-	int type1, type2;
-
-	blk1 = Clpos_to_blkpos(pos1);
-	type1 = World_get_block(blk1);
-
-	blk2 = Clpos_to_blkpos(pos2);
-	type2 = World_get_block(blk2);
-
-	if (!(type1 == SPACE && type2 == SPACE)) {
-	    warn("World_add_temporary_wormholes: could not add tmp wormholes: "
-		 "type1 = %d, type2 = %d", type1, type2);
-	    return;
-	}
-    }
-#endif
 }

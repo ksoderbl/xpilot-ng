@@ -77,7 +77,7 @@ static void Transport_to_home(player_t *pl)
 	    check = pl->check - 1;
 	else
 	    check = world->NumChecks - 1;
-	startpos = Checks(world, check)->pos;
+	startpos = Check_by_index(world, check)->pos;
     } else
 	startpos = pl->home_base->pos;
 
@@ -139,14 +139,6 @@ void Cloak(player_t *pl, bool on)
 {
     if (on) {
 	if (!BIT(pl->used, HAS_CLOAKING_DEVICE) && pl->item[ITEM_CLOAK] > 0) {
-	    if (!options.cloakedShield) {
-		if (BIT(pl->used, HAS_EMERGENCY_SHIELD))
-		    Emergency_shield(pl, false);
-		if (BIT(pl->used, HAS_DEFLECTOR))
-		    Deflector(pl, false);
-		CLR_BIT(pl->used, HAS_SHIELD);
-		CLR_BIT(pl->have, HAS_SHIELD);
-	    }
 	    sound_play_player(pl, CLOAK_SOUND);
 	    pl->updateVisibility = 1;
 	    SET_BIT(pl->used, HAS_CLOAKING_DEVICE);
@@ -159,16 +151,6 @@ void Cloak(player_t *pl, bool on)
 	}
 	if (!pl->item[ITEM_CLOAK])
 	    CLR_BIT(pl->have, HAS_CLOAKING_DEVICE);
-	if (!options.cloakedShield) {
-	    if (BIT(pl->have, HAS_EMERGENCY_SHIELD)) {
-		SET_BIT(pl->have, HAS_SHIELD);
-		Emergency_shield(pl, true);
-	    }
-	    if (BIT(DEF_HAVE, HAS_SHIELD) && !BIT(pl->have, HAS_SHIELD))
-		SET_BIT(pl->have, HAS_SHIELD);
-	    if (BITV_ISSET(pl->last_keyv, KEY_SHIELD))
-		SET_BIT(pl->used, HAS_SHIELD);
-	}
     }
 }
 
@@ -179,11 +161,8 @@ void Deflector(player_t *pl, bool on)
 {
     if (on) {
 	if (!BIT(pl->used, HAS_DEFLECTOR) && pl->item[ITEM_DEFLECTOR] > 0) {
-	    /* only allow deflector when cloaked shielding or not cloaked */
-	    if (options.cloakedShield || !BIT(pl->used, HAS_CLOAKING_DEVICE)) {
-		SET_BIT(pl->used, HAS_DEFLECTOR);
-		sound_play_player(pl, DEFLECTOR_SOUND);
-	    }
+	    SET_BIT(pl->used, HAS_DEFLECTOR);
+	    sound_play_player(pl, DEFLECTOR_SOUND);
 	}
     } else {
 	if (BIT(pl->used, HAS_DEFLECTOR)) {
@@ -232,12 +211,10 @@ void Emergency_shield (player_t *pl, bool on)
 		pl->emergency_shield_left += EMERGENCY_SHIELD_TIME;
 		pl->item[ITEM_EMERGENCY_SHIELD]--;
 	    }
-	    if (options.cloakedShield || !BIT(pl->used, HAS_CLOAKING_DEVICE)) {
-		SET_BIT(pl->have, HAS_SHIELD);
-		if (!BIT(pl->used, HAS_EMERGENCY_SHIELD)) {
-		    SET_BIT(pl->used, HAS_EMERGENCY_SHIELD);
-		    sound_play_sensors(pl->pos, EMERGENCY_SHIELD_ON_SOUND);
-		}
+	    SET_BIT(pl->have, HAS_SHIELD);
+	    if (!BIT(pl->used, HAS_EMERGENCY_SHIELD)) {
+		SET_BIT(pl->used, HAS_EMERGENCY_SHIELD);
+		sound_play_sensors(pl->pos, EMERGENCY_SHIELD_ON_SOUND);
 	    }
 	}
     } else {
@@ -450,7 +427,7 @@ static void Fuel_update(world_t *world)
     frames_per_update = MAX_STATION_FUEL / (fuel * BLOCK_SZ);
 
     for (i = 0; i < world->NumFuels; i++) {
-	fuel_t *fs = Fuels(world, i);
+	fuel_t *fs = Fuel_by_index(world, i);
 
 	if (fs->fuel == MAX_STATION_FUEL)
 	    continue;
@@ -551,7 +528,7 @@ static void Players_turn(void)
     double new_float_dir;
 
     for (i = 0; i < NumPlayers; i++) {
-	pl = Players(i);
+	pl = Player_by_index(i);
 
 	if (!Player_is_active(pl))
 	    continue;
@@ -661,7 +638,7 @@ static void Use_items(player_t *pl)
 static void Do_refuel(player_t *pl)
 {
     world_t *world = pl->world;
-    fuel_t *fs = Fuels(world, pl->fs);
+    fuel_t *fs = Fuel_by_index(world, pl->fs);
 
     if ((Wrap_length(pl->pos.cx - fs->pos.cx,
 		     pl->pos.cy - fs->pos.cy) > 90.0 * CLICK)
@@ -704,7 +681,7 @@ static void Do_refuel(player_t *pl)
 static void Do_repair(player_t *pl)
 {
     world_t *world = pl->world;
-    target_t *targ = Targets(world, pl->repair_target);
+    target_t *targ = Target_by_index(world, pl->repair_target);
 
     if ((Wrap_length(pl->pos.cx - targ->pos.cx,
 		     pl->pos.cy - targ->pos.cy) > 90.0 * CLICK)
@@ -747,22 +724,25 @@ static inline void Update_visibility(player_t *pl, int ind)
     int j;
 
     for (j = 0; j < NumPlayers; j++) {
-	player_t *pl_j = Players(j);
+	player_t *pl_j = Player_by_index(j);
 
 	if (pl->forceVisible > 0)
-	    pl_j->visibility[ind].canSee = 1;
+	    pl_j->visibility[ind].canSee = true;
 
 	if (ind == j || !BIT(pl_j->used, HAS_CLOAKING_DEVICE))
-	    pl->visibility[j].canSee = 1;
+	    pl->visibility[j].canSee = true;
 	else if (pl->updateVisibility
 		 || pl_j->updateVisibility
 		 || (int)(rfrac() * UPDATE_RATE)
 		 < ABS(frame_loops - pl->visibility[j].lastChange)) {
 
 	    pl->visibility[j].lastChange = frame_loops;
-	    pl->visibility[j].canSee
-		= (rfrac() * (pl->item[ITEM_SENSOR] + 1))
-		> (rfrac() * (pl_j->item[ITEM_CLOAK] + 1));
+
+	    if ((rfrac() * (pl->item[ITEM_SENSOR] + 1))
+		> (rfrac() * (pl_j->item[ITEM_CLOAK] + 1)))
+		pl->visibility[j].canSee = true;
+	    else
+		pl->visibility[j].canSee = false;
 	}
     }
 }
@@ -781,7 +761,7 @@ static void Update_players(world_t *world)
     player_t *pl;
 
     for (i = 0; i < NumPlayers; i++) {
-	pl = Players(i);
+	pl = Player_by_index(i);
 
 	if (BIT(pl->status, PAUSE)) {
 	    if (options.pauseTax > 0.0 && (frame_loops % FPS) == 0) {
@@ -855,12 +835,16 @@ static void Update_players(world_t *world)
 	    }
 	}
 
+	/*
+	 * kps - moved here so that visibility would be updated also
+	 * for e.g. waiting players.
+	 */
+	Update_visibility(pl, i);
+
 	if (!Player_is_active(pl))
 	    continue;
 
 	Use_items(pl);
-
-	Update_visibility(pl, i);
 
 	if (BIT(pl->used, HAS_REFUEL))
 	    Do_refuel(pl);
@@ -921,19 +905,41 @@ static void Update_players(world_t *world)
 		Traverse_wormhole(pl);
 	}
 
+	/*
+	 * Reset WARPED status, when player is outside a wormhole
+	 */
+	if (BIT(pl->status, WARPED)) {
+	    int group;
+	    hitmask_t hitmask = NONBALL_BIT | HITMASK(pl->team);
+	    /*
+	     * clear warped, so we can use shape_is inside,
+	     * Wormhole_hitfunc check for WARPED bit.
+	     */
+	    CLR_BIT(pl->status, WARPED);
+	    group = shape_is_inside(pl->pos.cx, pl->pos.cy, hitmask,
+				    OBJ_PTR(pl), (shape_t *)pl->ship,
+				    pl->dir);
+	    /*
+	     * kps - we might possibly have entered another polygon, e.g.
+	     * a wormhole ?
+	     */
+	    if (group != NO_GROUP)
+		SET_BIT(pl->status, WARPED);
+	}
 	
 	{
-	    double ax = pl->acc.x;
-	    double ay = pl->acc.y;
+	    vector_t acc = pl->acc;
+
 	    if (BIT(pl->status, GRAVITY)) {
 		vector_t gravity = World_gravity(world, pl->pos);
-		ax += gravity.x;
-		ay += gravity.y;
+
+		acc.x += gravity.x;
+		acc.y += gravity.y;
 	    }
-	    ax *= timeStep / 2;
-	    ay *= timeStep / 2;
-	    pl->vel.x += ax;
-	    pl->vel.y += ay;
+	    acc.x *= timeStep / 2;
+	    acc.y *= timeStep / 2;
+	    pl->vel.x += acc.x;
+	    pl->vel.y += acc.y;
 	    if (options.constantSpeed) {
 		pl->vel.x += options.constantSpeed * pl->acc.x;
 		pl->vel.y += options.constantSpeed * pl->acc.y;
@@ -948,8 +954,8 @@ static void Update_players(world_t *world)
 	    }
 	    else
 		Move_player(pl);
-	    pl->vel.x += ax;
-	    pl->vel.y += ay;
+	    pl->vel.x += acc.x;
+	    pl->vel.y += acc.y;
 	}
 
 	/*
@@ -1052,7 +1058,7 @@ void Update_objects(world_t *world)
     Players_turn();
 
     for (i = 0; i < NumPlayers; i++) {
-	pl = Players(i);
+	pl = Player_by_index(i);
 
 	if (pl->stunned > 0) {
 	    pl->stunned -= timeStep;
@@ -1094,18 +1100,15 @@ void Update_objects(world_t *world)
     Update_players(world);
 
     for (i = world->NumWormholes - 1; i >= 0; i--) {
-	wormhole_t *wh = Wormholes(world, i);
+	wormhole_t *wh = Wormhole_by_index(world, i);
 
 	if ((wh->countdown -= timeStep) <= 0)
 	    wh->countdown = 0;
-
-	if (wh->temporary && wh->countdown <= 0)
-	    remove_temp_wormhole(world, i);
     }
 
 
     for (i = 0; i < NumPlayers; i++) {
-	pl = Players(i);
+	pl = Player_by_index(i);
 
 	pl->updateVisibility = 0;
 
@@ -1137,7 +1140,7 @@ void Update_objects(world_t *world)
      * Update tanks, Kill players that ought to be killed.
      */
     for (i = NumPlayers - 1; i >= 0; i--) {
-	pl = Players(i);
+	pl = Player_by_index(i);
 
 	if (Player_is_playing(pl))
 	    Update_tanks(&(pl->fuel));

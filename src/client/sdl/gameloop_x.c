@@ -40,16 +40,10 @@ static int Poll_input(void)
  */
 void Game_loop(void)
 {
-    fd_set		rfds;
-    fd_set		tfds;
-    int			max,
-			n,
-			netfd,
-			result,
-			clientfd;
-    struct timeval	tv;
-    SDL_SysWMinfo       info;
-    long    	    	waitingtime;
+    fd_set rfds, tfds;
+    int max, n, netfd, result, clientfd;
+    struct timeval tv;
+    SDL_SysWMinfo info;
 
     SDL_VERSION(&info.version);
     if (!SDL_GetWMInfo(&info)) {
@@ -81,19 +75,18 @@ void Game_loop(void)
     FD_SET(netfd, &rfds);
     max = (clientfd > netfd) ? clientfd : netfd;
     for (tfds = rfds; ; rfds = tfds) {
-	if (!movement_interval && mouseMovement) {
-	    gettimeofday(&tv,NULL);
-	    waitingtime = next_time.tv_usec - tv.tv_usec + 1000000*(next_time.tv_sec - tv.tv_sec);
-    	    tv.tv_sec = 0;
-	    if (waitingtime > 0) {
-	    	tv.tv_usec = waitingtime%1000000;
-	    } else {
-	    	tv.tv_usec = 0;
-	    }
-	} else {
-	    tv.tv_sec = 1;
-	    tv.tv_usec = 500000;/*at maxFPS 1 you get lots of messages w/o this*/
+
+	tv.tv_sec = 1;
+	tv.tv_usec = 0;
+
+	if (maxMouseTurnsPS > 0) {
+	    int t = Client_check_pointer_move_interval();
+
+	    assert(t > 0);
+	    tv.tv_sec = t / 1000000;
+	    tv.tv_usec = t % 1000000;
 	}
+
 	if ((n = select(max + 1, &rfds, NULL, NULL, &tv)) == -1) {
 	    if (errno == EINTR)
 		continue;
@@ -102,20 +95,18 @@ void Game_loop(void)
 	}
 	
 	if (n == 0) {
-	    if (!movement_interval && mouseMovement) {
-	    	Send_pointer_move(mouseMovement);
-		mouseMovement = 0;
-		if (Net_flush() == -1) {
-		    error("Bad net flush");
-		    return;
-		}
-	    } else if (result <= 1) {
+	    if (maxMouseTurnsPS > 0 &&
+		cumulativeMouseMovement != 0)
+		continue;
+
+	    if (result <= 1) {
 		warn("No response from server");
 		continue;
 	    }
 	}
 	if (FD_ISSET(clientfd, &rfds)) {
-	    if (Poll_input()) return;
+	    if (Poll_input())
+		return;
 	    if (Net_flush() == -1) {
 		error("Bad net flush after input");
 		return;
@@ -127,12 +118,14 @@ void Game_loop(void)
 		return;
 	    }
 	    if (result > 0) {
-		if (Poll_input()) return;
+		if (Poll_input())
+		    return;
 		if (Net_flush() == -1) {
 		    error("Bad net flush");
 		    return;
 		}
-		if (Poll_input()) return;
+		if (Poll_input())
+		    return;
 	    }
 	}
     }

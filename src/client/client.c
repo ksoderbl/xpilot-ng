@@ -37,6 +37,7 @@ Connect_param_t connectParam;
 
 bool	newbie;
 int	baseWarningType;	/* Which type of base warning you prefer */
+int	maxCharsInNames;
 int	hudRadarDotSize;	/* Size for hudradar dot drawing */
 double	hudRadarScale;		/* Scale for hudradar drawing */
 double	hudRadarLimit;		/* Hudradar dots are not drawn if closer to
@@ -46,7 +47,7 @@ int	hudSize;		/* Size for HUD drawing, depends on hudScale */
 
 bool	is_server = false;	/* used in common code */
 
-int	scoresChanged = 1;
+bool	scoresChanged = true;
 unsigned RadarHeight = 0;
 unsigned RadarWidth = 256;	/* radar width at the server */ 
 
@@ -92,11 +93,11 @@ int	roundDelay;		/* != 0 means we're in a delay */
 int	roundDelayMax;		/* (not yet) used for graph of time
 				   remaining in delay */
 
-int	map_point_distance;	/* spacing of navigation points */
-int	map_point_size;		/* size of navigation points */
-int	spark_size;		/* size of debris and spark */
-int	shot_size;		/* size of shot */
-int	teamshot_size;		/* size of team shot */
+int	backgroundPointDist;	/* spacing of navigation points */
+int	backgroundPointSize;	/* size of navigation points */
+int	sparkSize;		/* size of debris and spark */
+int	shotSize;		/* size of shot */
+int	teamShotSize;		/* size of team shot */
 double	controlTime;		/* Display control for how long? */
 u_byte	spark_rand;		/* Sparkling effect */
 u_byte	old_spark_rand;		/* previous value of spark_rand */
@@ -145,8 +146,13 @@ char	modBankStr[NUM_MODBANKS][MAX_CHARS]; /* modifier banks */
 int	maxFPS;			/* Maximum FPS player wants from server */
 int	oldMaxFPS = 0;
 int	clientFPS = 1;	        /* How many fps we actually get */
+int	recordFPS = 0;		/* Optimal FPS to record at. */
 time_t	currentTime;	        /* Current value of time() */
 bool	newSecond = false;      /* True if time() incremented this frame */
+
+int	maxMouseTurnsPS = 0;
+int	mouseMovementInterval = 0;
+int	cumulativeMouseMovement = 0;
 
 int	clientPortStart = 0;	/* First UDP port for clients */
 int	clientPortEnd = 0;	/* Last one (these are for firewalls) */
@@ -526,7 +532,7 @@ void Map_dots(void)
     /*
      * Optimize.
      */
-    if (map_point_size > 0) {
+    if (backgroundPointSize > 0) {
 	if (BIT(Setup->mode, WRAP_PLAY)) {
 	    for (x = 0; x < Setup->x; x++) {
 		if (dot[Setup->map_data[x * Setup->y]])
@@ -536,13 +542,13 @@ void Map_dots(void)
 		if (dot[Setup->map_data[y]])
 		    Map_make_dot(&Setup->map_data[y]);
 	    }
-	    start = map_point_distance;
+	    start = backgroundPointDist;
 	} else
 	    start = 0;
 
-	if (map_point_distance > 0) {
-	    for (x = start; x < Setup->x; x += map_point_distance) {
-		for (y = start; y < Setup->y; y += map_point_distance) {
+	if (backgroundPointDist > 0) {
+	    for (x = start; x < Setup->x; x += backgroundPointDist) {
+		for (y = start; y < Setup->y; y += backgroundPointDist) {
 		    if (dot[Setup->map_data[x * Setup->y + y]])
 			Map_make_dot(&Setup->map_data[x * Setup->y + y]);
 		}
@@ -553,9 +559,9 @@ void Map_dots(void)
 	    y = cannons[i].pos % Setup->y;
 	    if ((x == 0 || y == 0) && BIT(Setup->mode, WRAP_PLAY))
 		cannons[i].dot = 1;
-	    else if (map_point_distance > 0
-		&& x % map_point_distance == 0
-		&& y % map_point_distance == 0)
+	    else if (backgroundPointDist > 0
+		&& x % backgroundPointDist == 0
+		&& y % backgroundPointDist == 0)
 		cannons[i].dot = 1;
 	    else
 		cannons[i].dot = 0;
@@ -628,9 +634,9 @@ void Map_blue(int startx, int starty, int width, int height)
     unsigned char	blue[256];
     bool		outline = false;
 
-    if (instruments.showOutlineWorld ||
-	instruments.showFilledWorld ||
-	instruments.showTexturedWalls)
+    if (instruments.outlineWorld ||
+	instruments.filledWorld ||
+	instruments.texturedWalls)
 	outline = true;
     /*
      * Optimize the map for blue.
@@ -1056,7 +1062,7 @@ static int init_polymap(void)
      * kps - hack.
      * Player can disable downloading of textures by having texturedWalls off.
      */
-    if (instruments.showTexturedWalls && Setup->data_url[0])
+    if (instruments.texturedWalls && Setup->data_url[0])
 	Mapdata_setup(Setup->data_url);
     Colors_init_style_colors();    
 
@@ -1351,13 +1357,13 @@ int Handle_leave(int id)
 	    *other = other[1];
 	    other++;
 	}
-	scoresChanged = 1;
+	scoresChanged = true;
     }
     for (i = 0; i < num_others; i++) {
 	other = &Others[i];
 	if (other->war_id == id) {
 	    other->war_id = -1;
-	    scoresChanged = 1;
+	    scoresChanged = true;
 	}
     }
     return 0;
@@ -1400,23 +1406,18 @@ int Handle_player(int id, int player_team, int mychar,
 	}
 	self = other;
     }
+    memset(other, 0, sizeof(other_t));
     other->id = id;
     other->team = player_team;
-    other->score = 0;
-    other->round = 0;
-    other->check = 0;
-    other->timing = 0;
-    other->life = 0;
     other->mychar = mychar;
     other->war_id = -1;
-    other->name_width = 0;
     strlcpy(other->nick_name, nick_name, sizeof(other->nick_name));
-    strlcpy(other->id_string, nick_name, sizeof(other->id_string));
     strlcpy(other->user_name, user_name, sizeof(other->user_name));
     strlcpy(other->host_name, host_name, sizeof(other->host_name));
-    scoresChanged = 1;
+    strlcpy(other->id_string, nick_name, sizeof(other->id_string));
+    other->max_chars_in_names = -1;
+    scoresChanged = true;
     other->ship = Convert_shape_str(shape);
-    other->ignorelevel = 0;
     Calculate_shield_radius(other->ship);
 
     return 0;
@@ -1467,7 +1468,7 @@ int Handle_war(int robot_id, int killer_id)
     sprintf(msg, "%s declares war on %s.",
 	    robot->nick_name, killer->nick_name);
     Add_message(msg);
-    scoresChanged = 1;
+    scoresChanged = true;
 
     return 0;
 }
@@ -1490,8 +1491,7 @@ int Handle_seek(int programmer_id, int robot_id, int sought_id)
     sprintf(msg, "%s has programmed %s to seek %s.",
 	    programmer->nick_name, robot->nick_name, sought->nick_name);
     Add_message(msg);
-    scoresChanged = 1;
-
+    scoresChanged = true;
 
     return 0;
 }
@@ -1513,7 +1513,7 @@ int Handle_score(int id, double score, int life, int mychar, int alliance)
 	other->life = life;
 	other->mychar = mychar;
 	other->alliance = alliance;
-	scoresChanged = 1;
+	scoresChanged = true;
     }
 
     return 0;
@@ -1523,7 +1523,7 @@ int Handle_team_score(int team, double score)
 {
     if (teamscores[team] != score) {
 	teamscores[team] = score;
-	scoresChanged = 1;
+	scoresChanged = true;
     }
 
     return 0;
@@ -1544,7 +1544,7 @@ int Handle_timing(int id, int check, int round, long tloops)
 	other->round = round;
 	other->timing = round * num_checks + check;
 	other->timing_loops = tloops;
-	scoresChanged = 1;
+	scoresChanged = true;
     }
 
     return 0;
@@ -1646,6 +1646,9 @@ int Handle_end(long server_loops)
     snooping = (self && eyesId != self->id) ? true : false;
     update_timing();    
     Paint_frame();
+#ifdef SOUND
+    audioUpdate();
+#endif
     return 0;
 }
 
@@ -2184,13 +2187,14 @@ int Client_setup(void)
 	Map_dots();
 	Map_restore(0, 0, Setup->x, Setup->y);
 	Map_blue(0, 0, Setup->x, Setup->y);
+	/* kps -remove this, you shouldn't change options this way */
 	/* No one wants this on old-style maps anyway, so turn it off.
 	 * I do, so turn it on.
 	 * This allows people to turn it on in their .xpilotrc for new maps
 	 * without affecting old ones. It's still possible to turn in on
 	 * from the config menu during play for old maps.
 	 * -- But doesn't seem to work anyway if turned on? Well who cares */
-	instruments.showTexturedWalls = false;
+	instruments.texturedWalls = false;
     }
 
     RadarHeight = (RadarWidth * Setup->height) / Setup->width;
@@ -2209,9 +2213,16 @@ int Client_setup(void)
 
 int Client_fps_request(void)
 {
-    LIMIT(maxFPS, 1, 200);
+    LIMIT(maxFPS, 1, MAX_SUPPORTED_FPS);
     oldMaxFPS = maxFPS;
     return Send_fps_request(maxFPS);
+}
+
+int Check_client_fps(void)
+{
+    if (oldMaxFPS != maxFPS)
+	return Client_fps_request();
+    return 0;
 }
 
 int Client_power(void)
@@ -2344,17 +2355,51 @@ void Client_cleanup(void)
     Paint_cleanup();
 }
 
-int Client_wrap_mode(void)
+int Client_pointer_move(int movement)
 {
-    return (BIT(Setup->mode, WRAP_PLAY) != 0);
+    if (maxMouseTurnsPS == 0)
+	return Send_pointer_move(movement);
+
+    /*
+     * maxMouseTurnsPS is not 0: player wants to limit amount
+     * of pointer move packets sent to server.
+     */
+    cumulativeMouseMovement += movement;
+
+    return 0;
 }
 
-int Check_client_fps(void)
+/*
+ * Check if there is any pointer move we need to send to server.
+ * Returns how many microseconds to wait in select().
+ */
+int Client_check_pointer_move_interval(void)
 {
-    if (oldMaxFPS != maxFPS) {
-	LIMIT(maxFPS, 1, 200);
-	oldMaxFPS = maxFPS;
-	return Send_fps_request(maxFPS);
+    struct timeval now;
+    static int last_send_interval_num = -1;
+    int interval_num; /* 0 ... maxMouseTurnsPS - 1 */
+    int next_interval_start;
+
+    assert(maxMouseTurnsPS > 0);
+
+    /*
+     * Let's see if we've sent any pointer move this interval,
+     * if not and there is something to send, do that now.
+     */
+    gettimeofday(&now, NULL);
+    interval_num = ((int)now.tv_usec) / mouseMovementInterval;
+    if (interval_num != last_send_interval_num
+	&& cumulativeMouseMovement != 0) {
+	Send_pointer_move(cumulativeMouseMovement);
+	cumulativeMouseMovement = 0;
+	last_send_interval_num = interval_num;
     }
-    return 0;
+
+    if (cumulativeMouseMovement != 0) {
+	/* calculate how long to wait to next interval */
+	next_interval_start = (interval_num + 1) * mouseMovementInterval;
+	return next_interval_start - (int)now.tv_usec;
+    }
+
+    return 1000000;
 }

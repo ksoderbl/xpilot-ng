@@ -94,6 +94,7 @@ Uint32 zeroLivesColorRGBA;
 
 Uint32 hudRadarEnemyColorRGBA;
 Uint32 hudRadarOtherColorRGBA;
+Uint32 hudRadarObjectColorRGBA;
 
 Uint32 scoreInactiveSelfColorRGBA;
 Uint32 scoreInactiveColorRGBA;
@@ -106,10 +107,16 @@ Uint32 selectionColorRGBA;
 
 static int meterWidth	= 60;
 static int meterHeight	= 10;
+
 float hudRadarMapScale;
+int   hudRadarEnemyShape;
+int   hudRadarOtherShape;
+int   hudRadarObjectShape;
+float hudRadarDotScale;
 
 static double shipLineWidth;
 static bool smoothLines;
+static bool texturedBalls;
 static GLuint polyListBase = 0;
 static GLuint polyEdgeListBase = 0;
 static GLuint asteroid = 0;
@@ -446,16 +453,16 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
 
     switch (type) {
     case SETUP_BASE_UP:
-	mapprint(&mapfont,color,CENTER,DOWN ,(x)    	    	,(y - BLOCK_SZ / 2),other->nick_name);
+	mapnprint(&mapfont,color,CENTER,DOWN ,(x)    	    	,(y - BLOCK_SZ / 2),maxCharsInNames,other->nick_name);
         break;
     case SETUP_BASE_DOWN:
-	mapprint(&mapfont,color,CENTER,UP   ,(x)    	    	,(y + BLOCK_SZ / 1.5),other->nick_name);
+	mapnprint(&mapfont,color,CENTER,UP   ,(x)    	    	,(y + BLOCK_SZ / 1.5),maxCharsInNames,other->nick_name);
         break;
     case SETUP_BASE_LEFT:
-	mapprint(&mapfont,color,RIGHT,UP    ,(x + BLOCK_SZ / 2) ,(y),other->nick_name);
+	mapnprint(&mapfont,color,RIGHT,UP    ,(x + BLOCK_SZ / 2) ,(y),maxCharsInNames,other->nick_name);
         break;
     case SETUP_BASE_RIGHT:
-	mapprint(&mapfont,color,LEFT,UP     ,(x - BLOCK_SZ / 2) ,(y),other->nick_name);
+	mapnprint(&mapfont,color,LEFT,UP     ,(x - BLOCK_SZ / 2) ,(y),maxCharsInNames,other->nick_name);
         break;
     default:
         errno = 0;
@@ -705,10 +712,10 @@ void Gui_paint_polygon(int i, int xoff, int yoff)
 		 rint((yoff * Setup->height - world.y) * scale), 0);
     glScalef(scale, scale, 0);
 
-    if ((instruments.showTexturedWalls || instruments.showFilledWorld) &&
+    if ((instruments.texturedWalls || instruments.filledWorld) &&
 	    BIT(p_style.flags, STYLE_TEXTURED | STYLE_FILLED)) {
 	if (BIT(p_style.flags, STYLE_TEXTURED)
-	        && instruments.showTexturedWalls) {
+	        && instruments.texturedWalls) {
 	    Image_use_texture(p_style.texture);
 	    glCallList(polyListBase + i);
 	    Image_no_texture();
@@ -759,7 +766,22 @@ void Gui_paint_ball(int x, int y, int style)
     if (style >= 0 && style < num_polygon_styles)
 	rgba = (polygon_styles[style].rgb << 8) | 0xff;
 
-    Image_paint(IMG_BALL, x - BALL_RADIUS, y - BALL_RADIUS, 0, rgba);
+    if (texturedBalls)
+	Image_paint(IMG_BALL, x - BALL_RADIUS, y - BALL_RADIUS, 0, rgba);
+    else {
+	int i, numvert = 16, ang = RES / numvert;
+	/* kps hack, feel free to improve */
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+	set_alphacolor(ballColorRGBA);
+	if (smoothLines) glEnable(GL_LINE_SMOOTH);
+	glBegin(GL_LINE_LOOP);
+	for (i = 0; i < numvert; i++)
+	    glVertex2d((double)x + tcos(i * ang) * BALL_RADIUS,
+		       (double)y + tsin(i * ang) * BALL_RADIUS);
+	glEnd();
+	if (smoothLines) glDisable(GL_LINE_SMOOTH);
+    }
 }
 
 void Gui_paint_ball_connector(int x_1, int y_1, int x_2, int y_2)
@@ -780,11 +802,11 @@ void Gui_paint_mine(int x, int y, int teammine, char *name)
     Image_paint(teammine ? IMG_MINE_TEAM : IMG_MINE_OTHER,
 		x - 10, y - 7, 0, whiteRGBA);
     if (name) {
-	mapprint(&mapfont, 
-		 teammine ? blueRGBA : whiteRGBA,
-		 CENTER, DOWN,
-		 x, y - 15, 
-		 "%s", name);
+	mapnprint(  &mapfont, 
+    	    	    teammine ? blueRGBA : whiteRGBA,
+    	    	    CENTER, DOWN,
+    	    	    x, y - 15, 
+    	    	    maxCharsInNames,"%s", name	);
     }
 }
 
@@ -799,7 +821,7 @@ void Gui_paint_spark(int color, int x, int y)
     glColor3ub(255 * (color + 1) / 8,
 	       255 * color * color / 64,
 	       0);
-    glPointSize(spark_size);
+    glPointSize(sparkSize);
     glBegin(GL_POINTS);
     glVertex2i(x + world.x, world.y + ext_view_height - y);
     glEnd();
@@ -881,18 +903,22 @@ void Gui_paint_asteroid(int x, int y, int type, int rot, int size)
  */
 void Gui_paint_fastshot(int color, int x, int y)
 {
+    int size = MIN(shotSize, 8);
+
     Image_paint(IMG_BULLET,
-		x + world.x - shot_size/2,
+		x + world.x - size/2,
 		world.y - 6 + ext_view_height - y,
-		shot_size - 1, whiteRGBA);
+		size - 1, whiteRGBA);
 }
 
 void Gui_paint_teamshot(int x, int y)
 {
+    int size = MIN(teamShotSize, 8);
+
     Image_paint(IMG_BULLET_OWN,
-		x + world.x - 3,
+		x + world.x - size/2,
 		world.y - 6 + ext_view_height - y,
-		shot_size - 1, whiteRGBA);
+		size - 1, whiteRGBA);
 }
 
 void Gui_paint_missiles_begin(void)
@@ -1187,7 +1213,7 @@ static void Gui_paint_ship_name(int x, int y, other_t *other)
 	if (!color)
 	    color = shipNameColorRGBA;
 
-	mapprint(&mapfont, color, CENTER, DOWN,x,y - SHIP_SZ,"%s",other->id_string);
+	mapnprint(&mapfont, color, CENTER, DOWN,x,y - SHIP_SZ,maxCharsInNames,"%s",other->id_string);
     } else
 	color = blueRGBA;
 
@@ -1490,9 +1516,40 @@ static void Paint_lock(int hud_pos_x, int hud_pos_y)
 
 }
 
+static void Paint_hudradar_dot(int x, int y, Uint32 col, int shape, int sz)
+{
+    if (col == 0 || shape < 2 || sz == 0) return;
+    set_alphacolor(col);
+
+    switch(shape) {
+    case 2:
+    case 3:
+	Circle(col, x, y, sz, shape == 2 ? 1 : 0);
+	break;
+    case 4:
+    case 5:
+	glBegin(shape == 4 ? GL_QUADS : GL_LINE_LOOP);
+	glVertex2i(x - sz, y - sz);
+	glVertex2i(x - sz, y + sz);
+	glVertex2i(x + sz, y + sz);
+	glVertex2i(x + sz, y - sz);
+	glEnd();
+	break;
+    case 6:
+    case 7:
+	glBegin(shape == 6 ? GL_TRIANGLES : GL_LINE_LOOP);
+	glVertex2i(x - sz, y + sz);
+	glVertex2i(x, y - sz);
+	glVertex2i(x + sz, y + sz);
+	glEnd();
+	break;
+    }
+}
+
 static void Paint_hudradar(double hrscale, double xlimit, double ylimit, int sz)
 {
-    int i, x, y;
+    Uint32 c;
+    int i, x, y, shape, size;
     int hrw = hrscale * 256;
     int hrh = hrscale * RadarHeight;
     double xf = (double) hrw / (double) Setup->width;
@@ -1521,12 +1578,21 @@ static void Paint_hudradar(double hrscale, double xlimit, double ylimit, int sz)
  	    y = -y + draw_height / 2;
 
 	    if (radar_ptr[i].type == normal) {
-		if (hudRadarEnemyColorRGBA)
-		    Circle(hudRadarEnemyColorRGBA, x, y, sz, 1);
+		c = hudRadarEnemyColorRGBA;
+		shape = hudRadarEnemyShape;
 	    } else {
-		if (hudRadarOtherColorRGBA)
-		    Circle(hudRadarOtherColorRGBA, x, y, sz, 1);
+		c = hudRadarOtherColorRGBA;
+		shape = hudRadarOtherShape;
 	    }
+	    size = sz;
+	    if (radar_ptr[i].size == 0) {
+		size >>= 1;
+		if (hudRadarObjectColorRGBA)
+		    c = hudRadarObjectColorRGBA;
+		if (hudRadarObjectShape)
+		    shape = hudRadarObjectShape;
+	    }
+	    Paint_hudradar_dot(x, y, c, shape, size);
 	}
     }
 }
@@ -1578,7 +1644,9 @@ void Paint_HUD(void)
     /* This should be done in a nicer way now (using radar.c maybe) */
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    if (hudRadarEnemyColorRGBA || hudRadarOtherColorRGBA) {
+    if (hudRadarEnemyColorRGBA 
+	|| hudRadarOtherColorRGBA 
+	|| hudRadarObjectColorRGBA) {
 	hudRadarMapScale = (double) Setup->width / (double) 256;
 	Paint_hudradar(
 	    hudRadarScale,
@@ -1986,6 +2054,8 @@ static xp_option_t sdlgui_options[] = {
     COLOR(hudItemsColorRGBA, "#0000ff44", "hud items"),
     COLOR(hudRadarEnemyColorRGBA, "#ff000088", "enemy on HUD radar"),
     COLOR(hudRadarOtherColorRGBA, "#0000ff88", "friend on HUD radar"),
+    COLOR(hudRadarObjectColorRGBA, "#00000000", "small object on HUD radar"),
+
     COLOR(dirPtrColorRGBA, "#0000ff22", "direction pointer"),
     COLOR(selectionColorRGBA, "#ff0000ff", "selection"),
 
@@ -2045,8 +2115,39 @@ static xp_option_t sdlgui_options[] = {
 	&smoothLines,
 	NULL,
 	XP_OPTFLAG_CONFIG_DEFAULT,
-	"Use antialized smooth lines.\n")
+	"Use antialized smooth lines.\n"),
 
+    XP_BOOL_OPTION(
+        "texturedBalls",
+        true,
+	&texturedBalls,
+	NULL,
+	XP_OPTFLAG_CONFIG_DEFAULT,
+	"Draw balls with textures.\n"),
+
+    XP_INT_OPTION(
+        "hudRadarEnemyShape",
+	2, 1, 7,
+	&hudRadarEnemyShape,
+	NULL,
+	XP_OPTFLAG_CONFIG_DEFAULT,
+	"The shape of enemy ships on hud radar.\n"),
+
+    XP_INT_OPTION(
+        "hudRadarOtherShape",
+	2, 1, 7,
+	&hudRadarOtherShape,
+	NULL,
+	XP_OPTFLAG_CONFIG_DEFAULT,
+	"The shape of friendly ships on hud radar.\n"),
+
+    XP_INT_OPTION(
+        "hudRadarObjectShape",
+	0, 0, 7,
+	&hudRadarObjectShape,
+	NULL,
+	XP_OPTFLAG_CONFIG_DEFAULT,
+	"The shape of small objects on hud radar.\n")
 };
 
 void Store_sdlgui_options(void)

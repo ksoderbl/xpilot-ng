@@ -35,27 +35,27 @@
 #ifdef _WINDOWS
 #pragma warning(disable : 4305)
 #endif
-#include "items/itemRocketPack.xbm"
-#include "items/itemCloakingDevice.xbm"
-#include "items/itemEnergyPack.xbm"
-#include "items/itemWideangleShot.xbm"
-#include "items/itemRearShot.xbm"
-#include "items/itemMinePack.xbm"
-#include "items/itemSensorPack.xbm"
-#include "items/itemTank.xbm"
-#include "items/itemEcm.xbm"
-#include "items/itemArmor.xbm"
-#include "items/itemAfterburner.xbm"
-#include "items/itemTransporter.xbm"
-#include "items/itemDeflector.xbm"
-#include "items/itemHyperJump.xbm"
-#include "items/itemPhasingDevice.xbm"
-#include "items/itemMirror.xbm"
-#include "items/itemLaser.xbm"
-#include "items/itemEmergencyThrust.xbm"
-#include "items/itemTractorBeam.xbm"
-#include "items/itemAutopilot.xbm"
-#include "items/itemEmergencyShield.xbm"
+#include "../items/itemRocketPack.xbm"
+#include "../items/itemCloakingDevice.xbm"
+#include "../items/itemEnergyPack.xbm"
+#include "../items/itemWideangleShot.xbm"
+#include "../items/itemRearShot.xbm"
+#include "../items/itemMinePack.xbm"
+#include "../items/itemSensorPack.xbm"
+#include "../items/itemTank.xbm"
+#include "../items/itemEcm.xbm"
+#include "../items/itemArmor.xbm"
+#include "../items/itemAfterburner.xbm"
+#include "../items/itemTransporter.xbm"
+#include "../items/itemDeflector.xbm"
+#include "../items/itemHyperJump.xbm"
+#include "../items/itemPhasingDevice.xbm"
+#include "../items/itemMirror.xbm"
+#include "../items/itemLaser.xbm"
+#include "../items/itemEmergencyThrust.xbm"
+#include "../items/itemTractorBeam.xbm"
+#include "../items/itemAutopilot.xbm"
+#include "../items/itemEmergencyShield.xbm"
 
 char xinit_version[] = VERSION;
 
@@ -805,9 +805,9 @@ static int Score_callback(int widget_desc, void *data, const char **str)
 {
     UNUSED_PARAM(widget_desc); UNUSED_PARAM(data); UNUSED_PARAM(str);
     Config(false, CONFIG_NONE);
-    if (showUserName != false) {
+    if (showUserName) {
 	showUserName = false;
-	scoresChanged = 1;
+	scoresChanged = true;
     }
     return 0;
 }
@@ -816,9 +816,9 @@ static int Player_callback(int widget_desc, void *data, const char **str)
 {
     UNUSED_PARAM(widget_desc); UNUSED_PARAM(data); UNUSED_PARAM(str);
     Config(false, CONFIG_NONE);
-    if (showUserName != true) {
+    if (!showUserName) {
 	showUserName = true;
-	scoresChanged = 1;
+	scoresChanged = true;
     }
     return 0;
 }

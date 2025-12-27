@@ -2517,6 +2517,31 @@ int Send_pointer_move(int movement)
 {
     static int total;
 
+#if 0
+    struct timeval tv;
+    static struct timeval old_tv;
+    double s, u, t;
+    static double oldt = 0;
+    static int num = 1;
+
+    gettimeofday(&tv, NULL);
+
+    s = tv.tv_sec;
+    u = tv.tv_usec;
+    t = s + u * 1e-6;
+
+    if (tv.tv_sec != old_tv.tv_sec) {
+	warn("Send_pointer_moves = %d", num);
+	num = 1;
+    } else
+	num ++;
+
+    /*warn("%d %.2f: %d", num, t - oldt, movement);*/
+
+    oldt = t;
+    old_tv = tv;
+#endif
+
     if (version >= 0x4F13) {
 	total += movement;
 	movement = total;
@@ -2543,6 +2568,8 @@ int Send_audio_request(int on)
 
 int Send_fps_request(int fps)
 {
+    assert(fps > 0);
+    assert(fps <= MAX_SUPPORTED_FPS);
     if (Packet_printf(&wbuf, "%c%c", PKT_ASYNC_FPS, fps) == -1)
 	return -1;
     return 0;

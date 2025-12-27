@@ -100,10 +100,8 @@ void Place_moving_mine(player_t *pl)
 void Place_general_mine(world_t *world, player_t *pl, int team, long status,
 			clpos_t pos, vector_t vel, modifiers_t mods)
 {
-    char msg[MSG_LEN];
-    int used;
+    int used, i, minis;
     double life, drain, mass;
-    int i, minis;
     vector_t mv;
 
     if (NumObjs + mods.mini >= MAX_TOTAL_SHOTS)
@@ -131,11 +129,11 @@ void Place_general_mine(world_t *world, player_t *pl, int team, long status,
 		    ? pl->item[ITEM_MINE]
 		    : options.nukeMinMines);
 	    if (pl->item[ITEM_MINE] < options.nukeMinMines) {
-		sprintf(msg, "You need at least %d mines to %s %s!",
+		Set_player_message_f(pl,
+			"You need at least %d mines to %s %s!",
 			options.nukeMinMines,
 			(BIT(status, GRAVITY) ? "throw" : "drop"),
 			Describe_shot (OBJ_MINE, status, mods, 0));
-		Set_player_message (pl, msg);
 		return;
 	    }
 	} else
@@ -151,15 +149,15 @@ void Place_general_mine(world_t *world, player_t *pl, int team, long status,
 	if (BIT(mods.warhead, CLUSTER))
 	    drain += CLUSTER_MASS_DRAIN(mass);
 	if (pl->fuel.sum < -drain) {
-	    sprintf(msg, "You need at least %.1f fuel units to %s %s!",
+	    Set_player_message_f(pl,
+		    "You need at least %.1f fuel units to %s %s!",
 		    -drain, (BIT(status, GRAVITY) ? "throw" : "drop"),
 		    Describe_shot(OBJ_MINE, status, mods, 0));
-	    Set_player_message (pl, msg);
 	    return;
 	}
 	if (options.baseMineRange) {
 	    for (i = 0; i < NumPlayers; i++) {
-		player_t *pl_i = Players(i);
+		player_t *pl_i = Player_by_index(i);
 
 		if (pl_i->home_base == NULL)
 		    continue;
@@ -179,10 +177,9 @@ void Place_general_mine(world_t *world, player_t *pl, int team, long status,
 	pl->item[ITEM_MINE] -= used;
 
 	if (used > 1) {
-	    sprintf(msg, "%s has %s %s!", pl->name,
-		    (BIT(status, GRAVITY) ? "thrown" : "dropped"),
-		    Describe_shot(OBJ_MINE, status, mods, 0));
-	    Set_message(msg);
+	    Set_message_f("%s has %s %s!", pl->name,
+			  (BIT(status, GRAVITY) ? "thrown" : "dropped"),
+			  Describe_shot(OBJ_MINE, status, mods, 0));
 	    sound_play_all(NUKE_LAUNCH_SOUND);
 	} else
 	    sound_play_sensors(pl->pos,
@@ -450,7 +447,6 @@ void Fire_general_shot(world_t *world, player_t *pl, int team, bool cannon,
 		       clpos_t pos, int type, int dir,
 		       modifiers_t mods, int target_id)
 {
-    char msg[MSG_LEN];
     int used, fuse = 0, lock = 0, status = GRAVITY, i, ldir, minis,
 	pl_range, pl_radius, rack_no = 0, racks_left = 0, r, on_this_rack = 0,
 	side = 0, fired = 0;
@@ -524,11 +520,10 @@ void Fire_general_shot(world_t *world, player_t *pl, int team, bool cannon,
 			? pl->item[ITEM_MISSILE]
 			: options.nukeMinSmarts);
 		if (pl->item[ITEM_MISSILE] < options.nukeMinSmarts) {
-		    sprintf(msg,
+		    Set_player_message_f(pl,
 			    "You need at least %d missiles to fire %s!",
 			    options.nukeMinSmarts,
 			    Describe_shot (type, status, mods, 0));
-		    Set_player_message (pl, msg);
 		    return;
 		}
 	    } else
@@ -605,18 +600,17 @@ void Fire_general_shot(world_t *world, player_t *pl, int team, bool cannon,
 
 	if (pl) {
 	    if (pl->fuel.sum < -drain) {
-		sprintf(msg, "You need at least %.1f fuel units to fire %s!",
+		Set_player_message_f(pl,
+			"You need at least %.1f fuel units to fire %s!",
 			-drain, Describe_shot(type, status, mods, 0));
-		Set_player_message (pl, msg);
 		return;
 	    }
 	    Player_add_fuel(pl, drain);
 	    pl->item[ITEM_MISSILE] -= used;
 
 	    if (used > 1) {
-		sprintf(msg, "%s has launched %s!", pl->name,
-			Describe_shot(type, status, mods, 0));
-		Set_message(msg);
+		Set_message_f("%s has launched %s!", pl->name,
+			      Describe_shot(type, status, mods, 0));
 		sound_play_all(NUKE_LAUNCH_SOUND);
 	    } else if (type == OBJ_SMART_SHOT)
 		sound_play_sensors(pl->pos, FIRE_SMART_SHOT_SOUND);
@@ -943,16 +937,30 @@ void Fire_general_shot(world_t *world, player_t *pl, int team, bool cannon,
 	}
 
 	/*
-	 * If "NG controls" are activated, use float dir when shooting
-	 * straight ahead.
+	 * Option constantSpeed affects shots' initial velocity.
+	 * This lets you accelerate shots nicely.
 	 */
+	if (pl && options.constantSpeed) {
+	    pl->vel.x += options.constantSpeed * pl->acc.x;
+	    pl->vel.y += options.constantSpeed * pl->acc.y;
+	}
 	if (options.ngControls && pl && ldir == pl->dir) {
+	    /*
+	     * If using "NG controls", use float dir when shooting
+	     * straight ahead.
+	     */
 	    shot->vel.x = mv.x + pl->vel.x + pl->float_dir_cos * speed;
 	    shot->vel.y = mv.y + pl->vel.y + pl->float_dir_sin * speed;
 	} else {
 	    shot->vel.x = mv.x + (pl ? pl->vel.x : 0.0) + tcos(ldir) * speed;
 	    shot->vel.y = mv.y + (pl ? pl->vel.y : 0.0) + tsin(ldir) * speed;
 	}
+	/* remove constantSpeed */
+	if (pl && options.constantSpeed) {
+	     pl->vel.x -= options.constantSpeed * pl->acc.x;
+	     pl->vel.y -= options.constantSpeed * pl->acc.y;
+	}
+
 	shot->status	= status;
 	shot->missile_dir	= ldir;
 	shot->mods  	= mods;
@@ -1080,7 +1088,7 @@ void Delete_shot(world_t *world, int ind)
 	     * Maybe some player is still busy trying to connect to this ball.
 	     */
 	    for (i = 0; i < NumPlayers; i++) {
-		player_t *pl_i = Players(i);
+		player_t *pl_i = Player_by_index(i);
 
 		if (pl_i->ball == ball)
 		    pl_i->ball = NULL;
@@ -1585,7 +1593,7 @@ void Update_missile(world_t *world, missileobject_t *shot)
 
 		range = HEAT_RANGE * (shot->count / HEAT_CLOSE_TIMEOUT);
 		for (i = 0; i < NumPlayers; i++) {
-		    player_t *pl_i = Players(i);
+		    player_t *pl_i = Player_by_index(i);
 		    clpos_t engine;
 
 		    if (!BIT(pl_i->status, THRUSTING))
@@ -1645,7 +1653,7 @@ void Update_missile(world_t *world, missileobject_t *shot)
 		|| smart->count == CONFUSED_TIME)) {
 
 	    if (smart->count > 0) {
-		smart->info = Players((int)(rfrac() * NumPlayers))->id;
+		smart->info = Player_by_index((int)(rfrac() * NumPlayers))->id;
 		smart->count -= timeStep;
 	    } else {
 		smart->count = 0;

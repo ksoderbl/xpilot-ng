@@ -73,8 +73,6 @@ Window	talkWindow;
 bool	gotFocus;
 bool	players_exposed;
 
-static double   time_counter = 0.0;
-
 static int clockColor;		/* Clock color index */
 static int scoreColor;		/* Score list color indices */
 static int scoreSelfColor;	/* Score list own score color index */
@@ -119,51 +117,8 @@ void Paint_frame(void)
     Net_flush();
 #endif
 
-    Check_view_dimensions();
-
-    world.x = selfPos.x - (ext_view_width / 2);
-    world.y = selfPos.y - (ext_view_height / 2);
-    realWorld = world;
-    if (BIT(Setup->mode, WRAP_PLAY)) {
-	if (world.x < 0 && world.x + ext_view_width < Setup->width)
-	    world.x += Setup->width;
-	else if (world.x > 0 && world.x + ext_view_width >= Setup->width)
-	    realWorld.x -= Setup->width;
-	if (world.y < 0 && world.y + ext_view_height < Setup->height)
-	    world.y += Setup->height;
-	else if (world.y > 0 && world.y + ext_view_height >= Setup->height)
-	    realWorld.y -= Setup->height;
-    }
-
-    if (start_loops != end_loops)
-	warn("Start neq. End (%ld,%ld,%ld)", start_loops, end_loops, loops);
-    loops = end_loops;
-
-
-    /*
-     * If time() changed from previous value, assume one second has passed.
-     */
-    if (newSecond) {
-	/* kps - improve */
-	recordFPS = clientFPS;
-	timePerFrame = 1.0 / clientFPS;
-
-	/* TODO: move this somewhere else */
-	/* check once per second if we are playing */
-	if (newSecond && self && !strchr("PW", self->mychar))
-	    played_this_round = true;
-    }
-
-    /*
-     * Instead of using loops to determining if things are drawn this frame,
-     * loopsSlow should be used. We don't want things to be drawn too fast
-     * at high fps.
-     */
-    time_counter += timePerFrame;
-    if (time_counter >= 1.0 / 12) {
-	loopsSlow++;
-	time_counter -= (1.0 / 12);
-    }
+    Paint_frame_start();
+    Paint_score_table();
 
     /*
      * Switch between two different window titles.
@@ -265,7 +220,7 @@ void Paint_frame(void)
      * Now switch planes and clear the screen.
      */
     if (radarPixmap != radarWindow && radar_exposures > 0) {
-	if (!instruments.showSlidingRadar
+	if (!instruments.slidingRadar
 	    || BIT(Setup->mode, WRAP_PLAY) == 0) {
 #ifndef _WINDOWS
 	    XCopyArea(dpy, radarPixmap, radarWindow, gameGC,
@@ -626,7 +581,7 @@ static void Paint_clock(bool redraw)
     hour = m->tm_hour;
     /*warn("drawing clock at %02d:%02d:%02d", hour, minute, second);*/
 
-    if (!instruments.useAMPMFormatClock)
+    if (!instruments.clockAMPM)
 	sprintf(buf, "%02d:%02d" /*":%02d"*/, hour, minute /*, second*/);
     else {
 	char tmpchar = 'A';

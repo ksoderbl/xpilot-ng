@@ -34,7 +34,7 @@
 #define MIN_RECEIVE_WINDOW_SIZE		1
 #define MAX_RECEIVE_WINDOW_SIZE		4
 
-#define MAX_SUPPORTED_FPS		200
+#define MAX_SUPPORTED_FPS		255
 
 typedef struct {
     int view_width;
@@ -48,11 +48,6 @@ extern int	 receive_window_size;
 extern long	 last_loops;
 extern bool      packetMeasurement;
 extern display_t server_display; /* the servers idea about our display */
-
-extern int mouseMovement;
-extern struct timeval next_time;
-extern int maxMouseTurnsPS;
-extern long movement_interval;
 
 int Net_setup(void);
 int Net_verify(char *real, char *nick, char *dpy);

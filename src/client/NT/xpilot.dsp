@@ -86,8 +86,8 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 /nologo /subsystem:windows /debug /machine:I386
-# ADD LINK32 winmm.lib ..\..\..\zlib\lib\libz.lib /nologo /subsystem:windows /debug /machine:I386
-# SUBTRACT LINK32 /map
+# ADD LINK32 winmm.lib d:\xpilotbuild\zlib\lib\zdll.lib /nologo /subsystem:windows /debug /machine:I386
+# SUBTRACT LINK32 /pdb:none
 
 !ELSEIF  "$(CFG)" == "XPilot - Win32 ReleasePentium"
 
@@ -115,7 +115,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 /nologo /subsystem:windows /map /machine:I386 /out:"Release/XPilotNT.exe"
-# ADD LINK32 winmm.lib ..\..\..\..\zlib\dll32\zlib.lib /nologo /subsystem:windows /map /machine:I386 /out:".\Release\XPilot.exe"
+# ADD LINK32 winmm.lib d:\xpilotbuild\zlib\lib\zdll.lib /nologo /subsystem:windows /map /machine:I386 /out:".\Release\XPilot.exe"
 # Begin Special Build Tool
 SOURCE="$(InputPath)"
 PostBuild_Cmds=copy Release\XPilot.exe c:\XPilot
@@ -140,19 +140,15 @@ SOURCE=..\.cvsignore
 # End Source File
 # Begin Source File
 
-SOURCE=..\about.c
+SOURCE=.\about.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\bitmaps.c
+SOURCE=.\bitmaps.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\bitmaps.h
-# End Source File
-# Begin Source File
-
-SOURCE=..\caudio.c
+SOURCE=.\bitmaps.h
 # End Source File
 # Begin Source File
 
@@ -180,11 +176,11 @@ SOURCE=..\clientrank.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\colors.c
+SOURCE=.\colors.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\configure.c
+SOURCE=.\configure.c
 # End Source File
 # Begin Source File
 
@@ -204,7 +200,7 @@ SOURCE=..\datagram.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\dbuff.h
+SOURCE=.\dbuff.h
 # End Source File
 # Begin Source File
 
@@ -228,7 +224,7 @@ SOURCE=..\gfx2d.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\guimap.c
+SOURCE=.\guimap.c
 # End Source File
 # Begin Source File
 
@@ -236,7 +232,7 @@ SOURCE=..\guimap.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\guiobjects.c
+SOURCE=.\guiobjects.c
 # End Source File
 # Begin Source File
 
@@ -244,11 +240,11 @@ SOURCE=..\guiobjects.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\icon.h
+SOURCE=.\icon.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\join.c
+SOURCE=.\join.c
 # End Source File
 # Begin Source File
 
@@ -284,7 +280,7 @@ SOURCE=..\paint.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\paintdata.c
+SOURCE=.\paintdata.c
 # End Source File
 # Begin Source File
 
@@ -292,7 +288,7 @@ SOURCE=..\paintdata.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\painthud.c
+SOURCE=.\painthud.c
 # End Source File
 # Begin Source File
 
@@ -308,7 +304,7 @@ SOURCE=..\paintobjects.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\paintradar.c
+SOURCE=.\paintradar.c
 # End Source File
 # Begin Source File
 
@@ -316,15 +312,15 @@ SOURCE=..\query.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\record.c
+SOURCE=.\record.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\record.h
+SOURCE=.\record.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\recordfmt.h
+SOURCE=.\recordfmt.h
 # End Source File
 # Begin Source File
 
@@ -344,48 +340,48 @@ SOURCE=..\usleep.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\welcome.c
+SOURCE=.\welcome.c
 # PROP Exclude_From_Build 1
 # End Source File
 # Begin Source File
 
-SOURCE=..\widget.c
+SOURCE=.\widget.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\widget.h
+SOURCE=.\widget.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\xdefault.c
+SOURCE=.\xdefault.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\xevent.c
+SOURCE=.\xevent.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\xevent.h
+SOURCE=.\xevent.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\xeventhandlers.c
+SOURCE=.\xeventhandlers.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\xeventhandlers.h
+SOURCE=.\xeventhandlers.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\xinit.c
+SOURCE=.\xinit.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\xinit.h
+SOURCE=.\xinit.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\xpaint.c
+SOURCE=.\xpaint.c
 # End Source File
 # Begin Source File
 
@@ -393,7 +389,11 @@ SOURCE=..\xpclient.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\xpilot.c
+SOURCE=.\xpclient_x11.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\xpilot.c
 # End Source File
 # Begin Source File
 
@@ -475,6 +475,10 @@ SOURCE=.\winAudio.h
 # Begin Source File
 
 SOURCE=.\winBitmap.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\winBitmap.h
 # End Source File
 # Begin Source File
 

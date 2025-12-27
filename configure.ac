@@ -1,9 +1,9 @@
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.57)
-AC_INIT([XPilot NG], 4.6.5, kps@users.sourceforge.net, xpilot-ng)
+AC_INIT([XPilot NG], 4.6.6, kps@users.sourceforge.net, xpilot-ng)
 AC_CONFIG_AUX_DIR(config)
-AC_CONFIG_SRCDIR(src/client/xpilot.c)
+AC_CONFIG_SRCDIR(src/client/x11/xpilot.c)
 
 AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
@@ -23,7 +23,7 @@ AC_SUBST([XP_COPYRIGHTDATE])
 XP_COPYRIGHT="Copyright © $XP_COPYRIGHTDATE by $XP_AUTHORS"
 AC_SUBST([XP_COPYRIGHT])
 
-AC_SUBST([XP_RELEASEDATE],["May 25, 2004"])
+AC_SUBST([XP_RELEASEDATE],["Sep 13, 2004"])
 AC_SUBST([XP_DATADIR],"$prefix/share/xpilot-ng")
 
 
@@ -136,6 +136,8 @@ case "$target" in
     *-*-freebsd*)
         MATHLIB="-lm"
         SYS_GL_LIBS="-L/usr/X11R6/lib -lGL -lGLU"
+	CPPFLAGS="$CPPFLAGS -I/usr/X11R6/include -I/usr/local/include"
+	LDFLAGS="$LDFLAGS -L/usr/local/lib"
         ;;
     *)
         MATHLIB="-lm"
@@ -387,6 +389,7 @@ AC_CONFIG_FILES([ \
 	src/client/Makefile \
 	src/client/items/Makefile \
 	src/client/sdl/Makefile \
+	src/client/x11/Makefile \
 	src/client/NT/Makefile \
 	src/client/NT/res/Makefile \
 	src/server/Makefile \

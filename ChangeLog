@@ -1,3 +1,1086 @@
+2004-08-29 21:08  darelcullen
+
+	* TODO: TODO update
+
+2004-08-29 16:37  kps
+
+	* TODO: Wrote a few things we need to do for xpilot ng.
+
+2004-08-26 22:05  kps
+
+	* src/client/NT/: Makefile.am, Makefile.in: changes due to added
+	  files.
+
+2004-08-26 21:41  kps
+
+	* src/client/NT/: paintdata.h, xpaint.h, xpclient_x11.h: Added some
+	  more files needed by NT client.
+
+2004-08-25 18:41  kps
+
+	* doc/man/: xpilot-ng-replay.man, xpilot-ng-sdl.man,
+	  xpilot-ng-server.man, xpilot-ng-x11.man: Generated new man pages
+	  due to new options.
+
+2004-08-25 00:26  kps
+
+	* contrib/TkXpInterface/.cvsignore: ignore tkxpinterface stuff
+
+2004-08-25 00:22  kps
+
+	* src/client/x11/.cvsignore: added cvsignore file.
+
+2004-08-25 00:18  kps
+
+	* src/server/: cmdline.c, play.c, server.h: New server option
+	  useDebris aka useSparks which toggles creation of debris.
+	  Default is true.
+
+2004-08-24 22:06  kps
+
+	* src/client/: about.c, bitmaps.c, bitmaps.h, colors.c,
+	  configure.c, dbuff.c, dbuff.h, guimap.c, guiobjects.c, icon.h,
+	  join.c, paintdata.c, paintdata.h, painthud.c, paintradar.c,
+	  record.c, record.h, talk.c, welcome.c, widget.c, widget.h,
+	  xdefault.c, xevent.c, xevent.h, xeventhandlers.c,
+	  xeventhandlers.h, xinit.c, xinit.h, xpaint.c, xpaint.h,
+	  xpclient_x11.h, xpilot.c: Removed x11 specific files from
+	  src/client directory.
+
+2004-08-24 21:38  kps
+
+	* configure, configure.ac, src/client/Makefile.am,
+	  src/client/Makefile.in, src/client/NT/Makefile.am,
+	  src/client/NT/Makefile.in, src/client/NT/about.c,
+	  src/client/NT/bitmaps.c, src/client/NT/bitmaps.h,
+	  src/client/NT/colors.c, src/client/NT/configure.c,
+	  src/client/NT/dbuff.h, src/client/NT/guimap.c,
+	  src/client/NT/guiobjects.c, src/client/NT/icon.h,
+	  src/client/NT/join.c, src/client/NT/paintdata.c,
+	  src/client/NT/painthud.c, src/client/NT/paintradar.c,
+	  src/client/NT/record.c, src/client/NT/record.h,
+	  src/client/NT/welcome.c, src/client/NT/widget.c,
+	  src/client/NT/widget.h, src/client/NT/xdefault.c,
+	  src/client/NT/xevent.c, src/client/NT/xevent.h,
+	  src/client/NT/xeventhandlers.c, src/client/NT/xeventhandlers.h,
+	  src/client/NT/xinit.c, src/client/NT/xinit.h,
+	  src/client/NT/xpaint.c, src/client/NT/xpilot.c,
+	  src/client/NT/xpilot.dsp, src/client/x11/Makefile.am,
+	  src/client/x11/Makefile.in, src/client/x11/about.c,
+	  src/client/x11/bitmaps.c, src/client/x11/bitmaps.h,
+	  src/client/x11/colors.c, src/client/x11/configure.c,
+	  src/client/x11/dbuff.c, src/client/x11/dbuff.h,
+	  src/client/x11/guimap.c, src/client/x11/guiobjects.c,
+	  src/client/x11/icon.h, src/client/x11/join.c,
+	  src/client/x11/paintdata.c, src/client/x11/paintdata.h,
+	  src/client/x11/painthud.c, src/client/x11/paintradar.c,
+	  src/client/x11/record.c, src/client/x11/record.h,
+	  src/client/x11/talk.c, src/client/x11/welcome.c,
+	  src/client/x11/widget.c, src/client/x11/widget.h,
+	  src/client/x11/xdefault.c, src/client/x11/xevent.c,
+	  src/client/x11/xevent.h, src/client/x11/xeventhandlers.c,
+	  src/client/x11/xeventhandlers.h, src/client/x11/xinit.c,
+	  src/client/x11/xinit.h, src/client/x11/xpaint.c,
+	  src/client/x11/xpaint.h, src/client/x11/xpclient_x11.h,
+	  src/client/x11/xpilot.c: Moved x11 specific client files into
+	  src/client/x11 and src/client/NT.
+
+2004-08-23 14:08  kps
+
+	* src/server/walls.c: When ship bounces, remove constantSpeed from
+	  player velocity vector before calculating the new velocity
+	  vector. This way you can't accumulate the constantSpeed by
+	  sliding along a wall.
+
+2004-08-23 13:54  kps
+
+	* src/server/player.c: Don't lose items when pausing.  The reason
+	  this bug/feature appeared was that Player_death_reset is now
+	  called when someone pauses. That change was done so that player
+	  would be properly reset when pausing so that e.g. player would
+	  stop shooting etc.
+
+2004-08-17 20:55  kps
+
+	* src/client/sdl/sdlgui.c: Added option texturedBalls for sdl
+	  client.
+
+2004-08-16 20:19  kps
+
+	* src/server/: sched.c, sched.h: Removed some unused functions from
+	  sched.c
+
+2004-08-15 22:18  kps
+
+	* src/server/shot.c: Don't use sprintf where _f versions of
+	  Set_message functions can be used.
+
+2004-08-15 19:56  kps
+
+	* src/server/: frame.c, map.c, map.h, server.h, update.c,
+	  wormhole.c, xp2map.c, xpmap.c: Removed broken support for
+	  temporary wormholes.	I've never seen temporary wormholes used
+	  anyway.
+
+2004-08-14 12:40  kps
+
+	* src/server/: asteroid.c, map.c, map.h, robotdef.c, server.h,
+	  walls.c, xpmap.c: Robots now use shape_is_inside to determine
+	  what is empty space on map.  This is done by using a new shape
+	  'filled_wire' which is the shape of a map block.  Removed
+	  'SPACE_BLOCKS' which was a bitmap with a bit for each type of
+	  block which should be considered space (this is not needed since
+	  this can be done with polygon methods). Removed from map.h
+	  definitions of block bits ('SPACE_BIT' etc).
+
+2004-08-05 19:37  kps
+
+	* src/server/update.c: Throat contributed some code to reset warped
+	  bit of players when they exit a wormhole. This means one can warp
+	  more than once per life now, whee!!!
+
+2004-07-15 16:03  kps
+
+	* src/server/xpmap.c: Try to avoid "Bad homebase index" error in
+	  block based clients.	If multiple bases are in the area of the
+	  same block on a polygon map, we line up the extra bases close to
+	  the origin of the map.  Note that bases will not be in the order
+	  the block based client expects, so bases might have wrong team
+	  number or player name shown in block based clients. This could
+	  probably be fixed by sorting the bases in int world->bases array.
+
+2004-07-15 14:25  kps
+
+	* src/common/pack.h: instruments.useBlockProtocol became
+	  instruments.blockProtocol.
+
+2004-07-15 00:18  kps
+
+	* src/client/: client.c, client.h, default.c, guimap.c,
+	  guiobjects.c, messages.c, paintmap.c, paintradar.c, xpaint.c,
+	  xpilot.c, NT/winXXPilot.c, sdl/radar.c, sdl/sdlgui.c: Client
+	  option teamShotSize works now. Apparently it was broken somewhere
+	  between xpilot 4.0.0 and xpilot 4.5.4. Teamshots now honor
+	  showNastyShots option.  Renamed fields in instruments_t and some
+	  client variables (shot_size, teamshot_size, spark_size, ...) to
+	  have same names as the relevant options.
+
+2004-07-13 22:38  kps
+
+	* src/client/: client.h, guiobjects.c, xdefault.c, xpaint.h: Jimmy
+	  Andersson contributed code that paints round shots instead of
+	  rectangles.  Max size of shots and teamshots is now 20 (was 8).
+	  Moved showNastyShots into instruments_t.
+
+2004-07-13 11:44  kps
+
+	* lib/maps/: polybloods.xp2, polybloods7.xp2: Removed some useless
+	  options and data.
+
+2004-07-10 21:59  kps
+
+	* src/client/textinterface.c: 'R' is not more a privileged command
+	  in textinterface (used to set robotnum).
+
+2004-07-10 17:31  darelcullen
+
+	* BUGS: Added 2 new bugs :(
+
+2004-07-06 01:42  kps
+
+	* lib/maps/: polybloods.xp2, polybloods7.xp2: slightly less powered
+	  settings afterburnerpower 1.1 ballconnectorspringconstant 1650
+
+2004-07-05 19:17  kps
+
+	* lib/maps/: polybloods.xp2, polybloods7.xp2: Set
+	  playerwallfriction to 0.8 and wallbouncefueldrainmult to 0.1.
+
+2004-07-04 21:40  kps
+
+	* src/server/walls.c: Changed constant C2 in uau's wallbounces to
+	  1-playerwallbrake.  (The change in speed parallel to wall during
+	  wall bounce is MIN(C1*perpendicular_change, C2*parallel_speed)).
+
+2004-07-04 20:48  kps
+
+	* lib/maps/polybloods.xp2: Changed playerwallbrake to 0.5 now that
+	  we have mara's or uau's wallbounces.
+
+2004-07-04 20:22  kps
+
+	* lib/maps/polybloods.xp2: New default settings in polybloods.xp2.
+	  Map version is now 8.3.  afterburnerpowermult 1.2
+	  ballconnectorspringconstant 1800 ballradius 10 constantspeed 0.5
+
+2004-07-04 20:14  kps
+
+	* lib/maps/polybloods.xp2: Sorted options alphabetically.
+
+2004-07-04 20:08  kps
+
+	* lib/maps/polybloods7.xp2: New "standard" settings: constantspeed
+	  0.5 afterburnerpowermult 1.2 ballradius 10
+	  ballconnectorspringconstant 1800
+
+2004-07-04 19:58  kps
+
+	* lib/maps/polybloods7.xp2: Removed some more unnecessary options.
+
+2004-07-04 19:54  kps
+
+	* lib/maps/polybloods7.xp2: Sorted options alphabetically.
+
+2004-07-04 19:36  kps
+
+	* lib/maps/polybloods7.xp2: Removed some unnecessary options.
+
+2004-07-04 18:47  kps
+
+	* lib/maps/polybloods7.xp2: Removed mapdata option (server can
+	  create the blocks from polygons).  Made dataurl option
+	  polybloods.xpd (opengl has problems with rtc2.xpd).
+
+2004-07-04 14:53  kps
+
+	* lib/maps/: Makefile.am, Makefile.in, polybloods7.xp2: Added
+	  polybloods v7 map to distro. Main difference to v8 is that v7 did
+	  not have rounded or modified walls.
+
+2004-07-03 22:58  kps
+
+	* src/server/: cmdline.c, server.h, walls.c: New wall bounce code.
+	  New option playerWallFriction (0.5 by default).  New option
+	  maraWallBounce (temporary option; true by default).  Mara's wall
+	  bounces work like this: Vtangent2 =
+	  (1-Vnormal1/Vtotal1*wallfriction)*Vtangent1 Uau's wall bounces
+	  work like this: change the parallel one by
+	  MIN(C1*perpendicular_change, C2*parallel_speed) if you assume the
+	  wall has a coefficient of friction C1.
+
+2004-06-30 01:15  kps
+
+	* src/client/netclient.c: OOPS! Commited some wrong code in
+	  netclient.c in revision 1.92.  Revision 1.93 is the same as 1.91.
+
+2004-06-30 01:11  kps
+
+	* configure, configure.ac, src/client/netclient.c: Define some
+	  extra CPPFLAGS and LDFLAGS to use in FreeBSD.
+
+2004-06-29 21:28  darelcullen
+
+	* ChangeLog: Updated Changelog
+
+2004-06-23 13:28  kps
+
+	* src/server/shot.c: Make option constantSpeed affect shots'
+	  initial velocity.  This lets you accelerate shots nicely.
+
+2004-06-21 19:35  kps
+
+	* src/server/: alliance.c, asteroid.c, cannon.c, cmdline.c,
+	  collision.c, command.c, contact.c, event.c, frame.c, item.c,
+	  map.c, map.h, metaserver.c, netserver.c, play.c, player.c,
+	  polygon.c, robot.c, robotdef.c, saudio.c, score.c, server.c,
+	  server.h, ship.c, shot.c, target.c, teamcup.c, treasure.c,
+	  tuner.c, update.c, walls.c, wormhole.c, xpmap.c: Renamed
+	  functions that access world map objects. Names were changed like
+	  Bases() -> Base_by_index(), Fuels() -> Fuel_by_index(). These
+	  functions now return NULL instead of accessing memory outside the
+	  allocated array if an invalid index is given. Also changed
+	  Players() to Player_by_index() and changed it from a function to
+	  an inline function.
+
+2004-06-21 00:42  kps
+
+	* lib/maps/: Makefile.am, Makefile.in, dragon-1.0.xp2: Added
+	  Throat's innovative Dragon map to the distro. Good work Throat!!!
+
+2004-06-20 23:26  kps
+
+	* src/: client/client.c, client/default.c, client/netclient.c,
+	  client/netclient.h, server/cmdline.c, server/netserver.c,
+	  server/sched.c, server/serverconst.h: Support FPS up to 255 on
+	  both client and server. Limit 255 comes from the fps request
+	  packet which uses a byte to specify FPS.  Changed client define
+	  MAX_SUPPORTED_FPS to 255 and added server define MAX_SERVER_FPS.
+
+2004-06-20 19:34  kps
+
+	* src/server/: cmdline.c, player.c, server.h, treasure.c: New
+	  server option by Karsten Siegmund (Throat): specialBallTeam.
+	  Balls that belong to this team are 'special' balls that score
+	  against all other teams.
+
+2004-06-15 00:39  kps
+
+	* lib/maps/teamcup.xp: Removed numberofrounds and framespersecond
+	  options.
+
+2004-06-14 22:39  kps
+
+	* src/server/netserver.c: Make pointer move packet sent by player
+	  reset his idle time counter.
+
+2004-06-13 21:01  juhal
+
+	* src/client/sdl/sdlgui.c: added some of the hudradar options
+	  suggested by C R Johnson
+
+2004-06-12 18:11  kps
+
+	* src/client/: client.c, join.c, sdl/gameloop.c, sdl/gameloop_x.c,
+	  sdl/sdlevent.c: SDL client now has support for maxMouseTurnsPS
+	  option.  In gameloop.c, continue if select is interrupted;
+
+2004-06-12 17:44  kps
+
+	* src/client/: client.c, client.h, default.c, join.c, netclient.c:
+	  Added Client_check_pointer_move_interval(). If calculates how
+	  long time to wait to next send interval in addition to sending a
+	  mouse steering packet if that is needed; this is done if
+	  maxMouseTurnsPS option is > 0.
+
+2004-06-09 01:29  kps
+
+	* src/client/: client.c, client.h, default.c, join.c, netclient.c,
+	  xevent.c: New implementation of maxMouseTurnsPs.
+
+2004-06-07 22:18  juhal
+
+	* lib/sound/: Makefile.in, Makefile.am: added thrust.wav to
+	  Makefiles
+
+2004-06-06 21:59  darelcullen
+
+	* doc/: xpilot-ng-sdl.spec, xpilot-ng-x11.spec: Updates
+
+2004-06-06 21:05  darelcullen
+
+	* doc/xpilot-ng-x11.spec: Updates
+
+2004-06-06 20:56  darelcullen
+
+	* doc/xpilot-ng-x11.spec: updated for 4.6.5 and sound
+
+2004-06-06 20:47  darelcullen
+
+	* doc/: xpilot-ng-sdl.spec, xpilot-ng-x11.spec: updated for 4.6.5
+	  and sound
+
+2004-06-04 13:10  kps
+
+	* src/server/metaserver.c: Send in meta update status field "Use
+	  server text interface to query status."
+
+2004-06-03 21:24  kps
+
+	* src/server/metaserver.c: Don't send server status (Server_info())
+	  to meta server. Other cleanups.
+
+2004-06-03 19:07  kps
+
+	* src/server/: metaserver.c, netserver.c, server.c, server.h: More
+	  metaserver.c cleanups.  Changed serverTime global to
+	  serverStartTime.
+
+2004-06-03 17:50  kps
+
+	* src/server/: cmdline.c, metaserver.c, server.h: Added option
+	  metaUpdateMaxSize (which doesn't work in this revision).  In
+	  metaserver.c, cleaned up for-loop where we calculate number of
+	  available homebases per team.
+
+2004-06-01 20:57  kps
+
+	* src/client/: client.c, client.h, event.c, paint.c, xdefault.c,
+	  xevent.c, xinit.c, NT/xpilotView.cpp, sdl/sdlpaint.c:
+	  scoresChanged is now a bool.
+
+2004-06-01 20:37  kps
+
+	* src/client/xevent.c: Removed unecessary indent levels.
+
+2004-06-01 20:29  kps
+
+	* src/client/xevent.c: Handle talk key repeat in new function
+	  Handle_talk_key_repeat().
+
+2004-06-01 19:40  kps
+
+	* src/client/xevent.c: More ifdef cleanups.
+
+2004-06-01 18:49  kps
+
+	* src/client/xevent.c: Started separating xevent_keyboard and
+	  xevent_pointer into Unix and Windows specific functions to get
+	  rid of ifdef hell.
+
+2004-05-31 21:14  kps
+
+	* src/server/netserver.c: Indent and trivial changes.
+
+2004-05-31 15:26  kps
+
+	* lib/Makefile.am, lib/Makefile.in, src/client/NT/Makefile.am,
+	  src/client/NT/Makefile.in, src/client/NT/XPilot.ini,
+	  src/client/NT/XPilot.shp, src/common/xpconfig.h: All platforms
+	  now use shipshapes.txt as the default shipshape file.  Removed
+	  XPilot.ini and XPilot.shp because in NG xpilotrc.txt and
+	  shipshapes.txt are used, even in MFC client.
+
+2004-05-31 15:23  kps
+
+	* lib/shipshapes.txt: Added Erik's (virus') and Flower's ships, a
+	  few ships from the XPilot.shp file, removed a broken ship.
+
+2004-05-31 14:33  maximan
+
+	* src/server/: cmdline.c, server.h, walls.c: removed turnqueue,
+	  buggy.
+
+2004-05-30 23:25  kps
+
+	* src/client/option.c: Fixed typo "Minumum" -> "Minimum", thanks
+	  Uoti.
+
+2004-05-30 14:37  kps
+
+	* src/client/: guimap.c, guiobjects.c, painthud.c, xpaint.h:
+	  Renamed FIND_NAME_WIDTH to Check_name_string and added check for
+	  NULL in it.
+
+2004-05-30 14:29  maximan
+
+	* src/client/sdl/sdlgui.c: maxCharsInNames works now for
+	  mines,players and bases TODO: consider implementing it for lock
+
+2004-05-30 14:05  kps
+
+	* src/client/client.c: Copy nick name to id string in other
+	  structure. Currently needed for SDLclient.
+
+2004-05-30 01:35  kps
+
+	* src/server/rank.c: Encode '<', '>', '&', '\'', '"' in html and
+	  xml files.  Bump rank file version to 1.0.
+
+2004-05-30 00:34  kps
+
+	* src/client/guiobjects.c: Set default manyLivesColor to 0.
+
+2004-05-30 00:16  kps
+
+	* src/client/: join.c, xpaint.c: Repaint score table whenever it
+	  changes. Delay max 1 second in select() in input loop.
+
+2004-05-29 22:32  kps
+
+	* src/client/: client.c, client.h, paint.c, paint.h, record.c,
+	  record.h, xpaint.c, sdl/sdlpaint.c: Moved common stuff related to
+	  frame painting into Paint_frame_start().
+
+2004-05-29 22:00  kps
+
+	* src/common/portability.h: Moved windows gettimeofday()
+	  implementation to common/portability.h.  Make a preprocessor
+	  error if we don't have gettimeofday().
+
+2004-05-29 20:47  kps
+
+	* src/client/xevent.c: Completed separating x_event() and
+	  win_xevent().
+
+2004-05-29 20:39  kps
+
+	* src/client/xevent.c: Start to separate x_event() and win_event().
+
+2004-05-29 20:01  kps
+
+	* src/client/: meta.c, xevent.c, xeventhandlers.c, sdl/gameloop.c,
+	  sdl/sdlevent.c: Moved windows gettimeofday() implementation to
+	  common/portability.h.  Make a preprocessor error if we don't have
+	  gettimeofday().
+
+2004-05-29 19:32  kps
+
+	* src/replay/xp-replay.h: Use xpcommon.h instead of a lot of other
+	  includes.
+
+2004-05-29 13:49  kps
+
+	* src/client/: default.c, join.c, netclient.h, xevent.c, xevent.h,
+	  sdl/gameloop.c, sdl/gameloop_x.c, sdl/sdlevent.c: Removed mara's
+	  implementation or maxMouseTurnsPS.
+
+2004-05-28 21:03  kps
+
+	* src/client/default.c: moved blockProtocol option.
+
+2004-05-28 16:20  kps
+
+	* src/client/: guimap.c, xpaint.h: Use FIND_NAME_WIDTH when
+	  painting bases.
+
+2004-05-28 15:23  kps
+
+	* src/client/: client.c, client.h, default.c, xpaint.h: New option
+	  maxCharsInNames allows you to limit number of characters painted
+	  in names of ships and on bases (could be extended to mines and
+	  stuff later).  This allows you to print only a few chars of
+	  insane nicks like MWMWMWMWWMMWWMW.
+
+2004-05-28 11:48  kps
+
+	* src/server/: object.h, update.c: Bugfix, now visibility is
+	  updated also for non-active (e.g. paused, waiting) player.
+	  Previously enemy ships could sometimes be invisible when e.g.
+	  waiting.  This could previously be reproduced by running the
+	  server with xpilot-ng-server -noQuit -map polybloods.xp2
+	  +restrictrobots -robots 7 -rawmode and waiting until a few robots
+	  had joined and then join (being in waiting state); then enemy
+	  robots would be invisible.  In visibility_t canSee becomes bool.
+
+2004-05-28 11:44  kps
+
+	* src/server/frame.c: Trivial changes.
+
+2004-05-27 17:06  kps
+
+	* src/: client/client.h, client/default.c, common/pack.h: New
+	  option blockProtocol can be used to force use of old protocol
+	  when joining polygon servers. Useful for testing and nostalgia.
+
+2004-05-26 22:19  juhal
+
+	* src/client/oalaudio.c: better algorithms for sound source
+	  selection
+
+2004-05-26 20:20  juhal
+
+	* lib/sound/: sounds.txt, thrust.wav: improved? sound
+
+2004-05-26 20:08  juhal
+
+	* src/client/: caudio.c, caudio.h, client.c, oalaudio.c: improved?
+	  audio
+
+2004-05-25 20:25  darelcullen
+
+	* ChangeLog: ChangeLog Updated
+
+2004-05-25 19:57  kps
+
+	* README, configure, configure.ac, doc/man/xpilot-ng-replay.man,
+	  doc/man/xpilot-ng-sdl.man, doc/man/xpilot-ng-server.man,
+	  doc/man/xpilot-ng-x11.man, src/common/version.h: Version is now
+	  4.6.5.  Changes compared to 4.6.4:
+
+	  Common: - shipshape bug that could crash server or client or
+	  allow bad shapes fixed
+
+	  Client:
+
+	  - bug fixed in xpilotrc parsing, e.g. in 4.6.4 this xpilotrc line
+	  could not   be parsed properly:   xpilot.msg2:#=[#t|2|/team
+	  4|/team 2] - SDL client fixes: quit button works on windows,
+	  configure menu fix - xp5 style OpenAL sound support
+
+	  Server:
+
+	  - "shots from empty space" bug fixed by uau - server ranking
+	  related changes: stats command can now show stats   of players
+	  not playing (requires giving whole nick to stats command),
+	  logout messages in rank webpage now work even after server
+	  restart
+
+2004-05-25 13:34  maximan
+
+	* src/client/sdl/: glwidgets.c, glwidgets.h: changes to intchooser
+	  and doublechooser widgets tap (button 2) on doublechoosers should
+	  give 0.01 now always intchooser widgets scrolling function from
+	  button 1 press should be more easy to use
+
+2004-05-24 19:13  kps
+
+	* src/server/rank.h: Rank_nuke_score is gone.
+
+2004-05-24 17:17  kps
+
+	* src/server/: command.c, rank.c: Stats command now allows
+	  abbreviated nicks for players that are currently on the server.
+	  Removed nuke command. Proper implementation would be something
+	  like /setscore or /setstats command.
+
+2004-05-23 21:24  juhal
+
+	* src/client/oalaudio.c: removed some cleanup calls (on linux)
+	  which caused hang/segfault
+
+2004-05-23 20:47  darelcullen
+
+	* src/client/xinit.c: oops forgot to check dpy when calling Change
+	  pointer control
+
+2004-05-23 17:38  kps
+
+	* src/server/shot.c: Make dropped mines be affected by gravity.
+
+2004-05-23 17:37  kps
+
+	* src/server/option.c: Add some more warnings about obsolete
+	  options.
+
+2004-05-23 00:52  uau
+
+	* src/server/event.c: Reset player state properly when pausing.
+
+2004-05-23 00:40  kps
+
+	* src/server/shot.c: Added Player_can_place_mine() inline function.
+	  Note that previously players could lay mines while phased if
+	  shieldedMining is true. Player_can_place_mine() doesn't allow
+	  that.
+
+2004-05-22 23:47  kps
+
+	* src/server/shot.c: Added Player_can_fire_shot().
+
+2004-05-22 22:36  kps
+
+	* src/server/: command.c, contact.c, server.h: Use
+	  Get_player_by_name() when kicking players in text interface.
+
+2004-05-22 00:36  kps
+
+	* src/server/robotdef.c: New Wrap_length_min() to make code a bit
+	  nicer looking and more efficient.  Use it in
+	  Robot_default_play_check_map().
+
+2004-05-21 21:52  kps
+
+	* src/server/: command.c, rank.c, rank.h: Make stats command work
+	  for players who aren't playing at the moment.  Change makes it
+	  necessary to type the whole player nick to get the stats,
+	  previously one could specify the player by an unique substring of
+	  the nick.
+
+2004-05-21 19:23  kps
+
+	* src/client/option.c: Print warning for valid looking xpilotrc
+	  lines that lack a colon.  Removed old Parse_xpilotrc_line().
+
+2004-05-21 17:27  kps
+
+	* src/server/: event.c, rank.c, rank.h: Remove
+	  Rank_set_logout_message(). Instead of setting the logout message
+	  in miscellaneous places we determine what logout message to use
+	  at the time we are saving the webpage.
+
+2004-05-21 01:02  kps
+
+	* lib/maps/polybloods.xp2, lib/maps/sadistic_bastard_v2.xp2,
+	  lib/maps/teamcup.xp, src/server/cmdline.c: Use value .5 for
+	  oldthrust (constantspeed) for Blood's style fighting.
+
+2004-05-20 23:28  uau
+
+	* src/server/: cmdline.c, option.c: Fixed default value of a float
+	  option from 0 to "0", added an assert that should catch such
+	  mistakes.
+
+2004-05-20 22:13  uau
+
+	* src/server/: cmdline.c, server.h, update.c: constantSpeed option
+
+2004-05-20 21:21  uau
+
+	* src/server/: asteroid.c, cmdline.c, item.c, server.h, update.c,
+	  walls.c: Reverted unnecessarily messy oldThrust patch, will
+	  implement essentially the same functionality in another way soon
+
+2004-05-20 18:41  kps
+
+	* src/client/option.c: New implementation of Parse_xpilotrc_line,
+	  which doesn't use strtok().  The old implementation was buggy,
+	  e.g. it could not handle this line correctly:
+	  xpilot.msg2:#=[#t|2|/team 4|/team 2]
+
+2004-05-20 16:02  darelcullen
+
+	* src/client/sdl/sdlevent.c: Quit button fix.
+
+2004-05-20 15:45  darelcullen
+
+	* src/client/oalaudio.c: Windows sound support.
+
+2004-05-19 18:35  darelcullen
+
+	* src/client/sdl/sdlevent.c: Make the quit button work with the sdl
+	  even tloop
+
+2004-05-19 12:53  kps
+
+	* Makefile.in, aclocal.m4, doc/Makefile.in, doc/man/Makefile.in,
+	  lib/Makefile.in, lib/fonts/Makefile.in, lib/maps/Makefile.in,
+	  lib/sound/Makefile.in, lib/textures/Makefile.in, src/Makefile.in,
+	  src/client/Makefile.in, src/client/NT/Makefile.in,
+	  src/client/NT/res/Makefile.in, src/client/items/Makefile.in,
+	  src/client/sdl/Makefile.in, src/common/Makefile.in,
+	  src/common/NT/Makefile.in, src/common/NT/bindist/Makefile.in,
+	  src/replay/Makefile.in, src/replay/tools/Makefile.in,
+	  src/server/Makefile.in: Generated files with automake 1.8.5.
+
+2004-05-19 12:48  kps
+
+	* lib/sound/.cvsignore: cvs should ignore Makefile.
+
+2004-05-18 19:38  maximan
+
+	* src/server/: Makefile.in, asteroid.c, cmdline.c, item.c,
+	  server.h, update.c, walls.c: option:oldAcceleration/oldThrust
+	  todo:double&triple check all stuff concerning speeds of objects
+
+2004-05-18 17:59  kps
+
+	* src/common/shipshape.c: Removed use of inline (to make a certain
+	  compiler happy).
+
+2004-05-17 21:59  kps
+
+	* src/client/: esdaudio.c, rplayaudio.c: only audio we support now
+	  is openal.
+
+2004-05-17 18:51  kps
+
+	* Makefile.in, aclocal.m4, config.h.in, configure, doc/Makefile.in,
+	  doc/man/Makefile.in, lib/Makefile.in, lib/fonts/Makefile.in,
+	  lib/maps/Makefile.in, lib/textures/Makefile.in, src/Makefile.in,
+	  src/client/Makefile.am, src/client/Makefile.in,
+	  src/client/NT/Makefile.in, src/client/NT/res/Makefile.in,
+	  src/client/items/Makefile.in, src/client/sdl/Makefile.in,
+	  src/common/Makefile.in, src/common/NT/Makefile.in,
+	  src/common/NT/bindist/Makefile.in, src/replay/Makefile.in,
+	  src/replay/tools/Makefile.in, src/server/Makefile.in:
+	  xpilot-ng-x11 now links to libxpclient.a.
+
+2004-05-17 18:50  kps
+
+	* src/client/option.c: Wrote some comments about
+	  Parse_xpilotrc_line().
+
+2004-05-16 20:16  juhal
+
+	* lib/sound/sounds.txt: decreased thrust volume because it is
+	  horrible at 50 fps
+
+2004-05-16 15:50  juhal
+
+	* src/client/oalaudio.c: added support for OpenAL sound
+
+2004-05-16 15:42  juhal
+
+	* Makefile.in, aclocal.m4, config.h.in, configure, configure.ac,
+	  doc/Makefile.in, doc/man/Makefile.in, lib/Makefile.am,
+	  lib/Makefile.in, lib/sounds.txt, lib/fonts/Makefile.in,
+	  lib/maps/Makefile.in, lib/sound/Drop01.wav,
+	  lib/sound/Makefile.am, lib/sound/Makefile.in,
+	  lib/sound/MusicaDefault.wav, lib/sound/RobotzDefault.wav,
+	  lib/sound/RobotzQuestion.wav, lib/sound/UtopiaClose.wav,
+	  lib/sound/bfire.wav, lib/sound/bloop.wav, lib/sound/buzzer.wav,
+	  lib/sound/confirm.wav, lib/sound/corkpop.wav, lib/sound/done.wav,
+	  lib/sound/doorchimes.wav, lib/sound/explo2.wav,
+	  lib/sound/failure.wav, lib/sound/finished.wav,
+	  lib/sound/flare.wav, lib/sound/gundead.wav,
+	  lib/sound/launch1.18.wav, lib/sound/lboom.wav,
+	  lib/sound/magic.wav, lib/sound/popclick.wav, lib/sound/sboom.wav,
+	  lib/sound/sbounce.wav, lib/sound/sounds.txt,
+	  lib/sound/sstart.wav, lib/sound/success.wav,
+	  lib/sound/waiting.wav, lib/sound/zap.wav,
+	  lib/textures/Makefile.in, src/Makefile.in,
+	  src/client/Makefile.am, src/client/Makefile.in,
+	  src/client/caudio.c, src/client/debugaudio.c,
+	  src/client/default.c, src/client/esdaudio.c,
+	  src/client/rplayaudio.c, src/client/xpilot.c,
+	  src/client/NT/Makefile.in, src/client/NT/res/Makefile.in,
+	  src/client/items/Makefile.in, src/client/sdl/Makefile.am,
+	  src/client/sdl/Makefile.in, src/common/Makefile.in,
+	  src/common/NT/Makefile.in, src/common/NT/bindist/Makefile.in,
+	  src/replay/Makefile.in, src/replay/tools/Makefile.in,
+	  src/server/Makefile.in: added support for OpenAL sound
+
+2004-05-13 15:26  kps
+
+	* src/common/shipshape.c: Changed remaining GRID macros to
+	  functions.
+
+2004-05-13 13:37  kps
+
+	* src/server/walls.c: Try to make shoves live longer when fps >
+	  gamespeed.
+
+2004-05-12 21:21  kps
+
+	* src/common/shipshape.c: Improved some warning messages. Changed
+	  some macros to functions.
+
+2004-05-12 19:51  kps
+
+	* src/common/shipshape.c: Fixed bug which could crash client or
+	  server if some point defined in shipshape was outside the grid
+	  defined in the code.
+
+2004-05-11 18:00  kps
+
+	* src/server/update.c: Code to measure distance travelled (have to
+	  turn if(0) to if(1) to use).	Code will be removed after ship
+	  thrust issues have been investigated.
+
+2004-05-11 17:57  kps
+
+	* src/server/cmdline.c: Set default shipMass back to 20.
+
+2004-05-07 21:37  kps
+
+	* src/common/shipshape.c: Disable shipshapes due to bug.
+
+2004-05-04 11:48  kps
+
+	* src/server/: cmdline.c, server.h, serverconst.h: Added option
+	  which can be used to modify afterburner power.
+
+2004-04-29 12:20  maximan
+
+	* src/client/sdl/sdlevent.c: [no log message]
+
+2004-04-28 20:29  maximan
+
+	* src/client/: default.c, netclient.h, xevent.c, sdl/sdlevent.c:
+	  bugfixes and maxMouseTurnsPF is now maxMouseTurnsPS (max turns
+	  per second) set to 0 to work as normal)
+
+2004-04-28 20:06  maximan
+
+	* src/client/: xevent.c, sdl/gameloop.c, sdl/sdlevent.c: [no log
+	  message]
+
+2004-04-28 18:38  maximan
+
+	* src/client/: default.c, join.c, meta.c, netclient.h, xevent.c,
+	  xevent.h, sdl/gameloop.c, sdl/gameloop_x.c, sdl/sdlevent.c: new
+	  option maxMouseTurnsPF (client) set to 0 things work as normal.
+	  otherwise the client will only send mouse events every
+	  1/(maxMouseTurnsPF*MIN(maxFPS,FPS) seconds.  (limits outgoing
+	  traffic alot, useful on modem)
+
+2004-04-28 02:09  uau
+
+	* src/client/netclient.c: Changed keyboard state resends so that
+	  the state is only resent max once per frame received from server.
+	  Before it was resent every time another packet was sent until the
+	  server acked it, and mouse control can create lots of small
+	  packets.
+
+2004-04-27 23:41  maximan
+
+	* src/: client/sdl/glwidgets.c, server/play.c: Save button now only
+	  appears when you press 'config' on the menu.
+
+2004-04-27 00:40  kps
+
+	* Makefile.in, README, aclocal.m4, configure, configure.ac,
+	  doc/Makefile.in, doc/man/Makefile.in, lib/Makefile.in,
+	  lib/fonts/Makefile.in, lib/maps/Makefile.in,
+	  lib/textures/Makefile.in, src/Makefile.in,
+	  src/client/Makefile.in, src/client/NT/Makefile.in,
+	  src/client/NT/res/Makefile.in, src/client/items/Makefile.in,
+	  src/client/sdl/Makefile.in, src/common/Makefile.in,
+	  src/common/version.h, src/common/NT/Makefile.in,
+	  src/common/NT/bindist/Makefile.in, src/replay/Makefile.in,
+	  src/replay/tools/Makefile.in, src/server/Makefile.in: Generated
+	  files with automake 1.8.4-1
+
+2004-04-27 00:26  kps
+
+	* doc/man/: xpilot-ng-sdl.man, xpilot-ng-x11.man: Changes for
+	  4.6.4.
+
+2004-04-27 00:18  kps
+
+	* src/client/event.c: more setting changes, e.g. a and s don't turn
+	  any more.
+
+2004-04-27 00:12  kps
+
+	* src/client/NT/res/.cvsignore: Ignore Makefile
+
+2004-04-27 00:01  kps
+
+	* src/client/default.c: Moved alt settings close to the end with
+	  other useless options.
+
+2004-04-26 23:30  kps
+
+	* src/client/NT/.cvsignore: ignore Makefile
+
+2004-04-26 22:18  kps
+
+	* src/client/option.c: Add space after comment char in commented
+	  options.
+
+2004-04-26 21:27  kps
+
+	* src/client/widget.c: Callback should be called, even for color
+	  widgets.
+
+2004-04-26 20:52  darelcullen
+
+	* src/client/bitmaps.c: fixed mfc errors.
+
+2004-04-26 19:44  kps
+
+	* src/common/xpcommon.h: Define PACKAGE_BUGREPORT on windoze.
+
+2004-04-25 21:34  kps
+
+	* Makefile.am, Makefile.in, configure, configure.ac,
+	  src/client/Makefile.am, src/client/Makefile.in,
+	  src/client/NT/Makefile.am, src/client/NT/Makefile.in,
+	  src/client/NT/res/Makefile.am, src/client/NT/res/Makefile.in,
+	  src/client/sdl/Makefile.am, src/client/sdl/Makefile.in,
+	  src/common/Makefile.am, src/common/Makefile.in,
+	  src/common/NT/Makefile.am, src/common/NT/Makefile.in,
+	  src/common/NT/bindist/Makefile.am,
+	  src/common/NT/bindist/Makefile.in: Added windoze sources and
+	  stuff to EXTRA_DIST.
+
+2004-04-25 20:07  kps
+
+	* Makefile.in, README, aclocal.m4, config.h.in, configure,
+	  configure.ac, doc/Makefile.in, doc/man/Makefile.in,
+	  doc/man/xpilot-ng-sdl.man, doc/man/xpilot-ng-server.man,
+	  doc/man/xpilot-ng-x11.man, lib/Makefile.in,
+	  lib/fonts/Makefile.in, lib/maps/Makefile.in,
+	  lib/textures/Makefile.in, src/Makefile.in,
+	  src/client/Makefile.in, src/client/event.c,
+	  src/client/items/Makefile.in, src/client/sdl/Makefile.in,
+	  src/common/Makefile.in, src/common/version.h,
+	  src/replay/Makefile.in, src/replay/tools/Makefile.in,
+	  src/server/Makefile.in: Version is now 4.6.3.  Changes compared
+	  to 4.6.2: - new option loading and saving code.  - A lot of
+	  changed options, e.g.    - quit on Esc    - kbd steering on arrow
+	  keys	- newbie help messages if option newbie is true - SDL
+	  client changes, including new fonts - bugfixes, e.g. clusters
+	  talk bug fix - polybloods has less "glue" on walls now
+	  (playerwallbrake option 0.5 changed to 0.6)
+
+2004-04-25 19:32  maximan
+
+	* Makefile.in, aclocal.m4, config.h.in, configure, doc/Makefile.in,
+	  doc/man/Makefile.in, lib/Makefile.in, lib/fonts/Makefile.in,
+	  lib/maps/Makefile.in, lib/textures/Makefile.in, src/Makefile.in,
+	  src/client/Makefile.in, src/client/items/Makefile.in,
+	  src/common/Makefile.in, src/replay/Makefile.in,
+	  src/replay/tools/Makefile.in, src/server/Makefile.in: [no log
+	  message]
+
+2004-04-25 19:30  maximan
+
+	* src/client/sdl/: Makefile.in, sdlinit.c: stupid bugfix, info
+	  string of mapFontSize was wrong
+
+2004-04-25 18:49  juhal
+
+	* lib/fonts/: Makefile.am, Test.ttf, defaultfont.bmp: removed
+	  unused fonts
+
+2004-04-25 18:39  juhal
+
+	* src/client/sdl/sdlinit.c: changed default font
+
+2004-04-25 18:34  juhal
+
+	* lib/fonts/FreeSansBoldOblique.ttf: this replaces the Test.ttf
+	  that might have licensing problems
+
+2004-04-25 17:59  kps
+
+	* AUTHORS: Change Improved XPilot to XPilot NG.
+
+2004-04-25 17:55  maximan
+
+	* src/client/: event.c, sdl/glwidgets.c, sdl/glwidgets.h,
+	  sdl/sdlevent.c, sdl/sdlgui.c, sdl/sdlinit.c, sdl/text.h:
+	  Bugfixes, tweaks.  new option '-TTFont <string>' for user
+	  specified font. (reverts to default font) conf menu
+	  appears/disappears with pointercontrol now instead of clicking
+	  the background.
+
+2004-04-25 17:54  kps
+
+	* src/client/option.c: Save default values as commented when saving
+	  xpilotrc.  Use CR LF when saving on windows.
+
+2004-04-25 16:31  kps
+
+	* lib/maps/polybloods.xp2: Remove some glue from walls.
+
+2004-04-25 15:56  kps
+
+	* src/client/option.c: Do audioInit at end of Parse_options.
+	  Removed some unused code.
+
+2004-04-25 15:45  kps
+
+	* src/client/option.c: Call set function even if option value is
+	  empty, remove cluttering comments for saved option values.
+
+2004-04-25 15:43  kps
+
+	* src/client/event.c: Set F11 to be keyToggleRadarScore, Shift_R to
+	  keyDropBall.
+
+2004-04-25 15:17  kps
+
+	* src/client/: default.c, xdefault.c: Changed some defaults:
+	  mouseAccelInClient->true, sparkSize->2 (looks cooler),
+	  messageFont back to old default.
+
+2004-04-25 14:45  kps
+
+	* src/client/: client.h, colors.c, xdefault.c, xevent.c, xinit.c,
+	  xinit.h, xpaint.c: Added Set_fontName function which removes
+	  whitespace from font specifications.	Moved externs to header
+	  files.
+
+2004-04-25 14:43  kps
+
+	* src/client/option.c: Fix warning.
+
+2004-04-25 14:40  kps
+
+	* src/server/: asteroid.c, netserver.c, target.c, wormhole.c: Fix
+	  warnings. Don't place new asteroids too close to player.
+
+2004-04-25 14:00  kps
+
+	* src/client/: colors.c, xinit.h: Make color_names static.
+
+2004-04-25 13:55  kps
+
+	* src/client/colors.c: Remove whitespace from color definition in
+	  Parse_colors, not in Set_color.
+
+2004-04-25 13:37  kps
+
+	* src/client/colors.c: Remove whitespace from color values because
+	  X functions don't like it.
+
+2004-04-25 01:26  darelcullen
+
+	* ChangeLog:  Changelog updates
+
 2004-04-25 01:16  kps
 
 	* doc/man/: xpilot-ng-sdl.man, xpilot-ng-x11.man: defaults changed,
@@ -414,6 +1497,11 @@
 2004-04-13 17:51  kps
 
 	* src/server/robot.c: Use improved Set_message().
+
+2004-04-13 15:26  darelcullen
+
+	* src/client/sdl/res/xpilot.ico: nice xpilot icon (C) colonel blood
+	  :)
 
 2004-04-13 15:24  darelcullen
 

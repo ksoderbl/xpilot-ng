@@ -28,7 +28,7 @@
 void Object_hits_wormhole(object_t *obj, int ind)
 {
     /*world_t *world = &World;
-      wormhole_t *wormhole = Wormholes(world, ind);*/
+      wormhole_t *wormhole = Wormhole_by_index(world, ind);*/
 
     SET_BIT(obj->status, WARPING);
     obj->wormHoleHit = ind;
@@ -102,8 +102,7 @@ static int Find_wormhole_dest(world_t *world, wormhole_t *wh_hit, player_t *pl)
 	do
 	    wh_dest = (int)(rfrac() * world->NumWormholes);
 	while (world->wormholes[wh_dest].type == WORM_IN
-	       || pl->wormHoleHit == wh_dest
-	       || world->wormholes[wh_dest].temporary);
+	       || pl->wormHoleHit == wh_dest);
 	return wh_dest;
     }
 
@@ -111,11 +110,10 @@ static int Find_wormhole_dest(world_t *world, wormhole_t *wh_hit, player_t *pl)
     proxFront = proxRear = 1e20;
 
     for (wh_dest = 0; wh_dest < world->NumWormholes; wh_dest++) {
-	wormhole_t *wh = Wormholes(world, wh_dest);
+	wormhole_t *wh = Wormhole_by_index(world, wh_dest);
 
 	if (wh_dest == pl->wormHoleHit
-	    || wh->type == WORM_IN
-	    || wh->temporary)
+	    || wh->type == WORM_IN)
 	    continue;
 
 	wcx = WRAP_DCX(wh->pos.cx - wh_hit->pos.cx);
@@ -162,7 +160,7 @@ void Traverse_wormhole(player_t *pl)
     clpos_t dest;
     int wh_dest;
     world_t *world = pl->world;
-    wormhole_t *wh_hit = Wormholes(world, pl->wormHoleHit);
+    wormhole_t *wh_hit = Wormhole_by_index(world, pl->wormHoleHit);
 
 #if 0
     warn("player %s is in Traverse_wormhole", pl->name);
@@ -185,8 +183,7 @@ void Traverse_wormhole(player_t *pl)
 
     if (wh_dest != pl->wormHoleHit) {
 	wh_hit->lastdest = wh_dest;
-	if (!world->wormholes[wh_dest].temporary)
-	    wh_hit->countdown = options.wormholeStableTicks;
+	wh_hit->countdown = options.wormholeStableTicks;
     }
 
     CLR_BIT(pl->status, WARPING);
@@ -224,12 +221,6 @@ void Hyperjump(player_t *pl)
 	return;
     }
 
-#if 0
-    /* kps - we need a option warpingCreatesWormhole or such */
-    if (options.wormholeStableTicks > 0)
-	World_add_temporary_wormholes(world, pl->pos, dest);
-#endif
-
     sound_play_sensors(pl->pos, HYPERJUMP_SOUND);
 
     Warp_balls(pl, dest);
@@ -258,7 +249,7 @@ bool Wormhole_hitfunc(group_t *gp, move_t *move)
 {
     object_t *obj = move->obj;
     world_t *world = &World;
-    wormhole_t *wormhole = Wormholes(world, gp->mapobj_ind);
+    wormhole_t *wormhole = Wormhole_by_index(world, gp->mapobj_ind);
 
     if (wormhole->type == WORM_OUT)
 	return false;
@@ -297,7 +288,7 @@ bool Wormhole_hitfunc(group_t *gp, move_t *move)
 	 */
 	if (pl->warped > 0
 	    && wormhole->type == WORM_NORMAL
-	    && wormhole == Wormholes(pl->wormHoleDest)
+	    && wormhole == Wormhole_by_index(pl->wormHoleDest)
 	    /* kps - wormHoleDest is now pointer */
 	    /*&& pl->wormHoleDest == ind */)
 	    return false;

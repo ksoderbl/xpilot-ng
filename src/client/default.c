@@ -30,8 +30,6 @@
 char default_version[] = VERSION;
 
 static double	hudScale;	/* Scale for HUD drawing */
-int maxMouseTurnsPS = 0;
-long movement_interval = 0;
 
 static bool Set_nickName(xp_option_t *opt, const char *value)
 {
@@ -379,9 +377,6 @@ static bool Set_maxFPS(xp_option_t *opt, int val)
 {
     UNUSED_PARAM(opt);
     maxFPS = val;
-    if (maxMouseTurnsPS) {
-    	movement_interval = 1000000 / maxMouseTurnsPS;
-    } else movement_interval = 0;
     Check_client_fps();
     return true;
 }
@@ -390,9 +385,12 @@ static bool Set_maxMouseTurnsPS(xp_option_t *opt, int val)
 {
     UNUSED_PARAM(opt);
     maxMouseTurnsPS = val;
-    if (maxMouseTurnsPS) {
-    	movement_interval = 1000000 / maxMouseTurnsPS;
-    } else movement_interval = 0;
+    if (maxMouseTurnsPS > 0) {
+	mouseMovementInterval = 1000000 / maxMouseTurnsPS;
+	if (mouseMovementInterval * maxMouseTurnsPS < 1000000)
+	    mouseMovementInterval++;
+    }
+    /*warn("mouseMovementInterval = %d", mouseMovementInterval);*/
     return true;
 }
 
@@ -416,7 +414,7 @@ static bool Set_hudScale(xp_option_t *opt, double value)
 static bool Set_backgroundPointDist(xp_option_t *opt, int val)
 {
     UNUSED_PARAM(opt);
-    map_point_distance = val;
+    backgroundPointDist = val;
     if (oldServer)
 	Map_dots();
     return true;
@@ -425,24 +423,24 @@ static bool Set_backgroundPointDist(xp_option_t *opt, int val)
 static bool Set_backgroundPointSize(xp_option_t *opt, int val)
 {
     UNUSED_PARAM(opt);
-    map_point_size = val;
+    backgroundPointSize = val;
     if (oldServer)
 	Map_dots();
     return true;
 }
 
-static bool Set_showSlidingRadar(xp_option_t *opt, bool val)
+static bool Set_slidingRadar(xp_option_t *opt, bool val)
 {
     UNUSED_PARAM(opt);
-    instruments.showSlidingRadar = val;
+    instruments.slidingRadar = val;
     Paint_sliding_radar();
     return true;
 }
 
-static bool Set_showOutlineWorld(xp_option_t *opt, bool val)
+static bool Set_outlineWorld(xp_option_t *opt, bool val)
 {
     UNUSED_PARAM(opt);
-    instruments.showOutlineWorld = val;
+    instruments.outlineWorld = val;
     if (oldServer && Setup) {
 	/* don't bother to check if recalculations are really needed. */
 	Map_restore(0, 0, Setup->x, Setup->y);
@@ -451,10 +449,10 @@ static bool Set_showOutlineWorld(xp_option_t *opt, bool val)
     return true;
 }
 
-static bool Set_showFilledWorld(xp_option_t *opt, bool val)
+static bool Set_filledWorld(xp_option_t *opt, bool val)
 {
     UNUSED_PARAM(opt);
-    instruments.showFilledWorld = val;
+    instruments.filledWorld = val;
     if (oldServer && Setup) {
 	/* don't bother to check if recalculations are really needed. */
 	Map_restore(0, 0, Setup->x, Setup->y);
@@ -463,10 +461,10 @@ static bool Set_showFilledWorld(xp_option_t *opt, bool val)
     return true;
 }
 
-static bool Set_showTexturedWalls(xp_option_t *opt, bool val)
+static bool Set_texturedWalls(xp_option_t *opt, bool val)
 {
     UNUSED_PARAM(opt);
-    instruments.showTexturedWalls = val;
+    instruments.texturedWalls = val;
 
     if (Setup) {
 	if (oldServer) {
@@ -622,8 +620,6 @@ xp_option_t default_options[] = {
 	XP_OPTFLAG_NO_SAVE,
 	"Use UDP ports clientPortStart - clientPortEnd (for firewalls).\n"),
 
-
-    /* steering */
     XP_DOUBLE_OPTION(
 	"power",
 	55.0,
@@ -682,7 +678,7 @@ xp_option_t default_options[] = {
 
     XP_INT_OPTION(
 	"maxFPS",
-	100,
+	MAX_SUPPORTED_FPS,
 	1,
 	MAX_SUPPORTED_FPS,
 	&maxFPS,
@@ -702,6 +698,16 @@ xp_option_t default_options[] = {
 	"Set maximum number of mouse turns sent per second\n"
 	"Set to 0 to disable this feature (its mostly useful on modem)\n"),
 
+    XP_INT_OPTION(
+	"sparkSize",
+	2,
+	MIN_SPARK_SIZE,
+	MAX_SPARK_SIZE,
+	&sparkSize,
+	NULL,
+	XP_OPTFLAG_CONFIG_DEFAULT,
+	"Size of sparks in pixels.\n"),
+
     XP_DOUBLE_OPTION(
 	"sparkProb",
 	0.4,
@@ -714,8 +720,6 @@ xp_option_t default_options[] = {
 	"This gives a sparkling effect.\n"
 	"Valid values are in the range [0.0-1.0]\n"),
 
-
-    /* hud stuff */
     XP_INT_OPTION(
 	"hudRadarDotSize",
 	8,
@@ -772,14 +776,21 @@ xp_option_t default_options[] = {
 	"A value of 2 makes the base name flash when a ship is appearing.\n"
 	"A value of 3 combines the effects of values 1 and 2.\n"),
 
-
-    /* instruments */
+    XP_INT_OPTION(
+	"maxCharsInNames",
+	MAX_NAME_LEN,
+	0,
+	MAX_NAME_LEN,
+	&maxCharsInNames,
+	NULL,
+	XP_OPTFLAG_CONFIG_DEFAULT,
+	"Maximum number of characters to paint in names on game area.\n"),
 
     XP_BOOL_OPTION(
 	"slidingRadar",
 	true,
-	&instruments.showSlidingRadar,
-	Set_showSlidingRadar,
+	&instruments.slidingRadar,
+	Set_slidingRadar,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"If the game is in edgewrap mode then the radar will keep your\n"
 	"position on the radar in the center and raw the rest of the radar\n"
@@ -847,8 +858,8 @@ xp_option_t default_options[] = {
     XP_BOOL_OPTION(
 	"filledWorld",
 	false,
-	&instruments.showFilledWorld,
-	Set_showFilledWorld,
+	&instruments.filledWorld,
+	Set_filledWorld,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"Draws the walls solid, filled with one color,\n"
 	"unless overridden by texture.\n"
@@ -857,17 +868,25 @@ xp_option_t default_options[] = {
     XP_BOOL_OPTION(
 	"texturedWalls",
 	true,
-	&instruments.showTexturedWalls,
-	Set_showTexturedWalls,
+	&instruments.texturedWalls,
+	Set_texturedWalls,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"Allows drawing polygon bitmaps specified by the (new-style) map.\n"
 	"Be warned that this needs a reasonably fast graphics system.\n"),
 
     XP_BOOL_OPTION(
+	"blockProtocol",
+	false,
+	&instruments.blockProtocol,
+	NULL,
+	XP_OPTFLAG_CONFIG_DEFAULT,
+	"Prefer (old) block protocol when joining servers.\n"),
+
+    XP_BOOL_OPTION(
 	"outlineWorld",
 	false,
-	&instruments.showOutlineWorld,
-	Set_showOutlineWorld,
+	&instruments.outlineWorld,
+	Set_outlineWorld,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"Draws only the outline of all the wall blocks\n"
 	"on block based maps.\n"),
@@ -883,7 +902,7 @@ xp_option_t default_options[] = {
     XP_BOOL_OPTION(
 	"outlineDecor",
 	false,
-	&instruments.showOutlineDecor,
+	&instruments.outlineDecor,
 	NULL,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"Draws only the outline of the map decoration.\n"),
@@ -891,7 +910,7 @@ xp_option_t default_options[] = {
     XP_BOOL_OPTION(
 	"filledDecor",
 	false,
-	&instruments.showFilledDecor,
+	&instruments.filledDecor,
 	NULL,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"Draws filled decorations.\n"),
@@ -899,7 +918,7 @@ xp_option_t default_options[] = {
     XP_BOOL_OPTION(
 	"texturedDecor",
 	false,
-	&instruments.showTexturedDecor,
+	&instruments.texturedDecor,
 	NULL,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"Draws the map decoration filled with a texture pattern.\n"),
@@ -907,7 +926,7 @@ xp_option_t default_options[] = {
     XP_BOOL_OPTION(
 	"clientRanker",
 	false,
-	&instruments.useClientRanker,
+	&instruments.clientRanker,
 	NULL,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"Scan messages and make personal kill/death ranking.\n"),
@@ -915,19 +934,17 @@ xp_option_t default_options[] = {
     XP_BOOL_OPTION(
 	"clockAMPM",
 	false,
-	&instruments.useAMPMFormatClock,
+	&instruments.clockAMPM,
 	NULL,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"Use AMPM format for clock display instead of 24 hour format.\n"),
 
-
-    /* painted stuff */
     XP_INT_OPTION(
 	"shotSize",
 	5,
 	MIN_SHOT_SIZE,
 	MAX_SHOT_SIZE,
-	&shot_size,
+	&shotSize,
 	NULL,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"The size of shots in pixels.\n"),
@@ -937,28 +954,18 @@ xp_option_t default_options[] = {
 	3,
 	MIN_TEAMSHOT_SIZE,
 	MAX_TEAMSHOT_SIZE,
-	&teamshot_size,
+	&teamShotSize,
 	NULL,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"The size of team shots in pixels.\n"
 	"Note that team shots are drawn in teamShotColor.\n"),
 
     XP_INT_OPTION(
-	"sparkSize",
-	2,
-	MIN_SPARK_SIZE,
-	MAX_SPARK_SIZE,
-	&spark_size,
-	NULL,
-	XP_OPTFLAG_CONFIG_DEFAULT,
-	"Size of sparks in pixels.\n"),
-
-    XP_INT_OPTION(
 	"backgroundPointDist",
 	8,
 	0,
 	10,
-	&map_point_distance,
+	&backgroundPointDist,
 	Set_backgroundPointDist,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"The distance between points in the background measured in blocks.\n"
@@ -970,7 +977,7 @@ xp_option_t default_options[] = {
 	2,
 	MIN_MAP_POINT_SIZE,
 	MAX_MAP_POINT_SIZE,
-	&map_point_size,
+	&backgroundPointSize,
 	Set_backgroundPointSize,
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"Specifies the size of the background points.  0 means no points.\n"),
@@ -985,7 +992,6 @@ xp_option_t default_options[] = {
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"How many seconds score objects remain visible on the map.\n"),
 
-    /* message stuff */
     XP_INT_OPTION(
 	"charsPerSecond",
 	100,
@@ -1039,8 +1045,6 @@ xp_option_t default_options[] = {
 	"Number of your messages saved in the `history' of the talk window.\n"
 	"`history' is accessible with `keyTalkCursorUp/Down'.\n"),
 
-
-    /* misc stuff */
     XP_BOOL_OPTION(
 	"toggleShield",
 	false,
@@ -1163,7 +1167,6 @@ xp_option_t default_options[] = {
 	"Too complicated.  Keep it on 3.\n"),
 #endif
 
-    /* eye candy stuff */
     XP_BOOL_OPTION(
 	"markingLights",
 	false,
@@ -1172,8 +1175,6 @@ xp_option_t default_options[] = {
 	XP_OPTFLAG_CONFIG_DEFAULT,
 	"Should the fighters have marking lights, just like airplanes?\n"),
 
-
-    /* modbanks */
     XP_STRING_OPTION(
 	"modifierBank1",
 	"",

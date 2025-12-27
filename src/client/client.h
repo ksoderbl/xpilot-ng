@@ -55,22 +55,24 @@
 #endif
 
 typedef struct {
-    bool showShipShapes;
-    bool showMyShipShape;
-    bool showShipShapesHack;
-    bool showLivesByShip;
-    bool showItems;
+    bool blockProtocol;
+    bool clientRanker;
+    bool clockAMPM;
+    bool filledDecor;
+    bool filledWorld;
+    bool outlineDecor;
+    bool outlineWorld;
     bool showDecor;
-    bool showOutlineWorld;
-    bool showFilledWorld;
-    bool showTexturedWalls;
-    bool showOutlineDecor;
-    bool showFilledDecor;
-    bool showTexturedDecor;
+    bool showItems;
+    bool showLivesByShip;
     bool showMessages;
-    bool showSlidingRadar;
-    bool useClientRanker;
-    bool useAMPMFormatClock;
+    bool showMyShipShape;
+    bool showNastyShots;
+    bool showShipShapes;
+    bool showShipShapesHack;
+    bool slidingRadar;
+    bool texturedDecor;
+    bool texturedWalls;
 } instruments_t;
 
 typedef struct {
@@ -92,9 +94,9 @@ typedef struct {
 #define MIN_SPARK_SIZE		1
 #define MAX_MAP_POINT_SIZE	8
 #define MIN_MAP_POINT_SIZE	0
-#define MAX_SHOT_SIZE		8
+#define MAX_SHOT_SIZE		20
 #define MIN_SHOT_SIZE		1
-#define MAX_TEAMSHOT_SIZE	8
+#define MAX_TEAMSHOT_SIZE	20
 #define MIN_TEAMSHOT_SIZE	1
 
 #define MIN_SHOW_ITEMS_TIME	0.0
@@ -184,7 +186,6 @@ do {								\
 
 
 typedef struct {
-    double	ratio;
     double	score;
     short	id;
     uint16_t	team;
@@ -198,6 +199,8 @@ typedef struct {
     short	war_id;
     short	name_width;	/* In pixels */
     short	name_len;	/* In bytes */
+    short	max_chars_in_names;	/* name_width was calculated
+					   for this value of maxCharsInNames */
     short	ignorelevel;
     shipshape_t	*ship;
     char	nick_name[MAX_CHARS];
@@ -500,11 +503,11 @@ extern int	roundDelayMax;
 
 extern unsigned	RadarWidth;
 extern unsigned	RadarHeight;
-extern int	map_point_distance;	/* spacing of navigation points */
-extern int	map_point_size;		/* size of navigation points */
-extern int	spark_size;		/* size of sparks and debris */
-extern int	shot_size;		/* size of shot */
-extern int	teamshot_size;		/* size of team shot */
+extern int	backgroundPointDist;	/* spacing of navigation points */
+extern int	backgroundPointSize;	/* size of navigation points */
+extern int	sparkSize;		/* size of sparks and debris */
+extern int	shotSize;		/* size of shot */
+extern int	teamShotSize;		/* size of team shot */
 
 extern double	controlTime;		/* Display control for how long? */
 extern u_byte	spark_rand;		/* Sparkling effect */
@@ -546,7 +549,7 @@ extern long	packet_loop;		/* start of measurement */
 extern bool	showUserName;		/* Show username instead of nickname */
 extern char	servername[MAX_CHARS];	/* Name of server connecting to */
 extern unsigned	version;		/* Version of the server */
-extern int	scoresChanged;
+extern bool	scoresChanged;
 extern bool	toggle_shield;		/* Are shields toggled by a press? */
 extern bool	shields;		/* When shields are considered up */
 extern bool	auto_shield;            /* drops shield for fire */
@@ -555,13 +558,19 @@ extern bool	pointerControl;		/* current state of mouse ship flying */
 extern int	maxFPS;			/* Client's own FPS */
 extern int 	oldMaxFPS;
 extern int	clientFPS;	        /* How many fps we actually get */
+extern int	recordFPS;		/* Optimal FPS to record at. */
 extern time_t	currentTime;	        /* Current value of time() */
 extern bool	newSecond;              /* True if time() incremented this frame */
+extern int	maxMouseTurnsPS;
+extern int	mouseMovementInterval;
+extern int	cumulativeMouseMovement;
+
 extern char	modBankStr[][MAX_CHARS];/* modifier banks strings */
 
 extern int	clientPortStart;	/* First UDP port for clients */
 extern int	clientPortEnd;		/* Last one (these are for firewalls) */
 extern int	baseWarningType;	/* Which type of base warning you prefer */
+extern int	maxCharsInNames;
 extern byte	lose_item;		/* flag and index to drop item */
 extern int	lose_item_active;	/* one of the lose keys is pressed */
 
@@ -772,7 +781,8 @@ void Client_cleanup(void);
 int Client_start(void);
 int Client_fps_request(void);
 int Client_power(void);
-int Client_wrap_mode(void);
+int Client_pointer_move(int movement);
+int Client_check_pointer_move_interval(void);
 
 int Init_playing_windows(void);
 void Raise_window(void);

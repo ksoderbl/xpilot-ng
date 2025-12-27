@@ -102,9 +102,6 @@ int Init_asteroids(void)
 void Gui_paint_item_symbol(int type, Drawable d, GC mygc, int x, int y, int c)
 {
     if (!texturedObjects) {
-#ifdef _WINDOWS
-	rd.paintItemSymbol(type, d, mygc, x, y, c);
-#else
 	gcv.stipple = itemBitmaps[type];
 	gcv.fill_style = FillStippled;
 	gcv.ts_x_origin = x;
@@ -116,7 +113,6 @@ void Gui_paint_item_symbol(int type, Drawable d, GC mygc, int x, int y, int c)
 	XFillRectangle(dpy, d, mygc, x, y, ITEM_SIZE, ITEM_SIZE);
 	gcv.fill_style = FillSolid;
 	XChangeGC(dpy, mygc, GCFillStyle, &gcv);
-#endif
     } else
 	Bitmap_paint(d, BM_ALL_ITEMS, x, y, type);
 }
@@ -300,9 +296,9 @@ void Gui_paint_spark(int color, int x, int y)
     color = spark_color[color];
 
     Rectangle_add(color,
-		  x - spark_size/2,
-		  y - spark_size/2,
-		  spark_size, spark_size);
+		  x - sparkSize/2,
+		  y - sparkSize/2,
+		  sparkSize, sparkSize);
 
 }
 
@@ -384,19 +380,29 @@ void Gui_paint_fastshot(int color, int x, int y)
 	return;
 
     if (!texturedObjects) {
-        int z = shot_size/2;
+        int z = shotSize/2;
 
-	if (showNastyShots)
+	if (instruments.showNastyShots)
 	    Gui_paint_nastyshot(color, x, y, z);
-	else
-	    Rectangle_add(color,
-			  x - z,
-			  y - z,
-			  shot_size, shot_size);
+	else {
+	    /* Show round shots - jiman392 */
+	    if (shotSize > 2) {
+		SET_FG(colors[color].pixel);
+		rd.fillArc(dpy, drawPixmap, gameGC,
+			   WINSCALE(x - z), WINSCALE(y - z),
+			   UWINSCALE(shotSize), UWINSCALE(shotSize), 
+			   0, 64*360);
+	    } else
+		Rectangle_add(color,
+			      x - z,
+			      y - z,
+			      shotSize, shotSize);
+	}
     }
     else {
-	int s_size = (shot_size > 8) ? 8 : shot_size ;
+	int s_size = MIN(shotSize, 8);
 	int z = s_size / 2;
+
 	Bitmap_paint(drawPixmap, BM_BULLET, WINSCALE(x) - z,
 		     WINSCALE(y) - z, s_size - 1);
     }
@@ -404,13 +410,33 @@ void Gui_paint_fastshot(int color, int x, int y)
 
 void Gui_paint_teamshot(int x, int y)
 {
-    if (teamShotColor == 0)
+    int color = teamShotColor;
+
+    if (color == 0)
 	return;
 
-    if (!texturedObjects)
-	Gui_paint_nastyshot(teamShotColor, x, y, shot_size/2);
+    if (!texturedObjects) {
+        int z = teamShotSize/2;
+
+	if (instruments.showNastyShots)
+	    Gui_paint_nastyshot(color, x, y, z);
+	else {
+	    /* Show round shots - jiman392 */
+	    if (teamShotSize > 2) {
+		SET_FG(colors[color].pixel);
+		rd.fillArc(dpy, drawPixmap, gameGC,
+			   WINSCALE(x - z), WINSCALE(y - z),
+			   UWINSCALE(teamShotSize), UWINSCALE(teamShotSize), 
+			   0, 64*360);
+	    } else
+		Rectangle_add(color,
+			      x - z,
+			      y - z,
+			      teamShotSize, teamShotSize);
+	}
+    }
     else {
-	int s_size = (teamshot_size > 8) ? 8 : shot_size ;
+	int s_size = MIN(teamShotSize, 8);
 	int z = s_size / 2;
 	Bitmap_paint(drawPixmap, BM_BULLET_OWN, WINSCALE(x) - z,
 		     WINSCALE(y) - z, s_size - 1);
@@ -519,7 +545,7 @@ void Gui_paint_appearing(int x, int y, int id, int count)
     int color = other ? Life_color(other) : 0;
 
     if (!color)
-	color = RED;
+	color = WHITE;
 
     /* Make a note we are doing the base warning */
     if (version >= 0x4F12) {
@@ -652,7 +678,7 @@ static void Gui_paint_rounddelay(int x, int y)
 /*  Here starts the paint functions for ships  (MM) */
 static void Gui_paint_ship_name(int x, int y, other_t *other)
 {
-    FIND_NAME_WIDTH(other);
+    Check_name_string(other);
     if (shipNameColor) {
 	int color = Life_color(other);
 	if (!color)
@@ -1086,7 +1112,7 @@ static xp_option_t guiobject_options[] = {
 
     COLOR_INDEX_OPTION(
 	"zeroLivesColor",
-	3,
+	5,
 	&zeroLivesColor,
 	"Which color to associate with ships with zero lives left.\n"
 	"This can be used to paint for example ship and base names.\n"),
@@ -1107,7 +1133,7 @@ static xp_option_t guiobject_options[] = {
 
     COLOR_INDEX_OPTION(
 	"manyLivesColor",
-	13,
+	0,
 	&manyLivesColor,
 	"Which color to associate with ships with more than two lives left.\n"
 	"This can be used to paint for example ship and base names.\n"),

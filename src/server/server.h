@@ -91,7 +91,7 @@ extern int		NumRobots;
 extern int		login_in_progress;
 extern char		ShutdownReason[];
 extern sock_t		contactSocket;
-extern time_t		serverTime;
+extern time_t		serverStartTime;
 extern server_t		Server;
 extern char		*serverAddr;
 extern long		DEF_BITS, KILL_BITS, DEF_HAVE, DEF_USED, USED_KILL;
@@ -109,7 +109,6 @@ extern double		friction;
 extern int		roundtime;
 extern int		roundsPlayed;
 extern long		KILLING_SHOTS;
-extern unsigned		SPACE_BLOCKS;
 extern double		timeStep;
 extern double		timePerFrame;
 extern double		ecmSizeFactor;
@@ -161,10 +160,10 @@ extern struct options {
     int 	contactPort;
     char	*serverHost;
     char	*greeting;
-    bool	crashWithPlayer;
-    bool	bounceWithPlayer;
-    bool	playerKillings;
-    bool	playerShielding;
+    bool	allowPlayerCrashes;
+    bool	allowPlayerBounces;
+    bool	allowPlayerKilling;
+    bool	allowShields;
     bool	playerStartsShielded;
     bool	shotsWallBounce;
     bool	ballsWallBounce;
@@ -178,13 +177,13 @@ extern struct options {
     bool	asteroidsWallBounce;
     bool	pulsesWallBounce;
     bool	cloakedExhaust;
-    bool	cloakedShield;
     bool	ecmsReprogramMines;
     bool	ecmsReprogramRobots;
     double	maxObjectWallBounceSpeed;
     double	maxShieldedWallBounceSpeed;
     double	maxUnshieldedWallBounceSpeed;
     double	playerWallBrakeFactor;
+    double	playerWallFriction;
     double	objectWallBrakeFactor;
     double	objectWallBounceLifeFactor;
     double	wallBounceFuelDrainMult;
@@ -281,6 +280,7 @@ extern struct options {
     bool	targetSync;
     double	targetDeadTicks;
     bool	reportToMetaServer;
+    int		metaUpdateMaxSize;
     bool	searchDomainForXPilot;
     char	*denyHosts;
 
@@ -297,6 +297,7 @@ extern struct options {
     bool	targetTeamCollision;
     bool	treasureKillTeam;
     bool	captureTheFlag;
+    int		specialBallTeam;
     bool	treasureCollisionDestroys;
     bool	treasureCollisionMayKill;
     bool	wreckageCollisionMayKill;
@@ -351,11 +352,11 @@ extern struct options {
     int		maxVisibleObject;
     bool	pLockServer;
     bool	sound;
-    int		timerResolution;
 
     int		maxRoundTime;
     int		roundsToPlay;
 
+    bool	useDebris;
     bool	useWreckage;
     bool	ignore20MaxFPS;
     char	*password;
@@ -388,8 +389,8 @@ extern struct options {
     char	*dataURL;
     char	*recordFileName;
     double	gameSpeed;
-    bool	maraTurnqueue;
     bool	ngControls;
+    bool	maraWallBounce;
     double	constantSpeed;
     bool	ballStyles;
     bool	ignoreMaxFPS;
@@ -398,14 +399,12 @@ extern struct options {
     char	*teamcupStatServer;
     int		teamcupStatPort;
     int		teamcupMatchNumber;
+
+    double	mainLoopTime;
 } options;
 
 
-extern shape_t		ball_wire;
-extern shape_t		wormhole_wire;
-
-/* determine if a block is one of SPACE_BLOCKS */
-#define EMPTY_SPACE(s)	BIT(1U << (s), SPACE_BLOCKS)
+extern shape_t ball_wire, wormhole_wire, filled_wire;
 
 static inline vector_t World_gravity(world_t *world, clpos_t pos)
 {
@@ -493,12 +492,11 @@ int World_place_grav(world_t *world, clpos_t pos, double force, int type);
 int World_place_target(world_t *world, clpos_t pos, int team);
 int World_place_treasure(world_t *world, clpos_t pos, int team, bool empty,
 			 int ball_style);
-int World_place_wormhole(world_t *world, clpos_t pos, wormType type);
+int World_place_wormhole(world_t *world, clpos_t pos, wormtype_t type);
 int World_place_item_concentrator(world_t *world, clpos_t pos);
 int World_place_asteroid_concentrator(world_t *world, clpos_t pos);
 int World_place_friction_area(world_t *world, clpos_t pos, double fric);
 
-void World_add_temporary_wormholes(world_t *world, clpos_t pos1, clpos_t pos2);
 void Wormhole_line_init(world_t *world);
 
 void Compute_gravity(world_t *world);
@@ -668,21 +666,24 @@ player_t *Get_player_by_name(const char *str,
 /*
  * Prototypes for player.c
  */
-player_t *Players(int ind);
+extern int	playerArrayNumber;
+extern player_t	**PlayersArray;
+
 int GetInd(int id);
+
+/*
+ * Get player with index 'ind' from Players array.
+ */
+static inline player_t *Player_by_index(int ind)
+{
+    if (ind < 0 || ind >= playerArrayNumber)
+	return NULL;
+    return PlayersArray[ind];
+}
 
 static inline player_t *Player_by_id(int id)
 {
-    int ind = GetInd(id);
-
-#if 0
-    if (ind < 0 || ind >= NumPlayers) {
-	warn("ind = %d, (ind < 0 || ind >= NumPlayers)", ind);
-	return NULL;
-    }
-#endif
-
-    return Players(ind);
+    return Player_by_index(GetInd(id));
 }
 
 static inline bool Player_is_playing(player_t *pl)
@@ -808,6 +809,7 @@ void Delete_spectator(player_t *pl);
 void Detach_ball(player_t *pl, ballobject_t *ball);
 void Kill_player(player_t *pl, bool add_rank_death);
 void Player_death_reset(player_t *pl, bool add_rank_death);
+void Player_pause_reset(player_t *pl);
 void Team_game_over(world_t *world, int winning_team, const char *reason);
 void Individual_game_over(world_t *world, int winner);
 void Race_game_over(world_t *world);
@@ -884,7 +886,8 @@ void Meta_send(char *mesg, size_t len);
 int Meta_from(char *addr, int port);
 void Meta_gone(void);
 void Meta_init(void);
-void Meta_update(int change);
+void Meta_update(bool change);
+void Meta_update_max_size_tuner(world_t *world);
 
 /*
  * Prototypes for frame.c

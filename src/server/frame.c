@@ -471,7 +471,6 @@ static void Frame_map(connection_t *conn, player_t *pl)
     const int fuel_packet_size = 5;
     const int cannon_packet_size = 5;
     const int target_packet_size = 7;
-    const int wormhole_packet_size = 5;
     int bytes_left = 2000, max_packet, packet_count;
     world_t *world = pl->world;
 
@@ -483,7 +482,7 @@ static void Frame_map(connection_t *conn, player_t *pl)
 
 	if (++i >= world->NumTargets)
 	    i = 0;
-	targ = Targets(world, i);
+	targ = Target_by_index(world, i);
 	if (BIT(targ->update_mask, conn_bit)
 	    || (BIT(targ->conn_mask, conn_bit) == 0
 		&& clpos_inview(&cv, targ->pos))) {
@@ -503,7 +502,7 @@ static void Frame_map(connection_t *conn, player_t *pl)
 
 	if (++i >= world->NumCannons)
 	    i = 0;
-	cannon = Cannons(world, i);
+	cannon = Cannon_by_index(world, i);
 	if (clpos_inview(&cv, cannon->pos)) {
 	    if (BIT(cannon->conn_mask, conn_bit) == 0) {
 		Send_cannon(conn, i, (int)cannon->dead_ticks);
@@ -524,7 +523,7 @@ static void Frame_map(connection_t *conn, player_t *pl)
 	if (++i >= world->NumFuels)
 	    i = 0;
 
-	fs = Fuels(world, i);
+	fs = Fuel_by_index(world, i);
 	if (BIT(fs->conn_mask, conn_bit) == 0) {
 	    if ((CENTER_XCLICK(fs->pos.cx - pl->pos.cx) <
 		 (view_width << CLICK_SHIFT) + BLOCK_CLICKS) &&
@@ -536,28 +535,6 @@ static void Frame_map(connection_t *conn, player_t *pl)
 		if (++packet_count >= max_packet)
 		    break;
 	    }
-	}
-    }
-
-    packet_count = 0;
-    max_packet = MAX(5, bytes_left / wormhole_packet_size);
-    i = MAX(0, pl->last_wormhole_update);
-    for (k = 0; k < world->NumWormholes; k++) {
-	wormhole_t *worm;
-
-	if (++i >= world->NumWormholes)
-	    i = 0;
-	worm = Wormholes(world, i);
-	if (options.wormholeVisible
-	    && worm->temporary
-	    && (worm->type == WORM_IN
-		|| worm->type == WORM_NORMAL)
-	    && clpos_inview(&cv, worm->pos)) {
-	    Send_wormhole(conn, worm->pos);
-	    pl->last_wormhole_update = i;
-	    bytes_left -= max_packet * wormhole_packet_size;
-	    if (++packet_count >= max_packet)
-		break;
 	}
     }
 }
@@ -872,7 +849,7 @@ static void Frame_ships(connection_t *conn, player_t *pl)
     }
 
     for (i = 0; i < world->NumCannons; i++) {
-	cannon_t *cannon = Cannons(world, i);
+	cannon_t *cannon = Cannon_by_index(world, i);
 
 	if (cannon->tractor_count > 0) {
 	    player_t *t = cannon->tractor_target_pl;
@@ -881,9 +858,9 @@ static void Frame_ships(connection_t *conn, player_t *pl)
 		int j;
 
 		for (j = 0; j < 3; j++) {
-		    clpos_t pts = Ship_get_point_clpos(t->ship, j, t->dir);
-		    clpos_t pos;
+		    clpos_t pts, pos;
 
+		    pts = Ship_get_point_clpos(t->ship, j, t->dir);
 		    pos.cx = t->pos.cx + pts.cx;
 		    pos.cy = t->pos.cy + pts.cy;
 		    Send_connector(conn, pos, cannon->pos, 1);
@@ -896,14 +873,18 @@ static void Frame_ships(connection_t *conn, player_t *pl)
 	player_t *pl_i;
 
 	i = player_shuffle_ptr[k];
-	pl_i = Players(i);
+	pl_i = Player_by_index(i);
+
 	if (BIT(pl_i->status, GAME_OVER))
 	    continue;
+
 	if (!BIT(pl_i->status, PLAYING) || BIT(pl_i->status, PAUSE)) {
 	    if (pl_i->home_base == NULL)
 		continue;
+
 	    if (!clpos_inview(&cv, pl_i->home_base->pos))
 		continue;
+
 	    if (BIT(pl_i->status, PAUSE))
 		Send_paused(conn, pl_i->home_base->pos,
 			    (int)pl_i->pause_count);
@@ -912,6 +893,7 @@ static void Frame_ships(connection_t *conn, player_t *pl)
 			       (int)(pl_i->recovery_count * 10));
 	    continue;
 	}
+
 	if (!clpos_inview(&cv, pl_i->pos))
 	    continue;
 
@@ -936,13 +918,15 @@ static void Frame_ships(connection_t *conn, player_t *pl)
 	}
 
 	if (BIT(pl_i->used, HAS_REFUEL)) {
-	    fuel_t *fs = Fuels(world, pl_i->fs);
+	    fuel_t *fs = Fuel_by_index(world, pl_i->fs);
+
 	    if (clpos_inview(&cv, fs->pos))
 		Send_refuel(conn, fs->pos, pl_i->pos);
 	}
 
 	if (BIT(pl_i->used, HAS_REPAIR)) {
-	    target_t *targ = Targets(world, pl_i->repair_target);
+	    target_t *targ = Target_by_index(world, pl_i->repair_target);
+
 	    if (clpos_inview(&cv, targ->pos))
 		/* same packet as refuel */
 		Send_refuel(conn, pl_i->pos, targ->pos);
@@ -950,12 +934,14 @@ static void Frame_ships(connection_t *conn, player_t *pl)
 
 	if (BIT(pl_i->used, HAS_TRACTOR_BEAM)) {
 	    player_t *t = Player_by_id(pl_i->lock.pl_id);
+
 	    if (clpos_inview(&cv, t->pos)) {
 		int j;
 
 		for (j = 0; j < 3; j++) {
-		    clpos_t pts = Ship_get_point_clpos(t->ship, j, t->dir), pos;
+		    clpos_t pts, pos;
 
+		    pts = Ship_get_point_clpos(t->ship, j, t->dir);
 		    pos.cx = t->pos.cx + pts.cx;
 		    pos.cy = t->pos.cy + pts.cy;
 		    Send_connector(conn, pos, pl_i->pos, 1);
@@ -964,9 +950,8 @@ static void Frame_ships(connection_t *conn, player_t *pl)
 	}
 
 	if (pl_i->ball != NULL
-	    && clpos_inview(&cv, pl_i->ball->pos)) {
+	    && clpos_inview(&cv, pl_i->ball->pos))
 	    Send_connector(conn, pl_i->ball->pos, pl_i->pos, 0);
-	}
     }
 }
 
@@ -1035,8 +1020,9 @@ static void Frame_radar(connection_t *conn, player_t *pl)
 	|| NumAlliances > 0) {
 	for (k = 0; k < num_player_shuffle; k++) {
 	    player_t *pl_i;
+
 	    i = player_shuffle_ptr[k];
-	    pl_i = Players(i);
+	    pl_i = Player_by_index(i);
 	    /*
 	     * Don't show on the radar:
 	     *		Ourselves (not necessarily same as who we watch).
@@ -1149,7 +1135,7 @@ void Frame_update(void)
     for (i = 0; i < spectatorStart + NumSpectators; i++) {
 	if (i >= num_player_shuffle && i < spectatorStart)
 	    continue;
-	pl = Players(i);
+	pl = Player_by_index(i);
 	conn = pl->conn;
 	if (conn == NULL)
 	    continue;
@@ -1205,7 +1191,7 @@ void Frame_update(void)
 		ind = 0;
 	}
 
-	pl2 = Players(ind);
+	pl2 = Player_by_index(ind);
 	if (pl2->damaged > 0)
 	    Send_damaged(conn, (int)pl2->damaged);
 	else {
@@ -1248,12 +1234,12 @@ void Set_message(const char *message)
 
     if (!rplayback || playback)
 	for (i = 0; i < NumPlayers; i++) {
-	    pl = Players(i);
+	    pl = Player_by_index(i);
 	    if (pl->conn != NULL)
 		Send_message(pl->conn, msg);
 	}
     for (i = 0; i < NumSpectators; i++) {
-	pl = Players(i + spectatorStart);
+	pl = Player_by_index(i + spectatorStart);
 	Send_message(pl->conn, msg);
     }
 }
@@ -1303,12 +1289,12 @@ void Set_message_f(const char *fmt, ...)
 
     if (!rplayback || playback)
 	for (i = 0; i < NumPlayers; i++) {
-	    pl = Players(i);
+	    pl = Player_by_index(i);
 	    if (pl->conn != NULL)
 		Send_message(pl->conn, msg);
 	}
     for (i = 0; i < NumSpectators; i++) {
-	pl = Players(i + spectatorStart);
+	pl = Player_by_index(i + spectatorStart);
 	Send_message(pl->conn, msg);
     }
 }
