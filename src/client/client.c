@@ -1408,35 +1408,23 @@ void Client_score_table(void)
     if (BIT(Setup->mode, TIMING)) {
 	best = order[0] - Others;
     }
-#if 1
     for (i = 0; i < num_others; i++) {
 	other = order[i];
 	j = other - Others;
-	Paint_score_entry(i, other, (j == best) ? true : false);
-    }
-#else /* doesn't work now ? */
-    for (i = 0; i < num_others; i++) {
-	other = order[i];
-	j = other - Others;
-	if (!BIT(hackedInstruments, TREAT_ZERO_SPECIAL)
-	    || other->team != 0) {
+	if (!BIT(hackedInstruments, TREAT_ZERO_SPECIAL) || other->team != 0) {
 	    Paint_score_entry(entrynum, other, (j == best) ? true : false);
 	    ++entrynum;
 	}
     }
-    if (BIT(hackedInstruments, TREAT_ZERO_SPECIAL)) {
+    if (BIT(hackedInstruments, TREAT_ZERO_SPECIAL))
 	for (i = 0; i < num_others; i++) {
 	    other = order[i];
 	    j = other - Others;
 	    if (other->team == 0) {
-		Paint_score_entry(entrynum, other,
-				  (j == best) ? true : false);
+		Paint_score_entry(entrynum, other, (j == best) ? true : false);
 		++entrynum;
 	    }
 	}
-	Paint_score_entry(i, other, (j == best) ? true : false);
-    }
-#endif
     if (BIT(Setup->mode, TEAM_PLAY|TIMING) == TEAM_PLAY) {
 	int pos = num_others + 1;
 	int num_playing_teams = 0;

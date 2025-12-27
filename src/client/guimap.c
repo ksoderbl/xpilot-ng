@@ -343,7 +343,7 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
 	char s[3];
 
 	/* Mara's flashy basewarning */
-	if (baseWarningType == 2) {
+	if (baseWarningType & 2) {
 	    for (i = 0; i < 10; i++) {
 		if (deatharray[i].id == id &&
 		    deatharray[i].deathtime > loops - 3 * FPS) {

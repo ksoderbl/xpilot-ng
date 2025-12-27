@@ -81,6 +81,8 @@
 #define BM_DECOR_TEXTURE 45
 #define BM_BALL_TEXTURE  46
 
+#define NUM_BITMAPS	47
+
 #define BMS_UNINITIALIZED 0
 #define BMS_INITIALIZED 1
 #define BMS_READY 2

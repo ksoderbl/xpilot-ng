@@ -72,7 +72,7 @@ extern int xpm_picture_from_file(xp_picture_t * pic, char *filename);
 
 int Picture_init (xp_picture_t *picture, const char *filename, int count)
 {
-    xpprintf("Picture_init: count is %d for %s\n", count, filename);
+    /*xpprintf("Picture_init: count is %d for %s\n", count, filename);*/
 
     picture->count = count;
     picture->data = (RGB_COLOR **) malloc(ABS(count) * sizeof(RGB_COLOR*));
@@ -265,7 +265,7 @@ int Picture_load(xp_picture_t *picture, const char *filename)
 	count = 1;
 	picture->width = width;
     } else  {
-	xpprintf("picture count negative for pic %s\n", filename); /* kps */
+	/*xpprintf("picture count negative for pic %s\n", filename);*/
 	count = -picture->count;
 	picture->width = width / count;
     }
@@ -313,8 +313,8 @@ int Picture_rotate(xp_picture_t *picture)
     int color;
     size = picture->height;
 
-    if (picture->count <= 0)
-	xpprintf("Picture_rotate: picture->count = %d\n", picture->count);
+    /*if (picture->count <= 0)
+      xpprintf("Picture_rotate: picture->count = %d\n", picture->count);*/
 
     for (image = 1; image < picture->count; image++) {
 
@@ -430,9 +430,9 @@ RGB_COLOR Picture_get_rotated_pixel(const xp_picture_t *picture,
     int		angle;
     double	rot_x, rot_y;
 
-    if (picture->count <= 0)
-	xpprintf("Picture_get_rotated_pixel: picture->count = %d\n",
-		 picture->count);
+    /*if (picture->count <= 0)
+      xpprintf("Picture_get_rotated_pixel: picture->count = %d\n",
+      picture->count);*/
 
     angle = ((image  * RES) / picture->count) % 128;
 

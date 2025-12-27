@@ -112,6 +112,7 @@ static int Config_create_showMessages(int widget_desc, int *height);
 static int Config_create_showHUD(int widget_desc, int *height);
 static int Config_create_showHUDRadar(int widget_desc, int *height);
 static int Config_create_mapRadar(int widget_desc, int *height);
+static int Config_create_clientRanker(int widget_desc, int *height);
 static int Config_create_showShipShapes(int widget_desc, int *height);
 static int Config_create_showMyShipShape(int widget_desc, int *height);
 static int Config_create_ballMsgScan(int widget_desc, int *height);
@@ -283,6 +284,7 @@ static int		(*config_creator[])(int widget_desc, int *height) = {
     Config_create_showHUD,
     Config_create_showHUDRadar,
     Config_create_mapRadar,
+    Config_create_clientRanker,
     Config_create_showShipShapes,
     Config_create_showMyShipShape,
     Config_create_ballMsgScan,
@@ -815,6 +817,15 @@ static int Config_create_mapRadar(int widget_desc, int *height)
 			      (void *) MAP_RADAR);
 }
 
+static int Config_create_clientRanker(int widget_desc, int *height)
+{
+    return Config_create_bool(widget_desc, height, "clientRanker",
+			      BIT(hackedInstruments, CLIENT_RANKER)
+			      ? true : false,
+			      Config_update_hackedInstruments,
+			      (void *) CLIENT_RANKER);
+}
+
 static int Config_create_showShipShapes(int widget_desc, int *height)
 {
     return Config_create_bool(widget_desc, height,"showShipShapes",
@@ -1299,7 +1310,7 @@ static int Config_create_scoreObjectTimer(int widget_desc, int *height)
 static int Config_create_baseWarningType(int widget_desc, int *height)
 {
     return Config_create_int(widget_desc, height,
-			     "baseWarningType", &baseWarningType, 0, 2,
+			     "baseWarningType", &baseWarningType, 0, 3,
 			     NULL, NULL);
 }
 
@@ -1987,10 +1998,9 @@ static int Config_save(int widget_desc, void *button_str, const char **strptr)
     Config_save_bool(fp, "showHUD", BIT(instruments, SHOW_HUD_INSTRUMENTS));
     Config_save_bool(fp, "showHUDRadar", BIT(instruments, SHOW_HUD_RADAR));
     Config_save_bool(fp, "mapRadar", BIT(hackedInstruments, MAP_RADAR));
-    Config_save_bool(fp, "showLivesByShip",
-		     BIT(hackedInstruments, SHOW_LIVES_BY_SHIP));
-    Config_save_bool(fp, "treatZeroSpecial",
-		     BIT(hackedInstruments, TREAT_ZERO_SPECIAL));
+    Config_save_bool(fp, "clientRanker", BIT(hackedInstruments, CLIENT_RANKER));
+    Config_save_bool(fp, "showLivesByShip", BIT(hackedInstruments, SHOW_LIVES_BY_SHIP));
+    Config_save_bool(fp, "treatZeroSpecial", BIT(hackedInstruments, TREAT_ZERO_SPECIAL));
     Config_save_bool(fp, "showShipShapes", BIT(hackedInstruments, SHOW_SHIP_SHAPES));
     Config_save_bool(fp, "showMyShipShape", BIT(hackedInstruments, SHOW_MY_SHIP_SHAPE));
     Config_save_bool(fp, "ballMsgScan", BIT(hackedInstruments, BALL_MSG_SCAN));

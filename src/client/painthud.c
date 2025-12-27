@@ -58,6 +58,7 @@
 #include "protoclient.h"
 #include "bitmaps.h"
 #include "commonproto.h"
+#include "clientrank.h"
 
 char painthud_version[] = VERSION;
 
@@ -1237,18 +1238,28 @@ static void Msg_parse(char *message, size_t len)
     if (i_am_victim || i_am_victim2)
 	killratio_deaths++;
 
-#if 0
     if (BIT(hackedInstruments, CLIENT_RANKER)) {
-
+	/*static char tauntstr[MAX_CHARS];
+	  int kills, deaths; */
+	
 	/* handle case where there is a victim and a killer */
 	if (killer != NULL && victim != NULL) {
-	    if (i_am_killer && !i_am_victim)
+	    if (i_am_killer && !i_am_victim) {
 		Add_rank_Death(victim);
+		/*if (BIT(instruments, TAUNT)) {
+		  kills = Get_kills(victim);
+		  deaths = Get_deaths(victim);
+		  if (deaths > kills) {
+		  sprintf(tauntstr, "%s: %i-%i HEHEHEHE\0",
+		  victim, deaths, kills);
+		  Net_talk(tauntstr);
+		  }
+		  } */
+	    }
 	    if (!i_am_killer && i_am_victim)
 		Add_rank_Kill(killer);
 	}
     }
-#endif
 }
 
 /*
@@ -1624,4 +1635,3 @@ void Paint_recording(void)
     Erase_rectangle( x - 1, WINSCALE(10),
 			 w+2, gameFont->ascent + gameFont->descent);
 }
-

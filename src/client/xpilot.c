@@ -58,6 +58,8 @@
 #include "portability.h"
 #include "checknames.h"
 #include "commonproto.h"
+#include "clientrank.h"
+#include "client.h"
 
 char xpilot_version[] = VERSION;
 
@@ -97,7 +99,7 @@ static void printfile(const char *filename)
  */
 int main(int argc, char *argv[])
 {
-    int				result;
+    int				result, retval = 1;
     int				auto_connect = false,
 				text = false,
 				list_servers = false,
@@ -157,7 +159,7 @@ int main(int argc, char *argv[])
 	Get_login_name(conpar->real_name, sizeof(conpar->real_name) - 1);
     }
 
-    IFWINDOWS( conpar->disp_name[0] = '\0'; )
+    IFWINDOWS( conpar->disp_name[0] = '\0' );
 
     /*
      * --- Check commandline arguments and resource files ---
@@ -169,6 +171,14 @@ int main(int argc, char *argv[])
 		  conpar->nick_name, conpar->disp_name,
 		  hostname, shutdown_reason);
 
+    /*strcpy(clientname,conpar->nick_name); */
+    
+    /* CLIENTRANK */
+    Init_saved_scores();
+
+    /* BASEWARNING, BMS */
+    xpprintf("Multiple evil hacks ON\n");
+    
     if (list_servers) {
 	auto_connect = true;
     }
@@ -196,15 +206,20 @@ int main(int argc, char *argv[])
 				 conpar);
     }
     else {
-	IFNWINDOWS(result = Welcome_screen(conpar);)
+	IFNWINDOWS(result = Welcome_screen(conpar));
     }
 
     if (result == 1) {
-	return Join(conpar->server_addr, conpar->server_name, conpar->login_port,
-		    conpar->real_name, conpar->nick_name, conpar->team,
-		    conpar->disp_name, conpar->server_version);
+      retval =
+	  Join(conpar->server_addr, conpar->server_name,
+	       conpar->login_port, conpar->real_name, conpar->nick_name,
+	       conpar->team, conpar->disp_name, conpar->server_version);
     }
-    return 1;
+    
+    if (BIT(hackedInstruments, CLIENT_RANKER))
+	Print_saved_scores();
+
+    return retval;
 }
 
 

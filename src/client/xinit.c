@@ -562,7 +562,7 @@ int Init_top(void)
     if (scoreObjectTimer >= 121 || scoreObjectTimer < 0) {
 	scoreObjectTimer = 24;
     }
-    if (baseWarningType > 2 || baseWarningType < 0) {
+    if (baseWarningType > 3 || baseWarningType < 0) {
 	baseWarningType = 1;
     }
     if (wallColor >= maxColors || wallColor <= 0) {

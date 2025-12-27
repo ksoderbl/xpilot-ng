@@ -337,7 +337,7 @@ static void parse_styles(char **callptr)
     for (i = 0; i < num_polygon_styles; i++) {
 	polygon_styles[i].color = wallColor;
 	polygon_styles[i].rgb = get_32bit(&ptr);
-	polygon_styles[i].texture = 46 + (*ptr++);
+	polygon_styles[i].texture = NUM_BITMAPS + (*ptr++);
 	polygon_styles[i].def_edge_style = *ptr++;
 	polygon_styles[i].flags = *ptr++;
     }

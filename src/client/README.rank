@@ -1,0 +1,36 @@
+
+The clientranking uses the options clientRanker, clientRankFile,
+clientRankHTMLFile and clientRankHTMLNOJSFile.
+
+---
+
+(Most of this text is from the original Svan ranking patch,
+ not written by me //Adamel)
+
+How to use the server.
+
+I suppose the important part is the rankingstuff.
+You control it with two different environmentvariables:
+XPILOTRANKINGPAGE and XPILOTSCOREFILE
+
+if XPILOTSCOREFILE is set and contains a filename then the server
+will remember the scores of the 400 most recent players and use that
+file to save the scores between server uptimes.
+
+if XPILOTRANKINGPAGE is set and contains a filename then the server
+will write a webpage with the rankings in that file.
+
+example: on svan I have:
+export XPILOTSCOREFILE=~/lib/xpilot/scores
+export XPILOTRANKINGPAGE=~/public_html/xpilot/ranks.html
+
+To reset the scores, simply delete the XPILOTSCOREFILE file.
+
+The server should also automatically pause inactive players but I do not think
+that works very well.
+
+And I know there are bugs in the code that counts deaths/kills'n'stuff, cause
+sometimes you get wierd "Deadliest player" values.
+Guess if I'm gonna root them out.
+
+Anything else I've forgotten.

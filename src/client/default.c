@@ -66,6 +66,7 @@
 #include "talk.h"
 #include "default.h"
 #include "checknames.h"
+#include "clientrank.h"
 
 
 char default_version[] = VERSION;
@@ -1290,6 +1291,7 @@ option options[] = {
 	"A value of 0 disables base warning.\n"
 	"A value of 1 draws a red box on a base when someone has died.\n"
 	"A value of 2 makes the base name flash when someone has died.\n"
+	"A value of 3 combines the effects of values 1 and 2.\n"
     },
     {
 	"wallColor",
@@ -1341,6 +1343,13 @@ option options[] = {
 	"2",
 	KEY_DUMMY,
 	"Which color number to use for drawing old messages.\n"
+    },
+    {
+	"clientRanker",
+	NULL,
+	"No",
+	KEY_DUMMY,
+	"Scan messages killmsgs and make personal kill/death ranking.\n"
     },
     {
 	"outlineDecor",
@@ -1995,6 +2004,29 @@ option options[] = {
 	KEY_DUMMY,
 	"An optional file where a recording of a game can be made.\n"
 	"If this file is undefined then recording isn't possible.\n"
+    },
+    {
+	"clientRankFile",
+	NULL,
+	"",
+	KEY_DUMMY,
+	"An optional file where clientside kill/death rank is stored.\n"
+    },
+    {
+	"clientRankHTMLFile",
+	NULL,
+	"",
+	KEY_DUMMY,
+	"An optional file where clientside kill/death rank is\n"
+	"published in HTML format. \n"
+    },
+    {
+	"clientRankHTMLNOJSFile",
+	NULL,
+	"",
+	KEY_DUMMY,
+	"An optional file where clientside kill/death rank is\n"
+	"published in HTML format, w/o JavaScript. \n"
     },
     {
 	"clientPortStart",
@@ -3087,6 +3119,7 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
     Get_bit_resource(rDB, "showHUDRadar", &instruments, SHOW_HUD_RADAR);
 
     Get_bit_resource(rDB, "mapRadar", &hackedInstruments, MAP_RADAR);
+    Get_bit_resource(rDB, "clientRanker", &hackedInstruments, CLIENT_RANKER);
     Get_bit_resource(rDB, "showShipShapes", &hackedInstruments, SHOW_SHIP_SHAPES);
     Get_bit_resource(rDB, "showMyShipShape", &hackedInstruments, SHOW_MY_SHIP_SHAPE);
     Get_bit_resource(rDB, "ballMsgScan", &hackedInstruments, BALL_MSG_SCAN);
@@ -3157,6 +3190,12 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
 
     Get_resource(rDB, "recordFile", resValue, sizeof resValue);
     Record_init(resValue);
+    Get_resource(rDB, "clientRankFile", resValue, sizeof resValue);
+    clientRankFile = xp_strdup(resValue);
+    Get_resource(rDB, "clientRankHTMLFile", resValue, sizeof resValue);
+    clientRankHTMLFile = xp_strdup(resValue);
+    Get_resource(rDB, "clientRankHTMLNOJSFile", resValue, sizeof resValue);
+    clientRankHTMLNOJSFile = xp_strdup(resValue);
     Get_resource(rDB, "texturePath", resValue, sizeof resValue);
     texturePath = xp_strdup(resValue);
     Get_resource(rDB, "wallTextureFile", resValue, sizeof resValue);
@@ -3321,6 +3360,18 @@ void	defaultCleanup(void)
 	free(texturePath);
 	texturePath = NULL;
     }
+/*    if (clientRankFile) {
++	free(clientRankFile);
++	clientRankFile = NULL;
++    }
++    if (clientRankHTMLFile) {
++	free(clientRankHTMLFile);
++	clientRankHTMLFile = NULL;
++    }
++    if (clientRankHTMLNOJSFile) {
++	free(clientRankHTMLNOJSFile);
++	clientRankHTMLNOJSFile = NULL;
++    }*/
     if (wallTextureFile) {
 	free(wallTextureFile);
 	wallTextureFile = NULL;
