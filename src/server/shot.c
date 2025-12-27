@@ -45,14 +45,23 @@ char shot_version[] = VERSION;
  * Functions for shots.
  */
 
+static inline bool Player_can_place_mine(player_t *pl)
+{
+    if (pl->item[ITEM_MINE] <= 0)
+	return false;
+    if (BIT(pl->used, HAS_PHASING_DEVICE))
+	return false;
+    if (BIT(pl->used, HAS_SHIELD)
+	&& !options.shieldedMining)
+	return false;
+    return true;
+}
 
 void Place_mine(player_t *pl)
 {
     vector_t zero_vel = { 0.0, 0.0 };
 
-    if (pl->item[ITEM_MINE] <= 0
-	|| (BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE)
-	    && !options.shieldedMining))
+    if (!Player_can_place_mine(pl))
 	return;
 
     if (options.minMineSpeed > 0) {
@@ -60,7 +69,7 @@ void Place_mine(player_t *pl)
 	return;
     }
 
-    Place_general_mine(pl->world, pl, pl->team, 0, pl->pos,
+    Place_general_mine(pl->world, pl, pl->team, GRAVITY, pl->pos,
 		       zero_vel, pl->mods);
 }
 
@@ -69,9 +78,7 @@ void Place_moving_mine(player_t *pl)
 {
     vector_t vel = pl->vel;
 
-    if (pl->item[ITEM_MINE] <= 0
-	|| (BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE)
-	    && !options.shieldedMining))
+    if (!Player_can_place_mine(pl))
 	return;
 
     if (options.minMineSpeed > 0) {
@@ -347,12 +354,19 @@ char *Describe_shot(int type, long status, modifiers_t mods, int hit)
     return msg;
 }
 
+static inline bool Player_can_fire_shot(player_t *pl)
+{
+    if (pl->shots >= options.maxPlayerShots
+	|| BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
+	return false;
+    return true;
+}
+
 void Fire_main_shot(player_t *pl, int type, int dir)
 {
     clpos_t m_gun, pos;
 
-    if (pl->shots >= options.maxPlayerShots
-	|| BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
+    if (!Player_can_fire_shot(pl))
 	return;
 
     m_gun = Ship_get_m_gun_clpos(pl->ship, pl->dir);
@@ -365,8 +379,7 @@ void Fire_main_shot(player_t *pl, int type, int dir)
 
 void Fire_shot(player_t *pl, int type, int dir)
 {
-    if (pl->shots >= options.maxPlayerShots
-	|| BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
+    if (!Player_can_fire_shot(pl))
 	return;
 
     Fire_general_shot(pl->world, pl, pl->team, 0, pl->pos, type,
@@ -377,8 +390,7 @@ void Fire_left_shot(player_t *pl, int type, int dir, int gun)
 {
     clpos_t l_gun, pos;
 
-    if (pl->shots >= options.maxPlayerShots
-	|| BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
+    if (!Player_can_fire_shot(pl))
 	return;
 
     l_gun = Ship_get_l_gun_clpos(pl->ship, gun, pl->dir);
@@ -393,8 +405,7 @@ void Fire_right_shot(player_t *pl, int type, int dir, int gun)
 {
     clpos_t r_gun, pos;
 
-    if (pl->shots >= options.maxPlayerShots
-	|| BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
+    if (!Player_can_fire_shot(pl))
 	return;
 
     r_gun = Ship_get_r_gun_clpos(pl->ship, gun, pl->dir);
@@ -409,8 +420,7 @@ void Fire_left_rshot(player_t *pl, int type, int dir, int gun)
 {
     clpos_t l_rgun, pos;
 
-    if (pl->shots >= options.maxPlayerShots
-	|| BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
+    if (!Player_can_fire_shot(pl))
 	return;
 
     l_rgun = Ship_get_l_rgun_clpos(pl->ship, gun, pl->dir);
@@ -425,8 +435,7 @@ void Fire_right_rshot(player_t *pl, int type, int dir, int gun)
 {
     clpos_t r_rgun, pos;
 
-    if (pl->shots >= options.maxPlayerShots
-	|| BIT(pl->used, HAS_SHIELD|HAS_PHASING_DEVICE))
+    if (!Player_can_fire_shot(pl))
 	return;
 
     r_rgun = Ship_get_r_rgun_clpos(pl->ship, gun, pl->dir);

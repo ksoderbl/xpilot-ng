@@ -76,9 +76,8 @@ static int rank_cmp(const void *p1, const void *p2)
     return 0;
 }
 
-static char *rank_showtime(void)
+static char *rank_showtime(const time_t t)
 {
-    time_t now;
     struct tm *tmp;
     static char month_names[13][4] = {
 	"Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -86,12 +85,12 @@ static char *rank_showtime(void)
 	"Bug"
     };
     static char buf[80];
+    time_t t2 = t;
 
-    time(&now);
-    tmp = localtime(&now);
-    sprintf(buf, "%02d\xA0%s\xA0%02d:%02d:%02d",
-	    tmp->tm_mday, month_names[tmp->tm_mon],
-	    tmp->tm_hour, tmp->tm_min, tmp->tm_sec);
+    tmp = localtime(&t2);
+    snprintf(buf, sizeof(buf), "%02d\xA0%s\xA0%02d:%02d:%02d",
+	     tmp->tm_mday, month_names[tmp->tm_mon],
+	     tmp->tm_hour, tmp->tm_min, tmp->tm_sec);
     return buf;
 }
 
@@ -212,6 +211,25 @@ static void SortRankings(void)
     }
 }
 
+static const char *Rank_get_logout_message(ranknode_t *rank)
+{
+    static char msg[MSG_LEN];
+    player_t *pl;
+
+    assert(strlen(rank->name) > 0);
+    pl = Get_player_by_name(rank->name, NULL, NULL);
+    if (pl) {
+	if (BIT(pl->status, PAUSE))
+	    snprintf(msg, sizeof(msg), "paused");
+	else
+	    snprintf(msg, sizeof(msg), "playing");
+    }
+    else
+	snprintf(msg, sizeof(msg), "%s", rank_showtime(rank->timestamp));
+
+    return msg;
+}
+
 #define TABLEHEAD \
 "<table><tr><td></td>" /* First column is the position */ \
 "<td align=left><h1><u><b>Player</b></u></h1></td>" \
@@ -292,24 +310,26 @@ void Rank_write_webpage(void)
 		rank->bestball,
 		rank_base[i].ratio,
 		rank->user, rank->host,
-		rank->logout);
+		Rank_get_logout_message(rank));
     }
-    fprintf(file, footer, rank_showtime());
+    fprintf(file, footer, rank_showtime(time(NULL)));
     fclose(file);
 }
 
-/* Return a line with the ranking status of the specified player. */
-void Rank_get_stats(player_t * pl, char *buf)
-{
-    ranknode_t *rank = pl->rank;
 
-    sprintf(buf, "%-15s  %4d/%4d, R: %3d, S: %5d, %d/%d/%d/%d/%.2f",
-	    pl->name,
-	    rank->kills, rank->deaths,
-	    rank->rounds, rank->shots,
-	    rank->ballsCashed, rank->ballsSaved,
-	    rank->ballsWon, rank->ballsLost,
-	    rank->bestball);
+bool Rank_get_stats(const char *name, char *buf, size_t size)
+{
+    ranknode_t *r = Rank_get_by_name(name);
+
+    if (r == NULL)
+	return false;
+
+    snprintf(buf, size, "%-15s  %4d/%4d, R: %4d, S: %6d, %d/%d/%d/%d/%.2f",
+	     r->name, r->kills, r->deaths, r->rounds, r->shots,
+	     r->ballsCashed, r->ballsSaved, r->ballsWon, r->ballsLost,
+	     r->bestball);
+
+    return true;
 }
 
 
@@ -381,9 +401,12 @@ static void Init_ranknode(ranknode_t *rank,
 }
 
 
-ranknode_t *Rank_get_by_name(char *name)
+ranknode_t *Rank_get_by_name(const char *name)
 {
     int i;
+    player_t *pl;
+
+    assert(name != NULL);
 
     for (i = 0; i < MAX_SCORES; i++) {
 	ranknode_t *rank = &ranknodes[i];
@@ -392,16 +415,17 @@ ranknode_t *Rank_get_by_name(char *name)
 	    return rank;
     }
 
+    /*
+     * If name doesn't equal any nick in the ranking list (ignoring case),
+     * let's see if it could be an abbreviation of the nick of some player
+     * who is currently playing.
+     */
+    pl = Get_player_by_name(name, NULL, NULL);
+    if (pl && pl->rank)
+	return pl->rank;
+
     return NULL;
 }
-
-
-void Rank_nuke_score(ranknode_t *rank)
-{
-    Init_ranknode(rank, "", "", "");
-    assert(rank->timestamp == 0);
-}
-
 
 /* Read scores from disk, and zero-initialize the ones that are not used.
    Call this on startup. */
@@ -467,7 +491,6 @@ void Rank_get_saved_score(player_t * pl)
 		rank->pl = pl;
 		pl->score = rank->score;
 		pl->rank = rank;
-		Rank_set_logout_message(pl, "playing");
 	    } else {
 		/* That ranknode is already in use by another player! */
 		pl->score = 0;
@@ -477,7 +500,7 @@ void Rank_get_saved_score(player_t * pl)
 	}
     }
 
-    /* find unused nick */
+    /* find unused rank node */
     for (i = 0; i < MAX_SCORES; i++) {
 	rank = &ranknodes[i];
 
@@ -512,7 +535,6 @@ void Rank_get_saved_score(player_t * pl)
     rank->timestamp = time(NULL);
     pl->score = 0;
     pl->rank = rank;
-    Rank_set_logout_message(pl, "playing");
 }
 
 /* A player has quit, save his info and mark him as not playing. */
@@ -521,7 +543,6 @@ void Rank_save_score(player_t * pl)
     ranknode_t *rank = pl->rank;
 
     rank->score = pl->score;
-    Rank_set_logout_message(pl, rank_showtime());
     rank->pl = NULL;
     rank->timestamp = time(NULL);
 }

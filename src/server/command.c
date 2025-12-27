@@ -43,7 +43,8 @@ char command_version[] = VERSION;
  * and a string describing the error is stored in
  * 'errorstr_p' if that is not NULL.
  */
-player_t *Get_player_by_name(char *str, int *error_p, const char **errorstr_p)
+player_t *Get_player_by_name(const char *str,
+			     int *error_p, const char **errorstr_p)
 {
     int i, id;
     player_t *found_pl = NULL, *pl;
@@ -185,7 +186,6 @@ static int Cmd_help(char *arg, player_t *pl, int oper, char *msg, size_t size);
 static int Cmd_kick(char *arg, player_t *pl, int oper, char *msg, size_t size);
 static int Cmd_lock(char *arg, player_t *pl, int oper, char *msg, size_t size);
 static int Cmd_mutepaused(char *arg, player_t *pl, int oper, char *msg, size_t size);
-static int Cmd_nuke(char *arg, player_t *pl, int oper, char *msg, size_t size);
 static int Cmd_op(char *arg, player_t *pl, int oper, char *msg, size_t size);
 static int Cmd_password(char *arg, player_t *pl, int oper, char *msg, size_t size);
 static int Cmd_pause(char *arg, player_t *pl, int oper, char *msg, size_t size);
@@ -282,13 +282,6 @@ static Command_info commands[] = {
 	"(operator)",
 	0,      /* checked in the function */
 	Cmd_mutepaused
-    },
-    {
-	"nuke",
-	"n",
-	"/nuke [player name]. Nuke player's score. (operator)",
-	1,
-	Cmd_nuke
     },
     {
 	"op",
@@ -873,45 +866,6 @@ static int Cmd_mutepaused(char *arg, player_t *pl, int oper,
     return CMD_RESULT_SUCCESS;
 }
 
-
-static int Cmd_nuke(char *arg, player_t *pl, int oper, char *msg, size_t size)
-{
-    ranknode_t *rank;
-    player_t *pl2;
-
-    UNUSED_PARAM(pl);
-
-    if (!oper)
-	return CMD_RESULT_NOT_OPERATOR;
-
-    if (!arg || !*arg)
-	return CMD_RESULT_NO_NAME;
-
-    pl2 = Get_player_by_name(arg, NULL, NULL);
-
-    /* hopefully this will help some weird issues */
-    if (pl2)
-	rank = Rank_get_by_name(pl2->name);
-    else
-	rank = Rank_get_by_name(arg);
-
-    if (!rank) {
-	snprintf(msg, size, "Name does not match any player.");
-	return CMD_RESULT_ERROR;
-    }
-
-    if (pl2)
-	pl2->score = 0;
-
-    snprintf(msg, size, "Nuked %s.", rank->name);
-
-    Rank_nuke_score(rank);
-
-    updateScores = true;
-
-    return CMD_RESULT_SUCCESS;
-}
-
 /* kps - this one is a bit obscure, maybe clean it up a bit ? */
 static int Cmd_op(char *arg, player_t *pl, int oper, char *msg, size_t size)
 {
@@ -1104,26 +1058,15 @@ static int Cmd_reset(char *arg, player_t *pl, int oper, char *msg, size_t size)
 
 static int Cmd_stats(char *arg, player_t *pl, int oper, char *msg, size_t size)
 {
-    const char *errorstr;
-    player_t *pl2;
-
     UNUSED_PARAM(pl); UNUSED_PARAM(oper);
 
     if (!arg || !*arg)
 	return CMD_RESULT_NO_NAME;
 
-    pl2 = Get_player_by_name(arg, NULL, &errorstr);
-    if (!pl2) {
-	strlcpy(msg, errorstr, size);
+    if (!Rank_get_stats(arg, msg, size)) {
+	snprintf(msg, size, "Player \"%s\" doesn't have ranking stats.", arg);
 	return CMD_RESULT_ERROR;
     }
-
-    if (pl2->rank == NULL) {
-	snprintf(msg, size, "Player doesn't have ranking stats.");
-	return CMD_RESULT_ERROR;
-    }
-
-    Rank_get_stats(pl2, msg);
 
     return CMD_RESULT_SUCCESS;
 }

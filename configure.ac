@@ -1,7 +1,7 @@
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.57)
-AC_INIT([XPilot NG], 4.6.4, kps@users.sourceforge.net, xpilot-ng)
+AC_INIT([XPilot NG], 4.6.5, kps@users.sourceforge.net, xpilot-ng)
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_SRCDIR(src/client/xpilot.c)
 
@@ -23,7 +23,7 @@ AC_SUBST([XP_COPYRIGHTDATE])
 XP_COPYRIGHT="Copyright © $XP_COPYRIGHTDATE by $XP_AUTHORS"
 AC_SUBST([XP_COPYRIGHT])
 
-AC_SUBST([XP_RELEASEDATE],["Apr 27, 2004"])
+AC_SUBST([XP_RELEASEDATE],["May 25, 2004"])
 AC_SUBST([XP_DATADIR],"$prefix/share/xpilot-ng")
 
 
@@ -72,6 +72,10 @@ AC_ARG_ENABLE(sdl_gameloop,
 [if test x$enable_sdl_gameloop = xyes; then
 	AC_DEFINE([SDL_GAMELOOP], 1, [enable sdl gameloop in sdl client])
 fi])
+
+AC_ARG_ENABLE(sound,
+	AC_HELP_STRING([--enable-sound],
+			[enable OpenAL sound]), [])
 
 
 dnl  Checks for programs.
@@ -217,6 +221,25 @@ fi
 AM_CONDITIONAL([COND_SDL_CLIENT], [test x$enable_sdl_client = xyes])
 AM_CONDITIONAL([COND_SDL_GAMELOOP], [test x$enable_sdl_gameloop = xyes])
 
+dnl OpenAL client sound support.
+if test x$enable_sound = xyes; then
+	have_openal=no
+	AC_CHECK_LIB(
+		openal, 
+		alutInit, 
+		[have_openal=yes],
+		[])
+	if test x$have_openal = xyes; then
+		SOUND_LIBS=-lopenal
+		AC_DEFINE([SOUND], 1, [Define to 1 if you want OpenAL sound.])
+	else
+		echo "*** Client sound disabled. Check that you have OpenAL installed."
+	fi
+	AC_SUBST(SOUND_LIBS)
+fi
+
+AM_CONDITIONAL([COND_SOUND], [test x$have_openal = xyes])
+
 dnl  Checks for header files.
 dnl AC_HEADER_STDC
 AC_HEADER_TIME
@@ -355,6 +378,7 @@ AC_CONFIG_FILES([ \
 	lib/fonts/Makefile \
 	lib/maps/Makefile \
 	lib/textures/Makefile \
+	lib/sound/Makefile \
 	src/Makefile \
 	src/common/Makefile \
 	src/common/version.h \

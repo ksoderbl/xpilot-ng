@@ -485,6 +485,7 @@ void Option_set_value(
 	    && atoi(value) == 0) {
 	    warn("WARNING: '%s: %s' in map.", name, value);
 	    warn("This is an obsolete way to set the default value.");
+	    warn("It will cause the weapon to detonate at once.");
 	    warn("To fix, remove the option from the map file.");
 	}
     }
@@ -735,9 +736,11 @@ static void Option_parse_node(hash_node *np)
     if (value == NULL) {
 	/* no value has been set, so get the option default value. */
 	value = desc->defaultValue;
-	if (value == NULL)
+	if (value == NULL) {
 	    /* no value at all.  (options.mapData or options.serverHost.) */
+	    assert(desc->type == valString);
 	    return;
+	}
     }
 
     if (!desc->variable) {

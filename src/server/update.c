@@ -921,8 +921,92 @@ static void Update_players(world_t *world)
 		Traverse_wormhole(pl);
 	}
 
-	update_object_speed(world, OBJ_PTR(pl));
-	Move_player(pl);
+	
+	{
+	    double ax = pl->acc.x;
+	    double ay = pl->acc.y;
+	    if (BIT(pl->status, GRAVITY)) {
+		vector_t gravity = World_gravity(world, pl->pos);
+		ax += gravity.x;
+		ay += gravity.y;
+	    }
+	    ax *= timeStep / 2;
+	    ay *= timeStep / 2;
+	    pl->vel.x += ax;
+	    pl->vel.y += ay;
+	    if (options.constantSpeed) {
+		pl->vel.x += options.constantSpeed * pl->acc.x;
+		pl->vel.y += options.constantSpeed * pl->acc.y;
+		Move_player(pl);
+		/* Bounces aren't really compatible with constant speed.
+		 * I guess this behaviour is as good as any.
+		 * Doesn't work right with stuff like friction. */
+		if (pl->last_wall_touch != frame_loops) { /* no bounce */
+		    pl->vel.x -= options.constantSpeed * pl->acc.x;
+		    pl->vel.y -= options.constantSpeed * pl->acc.y;
+		}
+	    }
+	    else
+		Move_player(pl);
+	    pl->vel.x += ax;
+	    pl->vel.y += ay;
+	}
+
+	/*
+	 * kps - hack to measure distance travelled, use e.g. with
+	 * acceleration.xp map.
+	 * This can be removed when Mara's "oldThrust" hack has been
+	 * tested.
+	 */
+	if (0) {
+	    static double olddist = 0;
+	    double dist
+		= Wrap_length(pl->pos.cx - pl->home_base->pos.cx,
+			      pl->pos.cy - pl->home_base->pos.cy) / CLICK;
+
+	    /* use with 12fps/12gs or 48fps/12gs */
+
+	    if (FPS == 12) {
+		assert(timeStep == 1.0);
+		if (dist > 0.0) {
+		    double delta = dist - olddist;
+
+		    pl->count += timeStep;
+		    if (olddist == 0)
+			printf("\t0.000 %% 0.00\n");
+		    printf("\t%.3f\n"
+			   "\t%.3f\n"
+			   "\t%.3f\n"
+			   "\t%.3f %% %.2f\n",
+			   olddist + 0.25 * delta,
+			   olddist + 0.50 * delta,
+			   olddist + 0.75 * delta,
+			   dist,
+			   pl->count);
+		    
+		    olddist = dist;
+		} else
+		    pl->count = 0;
+	    } else {
+		assert(timeStep == 0.25);
+		if (dist > 0.0) {
+		    int foo;
+		    double bar;
+		    pl->count += timeStep;
+		    if (olddist == 0)
+			printf("\t0.000 %% 0.00\n");
+		    foo = (int)pl->count;
+		    bar = pl->count - ((float)foo);
+		    bar = ABS(bar);
+		    if (bar < 0.01)
+			printf("\t%.3f %% %.2f\n", dist, pl->count);
+		    else
+			printf("\t%.3f\n", dist);
+		    olddist = dist;
+		} else
+		    pl->count = 0;
+	    }
+	}
 
 	if ((!BIT(pl->used, HAS_CLOAKING_DEVICE) || options.cloakedExhaust)
 	    && !BIT(pl->used, HAS_PHASING_DEVICE)) {

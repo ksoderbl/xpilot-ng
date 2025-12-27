@@ -147,11 +147,7 @@ static option_desc opts[] = {
     {
 	"shipMass",
 	"shipMass",
-	"18.0",		/*
-			 * kps - "optimal" value for fps=50 and gs=12.5.
-			 * Should be changed back to 20.0 when high fps
-			 * "inertia" issue is sorted out.
-			 */
+	"20.0",
 	&options.shipMass,
 	valReal,
 	tuner_shipmass,
@@ -900,6 +896,16 @@ static option_desc opts[] = {
 	valReal,
 	Move_init,
 	"Multiplication factor for player wall bounce fuel cost.\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
+	"afterburnerPowerMult",
+	"afterburnerPower",
+	"1.0",
+	&options.afterburnerPowerMult,
+	valReal,
+	tuner_dummy,
+	"Multiplication factor for afterburner power.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
@@ -3477,7 +3483,27 @@ static option_desc opts[] = {
 	"Enable improved precision steering and aiming of main gun.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
-    { /* kps - temp hack to disable ball styles during runtime */
+    {
+	"constantSpeed",
+	"oldThrust",
+	"0",
+	&options.constantSpeed,
+	valReal,
+	tuner_dummy,
+	"Make ship move forward at a constant speed when thrust key is held\n"
+	"down, in addition to the normal acceleration. The constant speed\n"
+	"is proportional to the product of the acceleration of the ship\n"
+	"(varying with ship mass and afterburners) and the value of this\n"
+	"option. Note that this option is quite unphysical and can using it\n"
+	"can cause weird effects (with bounces for example).\n"
+	"Low values close to 0.5 (maybe in the range 0.3 to 1) for this\n"
+	"option can be used if you want to increase ship agility without\n"
+	"increasing speeds otherwise. This can improve gameplay for example\n"
+	"on the Blood's Music map. Higher values make the ship behaviour\n"
+	"visibly weird.\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
 	"ballStyles",
 	"ballStyles",
 	"true",
