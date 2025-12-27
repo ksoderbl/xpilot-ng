@@ -250,12 +250,11 @@ void Place_item(int item, int ind)
 	bx = cx / BLOCK_CLICKS;
 	by = cy / BLOCK_CLICKS;
 
-	if (!is_polygon_map) {
-	    if (!BIT(1U << World.block[bx][by], SPACE_BLOCKS)) {
-		return;
-	    }
-	} else {
+	if (is_polygon_map || !useOldCode) {
 	    if (is_inside(cx, cy, NOTEAM_BIT | NONBALL_BIT) != -1)
+		return;
+	} else {
+	    if (!BIT(1U << World.block[bx][by], SPACE_BLOCKS))
 		return;
 	}
 
@@ -285,10 +284,11 @@ void Place_item(int item, int ind)
 		return;
 	    }
 	    if (con) {
+		/* change to use clicks */
 		dir = (int)(rfrac() * RES);
 		dist = (int)(rfrac() * ((itemConcentratorRadius * BLOCK_SZ) + 1));
-		cx = PIXEL_TO_CLICK(((con->pos.x + 0.5) * BLOCK_SZ + dist * tcos(dir)));
-		cy = PIXEL_TO_CLICK(((con->pos.y + 0.5) * BLOCK_SZ + dist * tsin(dir)));
+		cx = con->pos.cx + PIXEL_TO_CLICK(dist * tcos(dir));
+		cy = con->pos.cy + PIXEL_TO_CLICK(dist * tsin(dir));
 		if (BIT(World.rules->mode, WRAP_PLAY)) {
 		    if (cx < 0) cx += World.cwidth;
 		    if (cx >= World.cwidth) cx -= World.cwidth;
@@ -309,12 +309,11 @@ void Place_item(int item, int ind)
 		by = cy / BLOCK_CLICKS;
 	    }
 
-	    if (!is_polygon_map) {
-		if (BIT(1U << World.block[bx][by], SPACE_BLOCKS|CANNON_BIT)) {
-		    break;
-		}
-	    } else {
+	    if (is_polygon_map || !useOldCode) {
 		if (is_inside(cx, cy, NOTEAM_BIT | NONBALL_BIT) == -1)
+		    break;
+	    } else {
+		if (BIT(1U << World.block[bx][by], SPACE_BLOCKS|CANNON_BIT))
 		    break;
 	    }
 	}
@@ -364,6 +363,16 @@ void Make_item(int cx, int cy,
 	       long status)
 {
     object *obj;
+
+    /* kps - remove */
+    if (cx < 0 || cx >= World.cwidth) {
+	printf(__FILE__ "Make item cx = %d\n", cx); 
+	return;
+    }
+    if (cy < 0 || cy >= World.cheight) {
+	printf(__FILE__ "Make item cy = %d\n", cy);
+	return;
+    }
 
     if (World.items[item].num >= World.items[item].max)
 	return;
@@ -616,8 +625,8 @@ void Do_deflector(int ind)
 	    && !BIT(obj->status, GRAVITY))
 	    continue;
 
-	dx = CENTER_XCLICK(obj->pos.cx - pl->pos.cx);
-	dy = CENTER_YCLICK(obj->pos.cy - pl->pos.cy);
+	dx = WRAP_DCX(obj->pos.cx - pl->pos.cx);
+	dy = WRAP_DCY(obj->pos.cy - pl->pos.cy);
 
 	/* kps - 4.3.1X had some nice code here, consider using it ? */
 	dist = (DFLOAT)(LENGTH(dx, dy) - PIXEL_TO_CLICK(SHIP_SZ));
@@ -715,8 +724,8 @@ void Do_general_transporter(int ind, int cx, int cy, int target,
 	if (NumTransporters < MAX_TOTAL_TRANSPORTERS) {
 	    Transporters[NumTransporters] = (trans_t *)malloc(sizeof(trans_t));
 	    if (Transporters[NumTransporters] != NULL) {
-		Transporters[NumTransporters]->pos.x = CLICK_TO_PIXEL(cx);
-		Transporters[NumTransporters]->pos.y = CLICK_TO_PIXEL(cy);
+		Transporters[NumTransporters]->pos.cx = cx;
+		Transporters[NumTransporters]->pos.cy = cy;
 		Transporters[NumTransporters]->target = victim->id;
 		Transporters[NumTransporters]->id = (pl ? pl->id : NO_ID);
 		Transporters[NumTransporters]->count = 5;
@@ -992,8 +1001,8 @@ void Fire_general_ecm(int ind, unsigned short team, int cx, int cy)
 	return;
     }
     ecm = Ecms[NumEcms];
-    ecm->pos.x = CLICK_TO_PIXEL(cx);
-    ecm->pos.y = CLICK_TO_PIXEL(cy);
+    ecm->pos.cx = cx;
+    ecm->pos.cy = cy;
     ecm->id = (pl ? pl->id : NO_ID);
     ecm->size = (int)ECM_DISTANCE;
     NumEcms++;
@@ -1128,8 +1137,8 @@ void Fire_general_ecm(int ind, unsigned short team, int cx, int cy)
 	    if (BIT(World.rules->mode, TEAM_PLAY)
 		&& c->team == team)
 		continue;
-	    range = Wrap_length(cx - c->clk_pos.x,
-				cy - c->clk_pos.y) / CLICK;
+	    range = Wrap_length(cx - c->pos.cx,
+				cy - c->pos.cy) / CLICK;
 	    if (range > ECM_DISTANCE)
 		continue;
 	    damage = (ECM_DISTANCE - range) / ECM_DISTANCE;

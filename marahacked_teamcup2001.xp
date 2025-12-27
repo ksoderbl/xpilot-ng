@@ -1,4 +1,6 @@
-numberofrounds:20
+teamcup:yes
+usewreckage: no
+roundstoplay:12
 noquit:false
 maxunshieldedwallbouncespeed:90
 maxunshieldedplayerwallbounceangle:180
@@ -85,11 +87,17 @@ minefusetime:420
 detonateitemonkillprob:0.5
 rogueheatprob:0.01
 roguemineprob:0.02
+robotTeam:0
+reserveRobotTeam:no
+allowviewing:yes
+fullframerate:yes
+fullzeroframerate:yes
+teamzeropausing:yes
 
 limitedlives : yes
 mapwidth : 100
 mapheight : 100
-mapname : Xpilot-Tournament Map (Blood's Music)
+mapname : TeamCup 2001 - Xpilot-Tournament Map (Blood's Music)
 mapauthor : "Patrick Kenny - pkenny@eecs.umich.edu"
 edgewrap : yes
 teamplay : yes
@@ -171,8 +179,8 @@ s                                         axxxxxxx              axxw            
                    qxxxxw                                                            xxw    axxxxxs 
                   qxxxxxxw                                         axxw              xxxw    xxxs   
                  qxxxxxxxxxxxx#w                                     axw             axxx    axx    
-       qw     #xxxxxxxxxxxxxxxxxw         qxxw            qxxw        ax                      xx    
-      qxxw    axxxxxxxxxxxxxxxxxxxxw      xxxxw         qxxxxxw                               xx    
+       qw     #xxxxxxx00000xxxxxw         qxxw            qxxw        ax                      xx    
+      qxxw    axxxxxxx00000xxxxxxxxw      xxxxw         qxxxxxw                               xx    
       xxxxw    axxxxxxxxxxxxxxxxxxx#      axxxxw        xxxxxxx                               xxw   
       axxxx     a#s     a#xxxxxxxxxs       xxxxxx#xw    axxxxxs                               #xxw  
        #xx#              axxxxxxs          #xxxxxxxxw       as                                axx#  

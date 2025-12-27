@@ -172,7 +172,7 @@ static int Config_create_scoreSelfColor(int widget_desc, int *height);
 static int Config_create_scoreInactiveColor(int widget_desc, int *height);
 static int Config_create_scoreInactiveSelfColor(int widget_desc, int *height);
 static int Config_create_scoreZeroColor(int widget_desc, int *height);
-static int Config_create_scoreObjectTimer(int widget_desc, int *height);
+static int Config_create_scoreObjectTime(int widget_desc, int *height);
 static int Config_create_baseWarningType(int widget_desc, int *height);
 static int Config_create_wallColor(int widget_desc, int *height);
 static int Config_create_decorColor(int widget_desc, int *height);
@@ -345,7 +345,7 @@ static int		(*config_creator[])(int widget_desc, int *height) = {
     Config_create_scoreInactiveColor,
     Config_create_scoreInactiveSelfColor,
     Config_create_scoreZeroColor,
-    Config_create_scoreObjectTimer,
+    Config_create_scoreObjectTime,
     Config_create_baseWarningType,
     Config_create_wallColor,
     Config_create_decorColor,
@@ -1300,11 +1300,11 @@ static int Config_create_scoreZeroColor(int widget_desc, int *height)
 			     0, maxColors - 1, NULL, NULL);
 }
 
-static int Config_create_scoreObjectTimer(int widget_desc, int *height)
+static int Config_create_scoreObjectTime(int widget_desc, int *height)
 {
-    return Config_create_int(widget_desc, height,
-			     "scoreObjectTimer", &scoreObjectTimer, 0, 120,
-			     NULL, NULL);
+    return Config_create_float(widget_desc, height,
+			       "scoreObjectTime", &scoreObjectTime, 0.0, 10.0,
+			       NULL, NULL);
 }
 
 static int Config_create_baseWarningType(int widget_desc, int *height)
@@ -1678,7 +1678,6 @@ static int Config_update_sparkProb(int widget_desc, void *data, DFLOAT *val)
 
 static int Config_update_charsPerSecond(int widget_desc, void *data, int *val)
 {
-    charsPerTick = (DFLOAT)charsPerSecond / FPS;
     return 0;
 }
 
@@ -2060,7 +2059,7 @@ static int Config_save(int widget_desc, void *button_str, const char **strptr)
     Config_save_int(fp, "scoreInactiveColor", scoreInactiveColor);
     Config_save_int(fp, "scoreInactiveSelfColor", scoreInactiveSelfColor);
     Config_save_int(fp, "scoreZeroColor", scoreZeroColor);
-    Config_save_int(fp, "scoreObjectTimer", scoreObjectTimer);
+    Config_save_float(fp, "scoreObjectTime", scoreObjectTime);
     Config_save_int(fp, "baseWarningType", baseWarningType);
     Config_save_int(fp, "wallColor", wallColor);
     Config_save_int(fp, "decorColor", decorColor);

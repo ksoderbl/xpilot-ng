@@ -30,8 +30,15 @@
 #include <limits.h>
 #include <time.h>
 
+#ifndef _WINDOWS
+# include <sys/types.h>  /* freebsd for in.h to work */
+# include <sys/socket.h> /* freebsd for in.h to work */
+# include <netinet/in.h>
+#endif
+
 #ifdef _WINDOWS
 # include "NT/winServer.h"
+# include "../common/NT/winNet.h"
 #endif
 
 #define SERVER
@@ -92,10 +99,16 @@ static void Turn_player_new(int ind);
 
 void Walls_init(void)
 {
+#if 0
     if (!is_polygon_map)
 	Walls_init_old();
     else
 	Walls_init_new();
+#endif
+    /* kps hack */
+    if (!is_polygon_map)
+	Walls_init_old();
+    Walls_init_new();
 }
 
 void Move_init(void)
@@ -158,26 +171,26 @@ void Move_init(void)
 
 void Move_object(object *obj)
 {
-    if (!is_polygon_map)
-	Move_object_old(obj);
-    else
+    if (is_polygon_map || !useOldCode)
 	Move_object_new(obj);
+    else
+	Move_object_old(obj);
 }
 
 void Move_player(int ind)
 {
-    if (!is_polygon_map)
-	Move_player_old(ind);
-    else
+    if (is_polygon_map || !useOldCode)
 	Move_player_new(ind);
+    else
+	Move_player_old(ind);
 }
 
 void Turn_player(int ind)
 {
-    if (!is_polygon_map)
-	Turn_player_old(ind);
-    else
+    if (is_polygon_map || !useOldCode)
 	Turn_player_new(ind);
+    else
+	Turn_player_old(ind);
 }
 
 
@@ -557,7 +570,7 @@ static void Bounce_wall(move_state_t *ms, move_bounce_t bounce)
  *  - whether the point bounced, in which case no pixels will have been
  *    traversed, only a change in direction. (ms->bounce, ms->vel, ms->todo)
  */
-void Move_segment(move_state_t *ms)
+void Move_segment_old(move_state_t *ms)
 {
     int			i;
     int			block_type;	/* type of block we're going through */
@@ -814,10 +827,10 @@ void Move_segment(move_state_t *ms)
 		&& last != hole
 		&& (OBJ_X_IN_BLOCKS(mi->obj) != block.x
 		 || OBJ_Y_IN_BLOCKS(mi->obj) != block.y) ) {
-		ms->done.x += (World.wormHoles[last].pos.x
-		    - World.wormHoles[hole].pos.x) * BLOCK_CLICKS;
-		ms->done.y += (World.wormHoles[last].pos.y
-		    - World.wormHoles[hole].pos.y) * BLOCK_CLICKS;
+		ms->done.x += (World.wormHoles[last].pos.cx
+			       - World.wormHoles[hole].pos.cx);
+		ms->done.y += (World.wormHoles[last].pos.cy
+			       - World.wormHoles[hole].pos.cy);
 		break;
 	    }
 	}
@@ -832,8 +845,11 @@ void Move_segment(move_state_t *ms)
 	    break;
 	}
 	for (i = 0; ; i++) {
-	    if (World.cannon[i].blk_pos.x == block.x
-		&& World.cannon[i].blk_pos.y == block.y) {
+	    int bx, by;
+
+	    bx = CLICK_TO_BLOCK(World.cannon[i].pos.cx);
+	    by = CLICK_TO_BLOCK(World.cannon[i].pos.cy);
+	    if (bx == block.x && by == block.y) {
 		break;
 	    }
 	}
@@ -1015,8 +1031,8 @@ void Move_segment(move_state_t *ms)
 		}
 
 		for (i = 0; ; i++) {
-		    if (World.treasures[i].pos.x / BLOCK_CLICKS == block.x &&
-			World.treasures[i].pos.y / BLOCK_CLICKS == block.y) {
+		    if (World.treasures[i].pos.cx / BLOCK_CLICKS == block.x &&
+			World.treasures[i].pos.cy / BLOCK_CLICKS == block.y) {
 			break;
 		    }
 		}
@@ -1598,14 +1614,16 @@ void Move_segment(move_state_t *ms)
 static void Cannon_dies(move_state_t *ms)
 {
     cannon_t           *cannon = World.cannon + ms->cannon;
-    int			cx = cannon->clk_pos.x;
-    int			cy = cannon->clk_pos.y;
+    int			cx = cannon->pos.cx;
+    int			cy = cannon->pos.cy;
+    int			bx = CLICK_TO_BLOCK(cx);
+    int			by = CLICK_TO_BLOCK(cy);
     int			killer = -1;
     player		*pl = NULL;
 
     cannon->dead_time = cannonDeadTime;
     cannon->conn_mask = 0;
-    World.block[cannon->blk_pos.x][cannon->blk_pos.y] = SPACE;
+    World.block[bx][by] = SPACE;
     Cannon_throw_items(ms->cannon);
     Cannon_init(ms->cannon);
     sound_play_sensors(cx, cy, CANNON_EXPLOSION_SOUND);
@@ -1658,8 +1676,8 @@ static void Cannon_dies(move_state_t *ms)
 	    if (pl->score <= cannonMaxScore
 		&& !(BIT(World.rules->mode, TEAM_PLAY)
 		     && pl->team == cannon->team)) {
-		SCORE(killer, cannonPoints, cannon->clk_pos.x,
-					    cannon->clk_pos.y, "");
+		SCORE(killer, cannonPoints, cannon->pos.cx,
+					    cannon->pos.cy, "");
 	    }
 	}
     }
@@ -1755,8 +1773,8 @@ static void Object_hits_target(move_state_t *ms, long player_cost)
      * Destroy target.
      * Turn it into a space to simplify other calculations.
      */
-    x = targ->pos.x / BLOCK_CLICKS;
-    y = targ->pos.y / BLOCK_CLICKS;
+    x = targ->pos.cx / BLOCK_CLICKS;
+    y = targ->pos.cy / BLOCK_CLICKS;
     World.block[x][y] = SPACE;
 
     Make_debris(
@@ -1819,7 +1837,7 @@ static void Object_hits_target(move_state_t *ms, long player_cost)
 	sc = Rate(Players[killer]->score, CANNON_SCORE)/4;
 	sc = sc * (targets_total - targets_remaining) / (targets_total + 1);
 	if (sc >= 0.01) {
-	    SCORE(killer, sc, targ->pos.x, targ->pos.y, "Target: ");
+	    SCORE(killer, sc, targ->pos.cx, targ->pos.cy, "Target: ");
 	}
 	/*
 	 * If players can't collide with their own targets, we
@@ -1861,11 +1879,11 @@ static void Object_hits_target(move_state_t *ms, long player_cost)
 		&& targets_remaining == 0
 		&& !BIT(Players[j]->status, KILLED|PAUSE|GAME_OVER))
 		SET_BIT(Players[j]->status, KILLED);
-	    SCORE(j, -sc, targ->pos.x, targ->pos.y, "Target: ");
+	    SCORE(j, -sc, targ->pos.cx, targ->pos.cy, "Target: ");
 	}
 	else if (Players[j]->team == Players[killer]->team &&
 		 (Players[j]->team != TEAM_NOT_SET || j == killer)) {
-	    SCORE(j, por, targ->pos.x, targ->pos.y, "Target: ");
+	    SCORE(j, por, targ->pos.cx, targ->pos.cy, "Target: ");
 	}
     }
 }
@@ -1958,6 +1976,10 @@ void Move_object_old(object *obj)
     if (dist > 2) {
 	int max = ((dist - 2) * BLOCK_SZ) >> 1;
 	if (sqr(max) >= sqr(obj->vel.x) + sqr(obj->vel.y)) {
+	    /*
+	     * kps - comment the two timestep factors and the dodgers
+	     * laser wrap problem is removed
+	     */
 	    int cx = obj->pos.cx + FLOAT_TO_CLICK(obj->vel.x * timeStep2);
 	    int cy = obj->pos.cy + FLOAT_TO_CLICK(obj->vel.y * timeStep2);
 	    cx = WRAP_XCLICK(cx);
@@ -1992,7 +2014,7 @@ void Move_object_old(object *obj)
     ms.mip = &mi;
 
     for (;;) {
-	Move_segment(&ms);
+	Move_segment_old(&ms);
 	if (!(ms.done.x | ms.done.y)) {
 	    pos_update |= (ms.crash | ms.bounce);
 	    if (ms.crash) {
@@ -2064,7 +2086,7 @@ void Move_object_old(object *obj)
     Cell_add_object(obj);
 }
 
-static void Player_crash(move_state_t *ms, int pt, bool turning)
+static void Player_crash_old(move_state_t *ms, int pt, bool turning)
 {
     player		*pl = ms->mip->pl;
     int			ind = GetInd[pl->id];
@@ -2078,7 +2100,7 @@ static void Player_crash(move_state_t *ms, int pt, bool turning)
     default:
     case NotACrash:
 	errno = 0;
-	error("Player_crash not a crash %d", ms->crash);
+	error("Player_crash_old not a crash %d", ms->crash);
 	break;
 
     case CrashWormHole:
@@ -2405,7 +2427,7 @@ static void Move_player_old(int ind)
 	bounce = -1;
 	crash = -1;
 	for (i = 0; i < pl->ship->num_points; i++) {
-	    Move_segment(&ms[i]);
+	    Move_segment_old(&ms[i]);
 	    pos_update |= (ms[i].crash | ms[i].bounce);
 	    if (ms[i].crash) {
 		crash = i;
@@ -2624,7 +2646,7 @@ static void Move_player_old(int ind)
     pl->velocity = VECTOR_LENGTH(pl->vel);
 
     if (ms[worst].crash) {
-	Player_crash(&ms[worst], worst, false);
+	Player_crash_old(&ms[worst], worst, false);
     }
     if (pos_update) {
 	Player_position_remember(pl);
@@ -2739,7 +2761,7 @@ static void Turn_player_old(int ind)
 	    ms[i].target = -1;
 
 	    do {
-		Move_segment(&ms[i]);
+		Move_segment_old(&ms[i]);
 		if (ms[i].crash | ms[i].bounce) {
 		    if (ms[i].crash) {
 			if (ms[i].crash != CrashUniverse) {
@@ -2776,12 +2798,13 @@ static void Turn_player_old(int ind)
     }
 
     if (blocked) {
-	pl->float_dir = (DFLOAT) pl->dir;
+	/* kps - Mara "turnqueue" type hack  */
+	/*pl->float_dir = (DFLOAT) pl->dir;*/
 	pl->last_wall_touch = frame_loops;
     }
 
     if (crash != -1) {
-	Player_crash(&ms[crash], crash, true);
+	Player_crash_old(&ms[crash], crash, true);
     }
 
 }
@@ -3968,11 +3991,6 @@ static int Clear_corner(struct move *move, object *obj, int l1, int l2)
     return 1;
 }
 
-#ifdef _WINDOWS
-#include "../common/NT/winNet.h"
-#else
-#include <netinet/in.h>
-#endif
 
 static void store_short(unsigned char **ptr, int i)
 {
@@ -4046,19 +4064,19 @@ int Polys_to_client(unsigned char *ptr)
 	    *ptr++ = 0;
 	else
 	    *ptr++ = World.base[i].team;
-	store_short(&ptr, World.base[i].pos.x >> CLICK_SHIFT);
-	store_short(&ptr, World.base[i].pos.y >> CLICK_SHIFT);
+	store_short(&ptr, World.base[i].pos.cx >> CLICK_SHIFT);
+	store_short(&ptr, World.base[i].pos.cy >> CLICK_SHIFT);
 	*ptr++ = World.base[i].dir;
     }
     store_short(&ptr, World.NumFuels);
     for (i = 0; i < World.NumFuels; i++) {
-	store_short(&ptr, World.fuel[i].clk_pos.x >> CLICK_SHIFT);
-	store_short(&ptr, World.fuel[i].clk_pos.y >> CLICK_SHIFT);
+	store_short(&ptr, World.fuel[i].pos.cx >> CLICK_SHIFT);
+	store_short(&ptr, World.fuel[i].pos.cy >> CLICK_SHIFT);
     }
     *ptr++ = World.NumChecks;
     for (i = 0; i < World.NumChecks; i++) {
-	store_short(&ptr, World.check[i].x >> CLICK_SHIFT);
-	store_short(&ptr, World.check[i].y >> CLICK_SHIFT);
+	store_short(&ptr, World.check[i].cx >> CLICK_SHIFT);
+	store_short(&ptr, World.check[i].cy >> CLICK_SHIFT);
     }
     return ptr - start;
 }
@@ -4389,8 +4407,8 @@ static double edge_distance(int bx, int by, int ox, int oy, int dx, int dy,
 static void inside_test(void)
 {
     int dx, dy, bx, by, ox, oy, startx, starty;
-    int i, j, num_points, minx, miny, poly, group;
-    int bx2, by2, maxx, maxy, dir;
+    int i, j, num_points, minx = -1, miny = -1, poly, group;
+    int bx2, by2, maxx = -1, maxy = -1, dir;
     double dist;
     int *edges;
 
@@ -4399,7 +4417,7 @@ static void inside_test(void)
 	minx = -1;
 	for (poly = 0; poly < polyc; poly++) {
 	    if (pdata[poly].is_decor || pdata[poly].group != group)
-	    continue;
+		continue;
 	    num_points = pdata[poly].num_points;
 	    dx = 0;
 	    dy = 0;
@@ -4417,8 +4435,16 @@ static void inside_test(void)
 	    edges = pdata[poly].edges;
 	    closest_line(bx, by, 1e10, 0); /* For polygons within one block */
 	    for (j = 0; j < num_points; j++) {
-		if (startx >> B_SHIFT != bx || starty >> B_SHIFT != by)
+		if (((startx >> B_SHIFT) != bx)
+		    || ((starty >> B_SHIFT) != by)) {
+		    printf("startx = %d, startx >> B_SHIFT = %d, bx = %d\n",
+			   startx, startx >> B_SHIFT, bx);
+		    printf("starty = %d, starty >> B_SHIFT = %d, by = %d\n",
+			   starty, starty >> B_SHIFT, by);
+		    printf("going into infinite loop...\n");
+		    /* hmm ??? */
 		    while (1);
+		}
 		ox = startx & B_MASK;
 		oy = starty & B_MASK;
 		dx = *edges++;
@@ -4492,7 +4518,7 @@ static void inside_test(void)
  */
 
 #define DICLOSE (5 * CLICK)
-#define LINSIZE 50
+#define LINSIZE 100
 #define NCLLIN (10 + 1)
 static void Distance_init(void)
 {
@@ -4663,7 +4689,7 @@ static void Corner_init(void)
     int block, size = mapx * mapy;
     int height, height2, width, by2;
 
-#define DISIZE 100
+#define DISIZE 200
     temp = ralloc(NULL, mapx * mapy * DISIZE * sizeof(short)); /* !@# */
     for (i = 0; i < mapx * mapy; i++)
 	temp[i * DISIZE] = 0;
@@ -4717,17 +4743,25 @@ static void Corner_init(void)
 }
 
 
-static void Ball_line_init(void)
+void Ball_line_init(void)
 {
     int i;
     static cpos coords[24];
 
-    ball_wire.num_points = 24;
-
-    for (i = 0; i < 24; i++) {
-	ball_wire.pts[i] = coords + i;
-	coords[i].cx = cos(i * PI / 12) * BALL_RADIUS * CLICK;
-	coords[i].cy = sin(i * PI / 12) * BALL_RADIUS * CLICK;
+    if (!treatBallAsPoint) {
+	ball_wire.num_points = 24;
+	for (i = 0; i < 24; i++) {
+	    ball_wire.pts[i] = coords + i;
+	    coords[i].cx = cos(i * PI / 12) * BALL_RADIUS * CLICK;
+	    coords[i].cy = sin(i * PI / 12) * BALL_RADIUS * CLICK;
+	}
+	/*xpprintf(__FILE__ ": treating ball as polygon.\n");*/
+    } else {
+	ball_wire.num_points = 1;
+	ball_wire.pts[0] = coords;
+	coords[0].cx = 0;
+	coords[0].cy = 0;
+	/*xpprintf(__FILE__ ": treating ball as point.\n");*/
     }
 
     return;
@@ -4836,7 +4870,7 @@ static void Bounce_wall(move_state_t *ms, move_bounce_t bounce)
  *  - whether the point bounced, in which case no pixels will have been
  *    traversed, only a change in direction. (ms->bounce, ms->vel, ms->todo)
  */
-static void Move_segment(move_state_t *ms)
+static void Move_segment_431x_unused(move_state_t *ms)
 {
     int			i;
     int			block_type;	/* type of block we're going through */
@@ -6279,8 +6313,11 @@ static void Turn_player_new(int ind)
     else
 	hitmask = NONBALL_BIT | NOTEAM_BIT;
 
-
-    while (pl->dir != new_dir && (Shape_turn1(pl->ship, hitmask, pl->pos.cx, pl->pos.cy, pl->dir, sign) || (pl->float_dir = pl->dir, 0)))
+    /* kps - Mara "turnqueue" type hack  */
+    /* someone clean this obfuscated code up */
+    while (pl->dir != new_dir
+	   && (Shape_turn1(pl->ship, hitmask, pl->pos.cx, pl->pos.cy,
+			   pl->dir, sign) /*|| (pl->float_dir = pl->dir, 0)*/))
 	pl->dir = MOD2(pl->dir + sign, RES);
     return;
 }

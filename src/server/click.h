@@ -68,6 +68,29 @@
 		    : (y_))) \
 	    : (y_))
 
+/*
+ * Two macros for edge wrap of differences in position.
+ * If the absolute value of a difference is bigger than
+ * half the map size then it is wrapped.
+ */
+#define WRAP_DCX(dcx)	\
+	(BIT(World.rules->mode, WRAP_PLAY) \
+	    ? ((dcx) < - (World.cwidth >> 1) \
+		? (dcx) + World.cwidth \
+		: ((dcx) > (World.cwidth >> 1) \
+		    ? (dcx) - World.cwidth \
+		    : (dcx))) \
+	    : (dcx))
+
+#define WRAP_DCY(dcy)	\
+	(BIT(World.rules->mode, WRAP_PLAY) \
+	    ? ((dcy) < - (World.cheight >> 1) \
+		? (dcy) + World.cheight \
+		: ((dcy) > (World.cheight >> 1) \
+		    ? (dcy) - World.cheight \
+		    : (dcy))) \
+	    : (dcy))
+
 #define TWRAP_XCLICK(x_) \
      ((x_) > 0 ? (x_) % World.cwidth : \
       ((x_) % World.cwidth + World.cwidth))

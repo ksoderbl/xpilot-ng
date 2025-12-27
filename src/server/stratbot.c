@@ -324,5 +324,11 @@ static bool Really_empty_space(int ind, int x, int y)
 }
 #endif
 
+#else
+static void ansi_c_does_not_like_empty_source_files(void)
+{
+    ansi_c_does_not_like_empty_source_files();
+}
+
 #endif
 

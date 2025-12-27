@@ -400,10 +400,8 @@ static list_t Laser_pulse_get_object_list(
 		ast = (object *) LI_DATA(iter);
 		dcx = midcx - ast->pos.cx;
 		dcy = midcy - ast->pos.cy;
-		if (BIT(World.rules->mode, WRAP_PLAY)) {
-		    dcx = CENTER_XCLICK(dcx);
-		    dcy = CENTER_YCLICK(dcy);
-		}
+		dcx = WRAP_DCX(dcx);
+		dcy = WRAP_DCY(dcy);
 		range = ast->pl_radius * CLICK + pulse->len / 2;
 		if (ABS(dcx) > range || ABS(dcy) > range)
 		    continue;
@@ -521,10 +519,8 @@ void Laser_pulse_collision(void)
 	/* calculate delta x and y for pulse start and end position. */
 	dcx = cx2 - cx1;
 	dcy = cy2 - cy1;
-	if (BIT(World.rules->mode, WRAP_PLAY)) {
-	    dcx = CENTER_XCLICK(dcx);
-	    dcy = CENTER_YCLICK(dcy);
-	}
+	dcx = WRAP_DCX(dcx);
+	dcy = WRAP_DCY(dcy);
 
 	/* max is the highest absolute delta length of either x or y. */
 	max = MAX(ABS(dcx), ABS(dcy));
@@ -601,10 +597,8 @@ void Laser_pulse_collision(void)
 		    ast = LI_DATA(iter);
 		    adcx = cx - ast->pos.cx;
 		    adcy = cy - ast->pos.cy;
-		    if (BIT(World.rules->mode, WRAP_PLAY)) {
-			adcx = CENTER_XCLICK(adcx);
-			adcy = CENTER_YCLICK(adcy);
-		    }
+		    adcx = WRAP_DCX(adcx);
+		    adcy = WRAP_DCY(adcy);
 		    radius = ast->pl_radius * CLICK;
 		    if (ABS(adcx) > radius || ABS(adcy) > radius)
 			continue;

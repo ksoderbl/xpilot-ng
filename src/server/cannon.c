@@ -130,7 +130,7 @@ void Cannon_throw_items(int ind)
 		dir = MOD2(dir, RES);
 		obj->id = NO_ID;
 		obj->team = TEAM_NOT_SET;
-		Object_position_init_clicks(obj, c->clk_pos.x, c->clk_pos.y);
+		Object_position_init_clicks(obj, c->pos.cx, c->pos.cy);
 		velocity = rfrac() * 6;
 		obj->vel.x = tcos(dir) * velocity;
 		obj->vel.y = tsin(dir) * velocity;
@@ -223,13 +223,14 @@ static int Cannon_in_danger(int ind)
     const int	max_objs = 100;
     int		obj_count, i, danger = false;
     int		npx, npy, tdx, tdy;
-    int		cpx = CLICK_TO_PIXEL(c->clk_pos.x);
-    int		cpy = CLICK_TO_PIXEL(c->clk_pos.y);
+    int		cpx = CLICK_TO_PIXEL(c->pos.cx);
+    int		cpy = CLICK_TO_PIXEL(c->pos.cy);
 
     if (cannonSmartness == 0)
 	return false;
 
-    Cell_get_objects(c->blk_pos.x, c->blk_pos.y, range, max_objs,
+    Cell_get_objects(CLICK_TO_BLOCK(c->pos.cx),
+		     CLICK_TO_BLOCK(c->pos.cy), range, max_objs,
 		     &obj_list, &obj_count);
 
     for (i = 0; (i < obj_count) && !danger; i++) {
@@ -289,7 +290,7 @@ static void Cannon_defend(int ind, int defense)
 	break;
     }
     IFSOUND( if (sound != -1)
-	     sound_play_sensors(c->clk_pos.x, c->clk_pos.y, sound) );
+	     sound_play_sensors(c->pos.cx, c->pos.cy, sound) );
 }
 
 /* selects one of the available weapons. see cannon.h for descriptions. */
@@ -344,8 +345,8 @@ static void Cannon_aim(int ind, int weapon, int *target, int *dir)
     cannon_t	*c = World.cannon + ind;
     int		speed = ShotsSpeed;
     int		range = CANNON_SHOT_LIFE_MAX * speed;
-    int		cx = c->clk_pos.x;
-    int		cy = c->clk_pos.y;
+    int		cx = c->pos.cx;
+    int		cy = c->pos.cy;
     int		visualrange = (int)(CANNON_DISTANCE
 			      + 2 * c->item[ITEM_SENSOR] * BLOCK_SZ);
     bool	found = false, ready = false;
@@ -393,10 +394,10 @@ static void Cannon_aim(int ind, int weapon, int *target, int *dir)
 	player *pl = Players[i];
 	int tdist, tdx, tdy;
 
-	tdx = WRAP_XCLICK(pl->pos.cx - cx) / CLICK;
+	tdx = WRAP_DCX(pl->pos.cx - cx) / CLICK;
 	if (ABS(tdx) >= visualrange)
 	    continue;
-	tdy = WRAP_YCLICK(pl->pos.cy - cy) / CLICK;
+	tdy = WRAP_DCY(pl->pos.cy - cy) / CLICK;
 	if (ABS(tdy) >= visualrange)
 	    continue;
 	tdist = (int)LENGTH(tdx, tdy);
@@ -441,8 +442,8 @@ static void Cannon_aim(int ind, int weapon, int *target, int *dir)
 				+ pl->acc.y * time * time * CLICK);
 		int tdir;
 
-		tdx = WRAP_XCLICK(npx - cx) / CLICK;
-		tdy = WRAP_YCLICK(npy - cy) / CLICK;
+		tdx = WRAP_DCX(npx - cx) / CLICK;
+		tdy = WRAP_DCY(npy - cy) / CLICK;
 		tdir = (int)findDir(tdx, tdy);
 		ddir = MOD2(tdir - c->dir, RES);
 		if ((ddir < (CANNON_SPREAD * 0.5)
@@ -495,8 +496,8 @@ static void Cannon_fire(int ind, int weapon, int target, int dir)
 {
     cannon_t	*c = World.cannon + ind;
     player	*pl = Players[target];
-    int		cx = c->clk_pos.x;
-    int		cy = c->clk_pos.y;
+    int		cx = c->pos.cx;
+    int		cy = c->pos.cy;
     modifiers	mods;
 #ifdef SOUND
     int		sound = CANNON_FIRE_SOUND;

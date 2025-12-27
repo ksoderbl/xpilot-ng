@@ -1249,7 +1249,7 @@ static int Cmd_team(char *arg, player *pl, int oper, char *msg)
     int			i;
     int			ind = GetInd[pl->id];
     int			team;
-    int			pl_oldteam;
+    int			pl_oldteam = TEAM_NOT_SET; /* kps */
     int			pl2_oldteam;
     int			swap_allowed;
     char		*arg2;

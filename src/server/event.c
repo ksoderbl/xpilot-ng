@@ -68,8 +68,8 @@ static void Refuel(int ind)
 
     CLR_BIT(pl->used, HAS_REFUEL);
     for (i=0; i<World.NumFuels; i++) {
-	l = Wrap_length(pl->pos.cx - World.fuel[i].clk_pos.x,
-			pl->pos.cy - World.fuel[i].clk_pos.y) / CLICK;
+	l = Wrap_length(pl->pos.cx - World.fuel[i].pos.cx,
+			pl->pos.cy - World.fuel[i].pos.cy) / CLICK;
 	if (BIT(pl->used, HAS_REFUEL) == 0
 	    || l < dist) {
 	    SET_BIT(pl->used, HAS_REFUEL);
@@ -95,8 +95,8 @@ static void Repair(int ind)
     for (i = 0; i < World.NumTargets; i++, targ++) {
 	if (targ->team == pl->team
 	    && targ->dead_time <= 0) {
-	    cx = targ->pos.x;
-	    cy = targ->pos.y;
+	    cx = targ->pos.cx;
+	    cy = targ->pos.cy;
 	    l = Wrap_length(pl->pos.cx - cx, pl->pos.cy - cy);
 	    if (BIT(pl->used, HAS_REPAIR) == 0 || l < dist) {
 		SET_BIT(pl->used, HAS_REPAIR);
@@ -567,8 +567,8 @@ int Handle_keyboard(int ind)
 		cy = pl->pos.cy;
 		msg[0] = '\0';
 		for (i=0; i<World.NumBases; i++) {
-		    dx = ABS(CENTER_XCLICK(World.base[i].pos.x - cx));
-		    dy = ABS(CENTER_YCLICK(World.base[i].pos.y - cy));
+		    dx = ABS(CENTER_XCLICK(World.base[i].pos.cx - cx));
+		    dy = ABS(CENTER_YCLICK(World.base[i].pos.cy - cy));
 		    if (dx < BLOCK_CLICKS / 2 && dy < BLOCK_CLICKS / 2) {
 
 			if (i == pl->home_base) {
@@ -832,8 +832,8 @@ int Handle_keyboard(int ind)
 		    i = HOVERPAUSE;
 		}
 		else {
-		    cx = World.base[pl->home_base].pos.x;
-		    cy = World.base[pl->home_base].pos.y;
+		    cx = World.base[pl->home_base].pos.cx;
+		    cy = World.base[pl->home_base].pos.cy;
 		    dx = ABS(CENTER_XCLICK(pl->pos.cx - cx));
 		    dy = ABS(CENTER_YCLICK(pl->pos.cy - cy));
 		    if (dx < BLOCK_CLICKS / 2 && dy < BLOCK_CLICKS / 2) {

@@ -105,8 +105,7 @@
 #define DIR_DOWN		(3*RES/4)
 
 typedef struct {
-    ipos	blk_pos;
-    ipos	clk_pos;
+    cpos	pos;
     long	fuel;
     unsigned	conn_mask;
     long	last_change;
@@ -114,12 +113,12 @@ typedef struct {
 } fuel_t;
 
 typedef struct {
-    ipos	pos;
+    cpos	pos;
     DFLOAT	force;
 } grav_t;
 
 typedef struct {
-    ipos		pos;
+    cpos		pos;
     int			dir;
     unsigned short	team;
 } base_t;
@@ -131,8 +130,7 @@ typedef struct {
 } baseorder_t;
 
 typedef struct {
-    ipos		blk_pos;
-    ipos		clk_pos;
+    cpos		pos;
     int			dir;
     int			dead_time;
     unsigned		conn_mask;
@@ -170,7 +168,7 @@ typedef struct {
 typedef enum { WORM_NORMAL, WORM_IN, WORM_OUT } wormType;
 
 typedef struct {
-    ipos		pos;
+    cpos		pos;
     int			lastdest,	/* last destination wormhole */
 			countdown;	/* if >0 warp to lastdest else random */
     bool		temporary;	/* wormhole was left by hyperjump */
@@ -180,7 +178,7 @@ typedef struct {
 } wormhole_t;
 
 typedef struct {
-    ipos		pos;
+    cpos		pos;
     bool		have;	/* true if this treasure has ball in it */
     unsigned short	team;	/* team of this treasure */
     int 		destroyed;	/* how often this treasure destroyed */
@@ -188,7 +186,7 @@ typedef struct {
 } treasure_t;
 
 typedef struct {
-    ipos		pos;
+    cpos		pos;
     unsigned short	team;
     int			dead_time;
     int			damage;
@@ -211,7 +209,7 @@ typedef struct {
 } team_t;
 
 typedef struct {
-    ipos	pos;
+    cpos	pos;
 } item_concentrator_t, asteroid_concentrator_t;
 
 extern bool is_polygon_map;
@@ -253,7 +251,7 @@ typedef struct {
     int			NumCannons;
     cannon_t		*cannon;
     int			NumChecks;
-    ipos		*check;
+    cpos		*check;
     int			NumWormholes;
     wormhole_t		*wormHoles;
     int			NumTreasures;
@@ -266,7 +264,7 @@ typedef struct {
     asteroid_concentrator_t	*asteroidConcs;
 } World_map;
 
-
+/* kps change 100, 30 etc to something sane */
 struct polystyle {
     char id[100];
     int color;

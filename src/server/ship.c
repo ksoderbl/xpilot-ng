@@ -238,8 +238,8 @@ void Obj_repel(object *obj1, object *obj2, int repel_dist)
 			dvx2, dvy2;
     int			obj_theta;
 
-    xd = CENTER_XCLICK(obj2->pos.cx - obj1->pos.cx);
-    yd = CENTER_YCLICK(obj2->pos.cy - obj1->pos.cy);
+    xd = WRAP_DCX(obj2->pos.cx - obj1->pos.cx);
+    yd = WRAP_DCY(obj2->pos.cy - obj1->pos.cy);
     force = CLICK_TO_PIXEL((int)(repel_dist - LENGTH(xd, yd)));
 
     if (force <= 0)
@@ -544,6 +544,10 @@ void Make_wreckage(
 
     cx = WRAP_XCLICK(cx);
     cy = WRAP_YCLICK(cy);
+    if (cx < 0 || cx >= World.cwidth || cy < 0 || cy >= World.cheight) {
+	printf(__FILE__ ": bug\n"); /* kps - remove */
+	return;
+    }
 
     if (max_life < min_life)
 	max_life = min_life;

@@ -2563,7 +2563,7 @@ int Receive_score_object(void)
     char		msg[MAX_CHARS];
     u_byte		ch;
 
-    if (version < 0x4500 || (version >= 0x4F00 && version < 0x4F11)) {
+    if (version < 0x4500 || (version >= 0x4F09 && version < 0x4F11)) {
 	short	rcv_score;
 	n = Packet_scanf(&cbuf, "%c%hd%hu%hu%s",
 			 &ch, &rcv_score, &x, &y, msg);
@@ -2591,7 +2591,7 @@ int Receive_score(void)
     DFLOAT		score = 0;
     u_byte		ch, mychar, alliance = ' ';
 
-    if (version < 0x4500 || (version >= 0x4F00 && version < 0x4F11)) {
+    if (version < 0x4500 || (version >= 0x4F09 && version < 0x4F11)) {
 	short	rcv_score;
 	n = Packet_scanf(&cbuf, "%c%hd%hd%hd%c", &ch,
 			 &id, &rcv_score, &life, &mychar);

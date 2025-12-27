@@ -54,6 +54,18 @@ char map_version[] = VERSION;
 #define GRAV_RANGE  10
 
 
+#define STORE(T,P,N,M,V)						\
+    if (N >= M && ((M <= 0)						\
+	? (P = (T *) malloc((M = 1) * sizeof(*P)))			\
+	: (P = (T *) realloc(P, (M += M) * sizeof(*P)))) == NULL) {	\
+	warn("No memory");						\
+	exit(1);							\
+    } else								\
+	(P[N++] = V)
+/* !@# add a final realloc later to free wasted memory */
+int max_asteroidconcs = 0, max_bases = 0, max_cannons = 0, max_checks = 0,
+    max_fuels = 0, max_gravs = 0, max_itemconcs = 0,
+    max_targets = 0, max_treasures = 0, max_wormholes = 0;
 
 /*
  * Globals.
@@ -61,17 +73,19 @@ char map_version[] = VERSION;
 World_map World;
 bool is_polygon_map = FALSE;
 
-/*static void Init_map(void);
-  static void Alloc_map(void);*/
 static void Generate_random_map(void);
 
 static void Find_base_order(void);
 
+static void Reset_map_object_counters(void);
 
 #ifdef DEBUG
 static void Print_map(void)			/* Debugging only. */
 {
     int x, y;
+
+    if (is_polygon_map)
+	return;
 
     for (y=World.y-1; y>=0; y--) {
 	for (x=0; x<World.x; x++)
@@ -91,56 +105,208 @@ static void Print_map(void)			/* Debugging only. */
 }
 #endif
 
-
-void Init_map_new(void)
+#include <ctype.h>
+void asciidump(void *p, size_t size)
 {
     int i;
+    unsigned char *up = p;
+    char c;
 
-    for (i = 0; i < MAX_TEAMS; i++) {
-	World.teams[i].NumMembers = 0;
-	World.teams[i].NumBases = 0;
-	World.teams[i].NumTreasures = 0;
-	World.teams[i].TreasuresDestroyed = 0;
-	World.teams[i].TreasuresLeft = 0;
-	World.teams[i].SwapperId = NO_ID;
+    for (i = 0; i < size; i++) {
+       if (!(i % 64))
+           printf("\n%08x ", i);
+       c = *(up + i);
+       if (isprint(c))
+           printf("%c", c);
+       else
+           printf(".");
     }
-    World.NumBases = 0;
-    World.NumTreasures = 0;
-    World.NumFuels = 0;
-    World.NumChecks = 0;
-
-    if (World.NumChecks > 0
-	&& (World.check = malloc(World.NumChecks * sizeof(ipos))) ==NULL) {
-	error("Out of memory - checkpoints");
-	exit(-1);
-    }
-    World.NumGravs	= 0;
-    World.NumCannons	= 0;
-    World.NumWormholes	= 0;
-    World.NumTargets	= 0;
-    World.NumItemConcentrators	= 0;
+    printf("\n\n");
 }
 
 
-void Init_map_old(void)
+void hexdump(void *p, size_t size)
 {
-    World.x		= 256;
-    World.y		= 256;
-    World.diagonal	= (int) LENGTH(World.x, World.y);
-    World.width		= World.x * BLOCK_SZ;
-    World.height	= World.y * BLOCK_SZ;
-    World.hypotenuse	= (int) LENGTH(World.width, World.height);
-    World.NumFuels	= 0;
-    World.NumBases	= 0;
-    World.NumGravs	= 0;
-    World.NumCannons	= 0;
-    World.NumWormholes	= 0;
-    World.NumTreasures	= 0;
-    World.NumTargets	= 0;
-    World.NumItemConcentrators	= 0;
-    World.NumAsteroidConcs	= 0;
+    int i;
+    unsigned char *up = p;
+
+    for (i = 0; i < size; i++) {
+	if (!(i % 16))
+	    printf("\n%08x ", i);
+	printf("%02x ", *(up + i));
+    }
+    printf("\n\n");
 }
 
+
+void Map_place_cannon(int cx, int cy, int dir, int team)
+{
+    cannon_t t;
+
+    t.pos.cx = cx;
+    t.pos.cy = cy;
+    t.dir = dir;
+    t.team = team;
+    t.dead_time = 0;
+    t.conn_mask = (unsigned)-1;
+    STORE(cannon_t, World.cannon, World.NumCannons, max_cannons, t);
+    Cannon_init(World.NumCannons - 1);
+}
+
+void Map_place_fuel(int cx, int cy, int team)
+{
+    fuel_t t;
+
+    t.pos.cx = cx;
+    t.pos.cy = cy;
+    t.fuel = START_STATION_FUEL;
+    t.conn_mask = (unsigned)-1;
+    t.last_change = frame_loops;
+    t.team = team;
+    STORE(fuel_t, World.fuel, World.NumFuels, max_fuels, t);
+}
+
+void Map_place_base(int cx, int cy, int dir, int team)
+{
+    base_t t;
+
+    t.pos.cx = cx;
+    t.pos.cy = cy;
+    /*
+     * The direction of the base should be so that it points
+     * up with respect to the gravity in the region.  This
+     * is fixed in Find_base_dir() when the gravity has
+     * been computed.
+     */
+    t.dir = dir;
+    if (BIT(World.rules->mode, TEAM_PLAY)) {
+	if (team < 0 || team >= MAX_TEAMS)
+	    team = 0;
+	t.team = team;
+	World.teams[team].NumBases++;
+	if (World.teams[team].NumBases == 1)
+	    World.NumTeamBases++;
+    } else {
+	t.team = TEAM_NOT_SET;
+    }
+    STORE(base_t, World.base, World.NumBases, max_bases, t);
+}
+
+void Map_place_treasure(int cx, int cy, int team, bool empty)
+{
+    treasure_t t;
+
+    t.pos.cx = cx;
+    t.pos.cy = cy;
+    t.have = false;
+    t.destroyed = 0;
+    t.team = team;
+    t.empty = empty;
+    if (team != TEAM_NOT_SET) {
+	World.teams[team].NumTreasures++;
+	World.teams[team].TreasuresLeft++;
+    }
+    STORE(treasure_t, World.treasures, World.NumTreasures, max_treasures, t);
+}
+
+/*
+ * note: for ng support, we need code in Polys_to_client in walls.c
+ * and parse_new() in netclient.c
+ */
+void Map_place_target(int cx, int cy, int team)
+{
+    target_t t;
+
+    t.pos.cx = cx;
+    t.pos.cy = cy;
+    /*
+     * Determining which team it belongs to is done later,
+     * in Find_closest_team().
+     */
+    t.team = team;
+    t.dead_time = 0;
+    t.damage = TARGET_DAMAGE;
+    t.conn_mask = (unsigned)-1;
+    t.update_mask = 0;
+    t.last_change = frame_loops;
+    STORE(target_t, World.targets, World.NumTargets, max_targets, t);
+}
+
+void Map_place_wormhole(int cx, int cy, wormType type)
+{
+    wormhole_t t;
+
+    t.pos.cx = cx;
+    t.pos.cy = cy;
+    t.countdown = 0;
+    t.lastdest = -1;
+    t.temporary = 0;
+    t.type = type;
+    t.lastblock = SPACE;
+    t.lastID = -1;
+    STORE(wormhole_t, World.wormHoles, World.NumWormholes, max_wormholes, t);
+}
+
+/*
+ * if 0 <= index < OLD_MAX_CHECKS, the checkpoint is directly inserted
+ * into the check array and it is assumed it has been allocated earlier
+ */
+void Map_place_checkpoint(int cx, int cy, int index)
+{
+    cpos t;
+
+    if (index >= 0 && index < OLD_MAX_CHECKS) {
+	World.check[index].cx = cx;
+	World.check[index].cy = cy;
+	return;
+    }
+
+    t.cx = cx;
+    t.cy = cy;
+    STORE(cpos, World.check, World.NumChecks, max_checks, t);
+}
+
+void Map_place_item_concentrator(int cx, int cy)
+{
+    item_concentrator_t t;
+
+    t.pos.cx = cx;
+    t.pos.cy = cy;
+    STORE(item_concentrator_t, World.itemConcentrators,
+	  World.NumItemConcentrators, max_itemconcs, t);
+}
+
+void Map_place_asteroid_concentrator(int cx, int cy)
+{
+    asteroid_concentrator_t t;
+
+    t.pos.cx = cx;
+    t.pos.cy = cy;
+    STORE(asteroid_concentrator_t, World.asteroidConcs,
+	  World.NumAsteroidConcs, max_asteroidconcs, t);
+}
+
+void Map_place_grav(int cx, int cy, DFLOAT force)
+{
+    grav_t t;
+
+    t.pos.cx = cx;
+    t.pos.cy = cy;
+    t.force = force;
+    STORE(grav_t, World.grav, World.NumGravs, max_gravs, t);
+}
+
+
+
+
+static void Init_map(void)
+{
+    /*
+     * note - when this is called, options have already been parsed,
+     * so for exaple items are partially initialized
+     */
+    Reset_map_object_counters();
+}
 
 void Free_map(void)
 {
@@ -251,7 +417,6 @@ void Alloc_map(void)
     }
 }
 
-/* kps - ng does not want this */
 static void Map_extra_error(int line_num)
 {
 #ifndef SILENT
@@ -292,49 +457,96 @@ static void Map_missing_error(int line_num)
 
 static bool Grok_map_old(void);
 
+/*
+ * This function can be called after the map options have been read.
+ */
+static bool Grok_map_size(void)
+{
+    bool bad = FALSE;
+
+    if (!is_polygon_map) {
+	mapWidth *= BLOCK_SZ;
+	mapHeight *= BLOCK_SZ;
+    }
+
+    if (mapWidth < BLOCK_SZ) {
+	warn("mapWidth too small, minimum is 1 block (%d pixels).\n",
+	     BLOCK_SZ);
+	bad = TRUE;
+    }
+    if (mapWidth > MAX_MAP_SIZE * BLOCK_SZ) {
+	warn("mapWidth too big, maximum is %d blocks (%d pixels).\n",
+	    MAX_MAP_SIZE, MAX_MAP_SIZE * BLOCK_SZ);
+	bad = TRUE;
+    }
+    if (mapHeight < BLOCK_SZ) {
+	warn("mapHeight too small, minimum is 1 block (%d pixels).\n",
+	     BLOCK_SZ);
+	bad = TRUE;
+    }
+    if (mapHeight > MAX_MAP_SIZE * BLOCK_SZ) {
+	warn("mapWidth too big, maximum is %d blocks (%d pixels).\n",
+	     MAX_MAP_SIZE, MAX_MAP_SIZE * BLOCK_SZ);
+	bad = TRUE;
+    }
+
+    if (bad)
+	return FALSE;
+
+    /* pixel sizes */
+    World.width = mapWidth;
+    World.height = mapHeight;
+    if (!is_polygon_map && extraBorder) {
+	World.width += 2 * BLOCK_SZ;
+	World.height += 2 * BLOCK_SZ;
+    }
+    World.hypotenuse = (int) LENGTH(World.width, World.height);
+
+    /* click sizes */
+    World.cwidth = World.width * CLICK;
+    World.cheight = World.height * CLICK;
+
+    /* block sizes */
+    World.x = (World.width - 1) / BLOCK_SZ + 1; /* !@# */
+    World.y = (World.height - 1) / BLOCK_SZ + 1;
+    World.diagonal = (int) LENGTH(World.x, World.y);
+
+    return TRUE;
+}
+
 bool Grok_map(void)
 {
-    if (!is_polygon_map)
-	return Grok_map_old();
+    if (!Grok_map_old())
+	return FALSE;
 
-    /* kps - support base order stuff for now */
+    if (maxRobots == -1) {
+	maxRobots = World.NumBases;
+    }
+    if (minRobots == -1) {
+	minRobots = maxRobots;
+    }
     if (BIT(World.rules->mode, TIMING)) {
 	Find_base_order();
     }
 
-    /* kps - moved here to get World.NumBases right */
 #ifndef	SILENT
     xpprintf("World....: %s\nBases....: %d\nMapsize..: %dx%d pixels\n"
 	     "Team play: %s\n", World.name, World.NumBases, World.width,
 	     World.height, BIT(World.rules->mode, TEAM_PLAY) ? "on" : "off");
 #endif
 
-    /* kps - hack, Grok_polygon_map was done before this */
+    D( Print_map() );
+
     return TRUE;
 }
 
-bool Grok_polygon_map(void)
+bool Grok_map_new(void)
 {
-    Init_map_new();
+    Init_map();
 
-#if 0
-    /* !@# */
-    if (mapWidth > MAX_MAP_SIZE || mapHeight > MAX_MAP_SIZE) {
-	errno = 0;
-	error("mapWidth or mapHeight exceeds map size limit %d", MAX_MAP_SIZE);
-    } else {
-	World.x = mapWidth;
-	World.y = mapHeight;
-    }
-#endif
-    World.width = mapWidth;
-    World.height = mapHeight;
-    World.x = (mapWidth - 1) / BLOCK_SZ + 1; /* !@# */
-    World.y = (mapHeight - 1) / BLOCK_SZ + 1;
-    World.diagonal = (int) LENGTH(World.x, World.y);
-    World.cwidth = World.width * CLICK;
-    World.cheight = World.height * CLICK;
-    World.hypotenuse = (int) LENGTH(World.width, World.height);
+    if (!Grok_map_size())
+	return FALSE;
+
     strlcpy(World.name, mapName, sizeof(World.name));
     strlcpy(World.author, mapAuthor, sizeof(World.author));
     strlcpy(World.dataURL, dataURL, sizeof(World.dataURL));
@@ -352,76 +564,20 @@ bool Grok_polygon_map(void)
     return TRUE;
 }
 
-
-
-static bool Grok_map_old(void)
+/*
+ * Grok block based map data.
+ *
+ * Create World.block using mapData.
+ * Count objects on map.
+ * Free mapData.
+ */
+static void Grok_map_data(void)
 {
-    int i, x, y, c;
+    int x, y, c;
     char *s;
-
-    Init_map_old();
-
-    if (mapWidth <= 0 || mapWidth > MAX_MAP_SIZE ||
-	mapHeight <= 0 || mapHeight > MAX_MAP_SIZE) {
-	errno = 0;
-	error("mapWidth or mapHeight exceeds map size limit [1, %d]",
-		MAX_MAP_SIZE);
-	free(mapData);
-	mapData = NULL;
-    } else {
-	World.x = mapWidth;
-	World.y = mapHeight;
-    }
-    if (extraBorder) {
-	World.x += 2;
-	World.y += 2;
-    }
-    World.diagonal = (int) LENGTH(World.x, World.y);
-    World.width = World.x * BLOCK_SZ;
-    World.height = World.y * BLOCK_SZ;
-    World.hypotenuse = (int) LENGTH(World.width, World.height);
-    World.cwidth = World.width * CLICK;
-    World.cheight = World.height * CLICK;
-    strlcpy(World.name, mapName, sizeof(World.name));
-    strlcpy(World.author, mapAuthor, sizeof(World.author));
-
-#if 0
-    xpprintf(__FILE__ ":mapWidth = %d\n", mapWidth);
-    xpprintf(__FILE__ ":mapHeight = %d\n", mapHeight);
-    xpprintf(__FILE__ ":World.x = %d\n", World.x);
-    xpprintf(__FILE__ ":World.y = %d\n", World.y);
-    xpprintf(__FILE__ ":World.width  = %d\n", World.width);
-    xpprintf(__FILE__ ":World.height = %d\n", World.height);
-    xpprintf(__FILE__ ":World.cwidth  = %d\n", World.cwidth);
-    xpprintf(__FILE__ ":World.cheight = %d\n", World.cheight);
-    xpprintf(__FILE__ ":mapWidth  * CLICK = %d\n", mapWidth  * CLICK);
-    xpprintf(__FILE__ ":mapHeight * CLICK = %d\n", mapHeight * CLICK);
-    xpprintf(__FILE__ ":mp.click_width  = %d\n", PIXEL_TO_CLICK(World.width));
-    xpprintf(__FILE__ ":mp.click_heigth = %d\n", PIXEL_TO_CLICK(World.height));
-#endif
-
-    if (!mapData) {
-	errno = 0;
-	error("Generating random map");
-	Generate_random_map();
-	if (!mapData) {
-	    return FALSE;
-	}
-    }
-
-    Alloc_map();
 
     x = -1;
     y = World.y - 1;
-
-    Set_world_rules();
-    Set_world_items();
-    Set_world_asteroids();
-
-    if (BIT(World.rules->mode, TEAM_PLAY|TIMING) == (TEAM_PLAY|TIMING)) {
-	error("Cannot teamplay while in race mode -- ignoring teamplay");
-	CLR_BIT(World.rules->mode, TEAM_PLAY);
-    }
 
     s = mapData;
     while (y >= 0) {
@@ -471,56 +627,6 @@ static bool Grok_map_old(void)
 	}
 
 	switch (World.block[x][y] = c) {
-	case 'r':
-	case 'd':
-	case 'f':
-	case 'c':
-	    World.NumCannons++;
-	    break;
-	case '*':
-	case '^':
-	    World.NumTreasures++;
-	    break;
-	case '#':
-	    World.NumFuels++;
-	    break;
-	case '!':
-	    World.NumTargets++;
-	    break;
-	case '%':
-	    World.NumItemConcentrators++;
-	    break;
-	case '&':
-	    World.NumAsteroidConcs++;
-	    break;
-	case '_':
-	case '0':
-	case '1':
-	case '2':
-	case '3':
-	case '4':
-	case '5':
-	case '6':
-	case '7':
-	case '8':
-	case '9':
-	    World.NumBases++;
-	    break;
-	case '+':
-	case '-':
-	case '>':
-	case '<':
-        case 'i':
-        case 'm':
-        case 'j':
-        case 'k':
-	    World.NumGravs++;
-	    break;
-	case '@':
-	case '(':
-	case ')':
-	    World.NumWormholes++;
-	    break;
 	case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
 	case 'G': case 'H': case 'I': case 'J': case 'K': case 'L':
 	case 'M': case 'N': case 'O': case 'P': case 'Q': case 'R':
@@ -536,66 +642,24 @@ static bool Grok_map_old(void)
 
     free(mapData);
     mapData = NULL;
+}
 
-    /*
-     * Get space for special objects.
-     */
-    if (World.NumCannons > 0
-	&& (World.cannon = (cannon_t *)
-	    malloc(World.NumCannons * sizeof(cannon_t))) == NULL) {
-	error("Out of memory - cannons");
-	exit(-1);
-    }
 
-    /* kps compatibility hack */
-    if ((World.check = (ipos *)
-	    malloc(OLD_MAX_CHECKS * sizeof(ipos))) == NULL) {
+/*
+ * Get space for special objects.
+ *
+ * Used for block based maps.
+ */
+
+void Allocate_map_objects(void)
+{
+    if ((World.check = (cpos *)
+	    malloc(OLD_MAX_CHECKS * sizeof(cpos))) == NULL) {
 	error("Out of memory - checks");
 	exit(-1);
     }
-
-    if (World.NumFuels > 0
-	&& (World.fuel = (fuel_t *)
-	    malloc(World.NumFuels * sizeof(fuel_t))) == NULL) {
-	error("Out of memory - fuel depots");
-	exit(-1);
-    }
-    if (World.NumGravs > 0
-	&& (World.grav = (grav_t *)
-	    malloc(World.NumGravs * sizeof(grav_t))) == NULL) {
-	error("Out of memory - gravs");
-	exit(-1);
-    }
-    if (World.NumWormholes > 0
-	&& (World.wormHoles = (wormhole_t *)
-	    malloc(World.NumWormholes * sizeof(wormhole_t))) == NULL) {
-	error("Out of memory - wormholes");
-	exit(-1);
-    }
-    if (World.NumTreasures > 0
-	&& (World.treasures = (treasure_t *)
-	    malloc(World.NumTreasures * sizeof(treasure_t))) == NULL) {
-	error("Out of memory - treasures");
-	exit(-1);
-    }
-    if (World.NumTargets > 0
-	&& (World.targets = (target_t *)
-	    malloc(World.NumTargets * sizeof(target_t))) == NULL) {
-	error("Out of memory - targets");
-	exit(-1);
-    }
-    if (World.NumItemConcentrators > 0
-	&& (World.itemConcentrators = (item_concentrator_t *)
-	    malloc(World.NumItemConcentrators * sizeof(item_concentrator_t))) == NULL) {
-	error("Out of memory - item concentrators");
-	exit(-1);
-    }
-    if (World.NumAsteroidConcs > 0
-	&& (World.asteroidConcs = (asteroid_concentrator_t *)
-	    malloc(World.NumAsteroidConcs * sizeof(asteroid_concentrator_t))) == NULL) {
-	error("Out of memory - asteroid concentrators");
-	exit(-1);
-    }
+#if 0
+    /* kps - add the below warning somewhere else */
     if (World.NumBases > 0) {
 	if ((World.base = (base_t *)
 	    malloc(World.NumBases * sizeof(base_t))) == NULL) {
@@ -605,12 +669,49 @@ static bool Grok_map_old(void)
     } else {
 	error("WARNING: map has no bases!");
     }
+#endif
+}
 
-    /*
-     * Now reset all counters since we will recount everything
-     * and reuse these counters while inserting the objects
-     * into structures.
-     */
+/* realloc hack */
+static void shrink(void **pp, size_t size)
+{
+    void *p;
+
+    p = realloc(*pp, size);
+    if (!p) {
+	warn("Out of memory");
+	exit(1);
+    }
+    *pp = p;
+}
+
+#define SHRINK(P, N, T, M) { \
+if ((M) > (N)) { \
+  shrink((void **)&(P), (N) * sizeof(T)); \
+  M = (N); \
+} } \
+
+
+static void Realloc_map_objects(void)
+{
+    SHRINK(World.cannon, World.NumCannons, cannon_t, max_cannons);
+    SHRINK(World.fuel, World.NumFuels, fuel_t, max_fuels);
+    SHRINK(World.grav, World.NumGravs, grav_t, max_gravs);
+    SHRINK(World.wormHoles, World.NumWormholes, wormhole_t, max_wormholes);
+    SHRINK(World.treasures, World.NumTreasures, treasure_t, max_treasures);
+    SHRINK(World.targets, World.NumTargets, target_t, max_targets);
+    SHRINK(World.base, World.NumBases, base_t, max_bases);
+    SHRINK(World.itemConcentrators, World.NumItemConcentrators,
+	   item_concentrator_t, max_itemconcs);
+    SHRINK(World.asteroidConcs, World.NumAsteroidConcs,
+	   asteroid_concentrator_t, max_asteroidconcs);
+}
+
+
+static void Reset_map_object_counters(void)
+{
+    int i;
+
     World.NumCannons = 0;
     World.NumFuels = 0;
     World.NumGravs = 0;
@@ -633,6 +734,57 @@ static bool Grok_map_old(void)
 	World.teams[i].prev_score = 0;
 	World.teams[i].SwapperId = NO_ID;
     }
+}
+
+static bool Grok_map_old(void)
+{
+    int i, x, y;
+
+    if (is_polygon_map)
+	return TRUE;
+
+    Init_map();
+
+    if (!Grok_map_size()) {
+	if (mapData != NULL) {
+	    free(mapData);
+	    mapData = NULL;
+	}
+    }
+
+    strlcpy(World.name, mapName, sizeof(World.name));
+    strlcpy(World.author, mapAuthor, sizeof(World.author));
+
+    if (!mapData) {
+	errno = 0;
+	error("Generating random map");
+	Generate_random_map();
+	if (!mapData) {
+	    return FALSE;
+	}
+    }
+
+    Alloc_map();
+
+    Set_world_rules();
+    Set_world_items();
+    Set_world_asteroids();
+
+    if (BIT(World.rules->mode, TEAM_PLAY|TIMING) == (TEAM_PLAY|TIMING)) {
+	error("Cannot teamplay while in race mode -- ignoring teamplay");
+	CLR_BIT(World.rules->mode, TEAM_PLAY);
+    }
+
+    Grok_map_data();
+
+    Allocate_map_objects();
+
+    /*
+     * Now reset all counters since we will recount everything
+     * and reuse these counters while inserting the objects
+     * into structures.
+     */
+    Reset_map_object_counters();
 
     /*
      * Change read tags to internal data, create objects
@@ -641,14 +793,19 @@ static bool Grok_map_old(void)
 	int	worm_in = 0,
 		worm_out = 0,
 		worm_norm = 0;
+	wormType worm_type;
 
 	for (x=0; x<World.x; x++) {
 	    u_byte *line = World.block[x];
 	    unsigned short *itemID = World.itemID[x];
+	    int cx, cy;
+
+	    cx = BLOCK_CENTER(x);
 
 	    for (y=0; y<World.y; y++) {
 		char c = line[y];
 
+		cy = BLOCK_CENTER(y);
 		itemID[y] = (unsigned short) -1;
 
 		switch (c) {
@@ -677,130 +834,66 @@ static bool Grok_map_old(void)
 		case 'r':
 		    line[y] = CANNON;
 		    itemID[y] = World.NumCannons;
-		    World.cannon[World.NumCannons].dir = DIR_UP;
-		    World.cannon[World.NumCannons].blk_pos.x = x;
-		    World.cannon[World.NumCannons].blk_pos.y = y;
-		    World.cannon[World.NumCannons].clk_pos.x =
-			(x + 0.5) * BLOCK_CLICKS;
-		    World.cannon[World.NumCannons].clk_pos.y =
-			(y + 0.333) * BLOCK_CLICKS;
-		    World.cannon[World.NumCannons].dead_time = 0;
-		    World.cannon[World.NumCannons].conn_mask = (unsigned)-1;
-		    World.cannon[World.NumCannons].team = TEAM_NOT_SET;
-		    Cannon_init(World.NumCannons);
-		    World.NumCannons++;
+		    Map_place_cannon((x + 0.5) * BLOCK_CLICKS,
+				     (y + 0.333) * BLOCK_CLICKS,
+				     DIR_UP, TEAM_NOT_SET);
 		    break;
 		case 'd':
 		    line[y] = CANNON;
 		    itemID[y] = World.NumCannons;
-		    World.cannon[World.NumCannons].dir = DIR_LEFT;
-		    World.cannon[World.NumCannons].blk_pos.x = x;
-		    World.cannon[World.NumCannons].blk_pos.y = y;
-		    World.cannon[World.NumCannons].clk_pos.x =
-						(x + 0.667) * BLOCK_CLICKS;
-		    World.cannon[World.NumCannons].clk_pos.y =
-						(y + 0.5) * BLOCK_CLICKS;
-		    World.cannon[World.NumCannons].dead_time = 0;
-		    World.cannon[World.NumCannons].conn_mask = (unsigned)-1;
-		    World.cannon[World.NumCannons].team = TEAM_NOT_SET;
-		    Cannon_init(World.NumCannons);
-		    World.NumCannons++;
+		    Map_place_cannon((x + 0.667) * BLOCK_CLICKS,
+				     (y + 0.5) * BLOCK_CLICKS,
+				     DIR_LEFT, TEAM_NOT_SET);
 		    break;
 		case 'f':
 		    line[y] = CANNON;
 		    itemID[y] = World.NumCannons;
-		    World.cannon[World.NumCannons].dir = DIR_RIGHT;
-		    World.cannon[World.NumCannons].blk_pos.x = x;
-		    World.cannon[World.NumCannons].blk_pos.y = y;
-		    World.cannon[World.NumCannons].clk_pos.x =
-						(x + 0.333) * BLOCK_CLICKS;
-		    World.cannon[World.NumCannons].clk_pos.y =
-						(y + 0.5) * BLOCK_CLICKS;
-		    World.cannon[World.NumCannons].dead_time = 0;
-		    World.cannon[World.NumCannons].conn_mask = (unsigned)-1;
-		    World.cannon[World.NumCannons].team = TEAM_NOT_SET;
-		    Cannon_init(World.NumCannons);
-		    World.NumCannons++;
+		    Map_place_cannon((x + 0.333) * BLOCK_CLICKS,
+				     (y + 0.5) * BLOCK_CLICKS,
+				     DIR_RIGHT, TEAM_NOT_SET);
 		    break;
 		case 'c':
 		    line[y] = CANNON;
 		    itemID[y] = World.NumCannons;
-		    World.cannon[World.NumCannons].dir = DIR_DOWN;
-		    World.cannon[World.NumCannons].blk_pos.x = x;
-		    World.cannon[World.NumCannons].blk_pos.y = y;
-		    World.cannon[World.NumCannons].clk_pos.x =
-						(x + 0.5) * BLOCK_CLICKS;
-		    World.cannon[World.NumCannons].clk_pos.y =
-						(y + 0.667) * BLOCK_CLICKS;
-		    World.cannon[World.NumCannons].dead_time = 0;
-		    World.cannon[World.NumCannons].conn_mask = (unsigned)-1;
-		    World.cannon[World.NumCannons].team = TEAM_NOT_SET;
-		    Cannon_init(World.NumCannons);
-		    World.NumCannons++;
+		    Map_place_cannon((x + 0.5) * BLOCK_CLICKS,
+				     (y + 0.667) * BLOCK_CLICKS,
+				     DIR_DOWN, TEAM_NOT_SET);
 		    break;
 
 		case '#':
 		    line[y] = FUEL;
 		    itemID[y] = World.NumFuels;
-		    World.fuel[World.NumFuels].blk_pos.x = x;
-		    World.fuel[World.NumFuels].blk_pos.y = y;
-		    World.fuel[World.NumFuels].clk_pos.x = BLOCK_CENTER(x);
-		    World.fuel[World.NumFuels].clk_pos.y = BLOCK_CENTER(y);
-		    World.fuel[World.NumFuels].fuel = START_STATION_FUEL;
-		    World.fuel[World.NumFuels].conn_mask = (unsigned)-1;
-		    World.fuel[World.NumFuels].last_change = frame_loops;
-		    World.fuel[World.NumFuels].team = TEAM_NOT_SET;
-		    World.NumFuels++;
+		    Map_place_fuel(cx, cy, TEAM_NOT_SET);
 		    break;
 
 		case '*':
 		case '^':
 		    line[y] = TREASURE;
 		    itemID[y] = World.NumTreasures;
-		    World.treasures[World.NumTreasures].pos.x
-			= BLOCK_CENTER(x);
-		    World.treasures[World.NumTreasures].pos.y
-			= BLOCK_CENTER(y);
-		    World.treasures[World.NumTreasures].have = false;
-		    World.treasures[World.NumTreasures].destroyed = 0;
-		    World.treasures[World.NumTreasures].empty = (c == '^');
 		    /*
 		     * Determining which team it belongs to is done later,
 		     * in Find_closest_team().
 		     */
-		    World.treasures[World.NumTreasures].team = 0;
-		    World.NumTreasures++;
+		    Map_place_treasure(cx, cy, TEAM_NOT_SET, (c == '^'));
 		    break;
 		case '!':
 		    line[y] = TARGET;
 		    itemID[y] = World.NumTargets;
-		    World.targets[World.NumTargets].pos.x = BLOCK_CENTER(x);
-		    World.targets[World.NumTargets].pos.y = BLOCK_CENTER(y);
 		    /*
 		     * Determining which team it belongs to is done later,
 		     * in Find_closest_team().
 		     */
-		    World.targets[World.NumTargets].team = 0;
-		    World.targets[World.NumTargets].dead_time = 0;
-		    World.targets[World.NumTargets].damage = TARGET_DAMAGE;
-		    World.targets[World.NumTargets].conn_mask = (unsigned)-1;
-		    World.targets[World.NumTargets].update_mask = 0;
-		    World.targets[World.NumTargets].last_change = frame_loops;
-		    World.NumTargets++;
+		    Map_place_target(cx, cy, TEAM_NOT_SET);
 		    break;
 		case '%':
 		    line[y] = ITEM_CONCENTRATOR;
 		    itemID[y] = World.NumItemConcentrators;
-		    World.itemConcentrators[World.NumItemConcentrators].pos.x = x;
-		    World.itemConcentrators[World.NumItemConcentrators].pos.y = y;
-		    World.NumItemConcentrators++;
+		    Map_place_item_concentrator(cx, cy);
 		    break;
 		case '&':
 		    line[y] = ASTEROID_CONCENTRATOR;
 		    itemID[y] = World.NumAsteroidConcs;
-		    World.asteroidConcs[World.NumAsteroidConcs].pos.x = x;
-		    World.asteroidConcs[World.NumAsteroidConcs].pos.y = y;
-		    World.NumAsteroidConcs++;
+		    Map_place_asteroid_concentrator(cx, cy);
 		    break;
 		case '$':
 		    line[y] = BASE_ATTRACTOR;
@@ -818,118 +911,73 @@ static bool Grok_map_old(void)
 		case '9':
 		    line[y] = BASE;
 		    itemID[y] = World.NumBases;
-		    World.base[World.NumBases].pos.x = BLOCK_CENTER(x);
-		    World.base[World.NumBases].pos.y = BLOCK_CENTER(y);
 		    /*
 		     * The direction of the base should be so that it points
 		     * up with respect to the gravity in the region.  This
 		     * is fixed in Find_base_dir() when the gravity has
 		     * been computed.
 		     */
-		    World.base[World.NumBases].dir = DIR_UP;
-		    if (BIT(World.rules->mode, TEAM_PLAY)) {
-			if (c >= '0' && c <= '9') {
-			    World.base[World.NumBases].team = c - '0';
-			} else {
-			    World.base[World.NumBases].team = 0;
-			}
-			World.teams[World.base[World.NumBases].team].NumBases++;
-			if (World.teams[World.base[World.NumBases].team].NumBases == 1)
-			    World.NumTeamBases++;
-		    } else {
-			World.base[World.NumBases].team = TEAM_NOT_SET;
-		    }
-		    World.NumBases++;
+		    Map_place_base(cx, cy, DIR_UP, (int) (c - '0'));
 		    break;
 
 		case '+':
 		    line[y] = POS_GRAV;
 		    itemID[y] = World.NumGravs;
-		    World.grav[World.NumGravs].pos.x = x;
-		    World.grav[World.NumGravs].pos.y = y;
-		    World.grav[World.NumGravs].force = -GRAVS_POWER;
-		    World.NumGravs++;
+		    Map_place_grav(cx, cy, -GRAVS_POWER);
 		    break;
 		case '-':
 		    line[y] = NEG_GRAV;
 		    itemID[y] = World.NumGravs;
-		    World.grav[World.NumGravs].pos.x = x;
-		    World.grav[World.NumGravs].pos.y = y;
-		    World.grav[World.NumGravs].force = GRAVS_POWER;
-		    World.NumGravs++;
+		    Map_place_grav(cx, cy, GRAVS_POWER);
 		    break;
 		case '>':
 		    line[y]= CWISE_GRAV;
 		    itemID[y] = World.NumGravs;
-		    World.grav[World.NumGravs].pos.x = x;
-		    World.grav[World.NumGravs].pos.y = y;
-		    World.grav[World.NumGravs].force = GRAVS_POWER;
-		    World.NumGravs++;
+		    Map_place_grav(cx, cy, GRAVS_POWER);
 		    break;
 		case '<':
 		    line[y] = ACWISE_GRAV;
 		    itemID[y] = World.NumGravs;
-		    World.grav[World.NumGravs].pos.x = x;
-		    World.grav[World.NumGravs].pos.y = y;
-		    World.grav[World.NumGravs].force = -GRAVS_POWER;
-		    World.NumGravs++;
+		    Map_place_grav(cx, cy, -GRAVS_POWER);
 		    break;
 	        case 'i':
 		    line[y] = UP_GRAV;
 		    itemID[y] = World.NumGravs;
-		    World.grav[World.NumGravs].pos.x = x;
-		    World.grav[World.NumGravs].pos.y = y;
-		    World.grav[World.NumGravs].force = GRAVS_POWER;
-		    World.NumGravs++;
+		    Map_place_grav(cx, cy, GRAVS_POWER);
 		    break;
 	        case 'm':
 		    line[y] = DOWN_GRAV;
 		    itemID[y] = World.NumGravs;
-		    World.grav[World.NumGravs].pos.x = x;
-		    World.grav[World.NumGravs].pos.y = y;
-		    World.grav[World.NumGravs].force = -GRAVS_POWER;
-		    World.NumGravs++;
+		    Map_place_grav(cx, cy, -GRAVS_POWER);
 		    break;
 	        case 'k':
 		    line[y] = RIGHT_GRAV;
 		    itemID[y] = World.NumGravs;
-		    World.grav[World.NumGravs].pos.x = x;
-		    World.grav[World.NumGravs].pos.y = y;
-		    World.grav[World.NumGravs].force = GRAVS_POWER;
-		    World.NumGravs++;
+		    Map_place_grav(cx, cy, GRAVS_POWER);
 		    break;
                 case 'j':
 		    line[y] = LEFT_GRAV;
 		    itemID[y] = World.NumGravs;
-		    World.grav[World.NumGravs].pos.x = x;
-		    World.grav[World.NumGravs].pos.y = y;
-		    World.grav[World.NumGravs].force = -GRAVS_POWER;
-		    World.NumGravs++;
+		    Map_place_grav(cx, cy, -GRAVS_POWER);
 		    break;
 
 		case '@':
 		case '(':
 		case ')':
-		    World.wormHoles[World.NumWormholes].pos.x = x;
-		    World.wormHoles[World.NumWormholes].pos.y = y;
-		    World.wormHoles[World.NumWormholes].countdown = 0;
-		    World.wormHoles[World.NumWormholes].lastdest = -1;
-		    World.wormHoles[World.NumWormholes].temporary = 0;
-		    World.wormHoles[World.NumWormholes].lastblock = SPACE;
-		    World.wormHoles[World.NumWormholes].lastID = -1;
-		    if (c == '@') {
-			World.wormHoles[World.NumWormholes].type = WORM_NORMAL;
-			worm_norm++;
-		    } else if (c == '(') {
-			World.wormHoles[World.NumWormholes].type = WORM_IN;
-			worm_in++;
-		    } else {
-			World.wormHoles[World.NumWormholes].type = WORM_OUT;
-			worm_out++;
-		    }
 		    line[y] = WORMHOLE;
 		    itemID[y] = World.NumWormholes;
-		    World.NumWormholes++;
+		    if (c == '@') {
+			worm_type = WORM_NORMAL;
+			worm_norm++;
+		    } else if (c == '(') {
+			worm_type = WORM_IN;
+			worm_in++;
+		    } else {
+			worm_type = WORM_OUT;
+			worm_out++;
+		    }
+			
+		    Map_place_wormhole(cx, cy, worm_type);
 		    break;
 
 		case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
@@ -938,8 +986,7 @@ static bool Grok_map_old(void)
 		case 'S': case 'T': case 'U': case 'V': case 'W': case 'X':
 		case 'Y': case 'Z':
 		    if (BIT(World.rules->mode, TIMING)) {
-			World.check[c-'A'].x = BLOCK_CENTER(x);
-			World.check[c-'A'].y = BLOCK_CENTER(y);
+			Map_place_checkpoint(cx, cy, (int)(c-'A'));
 			line[y] = CHECK;
 		    } else {
 			line[y] = SPACE;
@@ -982,15 +1029,14 @@ static bool Grok_map_old(void)
 	    int i;
 
 	    xpprintf("Inconsistent use of wormholes, removing them.\n");
-	    for (i = 0; i < World.NumWormholes; i++)
-		{
-			World.block
-				[World.wormHoles[i].pos.x]
-				[World.wormHoles[i].pos.y] = SPACE;
-			World.itemID
-				[World.wormHoles[i].pos.x]
-				[World.wormHoles[i].pos.y] = (unsigned short) -1;
-		}
+	    for (i = 0; i < World.NumWormholes; i++) {
+		int bx, by;
+		
+		bx = CLICK_TO_BLOCK(World.wormHoles[i].pos.cx);
+		by = CLICK_TO_BLOCK(World.wormHoles[i].pos.cy);
+		World.block[bx][by] = SPACE;
+		World.itemID[bx][by] = (unsigned short) -1;
+	    }
 	    World.NumWormholes = 0;
 	}
 
@@ -1015,8 +1061,8 @@ static bool Grok_map_old(void)
 	if (BIT(World.rules->mode, TEAM_PLAY)) {
 	    unsigned short team = TEAM_NOT_SET;
 	    for (i = 0; i < World.NumTreasures; i++) {
-		team = Find_closest_team(World.treasures[i].pos.x,
-					 World.treasures[i].pos.y);
+		team = Find_closest_team(World.treasures[i].pos.cx,
+					 World.treasures[i].pos.cy);
 		World.treasures[i].team = team;
 		if (team == TEAM_NOT_SET) {
 		    error("Couldn't find a matching team for the treasure.");
@@ -1030,8 +1076,8 @@ static bool Grok_map_old(void)
 		}
 	    }
 	    for (i = 0; i < World.NumTargets; i++) {
-		team = Find_closest_team(World.targets[i].pos.x,
-					 World.targets[i].pos.y);
+		team = Find_closest_team(World.targets[i].pos.cx,
+					 World.targets[i].pos.cy);
 		if (team == TEAM_NOT_SET) {
 		    error("Couldn't find a matching team for the target.");
 		}
@@ -1039,17 +1085,18 @@ static bool Grok_map_old(void)
 	    }
 	    if (teamCannons) {
 		for (i = 0; i < World.NumCannons; i++) {
-		    team = Find_closest_team(World.cannon[i].clk_pos.x,
-					     World.cannon[i].clk_pos.y);
+		    team = Find_closest_team(World.cannon[i].pos.cx,
+					     World.cannon[i].pos.cy);
 		    if (team == TEAM_NOT_SET) {
 			error("Couldn't find a matching team for the cannon.");
 		    }
 		    World.cannon[i].team = team;
 		}
 	    }
+
 	    for (i = 0; i < World.NumFuels; i++) {
-		team = Find_closest_team(World.fuel[i].clk_pos.x,
-					 World.fuel[i].clk_pos.y);
+		team = Find_closest_team(World.fuel[i].pos.cx,
+					 World.fuel[i].pos.cy);
 		if (team == TEAM_NOT_SET) {
 		    error("Couldn't find a matching team for fuelstation.");
 		}
@@ -1058,23 +1105,7 @@ static bool Grok_map_old(void)
 	}
     }
 
-    if (maxRobots == -1) {
-	maxRobots = World.NumBases;
-    }
-    if (minRobots == -1) {
-	minRobots = maxRobots;
-    }
-    if (BIT(World.rules->mode, TIMING)) {
-	Find_base_order();
-    }
-
-#ifndef	SILENT
-    xpprintf("World....: %s\nBases....: %d\nMapsize..: %dx%d\nTeam play: %s\n",
-	   World.name, World.NumBases, World.x, World.y,
-	   BIT(World.rules->mode, TEAM_PLAY) ? "on" : "off");
-#endif
-
-    D( Print_map() );
+    Realloc_map_objects();
 
     return TRUE;
 }
@@ -1087,20 +1118,13 @@ static bool Grok_map_old(void)
 
 static void Generate_random_map(void)
 {
-    int		width, height;
-
     edgeWrap = TRUE;
-    width = World.x;
-    height = World.y;
+    mapWidth = 150;
+    mapHeight = 150;
 
-    Wildmap(width, height, World.name, World.author, &mapData, &width, &height);
-
-    World.x = width;
-    World.y = height;
-    World.diagonal = (int) LENGTH(World.x, World.y);
-    World.width = World.x * BLOCK_SZ;
-    World.height = World.y * BLOCK_SZ;
-    World.hypotenuse = (int) LENGTH(World.width, World.height);
+    Wildmap(mapWidth, mapHeight, World.name, World.author, &mapData,
+	    &mapWidth, &mapHeight);
+    Grok_map_size();
 }
 
 
@@ -1117,8 +1141,8 @@ void Find_base_direction(void)
     int	i;
 
     for (i = 0; i < World.NumBases; i++) {
-	int	x = World.base[i].pos.x / BLOCK_CLICKS,
-		y = World.base[i].pos.y / BLOCK_CLICKS,
+	int	x = World.base[i].pos.cx / BLOCK_CLICKS,
+		y = World.base[i].pos.cy / BLOCK_CLICKS,
 		dir,
 		att;
 	double	dx = World.gravity[x][y].x,
@@ -1133,7 +1157,8 @@ void Find_base_direction(void)
 	}
 	att = -1;
 	/*BASES SNAP TO UPWARDS ATTRACTOR FIRST*/
-        if (y == World.y - 1 && World.block[x][0] == BASE_ATTRACTOR && BIT(World.rules->mode, WRAP_PLAY)) {  /*check wrapped*/
+        if (y == World.y - 1 && World.block[x][0] == BASE_ATTRACTOR
+	    && BIT(World.rules->mode, WRAP_PLAY)) {  /*check wrapped*/
 	    if (att == -1 || dir == DIR_UP) {
 		att = DIR_UP;
 	    }
@@ -1144,7 +1169,8 @@ void Find_base_direction(void)
 	    }
 	}
 	/*THEN DOWNWARDS ATTRACTORS*/
-        if (y == 0 && World.block[x][World.y-1] == BASE_ATTRACTOR && BIT(World.rules->mode, WRAP_PLAY)) { /*check wrapped*/
+        if (y == 0 && World.block[x][World.y-1] == BASE_ATTRACTOR
+	    && BIT(World.rules->mode, WRAP_PLAY)) { /*check wrapped*/
 	    if (att == -1 || dir == DIR_DOWN) {
 		att = DIR_DOWN;
 	    }
@@ -1155,7 +1181,8 @@ void Find_base_direction(void)
 	    }
 	}
 	/*THEN RIGHTWARDS ATTRACTORS*/
-	if (x == World.x - 1 && World.block[0][y] == BASE_ATTRACTOR && BIT(World.rules->mode, WRAP_PLAY)) { /*check wrapped*/
+	if (x == World.x - 1 && World.block[0][y] == BASE_ATTRACTOR
+	    && BIT(World.rules->mode, WRAP_PLAY)) { /*check wrapped*/
 	    if (att == -1 || dir == DIR_RIGHT) {
 		att = DIR_RIGHT;
 	    }
@@ -1166,7 +1193,8 @@ void Find_base_direction(void)
 	    }
 	}
 	/*THEN LEFTWARDS ATTRACTORS*/
-	if (x == 0 && World.block[World.x-1][y] == BASE_ATTRACTOR && BIT(World.rules->mode, WRAP_PLAY)) { /*check wrapped*/
+	if (x == 0 && World.block[World.x-1][y] == BASE_ATTRACTOR
+	    && BIT(World.rules->mode, WRAP_PLAY)) { /*check wrapped*/
 	    if (att == -1 || dir == DIR_LEFT) {
 		att = DIR_LEFT;
 	    }
@@ -1205,8 +1233,8 @@ unsigned short Find_closest_team(int cx, int cy)
 	if (World.base[i].team == TEAM_NOT_SET)
 	    continue;
 
-	l = Wrap_length((cx - World.base[i].pos.x),
-			(cy - World.base[i].pos.y));
+	l = Wrap_length((cx - World.base[i].pos.cx),
+			(cy - World.base[i].pos.cy));
 
 	if (l < closest) {
 	    team = World.base[i].team;
@@ -1244,11 +1272,11 @@ static void Find_base_order(void)
 	exit(-1);
     }
 
-    cx = World.check[0].x;
-    cy = World.check[0].y;
+    cx = World.check[0].cx;
+    cy = World.check[0].cy;
     for (i = 0; i < n; i++) {
-	dist = Wrap_length(World.base[i].pos.x - cx,
-			   World.base[i].pos.y - cy) / CLICK;
+	dist = Wrap_length(World.base[i].pos.cx - cx,
+			   World.base[i].pos.cy - cy) / CLICK;
 	for (j = 0; j < i; j++) {
 	    if (World.baseorder[j].dist > dist) {
 		break;
@@ -1270,22 +1298,18 @@ DFLOAT Wrap_findDir(DFLOAT dx, DFLOAT dy)
     return findDir(dx, dy);
 }
 
-DFLOAT Wrap_cfindDir(int dx, int dy)
+DFLOAT Wrap_cfindDir(int dcx, int dcy)
 {
-    if (BIT(World.rules->mode, TEAM_PLAY)) {
-	dx = CENTER_XCLICK(dx);
-	dy = CENTER_YCLICK(dy);
-    }
-    return findDir(dx, dy);
+    dcx = WRAP_DCX(dcx);
+    dcy = WRAP_DCY(dcy);
+    return findDir(dcx, dcy);
 }
 
-DFLOAT Wrap_length(int dx, int dy)
+DFLOAT Wrap_length(int dcx, int dcy)
 {
-    if (BIT(World.rules->mode, TEAM_PLAY)) {
-	dx = CENTER_XCLICK(dx);
-	dy = CENTER_YCLICK(dy);
-    }
-    return LENGTH(dx, dy);
+    dcx = WRAP_DCX(dcx);
+    dcy = WRAP_DCY(dcy);
+    return LENGTH(dcx, dcy);
 }
 
 
@@ -1381,8 +1405,8 @@ static void Compute_local_gravity(void)
 	max_yi += MIN(GRAV_RANGE, World.y);
     }
     for (g=0; g<World.NumGravs; g++) {
-	gx = World.grav[g].pos.x;
-	gy = World.grav[g].pos.y;
+	gx = CLICK_TO_BLOCK(World.grav[g].pos.cx);
+	gy = CLICK_TO_BLOCK(World.grav[g].pos.cy);
 	force = World.grav[g].force;
 
 	if ((first_xi = gx - GRAV_RANGE) < min_xi) {
@@ -1489,10 +1513,10 @@ void add_temp_wormholes(int xin, int yin, int xout, int yout)
     }
     World.wormHoles = wwhtemp;
 
-    inhole.pos.x = xin;
-    inhole.pos.y = yin;
-    outhole.pos.x = xout;
-    outhole.pos.y = yout;
+    inhole.pos.cx = BLOCK_CENTER(xin);
+    inhole.pos.cy = BLOCK_CENTER(yin);
+    outhole.pos.cx = BLOCK_CENTER(xout);
+    outhole.pos.cy = BLOCK_CENTER(yout);
     inhole.countdown = outhole.countdown = wormTime;
     inhole.lastdest = World.NumWormholes + 1;
     inhole.temporary = outhole.temporary = 1;
@@ -1514,10 +1538,13 @@ void add_temp_wormholes(int xin, int yin, int xout, int yout)
 void remove_temp_wormhole(int ind)
 {
     wormhole_t hole;
+    int bx, by;
 
     hole = World.wormHoles[ind];
-    World.block[hole.pos.x][hole.pos.y] = hole.lastblock;
-    World.itemID[hole.pos.x][hole.pos.y] = hole.lastID;
+    bx = CLICK_TO_BLOCK(hole.pos.cx);
+    by = CLICK_TO_BLOCK(hole.pos.cy);
+    World.block[bx][by] = hole.lastblock;
+    World.itemID[bx][by] = hole.lastID;
     World.NumWormholes--;
     if (ind != World.NumWormholes) {
 	World.wormHoles[ind] = World.wormHoles[World.NumWormholes];

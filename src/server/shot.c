@@ -134,6 +134,10 @@ void Place_general_mine(int ind, unsigned short team, long status,
 
     cx = WRAP_XCLICK(cx);
     cy = WRAP_YCLICK(cy);
+    if (cx < 0 || cx >= World.cwidth || cy < 0 || cy >= World.cheight) {
+	printf(__FILE__ ": mine bug\n"); /* kps - remove */
+	return;
+    }
 
     if (pl && BIT(pl->status, KILLED)) {
 	life = (int)(rfrac() * 12 * TIME_FACT);
@@ -191,8 +195,8 @@ void Place_general_mine(int ind, unsigned short team, long status,
 		if (i != ind
 		    && !Team_immune(Players[i]->id, pl->id)
 		    && !IS_TANK_IND(i)) {
-		    int dx = cx - World.base[Players[i]->home_base].pos.x;
-		    int dy = cy - World.base[Players[i]->home_base].pos.y;
+		    int dx = cx - World.base[Players[i]->home_base].pos.cx;
+		    int dy = cy - World.base[Players[i]->home_base].pos.cy;
 		    if (Wrap_length(dx, dy) <= baseMineRange * BLOCK_CLICKS) {
 			Set_player_message(pl, "No base mining!");
 			return;
@@ -323,8 +327,8 @@ void Make_treasure_ball(int treasure)
 {
     ballobject *ball;
     treasure_t *t = &(World.treasures[treasure]);
-    int cx = t->pos.x;
-    int cy = t->pos.y;
+    int cx = t->pos.cx;
+    int cy = t->pos.cy;
 
     if (!is_polygon_map)
 	cy += (10 * PIXEL_CLICKS - BLOCK_CLICKS / 2);
@@ -985,6 +989,11 @@ void Fire_general_shot(int ind, unsigned short team, bool cannon,
 	}
 	shotpos.x = WRAP_XCLICK(shotpos.x);
 	shotpos.y = WRAP_YCLICK(shotpos.y);
+	if (shotpos.x < 0 || shotpos.x >= World.cwidth ||
+	    shotpos.y < 0 || shotpos.y >= World.cheight) {
+	    printf(__FILE__ ": shotpos bug\n"); /* kps - remove */
+	    continue;
+	}
 	Object_position_init_clicks(shot, shotpos.x, shotpos.y);
 
 	if (type == OBJ_SHOT || !pl) {
@@ -1183,7 +1192,7 @@ void Delete_shot(int ind)
 		break;
 	    sound_play_sensors(ball->pos.cx, ball->pos.cy, EXPLODE_BALL_SOUND);
 
-	    if (is_polygon_map) {
+	    if (is_polygon_map || !useOldCode) {
 		/* The ball could be inside a BallArea, check whether
 		 * the sparks can exist here. Should we set a team? */
 		if (is_inside(ball->prevpos.x, ball->prevpos.y,
@@ -1429,7 +1438,10 @@ void Fire_laser(int ind)
 		+ PIXEL_TO_CLICK(pl->vel.y) * timeStep2;
 	    cx = WRAP_XCLICK(cx);
 	    cy = WRAP_YCLICK(cy);
-	    Fire_general_laser(ind, pl->team, cx, cy, pl->dir, pl->mods);
+	    if (cx >= 0 && cx < World.cwidth &&
+		cy >= 0 && cy < World.cheight) {
+		Fire_general_laser(ind, pl->team, cx, cy, pl->dir, pl->mods);
+	    }
 	}
     }
 }
@@ -1530,8 +1542,8 @@ void Move_ball(int ind)
     /* const DFLOAT		max_spring_ratio = 0.30; */
 
     /* compute the normalized vector between the ball and the player */
-    D.x = CENTER_XCLICK(pl->pos.cx - ball->pos.cx);
-    D.y = CENTER_YCLICK(pl->pos.cy - ball->pos.cy);
+    D.x = WRAP_DCX(pl->pos.cx - ball->pos.cx);
+    D.y = WRAP_DCY(pl->pos.cy - ball->pos.cy);
     length = VECTOR_LENGTH(D);
     if (length > 0.0) {
 	D.x /= length;

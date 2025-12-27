@@ -261,6 +261,7 @@ extern DFLOAT		ballConnectorDamping;
 extern DFLOAT		maxBallConnectorRatio;
 extern DFLOAT		ballConnectorLength;
 extern bool		connectorIsString;
+extern bool		treatBallAsPoint;
 
 extern DFLOAT 		dropItemOnKillProb;
 extern DFLOAT		detonateItemOnKillProb;
@@ -359,6 +360,9 @@ extern int		timeStep;
 extern DFLOAT		timeStep2;
 extern char		*playerPasswordsFileName;
 extern int		playerPasswordsFileSizeLimit;
+
+/* kps hack */
+extern bool		useOldCode;
  
 #endif /* SERVER */
 

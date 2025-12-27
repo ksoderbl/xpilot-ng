@@ -169,6 +169,10 @@ void Make_debris(
 
     cx = WRAP_XCLICK(cx);
     cy = WRAP_YCLICK(cy);
+    if (cx < 0 || cx >= World.cwidth || cy < 0 || cy >= World.cheight) {
+	printf(__FILE__ ": bug\n"); /* kps - remove */
+	return;
+    }
 
     if (max_life < min_life)
 	max_life = min_life;
@@ -239,7 +243,7 @@ void Ball_is_replaced(ballobject *ball, treasure_t *tt, player *pl)
     ball->life = 0;
     SET_BIT(ball->status, (NOEXPLOSION|RECREATE));
     
-    SCORE(GetInd[pl->id], 5, tt->pos.x, tt->pos.y, "Treasure: ");
+    SCORE(GetInd[pl->id], 5, tt->pos.cx, tt->pos.cy, "Treasure: ");
     sprintf(msg, " < %s (team %d) has replaced the treasure >",
 	    pl->name, pl->team);
     Set_message(msg);
@@ -253,15 +257,21 @@ void Ball_is_destroyed(ballobject *ball)
     long frames = (LONG_MAX - ball->life) / timeStep;
     int ind = GetInd[ball->owner];
     DFLOAT seconds = ((DFLOAT)frames) / framesPerSecond;
-    DFLOAT frames12 = ((DFLOAT)frames) / FPSMultiplier;
 
     /*
      * Ball has been brought back to home treasure.
      * The team should be punished.
      */
-    sprintf(msg," < The ball was loose for %ld frames (best %d) "
-	    "/ %.2f frames @ 12fps / %.2f seconds >",
-	    frames, Rank_GetBestBall(Players[ind]), frames12, seconds);
+    if (FPSMultiplier != 1.0) {
+	DFLOAT frames12 = ((DFLOAT)frames) / FPSMultiplier;
+
+	sprintf(msg," < The ball was loose for %ld frames (best %d) "
+		"/ %.2f frames @ 12fps / %.2fs >",
+		frames, Rank_GetBestBall(Players[ind]), frames12, seconds);
+    } else {
+	sprintf(msg," < The ball was loose for %ld frames (best %d) / %.2fs >",
+		frames, Rank_GetBestBall(Players[ind]), seconds);
+    }
     Set_message(msg);
     Rank_BallRun(Players[ind], frames);
 }

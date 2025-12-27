@@ -156,6 +156,7 @@ int main(int argc, char **argv)
     Make_table();			/* Make trigonometric tables */
     Compute_gravity();
     Find_base_direction(); /* kps - ng does not want this */
+
     Walls_init();
 
     /* Allocate memory for players, shots and messages */
@@ -551,23 +552,24 @@ void Server_info(char *str, unsigned max_size)
     char		msg[MSG_LEN];
 
     sprintf(str,
-	    "SERVER VERSION...: %s\n"
-	    "STATUS...........: %s\n"
-	    "MAX SPEED........: %d fps\n"
-	    "WORLD (%3dx%3d)..: %s\n"
-	    "      AUTHOR.....: %s\n"
-	    "PLAYERS (%2d/%2d)..:\n"
+	    "SERVER VERSION..: %s\n"
+	    "STATUS..........: %s\n"
+	    "MAX SPEED.......: %d fps\n"
+	    "WORLD...........: %s\n"
+	    "      AUTHOR....: %s\n"
+	    "      SIZE......: %dx%d pixels\n"
+	    "PLAYERS.........: %2d/%2d\n"
 	    "\n"
 	    "EXPERIMENTAL SERVER, see\n"
 	    "http://xpilot.sourceforge.net/\n"
-	    "http://www.hut.fi/~ksoderbl/xpilot/xpilot-4.5.4X-rc7.txt\n"
+	    "http://www.hut.fi/~ksoderbl/xpilot/xpilot-4.5.4X.txt\n"
 	    "\n",
 	    server_version,
 	    (game_lock && ShutdownServer == -1) ? "locked" :
 	    (!game_lock && ShutdownServer != -1) ? "shutting down" :
 	    (game_lock && ShutdownServer != -1) ? "locked and shutting down" : "ok",
 	    FPS,
-	    World.x, World.y, World.name, World.author,
+	    World.name, World.author, World.width, World.height,
 	    NumPlayers, World.NumBases);
 
     if (strlen(str) >= max_size) {
@@ -887,6 +889,8 @@ extern char socklib_version[];
 extern char update_version[];
 extern char walls_version[];
 extern char wildmap_version[];
+extern char xpmap_version[];
+extern char xp2map_version[];
 
 static void Check_server_versions(void)
 {
@@ -936,6 +940,8 @@ static void Check_server_versions(void)
 	{ "update", update_version },
 	{ "walls", walls_version },
 	{ "wildmap", wildmap_version },
+	{ "xpmap", xpmap_version },
+	{ "xp2map", xp2map_version },
     };
     int			i;
     int			oops = 0;

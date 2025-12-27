@@ -179,16 +179,16 @@ void Go_home(int ind)
 	    check = pl->check - 1;
 	else
 	    check = World.NumChecks - 1;
-	cx = World.check[check].x;
-	cy = World.check[check].y;
+	cx = World.check[check].cx;
+	cy = World.check[check].cy;
 	vx = (rfrac() - 0.5) * 0.1;
 	vy = (rfrac() - 0.5) * 0.1;
 	velo = LENGTH(vx, vy);
 	dir = pl->last_check_dir;
 	dir = MOD2(dir + (int)((rfrac() - 0.5) * (RES / 8)), RES);
     } else {
-	cx = World.base[pl->home_base].pos.x;
-	cy = World.base[pl->home_base].pos.y;
+	cx = World.base[pl->home_base].pos.cx;
+	cy = World.base[pl->home_base].pos.cy;
 	dir = World.base[pl->home_base].dir;
 	vx = vy = velo = 0;
     }
@@ -767,8 +767,8 @@ void Reset_all_players(void)
 		if (World.targets[i].damage != TARGET_DAMAGE
 		    || World.targets[i].dead_time != 0) {
 #if 1 /* kps - remove this */
-		    World.block[World.targets[i].pos.x / BLOCK_CLICKS]
-			[World.targets[i].pos.y / BLOCK_CLICKS]	= TARGET;
+		    World.block[World.targets[i].pos.cx / BLOCK_CLICKS]
+			[World.targets[i].pos.cy / BLOCK_CLICKS]	= TARGET;
 #endif
 		    World.targets[i].dead_time = 0;
 		    World.targets[i].damage = TARGET_DAMAGE;

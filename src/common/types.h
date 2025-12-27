@@ -56,7 +56,6 @@ typedef struct { DFLOAT x, y; }	vector;
 typedef vector			position;
 typedef struct { int x, y; }	ivec;
 typedef ivec			ipos;
-/* kps addition */
 typedef struct { int cx, cy; }	cvec;
 typedef cvec			cpos;
 typedef struct { int x, y, w, h;} irec;

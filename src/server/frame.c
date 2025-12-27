@@ -156,7 +156,7 @@ static unsigned		fastshot_num[DEBRIS_TYPES * 2],
     }
 
 
-#if 1
+
 static int click_inview(click_visibility_t *v, int cx, int cy)
 {
     return ((cx > v->world.cx && cx < v->world.cx + view_cwidth)
@@ -164,21 +164,8 @@ static int click_inview(click_visibility_t *v, int cx, int cy)
 	&& ((cy > v->world.cy && cy < v->world.cy + view_cheight)
 	    || (cy > v->realWorld.cy && cy < v->realWorld.cy + view_cheight));
 }
-#else
-static int click_inview(click_visibility_t *v, int cx, int cy)
-{
-#define FOOBAR (200*CLICK)
-    return ((cx > v->world.cx + FOOBAR
-	     && cx < v->world.cx + view_cwidth - FOOBAR)
-	    || (cx > v->realWorld.cx + FOOBAR
-		&& cx < v->realWorld.cx + view_cwidth - FOOBAR))
-	&& ((cy > v->world.cy + FOOBAR
-	     && cy < v->world.cy + view_cheight - FOOBAR)
-	    || (cy > v->realWorld.cy + FOOBAR
-		&& cy < v->realWorld.cy + view_cheight - FOOBAR));
-}
-#endif
 
+#if 0
 /* kps - ng does not want this */
 static int block_inview(block_visibility_t *bv, int x, int y)
 {
@@ -187,6 +174,7 @@ static int block_inview(block_visibility_t *bv, int x, int y)
 	&& ((y > bv->world.y && y < bv->world.y + vertical_blocks)
 	    || (y > bv->realWorld.y && y < bv->realWorld.y + vertical_blocks));
 }
+#endif
 
 #define DEBRIS_STORE(xd,yd,color,offset) \
     int			i;						  \
@@ -338,7 +326,7 @@ static void Frame_radar_buffer_send(int conn)
     }
 
     ver = Get_conn_version(conn);
-    if (ver <= 0x4400 || (ver >= 0x4F00 && ver < 0x4F11)) {
+    if (ver <= 0x4400 || (ver >= 0x4F09 && ver < 0x4F11)) {
 	for (i = 0; i < num_radar; i++) {
 	    p = &radar_ptr[radar_shuffle[i]];
 	    radar_x = (radar_width * p->x) / World.width;
@@ -593,9 +581,7 @@ static void Frame_map(int conn, int ind)
 	targ = &World.targets[i];
 	if (BIT(targ->update_mask, conn_bit)
 	    || (BIT(targ->conn_mask, conn_bit) == 0
-		&& block_inview(&bv,
-				targ->pos.x / BLOCK_CLICKS,
-				targ->pos.y / BLOCK_CLICKS))) {
+		&& click_inview(&cv, targ->pos.cx, targ->pos.cy))) {
 	    Send_target(conn, i, targ->dead_time, targ->damage);
 	    pl->last_target_update = i;
 	    bytes_left -= target_packet_size;
@@ -612,9 +598,7 @@ static void Frame_map(int conn, int ind)
 	if (++i >= World.NumCannons) {
 	    i = 0;
 	}
-	if (block_inview(&bv,
-			 World.cannon[i].blk_pos.x,
-			 World.cannon[i].blk_pos.y)) {
+	if (click_inview(&cv, World.cannon[i].pos.cx, World.cannon[i].pos.cy)) {
 	    if (BIT(World.cannon[i].conn_mask, conn_bit) == 0) {
 		Send_cannon(conn, i, World.cannon[i].dead_time);
 		pl->last_cannon_update = i;
@@ -649,9 +633,9 @@ static void Frame_map(int conn, int ind)
 		}
 	    }
 #else
-	    if ((CENTER_XCLICK(World.fuel[i].clk_pos.x - pl->pos.cx) <
+	    if ((CENTER_XCLICK(World.fuel[i].pos.cx - pl->pos.cx) <
 		 (view_width << CLICK_SHIFT) + BLOCK_CLICKS) &&
-		(CENTER_YCLICK(World.fuel[i].clk_pos.y - pl->pos.cy) <
+		(CENTER_YCLICK(World.fuel[i].pos.cy - pl->pos.cy) <
 		 (view_height << CLICK_SHIFT) + BLOCK_CLICKS)) {
 		Send_fuel(conn, i, (int) World.fuel[i].fuel);
 		pl->last_fuel_update = i;
@@ -677,14 +661,18 @@ static void Frame_map(int conn, int ind)
 	    && worm->temporary
 	    && (worm->type == WORM_IN
 		|| worm->type == WORM_NORMAL)
-	    && block_inview(&bv, worm->pos.x, worm->pos.y)) {
+	    && click_inview(&cv, worm->pos.cx, worm->pos.cy)) {
 	    /* This is really a stupid bug: he first converts
 	       the perfect blocksizes to pixels which the
 	       client is perfectly capable of doing itself.
 	       Then he sends the pixels in signed shorts.
 	       This will fail on big maps. */
+#if 0
 	    int	x = (worm->pos.x * BLOCK_SZ) + BLOCK_SZ / 2,
 		y = (worm->pos.y * BLOCK_SZ) + BLOCK_SZ / 2;
+#endif
+	    int	x = CLICK_TO_PIXEL(worm->pos.cx),
+		y = CLICK_TO_PIXEL(worm->pos.cy);
 	    Send_wormhole(conn, x, y);
 	    pl->last_wormhole_update = i;
 	    bytes_left -= max_packet * wormhole_packet_size;
@@ -984,7 +972,7 @@ static void Frame_ships(int conn, int ind)
     player			*pl = Players[ind],
 				*pl_i;
     pulse_t			*pulse;
-    int				i, j, k, color, dir, cx, cy;
+    int				i, j, k, color, dir, cx = -1, cy = -1;
 
     for (j = 0; j < NumPulses; j++) {
 	pulse = Pulses[j];
@@ -997,8 +985,11 @@ static void Frame_ships(int conn, int ind)
 	if (click_inview(&cv, cx, cy)) {
 	    dir = pulse->dir;
 	} else {
-	    cx += WRAP_XCLICK(tcos(pulse->dir) * pulse->len);
-	    cy += WRAP_YCLICK(tsin(pulse->dir) * pulse->len);
+	    cx += tcos(pulse->dir) * pulse->len;
+	    cy += tsin(pulse->dir) * pulse->len;
+	    cx = WRAP_XCLICK(cx);
+	    cy = WRAP_YCLICK(cy);
+
 	    if (click_inview(&cv, cx, cy)) {
 		dir = MOD2(pulse->dir + RES/2, RES);
 	    }
@@ -1019,14 +1010,16 @@ static void Frame_ships(int conn, int ind)
     }
     for (i = 0; i < NumEcms; i++) {
 	ecm_t *ecm = Ecms[i];
-	Send_ecm(conn, (int)ecm->pos.x, (int)ecm->pos.y, ecm->size);
+	int x = CLICK_TO_PIXEL(ecm->pos.cx),
+	    y = CLICK_TO_PIXEL(ecm->pos.cy);
+	Send_ecm(conn, x, y, ecm->size);
     }
     for (i = 0; i < NumTransporters; i++) {
 	trans_t *trans = Transporters[i];
 	player 	*victim = Players[GetInd[trans->target]],
 		*pl = (trans->id == NO_ID ? NULL : Players[GetInd[trans->id]]);
-	int 	x = (pl ? pl->pos.px : trans->pos.x),
-		y = (pl ? pl->pos.py : trans->pos.y);
+	int 	x = CLICK_TO_PIXEL(pl ? pl->pos.cx : trans->pos.cx),
+		y = CLICK_TO_PIXEL(pl ? pl->pos.cy : trans->pos.cy);
 	Send_trans(conn, victim->pos.px, victim->pos.py, x, y);
     }
     for (i = 0; i < World.NumCannons; i++) {
@@ -1039,8 +1032,8 @@ static void Frame_ships(int conn, int ind)
 		    Send_connector(conn,
 				   CLICK_TO_PIXEL(t->pos.cx + t->ship->pts[j][t->dir].cx),
 				   CLICK_TO_PIXEL(t->pos.cy + t->ship->pts[j][t->dir].cy),
-				   CLICK_TO_PIXEL(cannon->clk_pos.x),
-				   CLICK_TO_PIXEL(cannon->clk_pos.y), 1);
+				   CLICK_TO_PIXEL(cannon->pos.cx),
+				   CLICK_TO_PIXEL(cannon->pos.cy), 1);
 		}
 	    }
 	}
@@ -1093,22 +1086,21 @@ static void Frame_ships(int conn, int ind)
 	}
 	if (BIT(pl_i->used, HAS_REFUEL)) {
 	    if (click_inview(&cv,
-			     World.fuel[pl_i->fs].clk_pos.x,
-			     World.fuel[pl_i->fs].clk_pos.y)) {
+			     World.fuel[pl_i->fs].pos.cx,
+			     World.fuel[pl_i->fs].pos.cy)) {
 		Send_refuel(conn,
-			    CLICK_TO_PIXEL(World.fuel[pl_i->fs].clk_pos.x),
-			    CLICK_TO_PIXEL(World.fuel[pl_i->fs].clk_pos.y),
+			    CLICK_TO_PIXEL(World.fuel[pl_i->fs].pos.cx),
+			    CLICK_TO_PIXEL(World.fuel[pl_i->fs].pos.cy),
 			    pl_i->pos.px,
 			    pl_i->pos.py);
 	    }
 	}
 	if (BIT(pl_i->used, HAS_REPAIR)) {
-	    int cx = World.targets[pl_i->repair_target].pos.x;
-	    int cy = World.targets[pl_i->repair_target].pos.y;
+	    int x = World.targets[pl_i->repair_target].pos.cx / CLICK;
+	    int y = World.targets[pl_i->repair_target].pos.cy / CLICK;
 	    if (click_inview(&cv, cx, cy)) {
 		/* same packet as refuel */
-		Send_refuel(conn, pl_i->pos.px, pl_i->pos.py,
-			    CLICK_TO_PIXEL(cx), CLICK_TO_PIXEL(cy));
+		Send_refuel(conn, pl_i->pos.px, pl_i->pos.py, x, y);
 	    }
 	}
 	if (BIT(pl_i->used, HAS_TRACTOR_BEAM)) {

@@ -1276,16 +1276,16 @@ option options[] = {
 	"Which color number to use for drawing team zero scores (when special).\n"
     },
     {
-	"scoreObjectTimer",
+	"scoreObjectTime",
 	NULL,
-	"24",
+	"2.0",
 	KEY_DUMMY,
-	"How many frames score objects remain visible on the map.\n"
+	"How many seconds score objects remain visible on the map.\n"
     },
     {
 	"baseWarningType",
 	NULL,
-	"1",
+	"2",
 	KEY_DUMMY,
 	"Which type of base warning you prefer.\n"
 	"A value of 0 disables base warning.\n"
@@ -3097,7 +3097,7 @@ void Parse_options(int *argcp, char **argvp, char *realName, int *port,
     Get_int_resource(rDB, "scoreInactiveSelfColor",
 		     &scoreInactiveSelfColor);
     Get_int_resource(rDB, "scoreZeroColor", &scoreZeroColor);
-    Get_int_resource(rDB, "scoreObjectTimer", &scoreObjectTimer);
+    Get_float_resource(rDB, "scoreObjectTime", &scoreObjectTime);
     Get_int_resource(rDB, "baseWarningType", &baseWarningType);
     Get_int_resource(rDB, "wallColor", &wallColor);
     Get_int_resource(rDB, "wallRadarColor", &wallRadarColor);

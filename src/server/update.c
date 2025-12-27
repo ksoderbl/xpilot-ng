@@ -55,6 +55,7 @@
 char update_version[] = VERSION;
 
 
+/* kps - remove block based gravity ??? */
 #define update_object_speed(o_)						\
     if (BIT((o_)->status, GRAVITY)) {					\
 	(o_)->vel.x += ((o_)->acc.x					\
@@ -97,24 +98,14 @@ static void Transport_to_home(int ind)
 		check = pl->check - 1;
 	else
 		check = World.NumChecks - 1;
-	cx = World.check[check].x;
-	cy = World.check[check].y;
+	cx = World.check[check].cx;
+	cy = World.check[check].cy;
     } else {
-	cx = World.base[pl->home_base].pos.x;
-	cy = World.base[pl->home_base].pos.y;
+	cx = World.base[pl->home_base].pos.cx;
+	cy = World.base[pl->home_base].pos.cy;
     }
-
-    /* kps - hack - check definitions of
-       WRAP_DX, WRAP_XCLICK and CENTER_XCLICK */
-
-    dx = WRAP_XCLICK(cx - pl->pos.cx);
-    dy = WRAP_YCLICK(cy - pl->pos.cy);
-
-    if (BIT(World.rules->mode, WRAP_PLAY)) {
-	dx = CENTER_XCLICK(dx);
-	dy = CENTER_YCLICK(dy);
-    }
-
+    dx = WRAP_DCX(cx - pl->pos.cx);
+    dy = WRAP_DCY(cy - pl->pos.cy);
     t = pl->count + 0.5f;
     if (2 * t <= T) {
 	m = 2 / t;
@@ -550,6 +541,7 @@ void Update_objects(void)
     /*
      * Special items.
      */
+    /* kps - this is done too often at high fps */
     for (i=0; i<NUM_ITEMS; i++)
 	if (World.items[i].num < World.items[i].max
 	    && World.items[i].chance > 0
@@ -655,8 +647,11 @@ void Update_objects(void)
 	cannon_t *cannon = World.cannon + i;
 	if (cannon->dead_time > 0) {
 	    if (!--cannon->dead_time) {
-		World.block[cannon->blk_pos.x][cannon->blk_pos.y]
-		    = CANNON;
+		int bx, by;
+
+		bx = CLICK_TO_BLOCK(cannon->pos.cx);
+		by = CLICK_TO_BLOCK(cannon->pos.cy);
+		World.block[bx][by] = CANNON;
 		cannon->conn_mask = 0;
 		cannon->last_change = frame_loops;
 	    }
@@ -696,12 +691,12 @@ void Update_objects(void)
 	}
 	if (cannon->tractor_count > 0) {
 	    int ind = GetInd[cannon->tractor_target];
-	    if (Wrap_length(Players[ind]->pos.cx - cannon->clk_pos.x,
-			    Players[ind]->pos.cy - cannon->clk_pos.y)
+	    if (Wrap_length(Players[ind]->pos.cx - cannon->pos.cx,
+			    Players[ind]->pos.cy - cannon->pos.cy)
 		< TRACTOR_MAX_RANGE(cannon->item[ITEM_TRACTOR_BEAM]) * CLICK
 		&& BIT(Players[ind]->status, PLAYING|GAME_OVER|KILLED|PAUSE)
 		   == PLAYING) {
-		General_tractor_beam(-1, cannon->clk_pos.x, cannon->clk_pos.y,
+		General_tractor_beam(-1, cannon->pos.cx, cannon->pos.cy,
 				     cannon->item[ITEM_TRACTOR_BEAM], ind,
 				     cannon->tractor_is_pressor);
 		cannon->tractor_count--;
@@ -712,14 +707,14 @@ void Update_objects(void)
 	if (cannon->emergency_shield_left > 0) {
 	    if (--cannon->emergency_shield_left <= 0) {
 		CLR_BIT(cannon->used, HAS_EMERGENCY_SHIELD);
-		sound_play_sensors(cannon->clk_pos.x, cannon->clk_pos.y,
+		sound_play_sensors(cannon->pos.cx, cannon->pos.cy,
 				   EMERGENCY_SHIELD_OFF_SOUND);
 	    }
 	}
 	if (cannon->phasing_left > 0) {
 	    if (--cannon->phasing_left <= 0) {
 		CLR_BIT(cannon->used, HAS_PHASING_DEVICE);
-	        sound_play_sensors(cannon->clk_pos.x, cannon->clk_pos.y,
+	        sound_play_sensors(cannon->pos.cx, cannon->pos.cy,
 				   PHASING_OFF_SOUND);
 	    }
 	}
@@ -731,8 +726,8 @@ void Update_objects(void)
     for (i = 0; i < World.NumTargets; i++) {
 	if (World.targets[i].dead_time > 0) {
 	    if (!--World.targets[i].dead_time) {
-		World.block[World.targets[i].pos.x / BLOCK_CLICKS]
-		    [World.targets[i].pos.y / BLOCK_CLICKS] = TARGET;
+		World.block[World.targets[i].pos.cx / BLOCK_CLICKS]
+		    [World.targets[i].pos.cy / BLOCK_CLICKS] = TARGET;
 		World.targets[i].conn_mask = 0;
 		World.targets[i].update_mask = (unsigned)-1;
 		World.targets[i].last_change = frame_loops;
@@ -742,8 +737,8 @@ void Update_objects(void)
 
 		    for (j = 0; j < World.NumTargets; j++) {
 			if (World.targets[j].team == team) {
-			    World.block[World.targets[j].pos.x / BLOCK_CLICKS]
-				       [World.targets[j].pos.y / BLOCK_CLICKS]
+			    World.block[World.targets[j].pos.cx / BLOCK_CLICKS]
+				       [World.targets[j].pos.cy / BLOCK_CLICKS]
 				= TARGET;
 			    World.targets[j].conn_mask = 0;
 			    World.targets[j].update_mask = (unsigned)-1;
@@ -1043,8 +1038,8 @@ void Update_objects(void)
 	}
 
 	if (BIT(pl->used, HAS_REFUEL)) {
-	    if ((Wrap_length(pl->pos.cx - World.fuel[pl->fs].clk_pos.x,
-			     pl->pos.cy - World.fuel[pl->fs].clk_pos.y)
+	    if ((Wrap_length(pl->pos.cx - World.fuel[pl->fs].pos.cx,
+			     pl->pos.cy - World.fuel[pl->fs].pos.cy)
 		 > 90.0 * CLICK)
 		|| (pl->fuel.sum >= pl->fuel.max)
 #if 0
@@ -1090,8 +1085,8 @@ void Update_objects(void)
 	/* target repair */
 	if (BIT(pl->used, HAS_REPAIR)) {
 	    target_t *targ = &World.targets[pl->repair_target];
-	    int cx = targ->pos.x;
-	    int cy = targ->pos.y;
+	    int cx = targ->pos.cx;
+	    int cy = targ->pos.cy;
 	    if (Wrap_length(pl->pos.cx - cx, pl->pos.cy - cy) > 90.0 * CLICK
 		|| targ->damage >= TARGET_DAMAGE
 		|| targ->dead_time > 0
@@ -1196,12 +1191,12 @@ void Update_objects(void)
 			|| World.wormHoles[j].temporary)
 			continue;
 
-		    wx = (World.wormHoles[j].pos.x -
-			  World.wormHoles[pl->wormHoleHit].pos.x) * BLOCK_SZ;
-		    wy = (World.wormHoles[j].pos.y -
-			  World.wormHoles[pl->wormHoleHit].pos.y) * BLOCK_SZ;
+		    wx = (World.wormHoles[j].pos.cx -
+			  World.wormHoles[pl->wormHoleHit].pos.cx) / CLICK;
+		    wy = (World.wormHoles[j].pos.cy -
+			  World.wormHoles[pl->wormHoleHit].pos.cy) / CLICK;
 		    wx = WRAP_DX(wx);
-		    wy = WRAP_DX(wy);
+		    wy = WRAP_DY(wy);
 
 		    proximity = (int)(pl->vel.y * wx + pl->vel.x * wy);
 		    proximity = ABS(proximity);
@@ -1234,8 +1229,8 @@ void Update_objects(void)
 
 	    sound_play_sensors(pl->pos.cx, pl->pos.cy, WORM_HOLE_SOUND);
 
-	    w.x = (World.wormHoles[j].pos.x + 0.5) * BLOCK_SZ;
-	    w.y = (World.wormHoles[j].pos.y + 0.5) * BLOCK_SZ;
+	    w.x = CLICK_TO_PIXEL(World.wormHoles[j].pos.cx);
+	    w.y = CLICK_TO_PIXEL(World.wormHoles[j].pos.cy);
 
 	    } else { /* wormHoleHit == -1 */
 		int counter;
@@ -1292,6 +1287,11 @@ void Update_objects(void)
 			    + (PIXEL_TO_CLICK(w.y) - pl->pos.cy);
 			ballpos.x = WRAP_XCLICK(ballpos.x);
 			ballpos.y = WRAP_YCLICK(ballpos.y);
+			if (ballpos.x < 0 || ballpos.x >= World.cwidth ||
+			    ballpos.y < 0 || ballpos.y >= World.cheight) {
+			    b->life = 0;
+			    continue;
+			}
 			Object_position_set_clicks(b, ballpos.x, ballpos.y);
 			Object_position_remember(b);
 			b->vel.x *= WORM_BRAKE_FACTOR;

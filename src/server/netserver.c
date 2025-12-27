@@ -214,7 +214,7 @@ static int Compress_map(unsigned char *map, int size)
  */
 static int Init_setup(void)
 {
-    int			i, x, y, team, type, size,
+    int			i, x, y, team, type = -1, size,
 			wormhole = 0,
 			treasure = 0,
 			target = 0,
@@ -340,8 +340,8 @@ static int Init_setup(void)
 		break;
 	    case CHECK:
 		for (i = 0; i < World.NumChecks; i++) {
-		    if (x != World.check[i].x / BLOCK_CLICKS
-			|| y != World.check[i].y / BLOCK_CLICKS) {
+		    if (x != World.check[i].cx / BLOCK_CLICKS
+			|| y != World.check[i].cy / BLOCK_CLICKS) {
 			continue;
 		    }
 		    *mapptr = SETUP_CHECK + i;
@@ -1359,7 +1359,7 @@ static int Handle_login(int ind, char *errmsg, int errsize)
     }
     pl->rectype = connp->rectype;
 #endif
-    strlcpy(pl->rawname, connp->nick, MAX_CHARS);
+    /*strlcpy(pl->rawname, connp->nick, MAX_CHARS);*/
     strlcpy(pl->name, connp->nick, MAX_CHARS);
     strlcpy(pl->auth_nick, old_nick, MAX_CHARS);
     strlcpy(pl->realname, connp->real, MAX_CHARS);
@@ -1643,8 +1643,8 @@ static void Handle_input(int fd, void *arg)
     int			type,
 			result,
 			(**receive_tbl)(int ind);
-    short		*pbscheck;
-    char		*pbdcheck;
+    short		*pbscheck = NULL;
+    char		*pbdcheck = NULL;
 
     if (connp->state & (CONN_PLAYING | CONN_READY)) {
 	receive_tbl = &playing_receive[0];
@@ -2019,7 +2019,7 @@ int Send_player(int ind, int id)
 		      "%c%hd" "%c%c" "%s%s%s" "%S",
 		      PKT_PLAYER, pl->id,
 		      pl->team, pl->mychar,
-		      pl->rawname, pl->realname, pl->hostname,
+		      pl->name, pl->realname, pl->hostname,
 		      buf);
     if (n > 0) {
 	if (connp->version < 0x4F10) {
@@ -2054,7 +2054,7 @@ int Send_score(int ind, int id, DFLOAT score,
 	return 0;
     }
     if (connp->version < 0x4500
-	|| (connp->version >= 0x4F00 && connp->version < 0x4F11)) {
+	|| (connp->version >= 0x4F09 && connp->version < 0x4F11)) {
 	/* older clients don't get alliance info or decimals of the score */
 	return Packet_printf(&connp->c, "%c%hd%hd%hd%c", PKT_SCORE,
 			     id, (int)(score + (score > 0 ? 0.5 : -0.5)),
@@ -2089,7 +2089,7 @@ int Send_team_score(int ind, int team, DFLOAT score)
 	return 0;
     }
     if (connp->version < 0x4500
-	|| (connp->version >= 0x4F00 && connp->version < 0x4F11)) {
+	|| (connp->version >= 0x4F09 && connp->version < 0x4F11)) {
 	/* older clients don't know about team scores */
 	return 0;
     }
@@ -2159,7 +2159,7 @@ int Send_score_object(int ind, DFLOAT score, int cx, int cy,
     by = cy / BLOCK_CLICKS;
 
     if (connp->version < 0x4500
-	|| (connp->version >= 0x4F00 && connp->version < 0x4F11)) {
+	|| (connp->version >= 0x4F09 && connp->version < 0x4F11)) {
 	/* older clients don't get decimals of the score */
 	return Packet_printf(&Conn[ind].c, "%c%hd%hu%hu%s",PKT_SCORE_OBJECT,
 			     (int)(score + (score > 0 ? 0.5 : -0.5)),
@@ -2316,7 +2316,7 @@ int Send_target(int ind, int num, int dead_time, int damage)
 int Send_wormhole(int ind, int x, int y)
 {
     if (Conn[ind].version < 0x4501
-	|| (Conn[ind].version >= 0x4F00 && Conn[ind].version < 0x4F11)) {
+	|| (Conn[ind].version >= 0x4F09 && Conn[ind].version < 0x4F11)) {
 	const int wormStep = 5;
 	int wormAngle = (frame_loops & 7) * (RES / 8);
 

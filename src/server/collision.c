@@ -67,7 +67,7 @@ char collision_version[] = VERSION;
  * invaluable insights.
  */
 
-/* kps - note: thise are all given in clicks here */
+/* kps - note: the arguments are all given in clicks here */
 static int in_range_acd_old(
 	int p1x, int p1y, int p2x, int p2y,
 	int q1x, int q1y, int q2x, int q2y,
@@ -320,7 +320,15 @@ static void PlayerCollision(void)
 		}
 		if (BIT(Players[j]->used, HAS_PHASING_DEVICE))
 		    continue;
-		if (!is_polygon_map) {
+		if (is_polygon_map || !useOldCode) {
+		    if (!in_range_acd(pl->prevpos.x - Players[j]->prevpos.x,
+				      pl->prevpos.y - Players[j]->prevpos.y,
+				      pl->extmove.x - Players[j]->extmove.x,
+				      pl->extmove.y - Players[j]->extmove.y,
+				      (2*SHIP_SZ-6) * CLICK)) {
+ 			continue;
+		    }
+		} else {
 		    if (!in_range_acd_old(pl->prevpos.x, pl->prevpos.y,
 					  pl->pos.cx, pl->pos.cy, 
 					  Players[j]->prevpos.x,
@@ -329,14 +337,6 @@ static void PlayerCollision(void)
 					  Players[j]->pos.cy, 
 					  PIXEL_TO_CLICK(2*SHIP_SZ-6))) {
 			continue;
-		    }
-		} else {
-		    if (!in_range_acd(pl->prevpos.x - Players[j]->prevpos.x,
-				      pl->prevpos.y - Players[j]->prevpos.y,
-				      pl->extmove.x - Players[j]->extmove.x,
-				      pl->extmove.y - Players[j]->extmove.y,
-				      (2*SHIP_SZ-6) * CLICK)) {
- 			continue;
 		    }
 		}
 
@@ -533,7 +533,7 @@ static void PlayerCollision(void)
 		    sound_play_sensors(pl->pos.cx, pl->pos.cy,
 				       CONNECT_BALL_SOUND);
 		    pl->grabbedBallFrame = main_loops;
-		    if (is_polygon_map) {
+		    if (is_polygon_map || !useOldCode) {
 			/* The ball might already be inside the team's ball
 			 * target. This is not a complete check as it only
 			 * checks the center of the ball, but at least it
@@ -594,8 +594,8 @@ static void PlayerCollision(void)
 		pl->time++;
 	    }
 	    if (BIT(pl->status, PLAYING|KILLED) == PLAYING
-		&& Wrap_length(pl->pos.cx - World.check[pl->check].x,
-			       pl->pos.cy - World.check[pl->check].y)
+		&& Wrap_length(pl->pos.cx - World.check[pl->check].cx,
+			       pl->pos.cy - World.check[pl->check].cy)
 		    < checkpointRadius * BLOCK_CLICKS
 		&& !IS_TANK_PTR(pl)
 		&& !ballrace) {
@@ -708,20 +708,7 @@ static void PlayerObjectCollision(int ind)
     for (j = 0; j < obj_count; j++) {
 	obj = obj_list[j];
 
-	if (!is_polygon_map) {
-	    if (obj->life <= 0) {
-		continue;
-	    }
-
-	    range = SHIP_SZ + obj->pl_range;
-	    if (!in_range_acd_old(pl->prevpos.x, pl->prevpos.y,
-				  pl->pos.cx, pl->pos.cy,
-				  obj->prevpos.x, obj->prevpos.y,
-				  obj->pos.cx, obj->pos.cy,
-				  range * CLICK)) {
-		continue;
-	    }
-	} else {
+	if (is_polygon_map || !useOldCode) {
 	    range = SHIP_SZ + obj->pl_range;
 	    switch (obj->collmode) {
 	    case 0:
@@ -752,6 +739,19 @@ static void PlayerObjectCollision(int ind)
 	    }
 	    if (!hit)
 		continue;
+	} else {
+	    if (obj->life <= 0) {
+		continue;
+	    }
+
+	    range = SHIP_SZ + obj->pl_range;
+	    if (!in_range_acd_old(pl->prevpos.x, pl->prevpos.y,
+				  pl->pos.cx, pl->pos.cy,
+				  obj->prevpos.x, obj->prevpos.y,
+				  obj->pos.cx, obj->pos.cy,
+				  range * CLICK)) {
+		continue;
+	    }
 	}
 
 	if (obj->id != NO_ID) {
@@ -812,13 +812,7 @@ static void PlayerObjectCollision(int ind)
 	if (radius >= range) {
 	    hit = 1;
 	} else {
-	    if (!is_polygon_map) {
-		hit = in_range_acd_old(pl->prevpos.x, pl->prevpos.y,
-				       pl->pos.cx, pl->pos.cy,
-				       obj->prevpos.x, obj->prevpos.y,
-				       obj->pos.cx, obj->pos.cy,
-				       range * CLICK);
-	    } else {
+	    if (is_polygon_map || !useOldCode) {
 		switch (obj->collmode) {
 		case 0:
 		    hit = in_range_simple(pl->pos.cx, pl->pos.cy,
@@ -843,11 +837,19 @@ static void PlayerObjectCollision(int ind)
 		    warn("Unimplemented collision mode %d", obj->collmode);
 		    continue;
 		}
+	    } else {
+		hit = in_range_acd_old(pl->prevpos.x, pl->prevpos.y,
+				       pl->pos.cx, pl->pos.cy,
+				       obj->prevpos.x, obj->prevpos.y,
+				       obj->pos.cx, obj->pos.cy,
+				       range * CLICK);
+
+
 	    }
 	}
 
-#if 1
-	if (is_polygon_map && obj->collmode != 1) {
+#if 0
+	if ((is_polygon_map || !useOldCode) && obj->collmode != 1) {
 	    char MSG[80];
 	    sprintf(MSG, "Collision type=%d, hit=%d, cm=%d, time=%f, "
 		    "frame=%ld [*DEBUG*]", obj->type, hit, obj->collmode,
@@ -1773,8 +1775,8 @@ static void BallCollision(void)
 	    player *owner = Players[owner_ind];
 
 	    if (!ballrace_connect || ball->id == owner->id) { 
-		if (Wrap_length(ball->pos.cx - World.check[owner->check].x,
-				ball->pos.cy - World.check[owner->check].y)
+		if (Wrap_length(ball->pos.cx - World.check[owner->check].cx,
+				ball->pos.cy - World.check[owner->check].cy)
 		    < checkpointRadius * BLOCK_CLICKS) {
 		    Player_pass_checkpoint(owner_ind);
 		}

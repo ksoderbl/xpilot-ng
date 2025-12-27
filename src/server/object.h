@@ -420,7 +420,7 @@ struct _visibility {
 #define MAX_PLAYER_ECMS		8	/* Maximum simultaneous per player */
 typedef struct {
     int		size;
-    position	pos;
+    cpos	pos;
     int		id;
 } ecm_t;
 
@@ -442,7 +442,7 @@ typedef struct {
  * Transporter info.
  */
 typedef struct {
-    position	pos;
+    cpos	pos;
     int		target;
     int		id;
     int		count;
@@ -574,7 +574,7 @@ struct player {
     char	mychar;			/* Special char for player */
     char	prev_mychar;		/* Special char for player */
     char	name[MAX_CHARS];	/* Nick-name of player */
-    char	rawname[MAX_CHARS];	/* Not legalized Nick-name */
+  /*char	rawname[MAX_CHARS];*/	/* Not legalized Nick-name */
     char	auth_nick[MAX_CHARS];	/* Original nick (/auth command) */
     char	realname[MAX_CHARS];	/* Real name of player */
     char	hostname[MAX_CHARS];	/* Hostname of client player uses */

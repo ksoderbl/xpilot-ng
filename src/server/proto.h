@@ -40,6 +40,11 @@
 #include "map.h"
 #endif
 
+#ifndef DEFAULTS_H
+/* need optOrigin */
+#include "defaults.h"
+#endif
+
 /*
  * Prototypes for cell.c
  */
@@ -82,6 +87,7 @@ void Move_player(int ind);
 void Turn_player(int ind);
 int is_inside(int x, int y, int hit_mask);
 int Polys_to_client(unsigned char *);
+void Ball_line_init(void);
 
 /*
  * Prototypes for event.c
@@ -96,11 +102,22 @@ void filter_mods(modifiers *mods);
 /*
  * Prototypes for map.c
  */
-void Init_map(void);
+/*void Init_map(void);*/
 void Alloc_map(void);
 void Free_map(void);
 bool Grok_map(void);
-bool Grok_polygon_map(void);
+bool Grok_map_new(void);
+
+void Map_place_base(int cx, int cy, int dir, int team);
+void Map_place_fuel(int cx, int cy, int team);
+void Map_place_treasure(int cx, int cy, int team, bool empty);
+void Map_place_wormhole(int cx, int cy, wormType type);
+void Map_place_check(int cx, int cy);
+void Map_place_target(int cx, int cy, int team);
+void Map_place_checkpoint(int cx, int cy, int index);
+void Map_place_item_concentrator(int cx, int cy);
+void Map_place_asteroid_concentrator(int cx, int cy);
+void Map_place_grav(int cx, int cy, DFLOAT force);
 
 void Find_base_direction(void);
 void Compute_gravity(void);
@@ -117,6 +134,13 @@ int Wildmap(
 	char **data,
 	int *width_ptr,
 	int *height_ptr);
+
+/*
+ * Prototypes for xp2map.c
+ */
+bool isXp2MapFile(int fd);
+bool parseXp2MapFile(int fd, optOrigin opt_origin);
+
 
 /*
  * Prototypes for math.c
@@ -395,6 +419,27 @@ bool parseDefaultsFile(const char *filename);
 bool parsePasswordFile(const char *filename);
 bool parseMapFile(const char *filename);
 void expandKeyword(const char *keyword);
+
+void Blocks_to_polygons(void);
+
+void P_edgestyle(char *id, int width, int color, int style);
+void P_polystyle(char *id, int color, int texture_id, int defedge_id,
+		 int flags);
+void P_bmpstyle(char *id, char *filename, int flags);
+void P_start_polygon(int cx, int cy, int style);
+void P_offset(int offcx, int offcy, int edgestyle);
+void P_vertex(int cx, int cy, int edgestyle);
+void P_end_polygon(void);
+void P_start_ballarea(void);
+void P_end_ballarea(void);
+void P_start_balltarget(int team);
+void P_end_balltarget(void);
+void P_start_decor(void);
+void P_end_decor(void);
+int P_get_bmp_id(const char *s);
+int P_get_edge_id(const char *s);
+int P_get_poly_id(const char *s);
+
 
 /*
  * Prototypes for laser.c

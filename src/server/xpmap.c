@@ -1,6 +1,6 @@
-/* 
+/* $Id: map.c,v 5.19 2002/01/18 22:34:26 kimiko Exp $
  *
- * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2003 by
+ * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
  *      Ken Ronny Schouten   <ken@xpilot.org>
@@ -22,23 +22,33 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef	VERSION_H
-#define	VERSION_H
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
-#if defined(__hpux)
-#   pragma COPYRIGHT_DATE	"1991-2003"
-#   pragma COPYRIGHT		"Bjørn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska & Uoti Urpala"
-#   pragma VERSIONID		"XPilot 4.5.4X-rc8"
+#ifndef _WINDOWS
+# include <sys/file.h>
 #endif
 
-#define VERSION			"4.5.4X-rc8"
-#ifdef	_WINDOWS
-#define	TITLE			"4.5.4X-rc8-NT13"
-#define	VERSION_WINDOWS	"13"
-#else
-#define TITLE			"XPilot 4.5.4X-rc8"
+#ifdef _WINDOWS
+# include "NT/winServer.h"
 #endif
-#define AUTHORS			"Bjørn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska & Uoti Urpala"
-#define COPYRIGHT		"Copyright © 1991-2003 by Bjørn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska & Uoti Urpala"
 
-#endif /* VERSION_H */
+#define SERVER
+#include "version.h"
+#include "config.h"
+#include "serverconst.h"
+#include "global.h"
+#include "proto.h"
+#include "map.h"
+#include "bit.h"
+#include "error.h"
+#include "commonproto.h"
+
+char xpmap_version[] = VERSION;
+
+

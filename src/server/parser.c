@@ -378,6 +378,9 @@ bool Parser(int argc, char **argv)
     option_desc		*desc;
 
     memset(&World, 0, sizeof(World));
+    mapData = NULL;
+    mapWidth = 0;
+    mapHeight = 0;
 
     if (Init_options() == FALSE) {
 	return FALSE;
@@ -478,20 +481,19 @@ bool Parser(int argc, char **argv)
      * Construct the World structure from the options.
      */
     status = Grok_map();
-	
+
+    if (!is_polygon_map) {
+	xpprintf("Converting blocks to polygons...\n");
+	Blocks_to_polygons();
+	xpprintf("Done creating polygons.\n");
+	/* force treatBallAsPoint on */
+	treatBallAsPoint = true;
+	Ball_line_init();
+    }
+
     return status;
 }
 
-#if 0
-/* kps - ng */
-void cmdhack(void)
-{
-    int j;
-    for (j = 0; j < NELEM(options); j++)
-	addOption(options[j].name, options[j].defaultValue, 0, &options[j],
-		  OPT_DEFAULT);
-}
-#endif
 
 /*
  * Modify an option during the game.

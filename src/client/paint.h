@@ -57,13 +57,19 @@
 #define WARNING_DISTANCE	(VISIBILITY_DISTANCE*0.8)
 /* constants end */
 
+#define MSG_LIFE_TIME		60.0	/* Seconds */
+#define MSG_FLASH_TIME		50.0	/* Old messages have life time less
+					   than this */
+
+#define TITLE_DELAY		500	/* Should probably change to seconds */
+
 
 /* typedefs begin */
 typedef struct {
     char		txt[MSG_LEN];
     short		len;
     short		pixelLen;
-    int			life;
+    DFLOAT		lifeTime;
 } message_t;
 /* typedefs end */
 
@@ -172,7 +178,7 @@ extern int	teamShotColor;		/* Color index for harmless shot drawing */
 extern int	ballColor;		/* Color index for ball drawing */
 extern int	connColor;		/* Color index for connector drawing */
 extern int	hudLockColor;           /* Color index for lock on HUD drawing */
-extern int	scoreObjectTimer;	/* how long score objects are flashed */
+extern DFLOAT	scoreObjectTime;	/* how long score objects are flashed */
 extern int	baseWarningType;	/* Which type of base warning you prefer */
 extern int	wallColor;		/* Color index for wall drawing */
 extern int	wallRadarColor;		/* Color index for walls on radar */
@@ -206,9 +212,10 @@ extern int	(*radarDrawRectanglePtr)	/* Function to draw player on radar */
 
 extern int	maxKeyDefs;
 extern long	loops;
-extern long	loopsSlow;
-extern int	paintFPS;
-extern DFLOAT	fpsMult;
+extern unsigned long	loopsSlow;
+extern int	clientFPS;
+extern time_t	currentTime;
+extern DFLOAT	timePerFrame;
 extern int	maxMessages;
 extern int	messagesToStdout;
 extern bool	selectionAndHistory;
@@ -233,6 +240,7 @@ extern void	Init_scale_array(void);
  * Prototypes from the paint*.c files.
  */
 
+void Init_paint(void);
 void Add_message(char *message);
 int Handle_start(long server_loops);
 int Handle_end(long server_loops);
@@ -297,6 +305,7 @@ int  Get_message(int* pos, char * message, int req_length, int key );
 void Paint_messages(void);
 void Add_pending_messages(void);
 void Paint_recording(void);
+void Paint_client_fps(void);
 void Paint_frame(void);
 int Handle_time_left(long sec);
 void Game_over_action(u_byte stat);

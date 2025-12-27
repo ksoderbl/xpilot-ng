@@ -51,6 +51,7 @@ void Object_position_set_clicks(object *obj, int cx, int cy)
     if (cx < 0 || cx >= PIXEL_TO_CLICK(World.width) || 
 	cy < 0 || cy >= PIXEL_TO_CLICK(World.height)) {
 	printf("BUG!  Illegal object position %d,%d\n", cx, cy);
+	printf("      Type = %d\n", obj->type);
 	*(double *)(-1) = 4321.0;
 	abort();
     }

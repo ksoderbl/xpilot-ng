@@ -213,10 +213,10 @@ typedef struct {
 
 /*#define SCORE_OBJECT_COUNT	100*/
 typedef struct {
-    DFLOAT	score;
+    DFLOAT	score,
+		life_time;
     int		x,
 		y,
-		count,
 		hud_msg_len,
 		hud_msg_width,
 		msg_width,

@@ -272,6 +272,7 @@ DFLOAT		ballConnectorDamping;
 DFLOAT		maxBallConnectorRatio;
 DFLOAT		ballConnectorLength;
 bool		connectorIsString;	/* can the connector get shorter? */
+bool		treatBallAsPoint;	/* ball is treated as a single point */
 
 DFLOAT		friction;		/* friction only affects ships */
 static DFLOAT	frictionSetting;	/* Above set through this */
@@ -336,6 +337,8 @@ DFLOAT		timeStep2;		/* timeStep /TIME_FACT */
 int		recordMode;		/* 0=off, 1=record, 2=playback */
 int		recordFlushInterval;	/* Max seconds between storing data */
 char		*recordFileName;
+
+bool		useOldCode;		/* Choice of new and old code */
 
 /*
 ** Two functions which can be used if an option
@@ -1528,6 +1531,16 @@ static option_desc options[] = {
 	valBool,
 	tuner_dummy,
 	"Is the ball connector made of string?\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
+	"treatBallAsPoint",
+	"treatBallAsPoint",
+	"no",
+	&treatBallAsPoint,
+	valBool,
+	Ball_line_init,
+	"Is the ball treated as single point?\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
@@ -3547,6 +3560,17 @@ static option_desc options[] = {
 	"Everything is slowed by this factor. Allows using higher\n"
 	"FPS without making the game too fast.\n",
 	OPT_ORIGIN_ANY | OPT_DEFAULTS /* kps - was OPT_ANY */
+    },
+    /* useOldCode - kps tmp hack */
+    {
+	"useOldCode",
+	"useOldCode",
+	"false",
+	&useOldCode,
+	valBool,
+	tuner_dummy,
+	"Use old code in some places when playing on a block based map?\n",
+	OPT_ORIGIN_ANY | OPT_DEFAULTS
     },
 };
 

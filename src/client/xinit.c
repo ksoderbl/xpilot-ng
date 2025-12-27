@@ -559,8 +559,8 @@ int Init_top(void)
     if (scoreZeroColor >= maxColors || scoreZeroColor < 0) {
 	scoreZeroColor = 4;
     }
-    if (scoreObjectTimer >= 121 || scoreObjectTimer < 0) {
-	scoreObjectTimer = 24;
+    if (scoreObjectTime > 10.0 || scoreObjectTime < 0.0) {
+	scoreObjectTime = 2.0;
     }
     if (baseWarningType > 3 || baseWarningType < 0) {
 	baseWarningType = 1;
@@ -582,6 +582,9 @@ int Init_top(void)
     }
     if (oldMessagesColor >= maxColors || oldMessagesColor < 0) {
 	oldMessagesColor = BLUE;
+    }
+    if (charsPerSecond > 255 || charsPerSecond < 10) {
+	charsPerSecond = 50;
     }
     if (decorColor >= maxColors || decorColor <= 0) {
 	decorColor = RED;
@@ -1066,14 +1069,14 @@ int Alloc_msgs(void)
 	}
 	x->txt[0] = '\0';
 	x->len = 0;
-	x->life = 0;
+	x->lifeTime = 0.0;
 	x++;
 
 #ifndef _WINDOWS
 	if (selectionAndHistory) {
 	    x2->txt[0] = '\0';
 	    x2->len = 0;
-	    x2->life = 0;
+	    x2->lifeTime = 0.0;
 	    x2++;
 	}
 #endif

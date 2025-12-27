@@ -1261,11 +1261,12 @@ int Handle_score_object(DFLOAT score, int x, int y, char *msg)
     sobj->score = score;
     sobj->x = x;
     sobj->y = y;
-    sobj->count = 1;
+    sobj->life_time = scoreObjectTime;
 
     /* Initialize sobj->hud_msg (is shown on the HUD) */
     if (msg[0] != '\0') {
-	if (showScoreDecimals > 0 && version >= 0x4500) {
+	if (showScoreDecimals > 0 && version >= 0x4500
+	    && (version < 0x4F09 || version >= 0x4F11)) {
 	    sprintf(sobj->hud_msg, "%s %.*f", msg, showScoreDecimals, score);
 	}
 	else {
@@ -1278,7 +1279,8 @@ int Handle_score_object(DFLOAT score, int x, int y, char *msg)
 	sobj->hud_msg_len = 0;
 
     /* Initialize sobj->msg data (is shown on game area) */
-    if (showScoreDecimals > 0 && version >= 0x4500) {
+    if (showScoreDecimals > 0 && version >= 0x4500
+	&& (version < 0x4F09 || version >= 0x4F11)) {
 	sprintf(sobj->msg, "%.*f", showScoreDecimals, score);
     }
     else {
@@ -1566,7 +1568,7 @@ static void Free_selectionAndHistory(void)
 int Client_init(char *server, unsigned server_version)
 {
     version = server_version;
-    if (server_version < 0x4F00)
+    if (server_version < 0x4F09)
 	oldServer = 1;
     else
 	oldServer = 0;

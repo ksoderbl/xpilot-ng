@@ -156,10 +156,15 @@ keydefs_t	*keyDefs = NULL;
 
 other_t	*self;			/* player info */
 
-long	loops = 0;
-long	loopsSlow = 0;		/* Proceeds slower than loops */
-int	paintFPS;		/* How many fps we actually paint */
-DFLOAT	fpsMult;		/* Server fpsmultiplier guess */
+long		loops = 0;
+
+unsigned long	loopsSlow = 0;	/* Proceeds slower than loops */
+int		clientFPS = 0;	/* How many fps we actually paint */
+static time_t	old_time = 0;	/* Previous value of time */
+time_t		currentTime;	/* Current value of time() */
+static int	frame_count = 0;/* Used to estimate paint fps */
+DFLOAT		timePerFrame = 0.0;/* How much real time proceeds per frame */
+static DFLOAT	time_counter = 0.0;
 
 int	cacheShips = 0;		/* cache some ship bitmaps every frame */
 
@@ -184,6 +189,7 @@ void Game_over_action(u_byte stat)
     old_stat = stat;
 }
 
+
 void Paint_frame(void)
 {
     static long		scroll_i = 0;
@@ -202,11 +208,28 @@ void Paint_frame(void)
 
     /*
      * Instead of using loops to determining if things are drawn this frame,
-     * loopsSlow can be used. Helps at high fps.
+     * loopsSlow should be used.
      */
-    paintFPS = MIN(FPS, maxFPS);
-    loopsSlow = (loops * 12) / paintFPS;
-    fpsMult = (DFLOAT)paintFPS / 12.0;
+    frame_count++;
+    currentTime = time(NULL);
+    if (currentTime != old_time) {
+	/* assume one second has passed */
+	old_time = currentTime;
+	clientFPS = frame_count;
+	frame_count = 0;
+	if (clientFPS != 0)
+	    timePerFrame = 1.0 / clientFPS;
+	/*xpprintf("clientFPS = %d\n", clientFPS);*/
+    }
+
+    /*
+     * We don't want things to happen too fast at high fps.
+     */
+    time_counter += timePerFrame;
+    if (time_counter >= 1.0 / 15) {
+	loopsSlow++;
+	time_counter = 0.0;
+    }
 
     /*
      * Switch between two different window titles.
@@ -277,6 +300,7 @@ void Paint_frame(void)
 	Paint_meters();
 	Paint_HUD();
 	Paint_recording();
+	Paint_client_fps();
 
 	Rectangle_end();
 	Segment_end();
@@ -649,7 +673,6 @@ static void Paint_clock(int redraw)
 			height = scoreListFont->ascent + scoreListFont->descent
 				+ 3,
 			border = 3;
-    time_t		t;
     struct tm		*m;
     char		buf[16];
     static long		prev_loops;
@@ -665,14 +688,14 @@ static void Paint_clock(int redraw)
 	}
 	return;
     }
+    /* kps - fix */
     if (redraw == 0
 	&& loops > prev_loops
 	&& loops - prev_loops < (FPS << 5)) {
 	return;
     }
     prev_loops = loops;
-    time(&t);
-    m = localtime(&t);
+    m = localtime(&currentTime);
 
     /* round seconds up to next minute. */
     minute = m->tm_min;

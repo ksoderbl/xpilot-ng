@@ -2,27 +2,30 @@
 <GeneralOptions>
 <Option name="shotswallbounce" value="no"/>
 <Option name="initialmines" value="0"/>
-<Option name="itemrearshotprob" value="0.01"/>
+<Option name="initialfuel" value="1000"/>
 <Option name="initialrearshots" value="0"/>
 <Option name="edgewrap" value="yes"/>
 <Option name="itemenergypackprob" value="0.8"/>
 <Option name="mapauthor" value="&quot;Patrick Kenny - pkenny@eecs.umich.edu&quot;"/>
+<Option name="itemrearshotprob" value="0.01"/>
 <Option name="missilesonradar" value="yes"/>
+<Option name="teamcup" value="yes"/>
 <Option name="itemtankprob" value="0.5"/>
 <Option name="laserisstungun" value="no"/>
 <Option name="minesonradar" value="yes"/>
+<Option name="fullframerate" value="yes"/>
 <Option name="limitedvisibility" value="no"/>
 <Option name="initialemergencythrusts" value="0"/>
 <Option name="ballswallbounce" value="yes"/>
-<Option name="numberofrounds" value="20"/>
 <Option name="worldlives" value="3"/>
 <Option name="sparkswallbounce" value="yes"/>
 <Option name="maxshieldedwallbouncespeed" value="100"/>
 <Option name="minefusetime" value="420"/>
 <Option name="targetteamcollision" value="no"/>
-<Option name="mapname" value="Xpilot-Tournament Map (Blood&apos;s Music)"/>
+<Option name="allowviewing" value="yes"/>
 <Option name="initialautopilots" value="1"/>
 <Option name="maxunshieldedwallbouncespeed" value="90"/>
+<Option name="roundstoplay" value="12"/>
 <Option name="itemprobmult" value="0.0000"/>
 <Option name="itemmissileprob" value="0.5"/>
 <Option name="allowplayerbounces" value="no"/>
@@ -61,7 +64,10 @@
 <Option name="nukesonradar" value="yes"/>
 <Option name="playerwallbouncebrakefactor" value="0.5"/>
 <Option name="allowmodifiers" value="yes"/>
+<Option name="teamzeropausing" value="yes"/>
 <Option name="initialsensors" value="0"/>
+<Option name="mapname" value="TeamCup 2001 - Xpilot-Tournament Map (Blood&apos;s Music)"/>
+<Option name="shotsgravity" value="yes"/>
 <Option name="initiallasers" value="0"/>
 <Option name="maxitemdensity" value="0.1"/>
 <Option name="itemwideangleprob" value="0.1"/>
@@ -74,11 +80,10 @@
 <Option name="shieldedmining" value="yes"/>
 <Option name="identifymines" value="yes"/>
 <Option name="itemswallbounce" value="no"/>
-<Option name="initialfuel" value="1000"/>
 <Option name="allownukes" value="yes"/>
 <Option name="playersonradar" value="yes"/>
 <Option name="allowshipshapes" value="yes"/>
-<Option name="shotsgravity" value="yes"/>
+<Option name="fullzeroframerate" value="yes"/>
 <Option name="itemlaserprob" value="0.7"/>
 <Option name="itemtractorbeamprob" value="0.7"/>
 <Option name="initialcloaks" value="0"/>
@@ -205,7 +210,14 @@
 <Offset x="6720" y="-6720"/>
 <Offset x="2240" y="0"/>
 <Offset x="2240" y="2240"/>
+<Offset x="6720" y="0"/>
+<Offset x="0" y="2240" style="internal"/>
+<Offset x="0" y="4480" style="xpbluehidden"/>
 <Offset x="11200" y="0"/>
+<Offset x="0" y="-4480"/>
+<Offset x="-11200" y="0"/>
+<Offset x="0" y="-2240" style="internal"/>
+<Offset x="4480" y="0" style="xpbluehidden"/>
 <Offset x="13440" y="-13440"/>
 <Offset x="2240" y="0"/>
 <Offset x="2240" y="2240"/>
@@ -789,7 +801,17 @@
 <Offset x="960" y="0"/> <Offset x="0" y="960"/>
 <Offset x="-960" y="0"/> <Offset x="0" y="-960"/>
 </Polygon></BallTarget>
+<Base team="9" x="50400" y="66080" dir = "32"/>
+<Base team="9" x="50400" y="63840" dir = "32"/>
+<Base team="9" x="52640" y="66080" dir = "32"/>
+<Base team="9" x="52640" y="63840" dir = "32"/>
+<Base team="9" x="54880" y="66080" dir = "32"/>
+<Base team="9" x="54880" y="63840" dir = "32"/>
+<Base team="9" x="57120" y="66080" dir = "32"/>
+<Base team="9" x="57120" y="63840" dir = "32"/>
 <Base team="4" x="59360" y="169120" dir = "32"/>
+<Base team="9" x="59360" y="66080" dir = "32"/>
+<Base team="9" x="59360" y="63840" dir = "32"/>
 <Base team="4" x="75040" y="166880" dir = "32"/>
 <Base team="4" x="86240" y="157920" dir = "32"/>
 <Base team="4" x="101920" y="171360" dir = "32"/>

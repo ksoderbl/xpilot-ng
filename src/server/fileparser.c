@@ -351,9 +351,6 @@ static void parseLine(char **map_ptr, optOrigin opt_origin)
 }
 #undef EXPAND
 
-static bool isXp2MapFile(int fd);
-static bool parseXp2MapFile(int fd, optOrigin opt_origin);
-
 /*
  * Parse a file containing defaults (and possibly a map).
  */
@@ -778,9 +775,11 @@ void expandKeyword(const char *keyword)
 /* polygon map format related stuff */
 static char	*FileName;
 
-#include <expat.h>
 
-static int edg[5000 * 2]; /* !@# change pointers in poly_t when realloc poss.*/
+/* kps - if this is too small, the server will probably say
+ * "xpilots: Polygon 2501 (4 points) doesn't start and end at the same place"
+ */
+static int edg[20000 * 2]; /* !@# change pointers in poly_t when realloc poss.*/
 extern int polyc;
 extern int num_groups;
 
@@ -796,10 +795,169 @@ struct bmpstyle  bstyles[256];
 poly_t *pdata;
 
 int num_pstyles, num_bstyles, num_estyles = 1; /* "Internal" edgestyle */
-int max_bases, max_balls, max_fuels, max_checks, max_polys,max_echanges; /* !@# make static after testing done */
+int max_bases, max_balls, max_polys,max_echanges; /* !@# make static after testing done */
 static int current_estyle, current_group, is_decor;
 
-static int get_bmp_id(const char *s)
+#define STORE(T,P,N,M,V)						\
+    if (N >= M && ((M <= 0)						\
+	? (P = (T *) malloc((M = 1) * sizeof(*P)))			\
+	: (P = (T *) realloc(P, (M += M) * sizeof(*P)))) == NULL) {	\
+	warn("No memory");						\
+	exit(1);							\
+    } else								\
+	(P[N++] = V)
+/* !@# add a final realloc later to free wasted memory */
+#define POLYGON_MAX_OFFSET 30000
+
+
+void P_edgestyle(char *id, int width, int color, int style)
+{
+    strlcpy(estyles[num_estyles].id, id, sizeof(estyles[0].id));
+    estyles[num_estyles].color = color;
+    estyles[num_estyles].width = width;
+    estyles[num_estyles].style = style;
+    num_estyles++;
+}
+
+void P_polystyle(char *id, int color, int texture_id, int defedge_id,
+		   int flags)
+{
+    /* kps - add sanity checks ??? */
+    if (defedge_id == 0) {
+	warn("Polygon default edgestyle cannot be omitted or set "
+	     "to 'internal'!");
+	exit(1);
+    }
+
+    strlcpy(pstyles[num_pstyles].id, id, sizeof(pstyles[0].id));
+    pstyles[num_pstyles].color = color;
+    pstyles[num_pstyles].texture_id = texture_id;
+    pstyles[num_pstyles].defedge_id = defedge_id;
+    pstyles[num_pstyles].flags = flags;
+    num_pstyles++;
+}
+
+
+void P_bmpstyle(char *id, char *filename, int flags)
+{
+    strlcpy(bstyles[num_bstyles].id, id, sizeof(bstyles[0].id));
+    strlcpy(bstyles[num_bstyles].filename, filename,
+	    sizeof(bstyles[0].filename));
+    bstyles[num_bstyles].flags = flags;
+    num_bstyles++;
+}
+
+/* current vertex */
+cpos P_cv;
+
+void P_start_polygon(int cx, int cy, int style)
+{
+    poly_t t;
+
+    if (cx < 0 || cx >= World.cwidth || cy < 0 || cy > World.cheight) {
+	warn("Polygon start point (%d, %d) is not inside the map"
+	     "(0 <= x < %d, 0 <= y < %d)",
+	     cx, cy, World.cwidth, World.cheight);
+	exit(1);
+    }
+    if (style == -1) {
+	warn("Currently you must give polygon style, no default");
+	exit(1);
+    }
+
+    ptscount = 0;
+    P_cv.cx = cx;
+    P_cv.cy = cy;
+    t.x = cx;
+    t.y = cy;
+    t.group = current_group;
+    t.edges = edges;
+    t.style = style;
+    t.estyles_start = ecount;
+    t.is_decor = is_decor;
+    current_estyle = pstyles[style].defedge_id;
+    STORE(poly_t, pdata, polyc, max_polys, t);
+}
+
+
+void P_offset(int offcx, int offcy, int edgestyle)
+{
+    if (ABS(offcx) > POLYGON_MAX_OFFSET || ABS(offcy) > POLYGON_MAX_OFFSET) {
+	warn("Offset component absolute value exceeds %d (x=%d, y=%d)",
+	     POLYGON_MAX_OFFSET, offcx, offcy);
+	exit(1);
+    }
+
+    *edges++ = offcx;
+    *edges++ = offcy;
+    if (edgestyle != -1 && edgestyle != current_estyle) {
+	STORE(int, estyleptr, ecount, max_echanges, ptscount);
+	STORE(int, estyleptr, ecount, max_echanges, edgestyle);
+	current_estyle = edgestyle;
+    }
+    ptscount++;
+    P_cv.cx += offcx;
+    P_cv.cy += offcy;
+}
+
+void P_vertex(int cx, int cy, int edgestyle)
+{
+    int offcx, offcy;
+
+    offcx = cx - P_cv.cx;
+    offcy = cy - P_cv.cy;
+
+    if (offcx == 0 && offcy == 0)
+	return;
+
+    P_offset(offcx, offcy, edgestyle);
+}
+
+void P_end_polygon(void)
+{
+    pdata[polyc - 1].num_points = ptscount;
+    pdata[polyc - 1].num_echanges = ecount -pdata[polyc - 1].estyles_start;
+    STORE(int, estyleptr, ecount, max_echanges, INT_MAX);
+}
+
+void P_start_ballarea(void)
+{
+    current_group = ++num_groups;
+    groups[current_group].type = TREASURE;
+    groups[current_group].team = TEAM_NOT_SET;
+    groups[current_group].hit_mask = BALL_BIT;
+}
+
+void P_end_ballarea(void)
+{
+    current_group = 0; 
+}
+
+void P_start_balltarget(int team)
+{
+    current_group = ++num_groups;
+    groups[current_group].type = TREASURE;
+    groups[current_group].team = team;
+    groups[current_group].hit_mask
+	= NONBALL_BIT | (((NOTEAM_BIT << 1) - 1) & ~(1 << team)); 
+}
+
+void P_end_balltarget(void)
+{
+    current_group = 0; 
+}
+
+void P_start_decor(void)
+{
+    is_decor = 1;
+}
+
+void P_end_decor(void)
+{
+    is_decor = 0;
+}
+
+int P_get_bmp_id(const char *s)
 {
     int i;
 
@@ -807,11 +965,11 @@ static int get_bmp_id(const char *s)
 	if (!strcmp(bstyles[i].id, s))
 	    return i;
     warn("Undeclared bmpstyle %s", s);
-    return 0;
+    return 0; /* kps - what if i was 0 ?, change to -1 ? */
 }
 
 
-static int get_edge_id(const char *s)
+int P_get_edge_id(const char *s)
 {
     int i;
 
@@ -823,7 +981,7 @@ static int get_edge_id(const char *s)
 }
 
 
-static int get_poly_id(const char *s)
+int P_get_poly_id(const char *s)
 {
     int i;
 
@@ -831,428 +989,276 @@ static int get_poly_id(const char *s)
 	if (!strcmp(pstyles[i].id, s))
 	    return i;
     warn("Undeclared polystyle %s", s);
-    return 0;
+    return 0; /* kps - what if i was 0 ?, change to -1 ? */
 }
 
 
-#define STORE(T,P,N,M,V)						\
-    if (N >= M && ((M <= 0)						\
-	? (P = (T *) malloc((M = 1) * sizeof(*P)))			\
-	: (P = (T *) realloc(P, (M += M) * sizeof(*P)))) == NULL) {	\
-	warn("No memory");						\
-	exit(1);							\
-    } else								\
-	(P[N++] = V)
-/* !@# add a final realloc later to free wasted memory */
 
 
-static void tagstart(void *data, const char *el, const char **attr)
+
+
+/*
+ * Add a wall polygon
+ *
+ * The polygon consists of a start block and and endblock and possibly
+ * some full wall/fuel blocks in between. A total number of numblocks
+ * blocks are part of the polygon and must be 1 or more. If numblocks
+ * is one, the startblock and endblock are the same block.
+ *
+ * The block coordinates of the first block is (bx, by)
+ *
+ * The polygon will have 3 or 4 vertices.
+ *
+ * Idea: first assume the polygon is a rectangle, then move
+ * the vertices depending on the start and end blocks.
+ *
+ * The vertex index:
+ * 0: upper left vertex
+ * 1: lower left vertex
+ * 2: lower right vertex
+ * 3: upper right vertex
+ * 4: upper left vertex, second time
+ */
+
+void Add_wall_poly(int bx, int by, char startblock,
+		   char endblock, int numblocks,
+		   int polystyle, int edgestyle)
 {
-    static double scale = 1;
-    static int xptag = 0;
+    int i;
+    cpos pos[5]; /* positions of vertices */
 
-    if (!strcasecmp(el, "XPilotMap")) {
-	double version = 0;
-	while (*attr) {
-	    if (!strcasecmp(*attr, "version"))
-		version = atof(*(attr + 1));
-	    attr += 2;
-	}
-	if (version == 0) {
-	    warn("Old(?) map file with no version number");
-	    warn("Not guaranteed to work");
-	}
-	else if (version < 1)
-	    warn("Impossible version in map file");
-	else if (version > 1) {
-	    warn("Map file has newer version than this server recognizes.");
-	    warn("The map file might use unsupported features.");
-	}
-	xptag = 1;
+    if (numblocks < 1)
+	return;
+
+    /* first assume we have a rectangle */
+    /* kps - use -1 if you don't wan't the polygon corners to
+     * overlap other polygons
+     */
+    pos[0].cx = bx * BLOCK_CLICKS;
+    pos[0].cy = (by + 1) * BLOCK_CLICKS /*- 1*/;
+    pos[1].cx = bx * BLOCK_CLICKS;
+    pos[1].cy = by * BLOCK_CLICKS;
+    pos[2].cx = (bx + numblocks) * BLOCK_CLICKS /*- 1*/;
+    pos[2].cy = by * BLOCK_CLICKS;
+    pos[3].cx = (bx + numblocks) * BLOCK_CLICKS /*- 1*/;
+    pos[3].cy = (by + 1) * BLOCK_CLICKS /*- 1*/;
+    
+    /* move the vertices depending on the startblock and endblock */
+    switch (startblock) {
+    case FILLED:
+    case REC_LU:
+    case REC_LD:
+    case FUEL:
+	/* no need to move the leftmost 2 vertices */
+	break;
+    case REC_RU:
+	/* move lower left vertex to the right */
+	pos[1].cx += BLOCK_CLICKS;
+	break;
+    case REC_RD:
+	/* move upper left vertex to the right */
+	pos[0].cx += BLOCK_CLICKS;
+	break;
+    default:
+	return;
+    }
+    
+    switch (endblock) {
+    case FILLED:
+    case FUEL:
+    case REC_RU:
+    case REC_RD:
+	/* no need to move the rightmost 2 vertices */
+	break;
+    case REC_LU:
+	pos[2].cx -= BLOCK_CLICKS;
+	break;
+    case REC_LD:
+	pos[3].cx -= BLOCK_CLICKS;
+	break;
+    default:
 	return;
     }
 
-    if (!xptag) {
-	fatal("This doesn't look like a map file "
-	      " (XPilotMap must be first tag).");
-	return; /* not reached */
-    }
+    /*
+     * Since we want to form a closed loop of line segments, the
+     * last vertex must equal the first.
+     */
+    pos[4].cx = pos[0].cx;
+    pos[4].cy = pos[0].cy;
 
-    if (!strcasecmp(el, "Polystyle")) {
-	pstyles[num_pstyles].id[sizeof(pstyles[0].id) - 1] = 0;
-	pstyles[num_pstyles].color = 0;
-	pstyles[num_pstyles].texture_id = 0;
-	pstyles[num_pstyles].defedge_id = 0;
-	pstyles[num_pstyles].flags = 0;
-
-	while (*attr) {
-	    if (!strcasecmp(*attr, "id"))
-		strncpy(pstyles[num_pstyles].id, *(attr + 1),
-			sizeof(pstyles[0].id) - 1);
-	    if (!strcasecmp(*attr, "color"))
-		pstyles[num_pstyles].color = strtol(*(attr + 1), NULL, 16);
-	    if (!strcasecmp(*attr, "texture"))
-		pstyles[num_pstyles].texture_id = get_bmp_id(*(attr + 1));
-	    if (!strcasecmp(*attr, "defedge"))
-		pstyles[num_pstyles].defedge_id = get_edge_id(*(attr + 1));
-	    if (!strcasecmp(*attr, "flags"))
-		pstyles[num_pstyles].flags = atoi(*(attr + 1)); /* names @!# */
-	    attr += 2;
-	}
-	if (pstyles[num_pstyles].defedge_id == 0) {
-	    warn("Polygon default edgestyle cannot be omitted or set "
-		  "to 'internal'!");
-	    exit(1);
-	}
-	num_pstyles++;
-	return;
-    }
-
-    if (!strcasecmp(el, "Edgestyle")) {
-	estyles[num_estyles].id[sizeof(estyles[0].id) - 1] = 0;
-	estyles[num_estyles].width = 0;
-	estyles[num_estyles].color = 0;
-	estyles[num_estyles].style = 0;
-	while (*attr) {
-	    if (!strcasecmp(*attr, "id"))
-		strncpy(estyles[num_estyles].id, *(attr + 1),
-			sizeof(estyles[0].id) - 1);
-	    if (!strcasecmp(*attr, "width"))
-		estyles[num_estyles].width = atoi(*(attr + 1));
-	    if (!strcasecmp(*attr, "color"))
-		estyles[num_estyles].color = strtol(*(attr + 1), NULL, 16);
-	    if (!strcasecmp(*attr, "style")) /* !@# names later */
-		estyles[num_estyles].style = atoi(*(attr + 1));
-	    attr += 2;
-	}
-	num_estyles++;
-	return;
-    }
-
-    if (!strcasecmp(el, "Bmpstyle")) {
-	bstyles[num_bstyles].flags = 0;
-	bstyles[num_bstyles].filename[sizeof(bstyles[0].filename) - 1] = 0;
-	bstyles[num_bstyles].id[sizeof(bstyles[0].id) - 1] = 0;
-/* add checks that these are filled !@# */
-
-	while (*attr) {
-	    if (!strcasecmp(*attr, "id"))
-		strncpy(bstyles[num_bstyles].id, *(attr + 1),
-			sizeof(bstyles[0].id) - 1);
-	    if (!strcasecmp(*attr, "filename"))
-		strncpy(bstyles[num_bstyles].filename, *(attr + 1),
-			sizeof(bstyles[0].filename) - 1);
-	    if (!strcasecmp(*attr, "scalable"))
-		if (!strcasecmp(*(attr + 1), "yes"))
-		    bstyles[num_bstyles].flags |= 1;
-	    attr += 2;
-	}
-	num_bstyles++;
-	return;
-    }
-
-    if (!strcasecmp(el, "Scale")) { /* "Undocumented feature" */
-	if (!*attr || strcasecmp(*attr, "value"))
-	    warn("Invalid Scale");
-	else
-	    scale = atof(*(attr + 1));
-	return;
-    }
-
-    if (!strcasecmp(el, "BallArea")) {
-	current_group = ++num_groups;
-	groups[current_group].type = TREASURE;
-	groups[current_group].team = TEAM_NOT_SET;
-	groups[current_group].hit_mask = BALL_BIT;
-	return;
-    }
-
-    if (!strcasecmp(el, "BallTarget")) {
-	int team;
-	while (*attr) {
-	    if (!strcasecmp(*attr, "team"))
-		team = atoi(*(attr + 1));
-	    attr += 2;
-	}
-	current_group = ++num_groups;
-	groups[current_group].type = TREASURE;
-	groups[current_group].team = team;
-	groups[current_group].hit_mask = NONBALL_BIT | (((NOTEAM_BIT << 1) - 1) & ~(1 << team));
-	return;
-    }
-
-    if (!strcasecmp(el, "Decor")) {
-	is_decor = 1;
-	return;
-    }
-
-    if (!strcasecmp(el, "Polygon")) {
-	int x, y, style = -1;
-	poly_t t;
-
-	while (*attr) {
-	    if (!strcasecmp(*attr, "x"))
-		x = atoi(*(attr + 1)) * scale;
-	    if (!strcasecmp(*attr, "y"))
-		y = atoi(*(attr + 1)) * scale;
-	    if (!strcasecmp(*attr, "style"))
-		style = get_poly_id(*(attr + 1));
-	    attr += 2;
-	}
-	if (x < 0 || x >= World.cwidth || y < 0 || y > World.cheight) {
-	    warn("Polygon start point (%d, %d) is not inside the map"
-		  "(0 <= x < %d, 0 <= y < %d)",
-		  x, y, World.cwidth, World.cheight);
-	    exit(1);
-	}
-	if (style == -1) {
-	    warn("Currently you must give polygon style, no default");
-	    exit(1);
-	}
-	ptscount = 0;
-	t.x = x;
-	t.y = y;
-	t.group = current_group;
-	t.edges = edges;
-	t.style = style;
-	t.estyles_start = ecount;
-	t.is_decor = is_decor;
-	current_estyle = pstyles[style].defedge_id;
-	STORE(poly_t, pdata, polyc, max_polys, t);
-	return;
-    }
-
-    if (!strcasecmp(el, "Check")) {
-	ipos t;
-	int x, y;
-
-	while (*attr) {
-	    if (!strcasecmp(*attr, "x"))
-		x = atoi(*(attr + 1)) * scale;
-	    if (!strcasecmp(*attr, "y"))
-		y = atoi(*(attr + 1)) * scale;
-	    attr += 2;
-	}
-	t.x = x;
-	t.y = y;
-	STORE(ipos, World.check, World.NumChecks, max_checks, t);
-	return;
-    }
-
-    if (!strcasecmp(el, "Fuel")) {
-	fuel_t t;
-	int team, x, y;
-
-	team = TEAM_NOT_SET;
-	while (*attr) {
-	    if (!strcasecmp(*attr, "team"))
-		team = atoi(*(attr + 1));
-	    if (!strcasecmp(*attr, "x"))
-		x = atoi(*(attr + 1)) * scale;
-	    if (!strcasecmp(*attr, "y"))
-		y = atoi(*(attr + 1)) * scale;
-	    attr += 2;
-	}
-	t.clk_pos.x = x;
-	t.clk_pos.y = y;
-	t.fuel = START_STATION_FUEL;
-	t.conn_mask = (unsigned)-1;
-	t.last_change = frame_loops;
-	t.team = team;
-	STORE(fuel_t, World.fuel, World.NumFuels, max_fuels, t);
-	return;
-    }
-
-    if (!strcasecmp(el, "Base")) {
-	base_t	t;
-	int	team, x, y, dir;
-
-	while (*attr) {
-	    if (!strcasecmp(*attr, "team"))
-		team = atoi(*(attr + 1));
-	    if (!strcasecmp(*attr, "x"))
-		x = atoi(*(attr + 1)) * scale;
-	    if (!strcasecmp(*attr, "y"))
-		y = atoi(*(attr + 1)) * scale;
-	    if (!strcasecmp(*attr, "dir"))
-		dir = atoi(*(attr + 1));
-	    attr += 2;
-	}
-	if (team < 0 || team >= MAX_TEAMS) {
-	    warn("Illegal team number in base tag.\n");
-	    exit(1);
-	}
-
-	t.pos.x = x;
-	t.pos.y = y;
-	t.dir = dir;
-	if (BIT(World.rules->mode, TEAM_PLAY)) {
-	    t.team = team;
-	    World.teams[team].NumBases++;
-	    if (World.teams[team].NumBases == 1)
-		World.NumTeamBases++;
-	} else {
-	    t.team = TEAM_NOT_SET;
-	}
-	STORE(base_t, World.base, World.NumBases, max_bases, t);
-	return;
-    }
-
-    if (!strcasecmp(el, "Ball")) {
-    	treasure_t t;
-	int team, x, y;
-
-	while (*attr) {
-	    if (!strcasecmp(*attr, "team"))
-		team = atoi(*(attr + 1));
-	    if (!strcasecmp(*attr, "x"))
-		x = atoi(*(attr + 1)) * scale;
-	    if (!strcasecmp(*attr, "y"))
-		y = atoi(*(attr + 1)) * scale;
-	    attr += 2;
-	}
-	t.pos.x = x;
-	t.pos.y = y;
-	t.have = false;
-	t.destroyed = 0;
-	t.team = team;
-	t.empty = false; /* kps addition */
-	World.teams[team].NumTreasures++;
-	World.teams[team].TreasuresLeft++;
-	STORE(treasure_t, World.treasures, World.NumTreasures, max_balls, t);
-	return;
-    }
-
-    if (!strcasecmp(el, "Option")) {
-	const char *name, *value;
-	while (*attr) {
-	    if (!strcasecmp(*attr, "name"))
-		name = *(attr + 1);
-	    if (!strcasecmp(*attr, "value"))
-		value = *(attr + 1);
-	    attr += 2;
-	}
-
-	/*addOption(name, value, 0, NULL, OPT_MAP);*/
-	Option_set_value(name, value, 0, OPT_MAP);
-
-	return;
-    }
-
-    if (!strcasecmp(el, "Offset")) {
-	int x, y, edgestyle = -1;
-	while (*attr) {
-	    if (!strcasecmp(*attr, "x"))
-		x = atoi(*(attr + 1)) * scale;
-	    if (!strcasecmp(*attr, "y"))
-		y = atoi(*(attr + 1)) * scale;
-	    if (!strcasecmp(*attr, "style"))
-		edgestyle = get_edge_id(*(attr + 1));
-	    attr += 2;
-	}
-	if (ABS(x) > 30000 || ABS(y) > 30000) {
-	    warn("Offset component absolute value exceeds 30000 (x=%d, y=%d)",
-		  x, y);
-	    exit(1);
-	}
-	*edges++ = x;
-	*edges++ = y;
-	if (edgestyle != -1 && edgestyle != current_estyle) {
-	    STORE(int, estyleptr, ecount, max_echanges, ptscount);
-	    STORE(int, estyleptr, ecount, max_echanges, edgestyle);
-	    current_estyle = edgestyle;
-	}
-	ptscount++;
-	return;
-    }
-
-    if (!strcasecmp(el, "GeneralOptions"))
-	return;
-
-    warn("Unknown map tag: \"%s\"", el);
-    return;
+    P_start_polygon(pos[0].cx, pos[0].cy, polystyle);
+    for (i = 1; i <= 4; i++)
+	P_vertex(pos[i].cx, pos[i].cy, edgestyle); 
+    P_end_polygon();
 }
 
-
-static void tagend(void *data, const char *el)
+/* number of vertices in polygon */
+#define N (2 + 12)
+void Add_treasure_polygon(treasure_t *tp, int polystyle, int edgestyle)
 {
-    void cmdhack(void);
-    if (!strcasecmp(el, "Decor"))
-	is_decor = 0;
-    if (!strcasecmp(el, "BallArea") || !strcasecmp(el, "BallTarget"))
-	current_group = 0;
-    if (!strcasecmp(el, "Polygon")) {
-	pdata[polyc - 1].num_points = ptscount;
-	pdata[polyc - 1].num_echanges = ecount -pdata[polyc - 1].estyles_start;
-	STORE(int, estyleptr, ecount, max_echanges, INT_MAX);
+    int cx, cy, i, r, n;
+    double angle;
+    cpos pos[N + 1];
+
+    /*printf(__FUNCTION__ ": team = %d\n", tp->team);*/
+    cx = tp->pos.cx - BLOCK_CLICKS / 2;
+    cy = tp->pos.cy - BLOCK_CLICKS / 2;
+
+    pos[0].cx = cx;
+    pos[0].cy = cy;
+    pos[1].cx = cx + BLOCK_CLICKS;
+    pos[1].cy = cy;
+
+    cx = tp->pos.cx;
+    cy = tp->pos.cy;
+    r = BLOCK_CLICKS / 2;
+    /* number of points in half circle */
+    n = N - 2;
+
+    for (i = 0; i < n; i++) {
+	angle = (((double)i)/(n - 1)) * PI;
+	pos[i + 2].cx = cx + r * cos(angle);
+	pos[i + 2].cy = cy + r * sin(angle);
     }
-    if (!strcasecmp(el, "GeneralOptions")) {
-	/*cmdhack(); - kps ng wants this */ /* !@# */
-	Options_parse();
-	Grok_polygon_map();
-    }
-    return;
+
+    pos[N] = pos[0];
+
+    /* create balltarget */
+    P_start_balltarget(tp->team);
+    P_start_polygon(pos[0].cx, pos[0].cy, polystyle);
+    for (i = 1; i <= N; i++)
+	P_vertex(pos[i].cx, pos[i].cy, edgestyle); 
+    P_end_polygon();
+    P_end_balltarget();
+
+    /* create ballarea */
+    P_start_ballarea();
+    P_start_polygon(pos[0].cx, pos[0].cy, polystyle);
+    for (i = 1; i <= N; i++)
+	P_vertex(pos[i].cx, pos[i].cy, edgestyle); 
+    P_end_polygon();
+    P_end_ballarea();
 }
+#undef N
 
-#if 0
-/* kps - ng */
-void cmdhack(void)
+void Blocks_to_polygons(void)
 {
-    int j;
-    for (j = 0; j < NELEM(options); j++)
-	addOption(options[j].name, options[j].defaultValue, 0, &options[j],
-		  OPT_DEFAULT);
-}
-#endif
+    int x, y, x0 = 0;
+    int i;
+    int numblocks = 0;
+    int inside = false;
+    char startblock = 0, endblock = 0, block;
+    int maxblocks = POLYGON_MAX_OFFSET / BLOCK_CLICKS;
+    int es, ps;
 
+    /* create edgestyle and polystyle */
+    P_edgestyle("es", -1, 0x00FF00, 0);
+    es = P_get_edge_id("es");
+    P_polystyle("ps", 0x0000FF, 0, es, 0);
+    ps = P_get_poly_id("ps");
+    
+    /*
+     * x, FILLED = solid wall
+     * s, REC_LU = wall triangle pointing left and up 
+     * a, REC_RU = wall triangle pointing right and up 
+     * w, REC_LD = wall triangle pointing left and down
+     * q, REC_RD = wall triangle pointing right and down
+     * #, FUEL   = fuel block
+     */
 
-/* kps - ugly hack */
-static bool isXp2MapFile(int fd)
-{
-    char start[] = "<XPilotMap";
-    char buf[16];
-    int n;
+    for (y = World.y - 1; y >= 0; y--) {
+	for (x = 0; x < World.x; x++) {
+	    block = World.block[x][y];
 
-    n = read(fd, buf, sizeof(buf));
-    if (n < 0) {
-	error("Error reading map!");
-	return false;
-    }
-    if (n == 0)
-	return false;
+	    if (!inside) {
+		switch (block) {
+		case FILLED:
+		case REC_RU:
+		case REC_RD:
+		case FUEL:
+		    x0 = x;
+		    startblock = endblock = block;
+		    inside = true;
+		    numblocks = 1;
+		    break;
 
-    /* assume this works */
-    (void)lseek(fd, 0, SEEK_SET);
-    if (!strncmp(start, buf, strlen(start)))
-	return true;
-    return false;
-}
+		case REC_LU:
+		case REC_LD:
+		    Add_wall_poly(x, y, block, block, 1, ps, es);
+		    break;
+		default:
+		    break;
+		}
+	    } else {
 
-static bool parseXp2MapFile(int fd, optOrigin opt_origin)
-{
-    char buff[8192];
-    int len;
-    XML_Parser p = XML_ParserCreate(NULL);
+		switch (block) {
+		case FILLED:
+		case FUEL:
+		    numblocks++;
+		    endblock = block;
+		    break;
 
-    if (!p) {
-	warn("Creating Expat instance for map parsing failed.\n");
-	/*exit(1);*/
-	return false;
-    }
-    XML_SetElementHandler(p, tagstart, tagend);
-    do {
-	len = read(fd, buff, 8192);
-	if (len < 0) {
-	    error("Error reading map!");
-	    return false;
+		case REC_RU:
+		case REC_RD:
+		    /* old polygon ends */
+		    Add_wall_poly(x0, y, startblock, endblock,
+				  numblocks, ps, es);
+		    /* and a new one starts */
+		    x0 = x;
+		    startblock = endblock = block;
+		    numblocks = 1;
+		    break;
+
+		case REC_LU:
+		case REC_LD:
+		    numblocks++;
+		    endblock = block;
+		    Add_wall_poly(x0, y, startblock, endblock,
+				  numblocks, ps, es);
+		    inside = false;
+		    break;
+
+		default:
+		    /* none of the above, polygon ends */
+		    Add_wall_poly(x0, y, startblock, endblock,
+				  numblocks, ps, es);
+		    inside = false;
+		    break;
+		}
+	    }
+
+	    /*
+	     * We don't want the polygon to have offsets
+	     * that is too big
+	     */
+	    if (inside && numblocks == maxblocks) {
+		Add_wall_poly(x0, y, startblock, endblock,
+			      numblocks, ps, es);
+		inside = false;
+	    }
+
 	}
-	if (!XML_Parse(p, buff, len, !len)) {
-	    warn("Parse error reading map at line %d:\n%s\n",
-		  XML_GetCurrentLineNumber(p),
-		  XML_ErrorString(XML_GetErrorCode(p)));
-	    /*exit(1);*/
-	    return false;
+
+	/* end of row */
+	if (inside) {
+	    Add_wall_poly(x0, y, startblock, endblock,
+			  numblocks, ps, es);
+	    inside = false;
 	}
-    } while (len);
-    return true;
+    }
+
+    /* kps - if you want to see the polygons in the client (use the polygon
+     * protocol , do this */
+    /*is_polygon_map = 1;*/
+    xpprintf("Created %d polygons.\n", polyc);
+
+    /* now handle nonwall stuff */
+    for (i = 0; i < World.NumTreasures; i++) {
+	Add_treasure_polygon(&World.treasures[i], ps, es);
+    }
+
+
 }
+
+

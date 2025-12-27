@@ -85,13 +85,11 @@ int	msgScanBallColor;	/* Color index for ball message scan drawing */
 int	msgScanCoverColor;	/* Color index for ball message scan drawing */
 int	messagesColor;		/* Color index for messages */
 int	oldMessagesColor;	/* Color index for old messages */
-int	scoreObjectTimer;	/* How long to flash score objects */
+DFLOAT	scoreObjectTime;	/* How long to flash score objects */
 int	baseWarningType;	/* Which type of base warning you prefer */
 
 radar_t	*old_radar_ptr;
 int	old_num_radar, old_max_radar;
-
-DFLOAT	charsPerTick = 0.0;	/* Output speed of messages */
 
 static const int meterColor1 = RED;  /* Color index for meter drawing */
 static const int meterColor2 = BLUE; /* Color index for meter border drawing */
@@ -204,8 +202,8 @@ void Paint_score_objects(void)
 
     for (i=0; i < MAX_SCORE_OBJECTS; i++) {
 	score_object_t*	sobj = &score_objects[i];
-	if (sobj->count > 0) {
-	    if (sobj->count%3) {
+	if (sobj->hud_msg_len > 0) {
+	    if (loopsSlow % 3) {
 		x = sobj->x * BLOCK_SZ + BLOCK_SZ/2;
 		y = sobj->y * BLOCK_SZ + BLOCK_SZ/2;
 		if (wrap(&x, &y)) {
@@ -221,9 +219,9 @@ void Paint_score_objects(void)
 				    gameFont->ascent + gameFont->descent);
 		}
 	    }
-	    sobj->count++;
-	    if (sobj->count > scoreObjectTimer) {
-		sobj->count = 0;
+	    sobj->life_time -= timePerFrame;
+	    if (sobj->life_time <= 0.0) {
+		sobj->life_time = 0.0;
 		sobj->hud_msg_len = 0;
 	    }
 	}
@@ -791,8 +789,8 @@ void Paint_messages(void)
     int		msg_color;
     int		last_msg_index = 0;
 
-    if (charsPerTick <= 0.0)
-	charsPerTick = (DFLOAT)charsPerSecond / paintFPS;
+    if (charsPerSecond <= 10 || charsPerSecond > 255)
+	charsPerSecond = 50;
 
     top_y = BORDER + messageFont->ascent;
     bot_y = WINSCALE(ext_view_height) - messageFont->descent - BORDER;
@@ -822,7 +820,7 @@ void Paint_messages(void)
 	 * of a message if it is not drawn `flashed' (red) anymore
 	 */
 	if (
-	    msg->life > MSG_FLASH
+	    msg->lifeTime > MSG_FLASH_TIME
 #ifndef _WINDOWS
 	    || !selectionAndHistory
 	    || (selection.draw.state != SEL_PENDING
@@ -830,18 +828,18 @@ void Paint_messages(void)
 #endif
 	    ) {
 
-	    if (msg->life-- <= 0) {
+	    if ((msg->lifeTime -= timePerFrame) <= 0.0) {
 		msg->txt[0] = '\0';
 		msg->len = 0;
-		msg->life = 0;
+		msg->lifeTime = 0.0;
 		continue;
 	    }
 	} 
 #ifdef _WINDOWS
-	else if (msg->life-- <= 0) {
+	else if ((msg->lifeTime -= timePerFrame) <= 0.0) {
 		msg->txt[0] = '\0';
 		msg->len = 0;
-		msg->life = 0;
+		msg->lifeTime = 0.0;
 		continue;
 	    }
 #endif
@@ -858,9 +856,9 @@ void Paint_messages(void)
 	    y = bot_y;
 	    bot_y -= SPACING;
 	}
-	len = (int)(charsPerTick * (MSG_DURATION - msg->life));
+	len = (int)(charsPerSecond * (MSG_LIFE_TIME - msg->lifeTime));
 	len = MIN(msg->len, len);
-	if (msg->life > MSG_FLASH) {
+	if (msg->lifeTime > MSG_FLASH_TIME) {
 	    msg_color = messagesColor;
 	}
 	else {
@@ -1515,7 +1513,7 @@ void Add_message(char *message)
     }
     msg_set[0] = tmp;
 
-    msg_set[0]->life = MSG_DURATION;
+    msg_set[0]->lifeTime = MSG_LIFE_TIME;
     strlcpy(msg_set[0]->txt, message, MSG_LEN);
     msg_set[0]->len = len;
 
@@ -1622,17 +1620,15 @@ void Paint_recording(void)
     int			w = -1;
     int			x, y;
     char		buf[32];
-    int			mb, ck, len;
-    long		size;
+    int			len;
+    DFLOAT		mb;
 
     if (!recording || (loopsSlow % 16) < 8)
 	return;
 
     SET_FG(colors[RED].pixel);
-    size = Record_size();
-    mb = size >> 20;
-    ck = (10 * (size - ((long)mb << 20))) >> 20;
-    sprintf(buf, "REC %d.%d", mb, ck);
+    mb = ((DFLOAT)Record_size()) / 1e6;
+    sprintf(buf, "REC %.1f MB", mb);
     len = strlen(buf);
     w = XTextWidth(gameFont, buf, len);
     x = WINSCALE(ext_view_width) - 10 - w;
@@ -1641,3 +1637,28 @@ void Paint_recording(void)
     Erase_rectangle( x - 1, WINSCALE(10),
 			 w+2, gameFont->ascent + gameFont->descent);
 }
+
+
+void Paint_client_fps(void)
+{
+    int			w = -1;
+    int			x, y;
+    char		buf[32];
+    int			len;
+
+    /*if (!showFPS)
+     * return;
+     */
+
+    SET_FG(colors[BLUE].pixel);
+    sprintf(buf, "FPS: %d", clientFPS);
+    len = strlen(buf);
+    w = XTextWidth(gameFont, buf, len);
+    x = WINSCALE(ext_view_width) - 10 - w;
+    y = 200 + gameFont->ascent;
+    rd.drawString(dpy, p_draw, gc, x, y, buf, len);
+    Erase_rectangle( x - 1,  WINSCALE(200),
+			 w+2, gameFont->ascent + gameFont->descent);
+}
+
+
