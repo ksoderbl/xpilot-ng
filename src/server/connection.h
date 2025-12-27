@@ -1,5 +1,4 @@
-/* $Id: connection.h,v 5.1 2001/11/28 14:21:20 bertg Exp $
- *
+/*
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -37,7 +36,7 @@
 #endif
 
 #ifndef DRAW_H
-/* need shipobj. */
+/* need shipshape_t. */
 #include "draw.h"
 #endif
 
@@ -85,6 +84,7 @@
  * All the player connection state info.
  */
 typedef struct {
+    int                 ind;                    /* index of connection */
     int			state;			/* state of connection */
     int			drain_state;		/* state after draining done */
     unsigned		magic;			/* magic cookie */
@@ -119,11 +119,11 @@ typedef struct {
     char		*real;			/* real login name of player */
     char		*nick;			/* nickname of player */
     char		*dpy;			/* display of player */
-    shipobj		*ship;			/* ship shape of player */
+    shipshape_t		*ship;			/* ship shape of player */
     char		*addr;			/* address of players host */
     char		*host;			/* hostname of players host */
     int			rectype;		/* normal/saved/spectator */
+    int			features;		/* supported features */
 } connection_t;
 
 #endif
-

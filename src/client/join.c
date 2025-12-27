@@ -1,5 +1,4 @@
-/* $Id: join.c,v 5.0 2001/04/07 20:00:58 dik Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,41 +21,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <errno.h>
-#include <signal.h>
-#include <time.h>
-#include <sys/types.h>
+/* kps - this file could be made X11 independent easily. */
 
-#ifndef _WINDOWS
-# include <unistd.h>
-# ifndef __hpux
-#  include <sys/time.h>
-# endif
-# ifdef _AIX
-#  include <sys/select.h> /* _BSD not defined in <sys/types.h>, so done by hand */
-# endif
-# include <sys/socket.h>
-# include <netinet/in.h>
-# include <netdb.h>
-#endif
-
-#ifdef _WINDOWS
-# include <winsock.h>
-# include "NT/winClient.h"
-#endif
-
-#include "version.h"
-#include "config.h"
-#include "const.h"
-#include "error.h"
-#include "client.h"
-#include "types.h"
-#include "netclient.h"
-#include "protoclient.h"
-#include "portability.h"
+#include "xpclient_x11.h"
 
 char join_version[] = VERSION;
 
@@ -64,10 +31,14 @@ char join_version[] = VERSION;
 # define SCORE_UPDATE_DELAY	4
 #endif
 
-void xpilotShutdown(void);
-
-extern void Record_cleanup(void);
-
+static int Handle_input(int new_input)
+{
+#ifndef _WINDOWS
+    return x_event(new_input);
+#else
+    return 0;
+#endif
+}
 
 #ifndef _WINDOWS
 static void Input_loop(void)
@@ -85,13 +56,13 @@ static void Input_loop(void)
 	error("Bad server input");
 	return;
     }
-    if (Client_input(2) == -1) {
+    if (Handle_input(2) == -1)
 	return;
-    }
-    if (Net_flush() == -1) {
+
+    if (Net_flush() == -1)
 	return;
-    }
-    if ((clientfd = Client_fd()) == -1) {
+
+    if ((clientfd = ConnectionNumber(dpy)) == -1) {
 	error("Bad client filedescriptor");
 	return;
     }
@@ -108,7 +79,7 @@ static void Input_loop(void)
 	if ((scoresChanged != 0 && ++scoresChanged > SCORE_UPDATE_DELAY)
 	    || result > 1) {
 	    if (scoresChanged > 2 * SCORE_UPDATE_DELAY) {
-		Client_score_table();
+		Paint_score_table();
 		tv.tv_sec = 10;
 		tv.tv_usec = 0;
 	    } else {
@@ -120,30 +91,27 @@ static void Input_loop(void)
 	    tv.tv_usec = 0;
 	}
 	if ((n = select(max + 1, &rfds, NULL, NULL, &tv)) == -1) {
-	    if (errno == EINTR) {
+	    if (errno == EINTR)
 		continue;
-	    }
 	    error("Select failed");
 	    return;
 	}
 	if (n == 0) {
 	    if (scoresChanged > SCORE_UPDATE_DELAY) {
-		Client_score_table();
-		if (Client_input(2) == -1) {
+		Paint_score_table();
+		if (Handle_input(2) == -1)
 		    return;
-		}
 		continue;
 	    }
 	    else if (result <= 1) {
-		errno = 0;
-		error("No response from server");
+		warn("No response from server");
 		continue;
 	    }
 	}
 	if (FD_ISSET(clientfd, &rfds)) {
-	    if (Client_input(1) == -1) {
+	    if (Handle_input(1) == -1)
 		return;
-	    }
+
 	    if (Net_flush() == -1) {
 		error("Bad net flush after X input");
 		return;
@@ -151,8 +119,7 @@ static void Input_loop(void)
 	}
 	if (FD_ISSET(netfd, &rfds) || result > 1) {
 	    if ((result = Net_input()) == -1) {
-		errno = 0;
-		error("Bad net input.  Have a nice day!");
+		warn("Bad net input.  Have a nice day!");
 		return;
 	    }
 	    if (result > 0) {
@@ -170,24 +137,23 @@ static void Input_loop(void)
 		 * keyboard events and then we wait until the X server
 		 * has finished the drawing of our current frame.
 		 */
-		if (Client_input(1) == -1) {
+		if (Handle_input(1) == -1)
 		    return;
-		}
+
 		if (Net_flush() == -1) {
 		    error("Bad net flush before sync");
 		    return;
 		}
-		Client_sync();
-		if (Client_input(1) == -1) {
+		XSync(dpy, False);
+		if (Handle_input(1) == -1)
 		    return;
-		}
 	    }
 	}
     }
 }
 #endif	/* _WINDOWS */
 
-void xpilotShutdown()
+static void xpilotShutdown(void)
 {
     Net_cleanup();
     Client_cleanup();
@@ -207,7 +173,7 @@ static void sigcatch(int signum)
 }
 
 int Join(char *server_addr, char *server_name, int port, char *real,
-	 char *nick, int my_team, char *display, unsigned version)
+	 char *nick, int my_team, char *display, unsigned server_version)
 {
     signal(SIGINT, sigcatch);
     signal(SIGTERM, sigcatch);
@@ -218,9 +184,9 @@ int Join(char *server_addr, char *server_name, int port, char *real,
 
     IFWINDOWS( received_self = FALSE );
     IFWINDOWS( Progress("Client_init") );
-    if (Client_init(server_name, version) == -1) {
+    if (Client_init(server_name, server_version) == -1)
 	return -1;
-    }
+
     IFWINDOWS( Progress("Net_init %s", server_addr) );
     if (Net_init(server_addr, port) == -1) {
 	Client_cleanup();
@@ -246,16 +212,14 @@ int Join(char *server_addr, char *server_name, int port, char *real,
     }
     IFWINDOWS( Progress("Net_start") );
     if (Net_start() == -1) {
-	errno = 0;
-	error("Network start failed");
+	warn("Network start failed");
 	Net_cleanup();
 	Client_cleanup();
 	return -1;
     }
     IFWINDOWS( Progress("Client_start") );
     if (Client_start() == -1) {
-	errno = 0;
-	error("Window init failed");
+	warn("Window init failed");
 	Net_cleanup();
 	Client_cleanup();
 	return -1;

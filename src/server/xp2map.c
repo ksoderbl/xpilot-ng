@@ -1,5 +1,4 @@
-/* $Id$
- *
+/*
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,47 +21,18 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <math.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#ifndef _WINDOWS
-# include <unistd.h>
-#endif
-
-#ifdef _WINDOWS
-# include <windows.h>
-# include <io.h>
-# define read(__a, __b, __c)	_read(__a, __b, __c)
-#endif
-
-#define SERVER
-#include "version.h"
-#include "config.h"
-#include "serverconst.h"
-#include "global.h"
-#include "proto.h"
-#include "defaults.h"
-#include "map.h"
-#include "bit.h"
-#include "error.h"
-#include "commonproto.h"
-
-#include <expat.h>
+#include "xpserver.h"
 
 char xp2map_version[] = VERSION;
 
-
+#define DEFAULT_POS { -1, -1 }
 
 static void tagstart(void *data, const char *el, const char **attr)
 {
     static double scale = 1;
     static int xptag = 0;
 
+    (void)data;
     if (!strcasecmp(el, "XPilotMap")) {
 	double version = 0;
 	while (*attr) {
@@ -76,7 +46,7 @@ static void tagstart(void *data, const char *el, const char **attr)
 	}
 	else if (version < 1)
 	    warn("Impossible version in map file");
-	else if (version > 1) {
+	else if (version > 1.1) {
 	    warn("Map file has newer version than this server recognizes.");
 	    warn("The map file might use unsupported features.");
 	}
@@ -93,7 +63,7 @@ static void tagstart(void *data, const char *el, const char **attr)
     if (!strcasecmp(el, "Polystyle")) {
 	char id[100];
 	int color = 0, texture_id = 0, defedge_id = 0, flags = 0;
-	
+
 	while (*attr) {
 	    if (!strcasecmp(*attr, "id"))
 		strlcpy(id, *(attr + 1), sizeof(id));
@@ -170,7 +140,12 @@ static void tagstart(void *data, const char *el, const char **attr)
 		team = atoi(*(attr + 1));
 	    attr += 2;
 	}
-	P_start_balltarget(team);
+	/*
+	 * kps - Currently we don't know mapobj for balltargets,
+	 * this means that captureTheFlag stuff does not work
+	 * on xp2 maps.
+	 */
+	P_start_balltarget(team, NO_IND);
 	return;
     }
 
@@ -180,61 +155,64 @@ static void tagstart(void *data, const char *el, const char **attr)
     }
 
     if (!strcasecmp(el, "Polygon")) {
-	int cx = -1, cy = -1, style = -1;
+	clpos pos = DEFAULT_POS;
+	int style = -1;
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "x"))
-		cx = atoi(*(attr + 1)) * scale;
+		pos.cx = atoi(*(attr + 1)) * scale;
 	    if (!strcasecmp(*attr, "y"))
-		cy = atoi(*(attr + 1)) * scale;
+		pos.cy = atoi(*(attr + 1)) * scale;
 	    if (!strcasecmp(*attr, "style"))
 		style = P_get_poly_id(*(attr + 1));
 	    attr += 2;
 	}
-	P_start_polygon(cx, cy, style);
+	P_start_polygon(pos, style);
 	return;
     }
 
     if (!strcasecmp(el, "Check")) {
-	int cx = -1, cy = -1;
+	clpos pos = DEFAULT_POS;
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "x"))
-		cx = atoi(*(attr + 1)) * scale;
+		pos.cx = atoi(*(attr + 1)) * scale;
 	    if (!strcasecmp(*attr, "y"))
-		cy = atoi(*(attr + 1)) * scale;
+		pos.cy = atoi(*(attr + 1)) * scale;
 	    attr += 2;
 	}
-	Map_place_check(cx, cy, -1);
+	Map_place_check(pos, -1);
 	return;
     }
 
     if (!strcasecmp(el, "Fuel")) {
-	int team = TEAM_NOT_SET, cx = -1, cy = -1;
+	int team = TEAM_NOT_SET; 
+	clpos pos = DEFAULT_POS;
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "team"))
 		team = atoi(*(attr + 1));
 	    if (!strcasecmp(*attr, "x"))
-		cx = atoi(*(attr + 1)) * scale;
+		pos.cx = atoi(*(attr + 1)) * scale;
 	    if (!strcasecmp(*attr, "y"))
-		cy = atoi(*(attr + 1)) * scale;
+		pos.cy = atoi(*(attr + 1)) * scale;
 	    attr += 2;
 	}
-	Map_place_fuel(cx, cy, team);
+	Map_place_fuel(pos, team);
 	return;
     }
 
     if (!strcasecmp(el, "Base")) {
-	int team = TEAM_NOT_SET, cx = -1, cy = -1, dir = DIR_UP;
+	int team = TEAM_NOT_SET, dir = DIR_UP;
+	clpos pos = DEFAULT_POS;
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "team"))
 		team = atoi(*(attr + 1));
 	    if (!strcasecmp(*attr, "x"))
-		cx = atoi(*(attr + 1)) * scale;
+		pos.cx = atoi(*(attr + 1)) * scale;
 	    if (!strcasecmp(*attr, "y"))
-		cy = atoi(*(attr + 1)) * scale;
+		pos.cy = atoi(*(attr + 1)) * scale;
 	    if (!strcasecmp(*attr, "dir"))
 		dir = atoi(*(attr + 1));
 	    attr += 2;
@@ -243,101 +221,107 @@ static void tagstart(void *data, const char *el, const char **attr)
 	    warn("Illegal team number in base tag.\n");
 	    exit(1);
 	}
-	Map_place_base(cx, cy, dir, team);
+	Map_place_base(pos, dir, team);
 	return;
     }
 
     if (!strcasecmp(el, "Ball")) {
-	int team = TEAM_NOT_SET, cx = -1, cy = -1;
+	int team = TEAM_NOT_SET;
+	 clpos pos = DEFAULT_POS;
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "team"))
 		team = atoi(*(attr + 1));
 	    if (!strcasecmp(*attr, "x"))
-		cx = atoi(*(attr + 1)) * scale;
+		pos.cx = atoi(*(attr + 1)) * scale;
 	    if (!strcasecmp(*attr, "y"))
-		cy = atoi(*(attr + 1)) * scale;
+		pos.cy = atoi(*(attr + 1)) * scale;
 	    attr += 2;
 	}
-	Map_place_treasure(cx, cy, team, false);
+	Map_place_treasure(pos, team, false);
 	return;
     }
 
-    /* kps extensions */
     if (!strcasecmp(el, "Cannon")) {
-	int team = TEAM_NOT_SET, cx = -1, cy = -1, dir = DIR_UP, ind = -1;
+	int team = TEAM_NOT_SET, dir = DIR_UP, cannon_ind;
+	clpos pos = DEFAULT_POS;
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "team"))
 		team = atoi(*(attr + 1));
-	    if (!strcasecmp(*attr, "x"))
-		cx = atoi(*(attr + 1)) * scale;
-	    if (!strcasecmp(*attr, "y"))
-		cy = atoi(*(attr + 1)) * scale;
-	    if (!strcasecmp(*attr, "dir"))
+	    else if (!strcasecmp(*attr, "x"))
+		pos.cx = atoi(*(attr + 1)) * scale;
+	    else if (!strcasecmp(*attr, "y"))
+		pos.cy = atoi(*(attr + 1)) * scale;
+	    else if (!strcasecmp(*attr, "dir"))
 		dir = atoi(*(attr + 1));
 	    attr += 2;
 	}
-	/* ind = ... */
-	P_start_cannon(cx, cy, dir, team, ind);
+	cannon_ind = Map_place_cannon(pos, dir, team);
+	P_start_cannon(cannon_ind);
 	return;
-    }    
-    
+    }
+
     if (!strcasecmp(el, "Target")) {
-	int team = TEAM_NOT_SET, ind = -1;
+	int team = TEAM_NOT_SET, target_ind;
+	clpos pos = DEFAULT_POS;
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "team"))
 		team = atoi(*(attr + 1));
+	    else if (!strcasecmp(*attr, "x"))
+		pos.cx = atoi(*(attr + 1)) * scale;
+	    else if (!strcasecmp(*attr, "y"))
+		pos.cy = atoi(*(attr + 1)) * scale;
 	    attr += 2;
 	}
-	/* ind = ... */
-	P_start_target(team, ind);
+	target_ind = Map_place_target(pos, team);
+	P_start_target(target_ind);
 	return;
-    }    
+    }
 
     if (!strcasecmp(el, "ItemConcentrator")) {
-	int cx = -1, cy = -1;
+	clpos pos = DEFAULT_POS;
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "x"))
-		cx = atoi(*(attr + 1)) * scale;
+		pos.cx = atoi(*(attr + 1)) * scale;
 	    if (!strcasecmp(*attr, "y"))
-		cy = atoi(*(attr + 1)) * scale;
+		pos.cy = atoi(*(attr + 1)) * scale;
 	    attr += 2;
 	}
-	/*Map_place_...(cx, cy);*/
+	Map_place_item_concentrator(pos);
 	return;
     }
 
     if (!strcasecmp(el, "AsteroidConcentrator")) {
-	int cx = -1, cy = -1;
+	clpos pos = DEFAULT_POS;
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "x"))
-		cx = atoi(*(attr + 1)) * scale;
+		pos.cx = atoi(*(attr + 1)) * scale;
 	    if (!strcasecmp(*attr, "y"))
-		cy = atoi(*(attr + 1)) * scale;
+		pos.cy = atoi(*(attr + 1)) * scale;
 	    attr += 2;
 	}
-	/*Map_place_...(cx, cy);*/
+	Map_place_asteroid_concentrator(pos);
 	return;
     }
 
     if (!strcasecmp(el, "Grav")) {
-	int cx = -1, cy = -1;
-	DFLOAT force = 0.0;
+	clpos pos = DEFAULT_POS;
+	double force = 0.0;
 	int type = SPACE;
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "x"))
-		cx = atoi(*(attr + 1)) * scale;
+		pos.cx = atoi(*(attr + 1)) * scale;
 	    else if (!strcasecmp(*attr, "y"))
-		cy = atoi(*(attr + 1)) * scale;
+		pos.cy = atoi(*(attr + 1)) * scale;
 	    else if (!strcasecmp(*attr, "force"))
-		force = (DFLOAT)atof(*(attr + 1));
+		force = atof(*(attr + 1));
 	    else if (!strcasecmp(*attr, "type")) {
-		char *s = (char *)*(attr + 1);
+		const char *s = *(attr + 1);
 
 		if (!strcasecmp(s, "pos"))
 		    type = POS_GRAV;
@@ -362,22 +346,22 @@ static void tagstart(void *data, const char *el, const char **attr)
 	if (type == SPACE) {
 	    warn("Illegal type in grav tag.\n");
 	    exit(1);
-	}	
-	/*Map_place_...(cx, cy, force, type);*/
+	}
+	Map_place_grav(pos, force, type);
 	return;
     }
 
     if (!strcasecmp(el, "Wormhole")) {
-	int cx = -1, cy = -1;
+	clpos pos = DEFAULT_POS;
 	wormType type = WORM_NORMAL;
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "x"))
-		cx = atoi(*(attr + 1)) * scale;
+		pos.cx = atoi(*(attr + 1)) * scale;
 	    else if (!strcasecmp(*attr, "y"))
-		cy = atoi(*(attr + 1)) * scale;
+		pos.cy = atoi(*(attr + 1)) * scale;
 	    else if (!strcasecmp(*attr, "type")) {
-		char *s = (char *)*(attr + 1);
+		const char *s = *(attr + 1);
 
 		if (!strcasecmp(s, "normal"))
 		    type = WORM_NORMAL;
@@ -389,23 +373,21 @@ static void tagstart(void *data, const char *el, const char **attr)
 
 	    attr += 2;
 	}
-	/*Map_place_...(cx, cy, force, type);*/
+	Map_place_wormhole(pos, type);
 	return;
     }
 
     if (!strcasecmp(el, "FrictionArea")) {
-	DFLOAT friction = 0.0; /* kps - other default ??? */
+	double fric = 0.0; /* kps - other default ??? */
 
 	while (*attr) {
 	    if (!strcasecmp(*attr, "friction"))
-		friction = atof(*(attr + 1));
+		fric = atof(*(attr + 1));
 	    attr += 2;
 	}
 	/*Map_place_...(team);*/
 	return;
-    }    
-
-    /* end of kps extensions */
+    }
 
     if (!strcasecmp(el, "Option")) {
 	const char *name = NULL, *value = NULL;
@@ -421,17 +403,18 @@ static void tagstart(void *data, const char *el, const char **attr)
     }
 
     if (!strcasecmp(el, "Offset")) {
-	int cx = -1, cy = -1, edgestyle = -1;
+	clpos offset = DEFAULT_POS;
+	int edgestyle = -1;
 	while (*attr) {
 	    if (!strcasecmp(*attr, "x"))
-		cx = atoi(*(attr + 1)) * scale;
+		offset.cx = atoi(*(attr + 1)) * scale;
 	    if (!strcasecmp(*attr, "y"))
-		cy = atoi(*(attr + 1)) * scale;
+		offset.cy = atoi(*(attr + 1)) * scale;
 	    if (!strcasecmp(*attr, "style"))
 		edgestyle = P_get_edge_id(*(attr + 1));
 	    attr += 2;
 	}
-	P_offset(cx, cy, edgestyle);
+	P_offset(offset, edgestyle);
 	return;
     }
 
@@ -445,6 +428,7 @@ static void tagstart(void *data, const char *el, const char **attr)
 
 static void tagend(void *data, const char *el)
 {
+    (void)data;
     if (!strcasecmp(el, "Decor"))
 	P_end_decor();
     else if (!strcasecmp(el, "BallArea"))
@@ -463,7 +447,8 @@ static void tagend(void *data, const char *el)
     if (!strcasecmp(el, "GeneralOptions")) {
 	/* ok, got to the end of options */
 	Options_parse();
-	Grok_map_new();
+	/* kps - this can fail - fix */
+	Grok_map_options();
     }
     return;
 }
@@ -496,6 +481,7 @@ bool parseXp2MapFile(int fd, optOrigin opt_origin)
     int len;
     XML_Parser p = XML_ParserCreate(NULL);
 
+    (void)opt_origin;
     if (!p) {
 	warn("Creating Expat instance for map parsing failed.\n");
 	/*exit(1);*/
@@ -518,5 +504,3 @@ bool parseXp2MapFile(int fd, optOrigin opt_origin)
     } while (len);
     return true;
 }
-
-

@@ -1,4 +1,4 @@
-/* $Id: metaserver.h,v 5.1 2002/04/11 08:06:12 bertg Exp $
+/* 
  *
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *

@@ -1,5 +1,4 @@
-/* $Id: datagram.c,v 5.5 2001/06/26 09:53:26 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,34 +21,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <errno.h>
-#include <sys/types.h>
-
-#ifndef _WINDOWS
-# include <unistd.h>
-# include <sys/param.h>
-# include <netdb.h>
-#endif
-
-#ifdef _WINDOWS
-# include "NT/winNet.h"
-# include "NT/winClient.h"
-#endif
-
-#include "version.h"
-#include "config.h"
-#include "error.h"
-#include "client.h"
-#include "socklib.h"
-#include "protoclient.h"
-#include "datagram.h"
-#include "portability.h"
-
-extern int	clientPortStart;	/* First UDP port for clients */
-extern int	clientPortEnd;		/* Last one (these are for firewalls) */
+#include "xpclient.h"
 
 char datagram_version[] = VERSION;
 
@@ -65,12 +37,10 @@ int create_dgram_addr_socket(sock_t *sock, char *dotaddr, int port)
     int			i;
 
     if (saved == 0) {
-	if (clientPortStart && (!clientPortEnd || clientPortEnd > 65535)) {
+	if (clientPortStart && (!clientPortEnd || clientPortEnd > 65535))
 	    clientPortEnd = 65535;
-	}
-	if (clientPortEnd && (!clientPortStart || clientPortStart < 1024)) {
+	if (clientPortEnd && (!clientPortStart || clientPortStart < 1024))
 	    clientPortStart = 1024;
-	}
 
 	if (port || !clientPortStart || (clientPortStart > clientPortEnd)) {
 	    status = sock_open_udp(sock, dotaddr, port);
@@ -96,9 +66,8 @@ int create_dgram_addr_socket(sock_t *sock, char *dotaddr, int port)
 	}
 
 	if (status == SOCK_IS_OK) {
-	    if (dgram_one_socket) {
+	    if (dgram_one_socket)
 		save_sock = *sock;
-	    }
 	}
     } else {
 	*sock = save_sock;
@@ -117,8 +86,7 @@ int create_dgram_socket(sock_t *sock, int port)
 
 void close_dgram_socket(sock_t *sock)
 {
-    if (!dgram_one_socket) {
+    if (!dgram_one_socket)
 	sock_close(sock);
-    }
 }
 

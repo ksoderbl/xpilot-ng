@@ -1,5 +1,4 @@
-/* $Id: robot.h,v 5.6 2002/01/07 20:49:25 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -89,14 +88,14 @@
 typedef struct {
     const char		*name;
     void		(*round_tick)(void);
-    void		(*create)(int ind, char *str);
-    void		(*go_home)(int ind);
-    void		(*play)(int ind);
-    void		(*set_war)(int ind, int killer);
-    int			(*war_on_player)(int ind);
-    void		(*message)(int ind, const char *str);
-    void		(*destroy)(int ind);
-    void		(*invite)(int ind, int inv_ind);
+    void		(*create)(player *robot, char *str);
+    void		(*go_home)(player *robot);
+    void		(*play)(player *robot);
+    void		(*set_war)(player *victim, int killer);
+    int			(*war_on_player)(player *robot);
+    void		(*message)(player *robot, const char *str);
+    void		(*destroy)(player *robot);
+    void		(*invite)(player *robot, player *inviter);
 } robot_type_t;
 
 /*
@@ -142,9 +141,9 @@ typedef struct robot_default_data {
     int		robot_count;		/* Misc timings, minimizes rand use */
     int		attack;			/* how aggressive (1-99) */
     int		defense;		/* how defensive (1-99) */
-    DFLOAT	robot_normal_speed;
-    DFLOAT	robot_attack_speed;
-    DFLOAT	robot_max_speed;
+    double	robot_normal_speed;
+    double	robot_attack_speed;
+    double	robot_max_speed;
     int		last_used_ecm;          /* relative to robot_count */
     int		last_dropped_mine;      /* relative to robot_count */
     int		last_fired_missile;     /* relative to robot_count */

@@ -1,5 +1,4 @@
-/* $Id: rules.c,v 5.14 2002/04/20 11:57:22 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,24 +21,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <time.h>
-
-#ifdef _WINDOWS
-# include <windows.h>
-#endif
-
-#define SERVER
-#include "version.h"
-#include "config.h"
-#include "serverconst.h"
-#include "global.h"
-#include "proto.h"
-#include "map.h"
-#include "rules.h"
-#include "bit.h"
-#include "cannon.h"
+#include "xpserver.h"
 
 char rules_version[] = VERSION;
 
@@ -67,7 +49,7 @@ char rules_version[] = VERSION;
 long	KILLING_SHOTS = (OBJ_SHOT|OBJ_CANNON_SHOT|OBJ_SMART_SHOT
 			 |OBJ_TORPEDO|OBJ_HEAT_SHOT|OBJ_PULSE);
 long	DEF_BITS = 0;
-long	KILL_BITS = (THRUSTING|PLAYING|KILLED|SELF_DESTRUCT|WARPING|WARPED);
+long	KILL_BITS = (THRUSTING|PLAYING|KILLED|SELF_DESTRUCT|WARPING/*|WARPED*/);
 long	DEF_HAVE =
 	(HAS_SHIELD|HAS_COMPASS|HAS_REFUEL|HAS_REPAIR|HAS_CONNECTOR
 	|HAS_SHOT|HAS_LASER);
@@ -85,26 +67,26 @@ long	USED_KILL =
  */
 static void Set_item_chance(int item)
 {
-    DFLOAT	max = itemProbMult * maxItemDensity * World.x * World.y;
-    DFLOAT	sum = 0;
+    double	max = itemProbMult * maxItemDensity * World.x * World.y;
+    double	sum = 0;
     int		i, num = 0;
 
     if (itemProbMult * World.items[item].prob > 0) {
 	World.items[item].chance = (int)(1.0
-	    / (itemProbMult * World.items[item].prob * World.x * World.y * FPS));
+	    / (itemProbMult * World.items[item].prob
+	       * World.x * World.y * FPS));
 	World.items[item].chance = MAX(World.items[item].chance, 1);
-    } else {
+    } else
 	World.items[item].chance = 0;
-    }
+
     if (max > 0) {
-	if (max < 1) {
+	if (max < 1)
 	    World.items[item].max = 1;
-	} else {
+	else
 	    World.items[item].max = (int)max;
-	}
-    } else {
+    } else
 	World.items[item].max = 0;
-    }
+
     if (!BIT(CANNON_USE_ITEM, 1U << item)) {
 	World.items[item].cannonprob = 0;
 	return;
@@ -116,13 +98,12 @@ static void Set_item_chance(int item)
 	    num++;
 	}
     }
-    if (num) {
+    if (num)
 	World.items[item].cannonprob = World.items[item].prob
 				       * (num / sum)
 				       * (maxItemDensity / 0.00012);
-    } else {
+    else
 	World.items[item].cannonprob = 0;
-    }
 }
 
 
@@ -146,9 +127,8 @@ void Tune_item_probs(void)
 		    if (obj->info == i) {
 			Delete_shot(j);
 			j--;
-			if (--excess == 0) {
+			if (--excess == 0)
 			    break;
-			}
 		    }
 		}
 	    }
@@ -158,24 +138,23 @@ void Tune_item_probs(void)
 
 void Tune_asteroid_prob(void)
 {
-    DFLOAT	max = maxAsteroidDensity * World.x * World.y;
+    double	max = maxAsteroidDensity * World.x * World.y;
 
     if (World.asteroids.prob > 0) {
 	World.asteroids.chance = (int)(1.0
 			/ (World.asteroids.prob * World.x * World.y * FPS));
 	World.asteroids.chance = MAX(World.asteroids.chance, 1);
-    } else {
+    } else
 	World.asteroids.chance = 0;
-    }
+
     if (max > 0) {
-	if (max < 1) {
+	if (max < 1)
 	    World.asteroids.max = 1;
-	} else {
+	else
 	    World.asteroids.max = (int)max;
-	}
-    } else {
+    } else
 	World.asteroids.max = 0;
-    }
+
     /* superfluous asteroids are handled by Asteroid_update() */
 
     /* Tune asteroid concentrator parameters */
@@ -241,9 +220,8 @@ void Set_initial_resources(void)
     LIMIT(World.items[ITEM_MIRROR].limit, 0, MAX_MIRROR);
     LIMIT(World.items[ITEM_ARMOR].limit, 0, MAX_ARMOR);
 
-    for (i = 0; i < NUM_ITEMS; i++) {
+    for (i = 0; i < NUM_ITEMS; i++)
 	LIMIT(World.items[i].initial, 0, World.items[i].limit);
-    }
 
     CLR_BIT(DEF_HAVE,
 	HAS_CLOAKING_DEVICE |
@@ -350,19 +328,16 @@ void Set_world_rules(void)
     rules.lives = worldLives;
     World.rules = &rules;
 
-    if (BIT(World.rules->mode, TEAM_PLAY)) {
+    if (BIT(World.rules->mode, TEAM_PLAY))
 	CLR_BIT(World.rules->mode, ALLIANCES);
-    }
 
-    if (!BIT(World.rules->mode, PLAYER_KILLINGS)) {
+    if (!BIT(World.rules->mode, PLAYER_KILLINGS))
 	CLR_BIT(KILLING_SHOTS,
 		OBJ_SHOT|OBJ_CANNON_SHOT|OBJ_SMART_SHOT
 		|OBJ_TORPEDO|OBJ_HEAT_SHOT|OBJ_PULSE);
-    }
 
-    if (!BIT(World.rules->mode, PLAYER_SHIELDING)) {
+    if (!BIT(World.rules->mode, PLAYER_SHIELDING))
 	CLR_BIT(DEF_HAVE, HAS_SHIELD);
-    }
 
     DEF_USED &= DEF_HAVE;
 }

@@ -1,5 +1,4 @@
-/* $Id: xpmemory.c,v 5.0 2001/05/27 20:29:02 dik Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,44 +21,27 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdlib.h>
-#include <string.h>
-
-#include "error.h"
-#include "commonproto.h"
+#include "xpcommon.h"
 
 void *xp_malloc(size_t size)
 {
-    void	*p;
-
-    p = (void *) malloc(size);
-
-    return p;
+    return (void *) malloc(size);
 }
 
 void *xp_realloc(void *oldptr, size_t size)
 {
-    void	*p;
-
-    p = (void *) realloc(oldptr, size);
-
-    return p;
+    return (void *) realloc(oldptr, size);
 }
 
 void *xp_calloc(size_t nmemb, size_t size)
 {
-    void	*p;
-
-    p = (void *) calloc(nmemb, size);
-
-    return p;
+    return (void *) calloc(nmemb, size);
 }
 
 void xp_free(void *p)
 {
-    if (p) {
+    if (p)
 	free(p);
-    }
 }
 
 void *xp_safe_malloc(size_t size)
@@ -67,9 +49,8 @@ void *xp_safe_malloc(size_t size)
     void	*p;
 
     p = (void *) malloc(size);
-    if (p == NULL) {
+    if (p == NULL)
 	fatal("Not enough memory.");
-    }
 
     return p;
 }
@@ -79,9 +60,8 @@ void *xp_safe_realloc(void *oldptr, size_t size)
     void	*p;
 
     p = (void *) realloc(oldptr, size);
-    if (p == NULL) {
+    if (p == NULL)
 	fatal("Not enough memory.");
-    }
 
     return p;
 }
@@ -91,17 +71,15 @@ void *xp_safe_calloc(size_t nmemb, size_t size)
     void	*p;
 
     p = (void *) calloc(nmemb, size);
-    if (p == NULL) {
+    if (p == NULL)
 	fatal("Not enough memory.");
-    }
 
     return p;
 }
 
 void xp_safe_free(void *p)
 {
-    if (p) {
+    if (p)
 	free(p);
-    }
 }
 

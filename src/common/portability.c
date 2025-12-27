@@ -1,5 +1,4 @@
-/* $Id: portability.c,v 5.3 2002/01/13 16:18:20 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -26,34 +25,7 @@
  * This file contains function wrappers around OS specific services.
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <math.h>
-
-#if !defined(_WINDOWS)
-# include <unistd.h>
-# include <pwd.h>
-#endif
-
-#ifdef PLOCKSERVER
-# if defined(__linux__)
-#  include <sys/mman.h>
-# else
-#  include <sys/lock.h>
-# endif
-#endif
-
-#ifdef _WINDOWS
-# include <windows.h>
-# include <process.h>
-#endif
-
-#include "version.h"
-#include "config.h"
-#include "portability.h"
-#include "commonproto.h"
-
+#include "xpcommon.h"
 
 char portability_version[] = VERSION;
 
@@ -68,7 +40,7 @@ int Get_process_id(void)
 }
 
 
-void Get_login_name(char *buf, int size)
+void Get_login_name(char *buf, size_t size)
 {
 #if defined(_WINDOWS)
     long nsize = size;
@@ -82,48 +54,12 @@ void Get_login_name(char *buf, int size)
 }
 
 
-#ifdef sony_news
-int sigprocmask(int how, const sigset_t *set, sigset_t *oset)
-{
-    int			mask;
-
-    if (how == SIG_BLOCK) {
-	mask = sigblock(0) | *set;
-    }
-    else if (how == SIG_UNBLOCK) {
-	mask = sigblock(0) & ~(*set);
-    }
-    else if (how == SIG_SETMASK) {
-	mask = *set;
-    }
-    else {
-	mask = sigblock(0);
-    }
-    mask = sigsetmask(mask);
-    if (oset != NULL) {
-	*oset = mask;
-    }
-
-    return 0;
-}
-#endif	/* sony_news */
-
-void move_memory(void *dst, void *src, size_t len)
-{
-#if defined(__hpux) || defined(__apollo) || defined(SVR4) || defined(_SEQUENT_) || defined(SYSV) || defined(_WINDOWS)
-        memmove(dst, src, len);
-#else
-        bcopy(src, dst, len);
-#endif
-}
-
-
-int is_this_windows()
+bool is_this_windows(void)
 {
 #ifdef _WINDOWS
-    return 1;
+    return true;
 #else
-    return 0;
+    return false;
 #endif
 }
 

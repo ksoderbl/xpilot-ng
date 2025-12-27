@@ -1,5 +1,4 @@
-/* $Id: strcasecmp.c,v 5.2 2001/06/02 21:02:25 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,16 +21,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <ctype.h>
+#include "xpcommon.h"
 
-
-/* prototypes to shut up strict compiler. */
-int strcasecmp(const char *str1, const char *str2);
-int strncasecmp(const char *str1, const char *str2, size_t n);
-
-
+#ifndef HAVE_STRCASECMP
 /*
  * By Ian Malcom Brown.
  * Changes by BG: prototypes with const,
@@ -42,7 +34,6 @@ int strcasecmp(const char *str1, const char *str2)
 {
     int	c1, c2;
 
-
     do {
 	c1 = *str1++;
 	c2 = *str2++;
@@ -52,7 +43,9 @@ int strcasecmp(const char *str1, const char *str2)
 
     return (c1 - c2);
 }
+#endif
 
+#ifndef HAVE_STRNCASECMP
 /*
  * By Bert Gijsbers, derived from Ian Malcom Brown's strcasecmp().
  */
@@ -61,9 +54,8 @@ int strncasecmp(const char *str1, const char *str2, size_t n)
     int	c1, c2;
 
     do {
-	if (n-- <= 0) {
+	if (n-- <= 0)
 	    return 0;
-	}
 	c1 = *str1++;
 	c2 = *str2++;
 	c1 = tolower(c1);
@@ -72,3 +64,5 @@ int strncasecmp(const char *str1, const char *str2, size_t n)
 
     return (c1 - c2);
 }
+#endif
+

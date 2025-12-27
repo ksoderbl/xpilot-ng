@@ -1,5 +1,4 @@
-/* $Id$
- *
+/*
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,56 +21,20 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <ctype.h>
-#include <limits.h>
-#include <errno.h>
-#include <sys/types.h>
-
-#ifndef _WINDOWS
-# include <unistd.h>
-#endif
-
-#ifdef _WINDOWS
-# include <windows.h>
-# include <io.h>
-# define read(__a, __b, __c)	_read(__a, __b, __c)
-#endif
-
-#define SERVER
-#include "version.h"
-#include "config.h"
-#include "serverconst.h"
-#include "global.h"
-#include "proto.h"
-#include "defaults.h"
-#include "map.h"
-#include "error.h"
-#include "types.h"
-#include "commonproto.h"
-
+#include "xpserver.h"
 
 char polygon_version[] = VERSION;
 
 
 
 /* polygon map format related stuff */
-/*static char	*FileName;*/
-
-
-/* kps - if this is too small, the server will probably say
- * "xpilots: Polygon 2501 (4 points) doesn't start and end at the same place"
- */
-static int edg[20000 * 2]; /* !@# change pointers in poly_t when realloc poss.*/
-extern int num_polys; /* old name polyc */
+int num_edges, max_edges;
+extern int num_polys;
 extern int num_groups;
 
-int *edges = edg;
+int *edgeptr;
 int *estyleptr;
-int ptscount, ecount;
-char *mapd;
+static int ptscount, ecount;
 
 struct polystyle pstyles[256];
 struct edgestyle estyles[256] =
@@ -94,8 +57,39 @@ static int current_estyle, current_group, is_decor;
 /* !@# add a final realloc later to free wasted memory */
 
 
-void P_edgestyle(char *id, int width, int color, int style)
+static void Check_groupcount(void)
 {
+    if (current_group == 1000) {
+	warn("Server didn't allocate enough space for groups");
+	exit(1);
+    }
+}
+
+static int Create_group(int type, int team, int hitmask,
+			bool (*hitfunc)(struct group *gp, struct move *move),
+			int mapobj_ind)
+{
+    if (current_group != 0) {
+	warn("Broken map: map object defined inside another.");
+	exit(1);
+    }
+    current_group = ++num_groups;
+    Check_groupcount();
+    groups[current_group].type = type;
+    groups[current_group].team = team;
+    groups[current_group].hitmask = hitmask;
+    groups[current_group].hitfunc = hitfunc;
+    groups[current_group].mapobj_ind = mapobj_ind;
+    return current_group;    
+}
+
+void P_edgestyle(const char *id, int width, int color, int style)
+{
+    if (num_estyles > 255) {
+	warn("Too many edgestyles");
+	exit(1);
+    }
+
     strlcpy(estyles[num_estyles].id, id, sizeof(estyles[0].id));
     estyles[num_estyles].color = color;
     estyles[num_estyles].width = width;
@@ -103,9 +97,13 @@ void P_edgestyle(char *id, int width, int color, int style)
     num_estyles++;
 }
 
-void P_polystyle(char *id, int color, int texture_id, int defedge_id,
-		   int flags)
+void P_polystyle(const char *id, int color, int texture_id, int defedge_id,
+		 int flags)
 {
+    if (num_pstyles > 255) {
+	warn("Too many polygon styles");
+	exit(1);
+    }
     /* kps - add sanity checks ??? */
     if (defedge_id == 0) {
 	warn("Polygon default edgestyle cannot be omitted or set "
@@ -122,8 +120,12 @@ void P_polystyle(char *id, int color, int texture_id, int defedge_id,
 }
 
 
-void P_bmpstyle(char *id, char *filename, int flags)
+void P_bmpstyle(const char *id, const char *filename, int flags)
 {
+    if (num_bstyles > 255) {
+	warn("Too many bitmap styles");
+	exit(1);
+    }
     strlcpy(bstyles[num_bstyles].id, id, sizeof(bstyles[0].id));
     strlcpy(bstyles[num_bstyles].filename, filename,
 	    sizeof(bstyles[0].filename));
@@ -134,14 +136,14 @@ void P_bmpstyle(char *id, char *filename, int flags)
 /* current vertex */
 static clpos P_cv;
 
-void P_start_polygon(int cx, int cy, int style)
+void P_start_polygon(clpos pos, int style)
 {
     poly_t t;
 
-    if (cx < 0 || cx >= World.cwidth || cy < 0 || cy > World.cheight) {
+    if (!INSIDE_MAP(pos.cx, pos.cy)) {
 	warn("Polygon start point (%d, %d) is not inside the map"
 	     "(0 <= x < %d, 0 <= y < %d)",
-	     cx, cy, World.cwidth, World.cheight);
+	     pos.cx, pos.cy, World.cwidth, World.cheight);
 	exit(1);
     }
     if (style == -1) {
@@ -150,12 +152,10 @@ void P_start_polygon(int cx, int cy, int style)
     }
 
     ptscount = 0;
-    P_cv.cx = cx;
-    P_cv.cy = cy;
-    t.x = cx;
-    t.y = cy;
+    P_cv = pos;
+    t.pos = pos;
     t.group = current_group;
-    t.edges = edges;
+    t.edges = num_edges;
     t.style = style;
     t.estyles_start = ecount;
     t.is_decor = is_decor;
@@ -164,132 +164,156 @@ void P_start_polygon(int cx, int cy, int style)
 }
 
 
-void P_offset(int offcx, int offcy, int edgestyle)
+void P_offset(clpos offset, int edgestyle)
 {
-    /* don't add duplicates */
-    if (offcx == 0 && offcy == 0)
-	return;
+    int i, offcx = offset.cx, offcy = offset.cy;
 
-    if (ABS(offcx) > POLYGON_MAX_OFFSET || ABS(offcy) > POLYGON_MAX_OFFSET) {
-	warn("Offset component absolute value exceeds %d (x=%d, y=%d)",
-	     POLYGON_MAX_OFFSET, offcx, offcy);
-	exit(1);
+    if (offcx == 0 && offcy == 0) {
+	/*
+	 * Don't warn about zero length edges for xp maps, since
+	 * the conversion creates such edges.
+	 */
+	if (is_polygon_map)
+	    warn("Edge with zero length");
+	if (edgestyle != -1 && edgestyle != current_estyle) {
+	    warn("Refusing to change edgestyle with zero-length edge");
+	    exit(1);
+	}
+	return;
     }
 
-    *edges++ = offcx;
-    *edges++ = offcy;
     if (edgestyle != -1 && edgestyle != current_estyle) {
 	STORE(int, estyleptr, ecount, max_echanges, ptscount);
 	STORE(int, estyleptr, ecount, max_echanges, edgestyle);
 	current_estyle = edgestyle;
     }
-    ptscount++;
+
     P_cv.cx += offcx;
     P_cv.cy += offcy;
+
+    i = (MAX(ABS(offcx), ABS(offcy)) - 1) / POLYGON_MAX_OFFSET + 1;
+    for (;i > 0;i--) {
+	STORE(int, edgeptr, num_edges, max_edges, offcx / i);
+	STORE(int, edgeptr, num_edges, max_edges, offcy / i);
+	offcx -= offcx / i;
+	offcy -= offcy / i;
+	ptscount++;
+    }
 }
 
-void P_vertex(int cx, int cy, int edgestyle)
+void P_vertex(clpos pos, int edgestyle)
 {
-    P_offset(cx - P_cv.cx, cy - P_cv.cy, edgestyle);
+    clpos offset;
+
+    offset.cx = pos.cx - P_cv.cx;
+    offset.cy = pos.cy - P_cv.cy;
+
+    P_offset(offset, edgestyle);
 }
 
 void P_end_polygon(void)
 {
+    if (ptscount < 3) {
+	warn("Polygon with less than 3 edges?? (start %d, %d)",
+	     pdata[num_polys - 1].pos.cx, pdata[num_polys - 1].pos.cy);
+	exit(-1);
+    }
     pdata[num_polys - 1].num_points = ptscount;
     pdata[num_polys - 1].num_echanges
 	= ecount -pdata[num_polys - 1].estyles_start;
     STORE(int, estyleptr, ecount, max_echanges, INT_MAX);
 }
 
-void P_start_ballarea(void)
+int P_start_ballarea(void)
 {
-    current_group = ++num_groups;
-    groups[current_group].type = TREASURE;
-    groups[current_group].team = TEAM_NOT_SET;
-    groups[current_group].hit_mask = BALL_BIT;
-    groups[current_group].hit_func = NULL;
-    groups[current_group].item_id = -1;
+    return Create_group(TREASURE,
+			TEAM_NOT_SET,
+			BALL_BIT,
+			NULL,
+			NO_IND);
 }
 
 void P_end_ballarea(void)
 {
-    current_group = 0; 
+    current_group = 0;
 }
 
-void P_start_balltarget(int team)
+int P_start_balltarget(int team, int treasure_ind)
 {
-    current_group = ++num_groups;
-    groups[current_group].type = TREASURE;
-    groups[current_group].team = team;
-    groups[current_group].hit_mask = NONBALL_BIT;
-    /*= NONBALL_BIT | (((NOTEAM_BIT << 1) - 1) & ~(1 << team));*/
-    groups[current_group].hit_func = Balltarget_hit_func;
-    groups[current_group].item_id = -1;
+    return Create_group(TREASURE,
+			team,
+			NONBALL_BIT,
+			Balltarget_hitfunc,
+			treasure_ind);
 }
 
 void P_end_balltarget(void)
 {
-    current_group = 0; 
+    current_group = 0;
 }
 
-void P_start_target(int team, int ind)
+int P_start_target(int target_ind)
 {
-    current_group = ++num_groups;
-    groups[current_group].type = TARGET;
-    groups[current_group].team = team;
-    groups[current_group].hit_mask = HITMASK(team);
-    groups[current_group].hit_func = NULL;
-    groups[current_group].item_id = ind;
+    target_t *targ = Targets(target_ind);
+
+    targ->group = Create_group(TARGET,
+			       targ->team,
+			       Target_hitmask(targ),
+			       NULL,
+			       target_ind);
+    return targ->group;
 }
 
 void P_end_target(void)
 {
-    current_group = 0; 
+    current_group = 0;
 }
 
-void P_start_cannon(int cx, int cy, int dir, int team, int ind)
+int P_start_cannon(int cannon_ind)
 {
-    current_group = ++num_groups;
-    groups[current_group].type = CANNON;
-    groups[current_group].team = team;
-    groups[current_group].hit_mask = HITMASK(team);
-    groups[current_group].hit_func = NULL;
-    groups[current_group].item_id = ind;
+    cannon_t *cannon = Cannons(cannon_ind);
+
+    cannon->group = Create_group(CANNON,
+				 cannon->team,
+				 Cannon_hitmask(cannon),
+				 Cannon_hitfunc,
+				 cannon_ind);
+    return cannon->group;
 }
 
 void P_end_cannon(void)
 {
-    current_group = 0; 
+    current_group = 0;
 }
 
-void P_start_wormhole(int ind)
+int P_start_wormhole(int wormhole_ind)
 {
-    current_group = ++num_groups;
-    groups[current_group].type = WORMHOLE;
-    groups[current_group].team = TEAM_NOT_SET;
-    groups[current_group].hit_mask = 0;
-    groups[current_group].hit_func = NULL;
-    groups[current_group].item_id = ind;
+    wormhole_t *wormhole = Wormholes(wormhole_ind);
+
+    return Create_group(WORMHOLE,
+			TEAM_NOT_SET,
+			Wormhole_hitmask(wormhole),
+			Wormhole_hitfunc,
+			wormhole_ind);
 }
 
 void P_end_wormhole(void)
 {
-    current_group = 0; 
+    current_group = 0;
 }
 
-void P_start_frictionarea(void)
+int P_start_frictionarea(void)
 {
-    current_group = ++num_groups;
-    groups[current_group].type = FRICTION;
-    groups[current_group].team = TEAM_NOT_SET;
-    groups[current_group].hit_mask = 0xFFFFFFFF; /* kps - hack */
-    groups[current_group].hit_func = NULL;
-    groups[current_group].item_id = -1;
+    return Create_group(FRICTION,
+			TEAM_NOT_SET,
+			ALL_BITS,
+			NULL,
+			NO_IND);
 }
 
 void P_end_frictionarea(void)
 {
-    current_group = 0; 
+    current_group = 0;
 }
 
 void P_start_decor(void)
@@ -309,8 +333,8 @@ int P_get_bmp_id(const char *s)
     for (i = 0; i < num_bstyles; i++)
 	if (!strcmp(bstyles[i].id, s))
 	    return i;
-    warn("Undeclared bmpstyle %s", s);
-    return -1;
+    warn("Broken map: Undeclared bmpstyle %s", s);
+    exit(-1);
 }
 
 
@@ -321,8 +345,8 @@ int P_get_edge_id(const char *s)
     for (i = 0; i < num_estyles; i++)
 	if (!strcmp(estyles[i].id, s))
 	    return i;
-    warn("Undeclared edgestyle %s", s);
-    return -1;
+    warn("Broken map: Undeclared edgestyle %s", s);
+    exit(-1);
 }
 
 
@@ -333,10 +357,34 @@ int P_get_poly_id(const char *s)
     for (i = 0; i < num_pstyles; i++)
 	if (!strcmp(pstyles[i].id, s))
 	    return i;
-    warn("Undeclared polystyle %s", s);
-    return -1;
+    warn("Broken map: Undeclared polystyle %s", s);
+    exit(-1);
 }
 
+/*
+ * Call given function f with group map object pointer as argument for
+ * all groups of grouptype 'type'.
+ *
+ * kps - which group numbers are ok ???
+ * Is it 1 to num_groups ???
+ */
+#if 0
+void P_grouphack(int type, void (*f)(int, void *))
+{
+    int group;
 
+    for (group = 0; group <= num_groups; group++) {
+	struct group *gp = groupptr_by_id(group);
 
+	if (gp->type == type)
+	    (*f)(group, gp->mapobj);
+    }
+}
+#endif
 
+void P_set_hitmask(int group, int hitmask)
+{
+    assert(group >= 0);
+    assert(group <= num_groups);
+    groups[group].hitmask = hitmask;
+}

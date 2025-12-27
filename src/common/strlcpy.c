@@ -1,5 +1,4 @@
-/* $Id: strlcpy.c,v 5.5 2001/05/07 20:06:09 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,10 +21,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdlib.h>
-#include "commonproto.h"
+#include "xpcommon.h"
 
-
+#ifndef HAVE_STRLCPY
 /*
     NAME
 	strlcpy
@@ -44,9 +42,9 @@
 */
 size_t strlcpy(char *dest, const char *src, size_t size)
 {
-    register char	*d = dest;
-    register const char	*s = src;
-    register char	*maxd = dest + (size - 1);
+    char	*d = dest;
+    const char	*s = src;
+    char	*maxd = dest + (size - 1);
 
     if (size > 0) {
 	while (*s && d < maxd) {
@@ -56,13 +54,13 @@ size_t strlcpy(char *dest, const char *src, size_t size)
 	}
 	*d = '\0';
     }
-    while (*s) {
+    while (*s)
 	s++;
-    }
     return (s - src);
 }
+#endif
 
-
+#ifndef HAVE_STRLCAT
 /*
     NAME
 	strlcat
@@ -81,15 +79,14 @@ size_t strlcpy(char *dest, const char *src, size_t size)
 */
 size_t strlcat(char *dest, const char *src, size_t size)
 {
-    register char	*d = dest;
-    register const char	*s = src;
-    register char	*maxd = dest + (size - 1);
-    size_t		dlen = 0;
+    char	*d = dest;
+    const char	*s = src;
+    char	*maxd = dest + (size - 1);
+    size_t	dlen = 0;
 
     if (size > 0) {
-	while (*d && d < maxd) {
+	while (*d && d < maxd)
 	    d++;
-	}
 	dlen = (d - dest);
 	while (*s && d < maxd) {
 	    *d = *s;
@@ -98,9 +95,9 @@ size_t strlcat(char *dest, const char *src, size_t size)
 	}
 	*d = '\0';
     }
-    while (*s) {
+    while (*s)
 	s++;
-    }
     return dlen + (s - src);
 }
+#endif
 

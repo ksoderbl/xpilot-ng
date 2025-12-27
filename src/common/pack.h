@@ -1,5 +1,4 @@
-/* $Id: pack.h,v 5.4 2002/01/18 22:34:26 kimiko Exp $
- *
+/*
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -99,14 +98,17 @@
  * 4.4.0.1: fast radar packet
  * 4.5.0.0: new team score packet; score packet made larger to send decimals
  * 4.5.0.1: temporary wormholes
- *
- * 4.F.1.0: Send_player(): Additional %c (is 1 when we tell a player about himself).
- * 4.F.1.1: same as 4.5.0.1, but adds the 4.F.1.0 Send_player() change
+
+ * Polygon branch
+ * 4.F.0.9: 4.3.0.0 + xp2 map format
+ * 4.F.1.0: Send_player(): Additional %c (1 when sending player's own info).
+ * 4.F.1.1: support for everything in 4.5.0.1
+ * 4.F.1.2: Show ships about to appear on bases, new team change packet.
  */
 #ifdef SERVER
-#define	MAGIC		(is_polygon_map ? 0x4F11F4ED : 0x4501F4ED)
+#define	MAGIC		(is_polygon_map ? 0x4F12F4ED : 0x4501F4ED)
 #else
-#define	MAGIC		0x4F11F4ED
+#define	MAGIC		0x4F12F4ED
 #endif
 
 #define MAGIC2VERSION(M)	(((M) >> 16) & 0xFFFF)
@@ -117,14 +119,14 @@
  * Which client versions can join this server.
  */
 #ifdef SERVER
-#define MIN_CLIENT_VERSION	(is_polygon_map ? 0x4F09 : 0x4203)
+#define MIN_CLIENT_VERSION	0x4203
 #define MAX_CLIENT_VERSION	MY_VERSION
 #endif
 
 /*
  * Which server versions can this client join.
  */
-#define MIN_SERVER_VERSION	0x3103
+#define MIN_SERVER_VERSION	0x4F09
 #define MAX_SERVER_VERSION	MY_VERSION
 
 /*
@@ -132,7 +134,7 @@
  * but make incompatible changes while developing the new format. Therefore
  * there is a separate "old" range of allowed servers.
  */
-#define MIN_OLD_SERVER_VERSION  0x3103
+#define MIN_OLD_SERVER_VERSION  0x4203
 #define MAX_OLD_SERVER_VERSION  0x4501
 /* Which old-style (non-polygon) protocol version we support. */
 #define COMPATIBILITY_MAGIC 0x4501F4ED

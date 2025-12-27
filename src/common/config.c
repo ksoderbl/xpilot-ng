@@ -1,5 +1,4 @@
-/* $Id: config.c,v 5.7 2002/01/26 13:01:01 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,139 +21,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
-
-#include "version.h"
-#include "config.h"
-
-#ifdef _WINDOWS
-/* #include "NT/winClient.h" */
-/* #include "NT/winAudio.h" */
-#endif /* _WINDOWS */
-
-
-/*
- * Configure these, that's what they're here for.
- * Explanation about all these compile time configuration options
- * is in the Makefile.std and in the Imakefile.
- */
-#ifndef LOCALGURU
-#    define LOCALGURU		"xpilot@xpilot.org"
-#endif
-
-#ifndef	DEFAULT_MAP
-#    ifdef _WINDOWS
-#         define DEFAULT_MAP		"default.xp"
-#    else
-#         define DEFAULT_MAP		"marahacked_teamcup2001.xp"
-#    endif
-#endif
-
-#ifndef LIBDIR
-#    if defined(_WINDOWS)
-#        define LIBDIR		"lib/"
-#    else
-#        define LIBDIR		"/usr/local/lib/xpilot/"
-#    endif
-#endif
-
-#ifndef DEFAULTS_FILE_NAME
-#    if defined(_WINDOWS)
-#        define DEFAULTS_FILE_NAME	LIBDIR "defaults.txt"
-#    else
-#        define DEFAULTS_FILE_NAME	LIBDIR "defaults"
-#    endif
-#endif
-
-#ifndef PLAYER_PASSWORDS_FILE_NAME
-#    if defined(_WINDOWS)
-#        define PLAYER_PASSWORDS_FILE_NAME	LIBDIR "player_passwords.txt"
-#    else
-#        define PLAYER_PASSWORDS_FILE_NAME	LIBDIR "player_passwords"
-#    endif
-#endif
-
-#ifndef PASSWORD_FILE_NAME
-#    if defined(_WINDOWS)
-#        define PASSWORD_FILE_NAME	LIBDIR "password.txt"
-#    else
-#        define PASSWORD_FILE_NAME	LIBDIR "password"
-#    endif
-#endif
-#ifndef ROBOTFILE
-#    if defined(_WINDOWS)
-#		 define	ROBOTFILE	LIBDIR "robots.txt"
-#    else
-#        define ROBOTFILE	LIBDIR "robots"
-#    endif
-#endif
-#ifndef SERVERMOTDFILE
-#    if defined(_WINDOWS)
-#	 define	SERVERMOTDFILE	LIBDIR "servermotd.txt"
-#    else
-#        define SERVERMOTDFILE	LIBDIR "servermotd"
-#    endif
-#endif
-#ifndef LOCALMOTDFILE
-#    if defined(_WINDOWS)
-#	 define	LOCALMOTDFILE	LIBDIR "localmotd.txt"
-#    else
-#        define LOCALMOTDFILE	LIBDIR "localmotd"
-#    endif
-#endif
-#ifndef LOGFILE
-#    if defined(_WINDOWS)
-#	 define	LOGFILE		LIBDIR "log.txt"
-#    else
-#        define LOGFILE		LIBDIR "log"
-#    endif
-#endif
-#ifndef MAPDIR
-#    define MAPDIR		LIBDIR "maps/"
-#endif
-#ifndef SHIP_FILE
-#    if defined(_WINDOWS)
-#	 define SHIP_FILE	"XPilot.shp"
-#    else
-#        define SHIP_FILE       ""
-#    endif
-#endif
-#ifndef TEXTUREDIR
-#    define TEXTUREDIR	LIBDIR "textures/"
-#endif
-#ifndef	SOUNDDIR
-#    define SOUNDDIR	LIBDIR "sound/"
-#endif
-
-#ifndef SOUNDFILE
-#    if defined(_WINDOWS)
-#        define SOUNDFILE	SOUNDDIR "sounds.txt"
-#    else
-#        define SOUNDFILE	SOUNDDIR "sounds"
-#    endif
-#endif
-
-#ifndef ZCAT_EXT
-#    define ZCAT_EXT	".gz"
-#endif
-
-#ifndef ZCAT_FORMAT
-#    define ZCAT_FORMAT "gzip -d -c < %s"
-#endif
-
-/*
- * Please don't change this one.
- */
-#ifndef CONTACTADDRESS
-#    define CONTACTADDRESS	"xpilot@xpilot.org"
-#endif
-
+#include "xpcommon.h"
 
 char config_version[] = VERSION;
-
-
 
 
 char *Conf_libdir(void)
@@ -207,9 +76,8 @@ char *Conf_servermotdfile(void)
     char *filename;
 
     filename = getenv(env);
-    if (filename == NULL) {
+    if (filename == NULL)
 	filename = conf;
-    }
 
     return filename;
 }
@@ -293,4 +161,52 @@ char *Conf_sounddir(void)
 
     return conf;
 }
+
+void Conf_print(void)
+{
+    xpprintf("============================================================\n");
+    xpprintf("VERSION                   = %s\n", VERSION);
+    xpprintf("PACKAGE                   = %s\n", PACKAGE);
+
+#ifdef DBE
+    xpprintf("DBE\n");
+#endif
+#ifdef MBX
+    xpprintf("MBX\n");
+#endif
+#ifdef LOG
+    xpprintf("LOG\n");
+#endif
+#ifdef SERVER_SOUND
+    xpprintf("SERVER_SOUND\n");
+#endif
+#ifdef PLOCKSERVER
+    xpprintf("PLOCKSERVER\n");
+#endif
+#ifdef DEVELOPMENT
+    xpprintf("DEVELOPMENT\n");
+#endif
+
+    xpprintf("Conf_libdir()             = %s\n", Conf_libdir());
+    xpprintf("Conf_defaults_file_name() = %s\n", Conf_defaults_file_name());
+    xpprintf("Conf_password_file_name() = %s\n", Conf_password_file_name());
+    xpprintf("Conf_player_passwords_file_name() = %s\n",
+	     Conf_player_passwords_file_name());
+    xpprintf("Conf_mapdir()             = %s\n", Conf_mapdir());
+    xpprintf("Conf_default_map()        = %s\n", Conf_default_map());
+    xpprintf("Conf_servermotdfile()     = %s\n", Conf_servermotdfile());
+    xpprintf("Conf_localmotdfile()      = %s\n", Conf_localmotdfile());
+    xpprintf("Conf_logfile()            = %s\n", Conf_logfile());
+    xpprintf("Conf_ship_file()          = %s\n", Conf_ship_file());
+    xpprintf("Conf_texturedir()         = %s\n", Conf_texturedir());
+    xpprintf("Conf_soundfile()          = %s\n", Conf_soundfile());
+    xpprintf("Conf_localguru()          = %s\n", Conf_localguru());
+    xpprintf("Conf_contactaddress()     = %s\n", Conf_contactaddress());
+    xpprintf("Conf_robotfile()          = %s\n", Conf_robotfile());
+    xpprintf("Conf_zcat_ext()           = %s\n", Conf_zcat_ext());
+    xpprintf("Conf_zcat_format()        = %s\n", Conf_zcat_format());
+    xpprintf("Conf_soundir()            = %s\n", Conf_sounddir());
+    xpprintf("============================================================\n");
+}
+
 

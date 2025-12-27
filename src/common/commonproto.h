@@ -1,5 +1,4 @@
-/* $Id: commonproto.h,v 5.6 2001/06/02 21:02:05 bertg Exp $
- *
+/*
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -25,23 +24,18 @@
 #ifndef	COMMONPROTO_H
 #define	COMMONPROTO_H
 
-#ifndef TYPES_H
-/* need DFLOAT */
-#include "types.h"
-#endif
-
 /* randommt.c */
 extern void seedMT(unsigned int seed);
 extern unsigned int reloadMT(void);
 extern unsigned int randomMT(void);
 
 /* math.c */
-extern DFLOAT rfrac(void);
+extern double rfrac(void);
 extern int mod(int x, int y);
 extern void Make_table(void);
 extern int ON(char *optval);
 extern int OFF(char *optval);
-extern DFLOAT findDir(DFLOAT x, DFLOAT y);
+extern double findDir(double x, double y);
 
 /* strdup.c */
 extern char *xp_strdup(const char *);
@@ -51,11 +45,22 @@ extern char *xp_safe_strdup(const char *old_string);
 unsigned String_hash(const char *s);
 
 /* strlcpy.c */
+#ifndef HAVE_STRLCPY
 size_t strlcpy(char *dest, const char *src, size_t size);
+#endif
+#ifndef HAVE_STRLCAT
 size_t strlcat(char *dest, const char *src, size_t size);
+#endif
+
+/* strcasecmp.c */
+#ifndef HAVE_STRCASECMP
+int strcasecmp(const char *str1, const char *str2);
+#endif
+#ifndef HAVE_STRNCASECMP
+int strncasecmp(const char *str1, const char *str2, size_t n);
+#endif
 
 /* xpmemory.c */
-
 void *xp_malloc(size_t size);
 void *xp_realloc(void *oldptr, size_t size);
 void *xp_calloc(size_t nmemb, size_t size);

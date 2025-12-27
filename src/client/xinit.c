@@ -1,5 +1,4 @@
-/* $Id: xinit.c,v 5.3 2001/06/02 21:01:45 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,40 +21,8 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <string.h>
-#include <errno.h>
-
-#ifndef _WINDOWS
-# include <unistd.h>
-# include <X11/Xlib.h>
-# include <X11/Xos.h>
-# include <X11/Xutil.h>
-#endif
-
-#ifdef _WINDOWS
-# include "../common/NT/winX.h"
-# include "NT/winclient.h"
-# include "NT/winXXPilot.h"
-#endif
-
-#include "version.h"
-#include "config.h"
-#include "const.h"
-#include "keys.h"
+#include "xpclient_x11.h"
 #include "icon.h"
-#include "paint.h"
-#include "xinit.h"
-#include "widget.h"
-#include "configure.h"
-#include "error.h"
-#include "netclient.h"
-#include "dbuff.h"
-#include "protoclient.h"
-#include "portability.h"
-#include "bitmaps.h"
 
 /*
  * Item structures.
@@ -99,35 +66,21 @@ char xinit_version[] = VERSION;
 #define ABOUT_WINDOW_WIDTH	600
 #define ABOUT_WINDOW_HEIGHT	700
 
-extern message_t	*TalkMsg[], *GameMsg[];
-extern message_t	*TalkMsg_pending[], *GameMsg_pending[];
-extern char		*HistMsg[];
-extern int		RadarHeight;
-
 /*
  * Globals.
  */
 int			ButtonHeight;
 Atom			ProtocolAtom, KillAtom;
 int			buttonColor, windowColor, borderColor;
-int			scoreColor, scoreSelfColor, scoreInactiveColor;
-int			scoreInactiveSelfColor, scoreZeroColor;
-int			quitting = false;
-int			top_width, top_height, top_x, top_y, top_posmask;
-int			draw_width, draw_height;
-int			players_width, players_height;
+bool			quitting = false;
+unsigned		top_width, top_height;
+unsigned		players_width, players_height;
 char			*geometry;
+bool			radar_score_mapped;
 bool			autoServerMotdPopup;
 bool			refreshMotd;
 Cursor			pointerControlCursor;
-char			sparkColors[MSG_LEN];
-int			spark_color[MAX_COLORS];
-int			num_spark_colors;
-int			ignoreWindowManager;
-
-static message_t	*MsgBlock = NULL;
-static message_t	*MsgBlock_pending = NULL;
-
+bool			ignoreWindowManager;
 
 /*
  * NB!  Is dependent on the order of the items in item.h!
@@ -261,7 +214,7 @@ static int Colors_callback(int, void *, const char **);
 static int Score_callback(int, void *, const char **);
 static int Player_callback(int, void *, const char **);
 
-static int button_form;
+int button_form;
 static int menu_button;
 
 const char *Item_get_text(int i)
@@ -274,22 +227,22 @@ const char *Item_get_text(int i)
  * Return font that is used for this GC, even if setting a new
  * font failed (return default font in that case).
  */
-static XFontStruct* Set_font(Display* dpy, GC gc,
+static XFontStruct* Set_font(Display* display, GC gc,
 			     const char* fontName,
 			     const char *resName)
 {
     XFontStruct*	font;
 
 #ifndef _WINDOWS
-    if ((font = XLoadQueryFont(dpy, fontName)) == NULL) {
+    if ((font = XLoadQueryFont(display, fontName)) == NULL) {
 	error("Couldn't find font '%s' for %s, using default font",
 	      fontName, resName);
-	font = XQueryFont(dpy, XGContextFromGC(gc));
+	font = XQueryFont(display, XGContextFromGC(gc));
     } else
-	XSetFont(dpy, gc, font->fid);
+	XSetFont(display, gc, font->fid);
 #else
-	font = WinXLoadFont(fontName);
-	XSetFont(dpy, gc, font->fid);
+    font = WinXLoadFont(fontName);
+    XSetFont(display, gc, font->fid);
 #endif
 
     return font;
@@ -322,35 +275,31 @@ static void Init_spark_colors(void)
 	    } while (*src &&
 		     isascii(*src) &&
 		     isdigit(*src) &&
-		     ((dst - buf) < (sizeof(buf) - 1)));
+		     ((size_t)(dst - buf) < (sizeof(buf) - 1)));
 	    *dst = '\0';
 	    src--;
 	    if (sscanf(buf, "%u", &col) == 1) {
-		if (col < (unsigned)maxColors) {
+		if (col < (unsigned)maxColors)
 		    spark_color[num_spark_colors++] = col;
-		}
 	    }
 	}
     }
     if (num_spark_colors == 0) {
 	if (maxColors <= 8) {
 	    /* 3 colors ranging from 5 up to 7 */
-	    for (i = 5; i < maxColors; i++) {
+	    for (i = 5; i < maxColors; i++)
 		spark_color[num_spark_colors++] = i;
-	    }
 	}
 	else {
 	    /* 7 colors ranging from 5 till 11 */
-	    for (i = 5; i < 12; i++) {
+	    for (i = 5; i < 12; i++)
 		spark_color[num_spark_colors++] = i;
-	    }
 	}
 	/* default spark colors always include RED. */
 	spark_color[num_spark_colors++] = RED;
     }
-    for (i = num_spark_colors; i < MAX_COLORS; i++) {
+    for (i = num_spark_colors; i < MAX_COLORS; i++)
 	spark_color[i] = spark_color[num_spark_colors - 1];
-    }
 }
 
 /*
@@ -362,7 +311,7 @@ extern int		Argc;
 extern char		myClass[];
 
 static void Init_disp_prop(Display *d, Window win,
-			   int w, int h, int x, int y,
+			   unsigned w, unsigned h, int x, int y,
 			   int flags)
 {
     XClassHint		xclh;
@@ -410,11 +359,11 @@ static void Init_disp_prop(Display *d, Window win,
 	sprintf(msg, "%s -- Server at \"%s\".", TITLE, servername);
     XStoreName(d, win, msg);
 
-    sprintf(msg, "%s:%s", name, servername);
+    sprintf(msg, "%s:%s", nickname, servername);
     XSetIconName(d, win, msg);
 
     if (d != dpy)
-	    return;
+	return;
 
     /*
      * Specify IO error handler and the WM_DELETE_WINDOW atom in
@@ -440,20 +389,19 @@ int Init_top(void)
     int					top_x, top_y;
     int					x, y;
     unsigned				w, h;
-    int					values;
+    unsigned long			values;
     int					top_flags;
     XGCValues				xgc;
     XSetWindowAttributes		sattr;
     unsigned long			mask;
 
-    if (top) {
+    if (topWindow) {
 	error("Init_top called twice");
 	exit(1);
     }
 
-    if (Colors_init() == -1) {
+    if (Colors_init() == -1)
 	return -1;
-    }
 
     if (shieldDrawMode == -1) {
 	shieldDrawMode = 0;
@@ -468,13 +416,6 @@ int Init_top(void)
 	    && ProtocolVersion (dpy) == 11)
 	    shieldDrawMode = 1;
 
-	if (useErase){
-	/*
-	 * The NeWS X server doesn't orrectly erase shields.
-	 */
-	if (!strcmp(ServerVendor(dpy), "X11/NeWS - Sun Microsystems Inc."))
-	    shieldDrawMode = 1;
-	}
     }
 #endif
 
@@ -483,91 +424,139 @@ int Init_top(void)
       xpprintf("Value of option \"" #c "\" (%d) is out of range, " \
                "setting default value " #d ".\n", c); c = d ; }
 
-    COLORCHECK(hudColor, BLUE);
-    COLORCHECK(hudLockColor, hudColor);
-    COLORCHECK(hrColor1, RED);
-    COLORCHECK(hrColor2, BLUE);
-    COLORCHECK(shipShapesHackColor, BLACK);
-    COLORCHECK(dirPtrColor, BLACK);
-    COLORCHECK(msgScanBallColor, RED);
-    COLORCHECK(msgScanCoverColor, BLUE);
-    COLORCHECK(selfLWColor, RED);
-    COLORCHECK(enemyLWColor, RED);
-    COLORCHECK(teamLWColor, 4);
-    COLORCHECK(teamShotColor, BLUE);
-    COLORCHECK(shipNameColor, BLUE);
-    COLORCHECK(baseNameColor, BLUE);
-    COLORCHECK(mineNameColor, BLUE);
-    COLORCHECK(ballColor, WHITE);
-    COLORCHECK(connColor, WHITE);
-    COLORCHECK(windowColor, BLUE);
-    COLORCHECK(buttonColor, RED);
-    COLORCHECK(borderColor, WHITE);
-    COLORCHECK(scoreColor, WHITE);
-    COLORCHECK(scoreSelfColor, RED);
-    COLORCHECK(scoreInactiveColor, 12);
-    COLORCHECK(scoreInactiveSelfColor, 12);
-    /* kps - add scoreObjectColor */
-    COLORCHECK(scoreZeroColor, 4);
-    COLORCHECK(wallColor, BLUE);
-    COLORCHECK(fuelColor, RED);
-    COLORCHECK(messagesColor, RED);
-    COLORCHECK(oldMessagesColor, BLUE);
-    COLORCHECK(decorColor, RED);
+    /* Color checks for colors with a default of 0-3. */
+    COLORCHECK(hudColor, 2);
+    COLORCHECK(hudHLineColor, 2);
+    COLORCHECK(hudVLineColor, 0);
+    COLORCHECK(hudItemsColor, 2);
+    COLORCHECK(hudLockColor, 0);
+    COLORCHECK(hudRadarOtherColor, 1);
+    COLORCHECK(hudRadarOtherColor, 2);
+    COLORCHECK(visibilityBorderColor, 2);
+    COLORCHECK(fuelGaugeColor, 2);
+    COLORCHECK(shipShapesHackColor, 0);
+    COLORCHECK(dirPtrColor, 0);
+    COLORCHECK(msgScanBallColor, 3);
+    COLORCHECK(msgScanCoverColor, 2);
+    COLORCHECK(zeroLivesColor, 1);
+    COLORCHECK(oneLifeColor, 3);
+    COLORCHECK(selfLWColor, 1);
+    COLORCHECK(teamLWColor, 2);
+    COLORCHECK(enemyLWColor, 1);
+    COLORCHECK(teamShotColor, 2);
+    COLORCHECK(shipNameColor, 2);
+    COLORCHECK(baseNameColor, 1);
+    COLORCHECK(mineNameColor, 2);
+    COLORCHECK(ballColor, 1);
+    COLORCHECK(connColor, 2);
+    COLORCHECK(fuelMeterColor, 3);
+    COLORCHECK(powerMeterColor, 3);
+    COLORCHECK(turnSpeedMeterColor, 3);
+    COLORCHECK(packetSizeMeterColor, 3);
+    COLORCHECK(packetLossMeterColor, 3);
+    COLORCHECK(packetDropMeterColor, 3);
+    COLORCHECK(packetLagMeterColor, 3);
+    COLORCHECK(temporaryMeterColor, 3);
+    COLORCHECK(meterBorderColor, 2);
+    COLORCHECK(buttonColor, 2);
+    COLORCHECK(borderColor, 1);
+    COLORCHECK(clockColor, 1);
+    COLORCHECK(scoreColor, 1);
+    COLORCHECK(scoreSelfColor, 3);
+    COLORCHECK(scoreObjectColor, hudColor);
+    COLORCHECK(wallColor, 2);
+    COLORCHECK(fuelColor, 3);
+    COLORCHECK(backgroundPointColor, 2);
+    COLORCHECK(team0Color, 0);
+    COLORCHECK(team1Color, 0);
+    COLORCHECK(team2Color, 0);
+    COLORCHECK(team3Color, 0);
+    COLORCHECK(team4Color, 0);
+    COLORCHECK(team5Color, 0);
+    COLORCHECK(team6Color, 0);
+    COLORCHECK(team7Color, 0);
+    COLORCHECK(team8Color, 0);
+    COLORCHECK(team9Color, 0);
+
+    /* Color checks for colors with a default of 4-7. */
+    if (maxColors > 4) {
+	COLORCHECK(msgScanSafeColor, 4);
+	COLORCHECK(decorColor, 6);
+	COLORCHECK(manyLivesColor, 4);
+	COLORCHECK(scoreOwnTeamColor, 4);
+    } else {
+	COLORCHECK(msgScanSafeColor, 2);
+	COLORCHECK(decorColor, 3);
+	COLORCHECK(manyLivesColor, 0);
+	COLORCHECK(scoreOwnTeamColor, 1);
+    }
+
+    /* Color checks for colors with a default of 8-15. */
+    if (maxColors > 8) {
+	COLORCHECK(msgScanPopColor, 11);
+	COLORCHECK(windowColor, 8);
+	COLORCHECK(scoreInactiveColor, 12);
+	COLORCHECK(scoreInactiveSelfColor, 12);
+	COLORCHECK(scoreEnemyTeamColor, 11);
+	COLORCHECK(messagesColor, 12);
+	COLORCHECK(oldMessagesColor, 13);
+	COLORCHECK(twoLivesColor, 11);
+    } else {
+	COLORCHECK(msgScanPopColor, 1);
+	COLORCHECK(windowColor, 2);
+	COLORCHECK(scoreInactiveColor, 1);
+	COLORCHECK(scoreInactiveSelfColor, 1);
+	COLORCHECK(scoreEnemyTeamColor, 1);
+	COLORCHECK(messagesColor, 3);
+	COLORCHECK(oldMessagesColor, 2);
+	COLORCHECK(twoLivesColor, 0);
+    }
+
 #undef COLORCHECK
 
-    if (hrSize >= SHIP_SZ || hrSize <= 0) {
-	hrSize = 6;
-    }
-    if (hrScale >= 4.0 || hrScale <= 0.5) {
-	hrScale = 1.5;
-    }
-    if (hrLimit > 5.0 || hrLimit < 0.0) {
-	hrLimit = 0.05;
-    }
-    if (hudSize >= 6 * MIN_HUD_SIZE || hudSize < MIN_HUD_SIZE) {
-	hudSize = MIN_HUD_SIZE;
-    }
-
-
-    if (scoreObjectTime > 10.0 || scoreObjectTime < 0.0) {
-	scoreObjectTime = 2.0;
-    }
-    if (baseWarningType > 3 || baseWarningType < 0) {
-	baseWarningType = 1;
-    }
     if (wallRadarColor >= maxColors
-	|| ((wallRadarColor & 5) && colorSwitch)) {
+	|| ((wallRadarColor & 5) && colorSwitch))
 	wallRadarColor = BLUE;
-    }
+
     if (targetRadarColor >= maxColors
-	|| ((targetRadarColor & 1) && colorSwitch)) {
+	|| ((targetRadarColor & 1) && colorSwitch))
 	/* should be & 5? !@# */
 	targetRadarColor = BLUE;
-    }
-
-    if (charsPerSecond > 255 || charsPerSecond < 10) {
-	charsPerSecond = 50;
-    }
 
     if (decorRadarColor >= maxColors
-	|| ((decorRadarColor & 5) && colorSwitch)) {
+	|| ((decorRadarColor & 5) && colorSwitch))
 	decorRadarColor = 2;
-    }
+
+#define OPTIONCHECK(o, cmp1, max, cmp2, min, fmt, d) \
+    if (o cmp1 (max) || o cmp2 (min)) { \
+      xpprintf("Value of option \"" #o "\" (" fmt ") is out of range, " \
+               "setting default value " #d ".\n", o); \
+      o = d ; }
+
+    OPTIONCHECK(hudRadarDotSize, >=, SHIP_SZ, <=, 0,   "%d",   6);
+    OPTIONCHECK(hudRadarScale,   >,  5.0,     <,  0.5, "%.2f", 1.5);
+    OPTIONCHECK(hudRadarLimit,   >,  5.0,     <,  0.0, "%.2f", 0.05);
+    OPTIONCHECK(hudSize,
+		>=, 6 * MIN_HUD_SIZE, <, MIN_HUD_SIZE, \
+		"%d", MIN_HUD_SIZE);
+    OPTIONCHECK(scoreObjectTime, >,  10.0,    <,  0.0, "%.2f", 3.0);
+    OPTIONCHECK(baseWarningType, >,  3,       <,  0,   "%d",   2);
+    OPTIONCHECK(charsPerSecond,  >,  255,     <,  10,  "%d",   50);
+#undef OPTIONCHECK
 
     shieldDrawMode = shieldDrawMode ? LineSolid : LineOnOffDash;
-    radarDrawRectanglePtr = (mono ? XDrawRectangle : XFillRectangle);
+    radarDrawRectanglePtr = XFillRectangle;
 
     /*
      * Get toplevel geometry.
      */
 #ifndef _WINDOWS
     top_flags = 0;
-    if (geometry != NULL && geometry[0] != '\0') {
+    if (geometry != NULL && geometry[0] != '\0')
 	mask = XParseGeometry(geometry, &x, &y, &w, &h);
-    } else {
+    else
 	mask = 0;
-    }
+
     if ((mask & WidthValue) != 0) {
 	top_width = w;
 	top_flags |= USSize;
@@ -585,22 +574,20 @@ int Init_top(void)
     }
     LIMIT(top_height, MIN_TOP_HEIGHT, MAX_TOP_HEIGHT);
     if ((mask & XValue) != 0) {
-	if ((mask & XNegative) != 0) {
+	if ((mask & XNegative) != 0)
 	    top_x = DisplayWidth(dpy, DefaultScreen(dpy)) - top_width + x;
-	} else {
+	else
 	    top_x = x;
-	}
 	top_flags |= USPosition;
     } else {
 	top_x = (DisplayWidth(dpy, DefaultScreen(dpy)) - top_width) /2;
 	top_flags |= PPosition;
     }
     if ((mask & YValue) != 0) {
-	if ((mask & YNegative) != 0) {
+	if ((mask & YNegative) != 0)
 	    top_y = DisplayHeight(dpy, DefaultScreen(dpy)) - top_height + y;
-	} else {
+	else
 	    top_y = y;
-	}
 	top_flags |= USPosition;
     } else {
 	top_y = (DisplayHeight(dpy, DefaultScreen(dpy)) - top_height) /2;
@@ -628,51 +615,51 @@ int Init_top(void)
 	sattr.override_redirect = True;
 	mask |= CWOverrideRedirect;
     }
-    top = XCreateWindow(dpy,
-			DefaultRootWindow(dpy),
-			top_x, top_y,
-			top_width, top_height,
-			0, dispDepth,
-			InputOutput, visual,
-			mask, &sattr);
-    XSelectInput(dpy, top,
+    topWindow = XCreateWindow(dpy,
+			      DefaultRootWindow(dpy),
+			      top_x, top_y,
+			      top_width, top_height,
+			      0, (int)dispDepth,
+			      InputOutput, visual,
+			      mask, &sattr);
+    XSelectInput(dpy, topWindow,
 		 KeyPressMask | KeyReleaseMask
 		 | FocusChangeMask | StructureNotifyMask);
-    Init_disp_prop(dpy, top, top_width, top_height, top_x, top_y, top_flags);
+    Init_disp_prop(dpy, topWindow, top_width, top_height,
+		   top_x, top_y, top_flags);
     if (kdpy) {
 	int scr = DefaultScreen(kdpy);
-	keyboard = XCreateSimpleWindow(kdpy,
-				       DefaultRootWindow(kdpy),
-				       top_x, top_y,
-				       top_width, top_height,
-				       0, 0, BlackPixel(dpy, scr));
-	XSelectInput(kdpy, keyboard,
+	keyboardWindow = XCreateSimpleWindow(kdpy,
+					     DefaultRootWindow(kdpy),
+					     top_x, top_y,
+					     top_width, top_height,
+					     0, 0, BlackPixel(dpy, scr));
+	XSelectInput(kdpy, keyboardWindow,
 		     KeyPressMask | KeyReleaseMask | FocusChangeMask);
-	Init_disp_prop(kdpy, keyboard, top_width, top_height,
+	Init_disp_prop(kdpy, keyboardWindow, top_width, top_height,
 		       top_x, top_y, top_flags);
     }
 #else	/* _WINDOWS */
-	/* MFC already gave us a nice top window...use it */
-	{
-		XRectangle	rect;
-		WinXGetWindowRectangle(0, &rect);
-		top_x = rect.x;
-		top_y = rect.y;
-		top_width = rect.width;
-		top_height = rect.height;
-	}
+    /* MFC already gave us a nice top window...use it */
+    {
+	XRectangle	rect;
+	WinXGetWindowRectangle(0, &rect);
+	top_x = rect.x;
+	top_y = rect.y;
+	top_width = rect.width;
+	top_height = rect.height;
+    }
 #endif	/* _WINDOWS */
 
 #ifndef _WINDOWS
     /*
      * Create item bitmaps
      */
-    for (i = 0; i < NUM_ITEMS; i++) {
+    for (i = 0; i < NUM_ITEMS; i++)
 	itemBitmaps[i]
-	    = XCreateBitmapFromData(dpy, top,
+	    = XCreateBitmapFromData(dpy, topWindow,
 				    (char *)itemBitmapData[i].data,
 				    ITEM_SIZE, ITEM_SIZE);
-    }
 
     /*
      * Creates and initializes the graphic contexts.
@@ -685,29 +672,21 @@ int Init_top(void)
     values
 	= GCLineWidth|GCLineStyle|GCCapStyle|GCJoinStyle|GCGraphicsExposures;
 
-    messageGC
-	= XCreateGC(dpy, top, values, &xgc);
-    radarGC
-	= XCreateGC(dpy, top, values, &xgc);
-    buttonGC
-	= XCreateGC(dpy, top, values, &xgc);
-    scoreListGC
-	= XCreateGC(dpy, top, values, &xgc);
-    textGC
-	= XCreateGC(dpy, top, values, &xgc);
-    talkGC
-	= XCreateGC(dpy, top, values, &xgc);
-    motdGC
-	= XCreateGC(dpy, top, values, &xgc);
-    gc
-	= XCreateGC(dpy, top, values, &xgc);
-    XSetBackground(dpy, gc, colors[BLACK].pixel);
+    messageGC	= XCreateGC(dpy, topWindow, values, &xgc);
+    radarGC	= XCreateGC(dpy, topWindow, values, &xgc);
+    buttonGC	= XCreateGC(dpy, topWindow, values, &xgc);
+    scoreListGC	= XCreateGC(dpy, topWindow, values, &xgc);
+    textGC	= XCreateGC(dpy, topWindow, values, &xgc);
+    talkGC	= XCreateGC(dpy, topWindow, values, &xgc);
+    motdGC	= XCreateGC(dpy, topWindow, values, &xgc);
+    gameGC	= XCreateGC(dpy, topWindow, values, &xgc);
+    XSetBackground(dpy, gameGC, colors[BLACK].pixel);
 
     /*
      * Set fonts
      */
     gameFont
-	= Set_font(dpy, gc, gameFontName, "gameFont");
+	= Set_font(dpy, gameGC, gameFontName, "gameFont");
     messageFont
 	= Set_font(dpy, messageGC, messageFontName, "messageFont");
     scoreListFont
@@ -721,7 +700,7 @@ int Init_top(void)
     motdFont
 	= Set_font(dpy, motdGC, motdFontName, "motdFont");
 
-    XSetState(dpy, gc,
+    XSetState(dpy, gameGC,
 	      WhitePixel(dpy, DefaultScreen(dpy)),
 	      BlackPixel(dpy, DefaultScreen(dpy)),
 	      GXcopy, AllPlanes);
@@ -742,17 +721,10 @@ int Init_top(void)
 	      BlackPixel(dpy, DefaultScreen(dpy)),
 	      GXcopy, AllPlanes);
 
-    if (dbuf_state->type == COLOR_SWITCH) {
-	XSetPlaneMask(dpy, gc, dbuf_state->drawing_planes);
-    }
+    if (dbuf_state->type == COLOR_SWITCH)
+	XSetPlaneMask(dpy, gameGC, dbuf_state->drawing_planes);
 
 #endif
-
-    if (mono) {
-	buttonColor = BLACK;
-	windowColor = BLACK;
-	borderColor = WHITE;
-    }
 
     return 0;
 }
@@ -772,10 +744,9 @@ int Init_playing_windows(void)
     int				i;
 #endif
 
-    if (!top) {
-	if (Init_top()) {
+    if (!topWindow) {
+	if (Init_top())
 	    return -1;
-	}
     }
 
     Scale_dashes();
@@ -786,48 +757,50 @@ int Init_playing_windows(void)
     /*
      * What follows is poor code.  WinX needs to know beforehand if its
      * dealing with draw because it might want to create 2 bitmaps for it.
-     * Since i know draw is the first window created (after top), i can cheat it.
+     * Since i know draw is the first window created (after top),
+     * i can cheat it.
      */
-    draw = 1;
+    drawWindow = 1;
 #endif
-    draw = XCreateSimpleWindow(dpy, top, 258, 0,
-			       draw_width, draw_height,
-			       0, 0, colors[BLACK].pixel);
-    IFWINDOWS( if (draw != 1) error("draw != 1") );
-    radar = XCreateSimpleWindow(dpy, top, 0, 0,
-				256, RadarHeight, 0, 0,
-				colors[BLACK].pixel);
+    drawWindow = XCreateSimpleWindow(dpy, topWindow, 258, 0,
+				     draw_width, draw_height,
+				     0, 0, colors[BLACK].pixel);
+    IFWINDOWS( if (drawWindow != 1) error("draw != 1") );
+    radarWindow = XCreateSimpleWindow(dpy, topWindow, 0, 0,
+				      256, RadarHeight, 0, 0,
+				      colors[BLACK].pixel);
+    radar_score_mapped = true;
 
 #ifdef _WINDOWS
-    WinXSetEventMask(draw, NoEventMask);
+    WinXSetEventMask(drawWindow, NoEventMask);
     radar_exposures = 1;
-    radarGC = WinXCreateWinDC(radar);
-    gc = WinXCreateWinDC(draw);
+    radarGC = WinXCreateWinDC(radarWindow);
+    gc = WinXCreateWinDC(drawWindow);
 
-    textWindow = XCreateSimpleWindow(dpy, top, 0, 0,
-				0, 0, 0, 0,
-				colors[BLACK].pixel);
+    textWindow = XCreateSimpleWindow(dpy, topWindow, 0, 0,
+				     0, 0, 0, 0,
+				     colors[BLACK].pixel);
     textGC = WinXCreateWinDC(textWindow);
 
-    msgWindow = XCreateSimpleWindow(dpy, top, 0, 0,
-				0, 0, 0, 0,
-				colors[BLACK].pixel);
+    msgWindow = XCreateSimpleWindow(dpy, topWindow, 0, 0,
+				    0, 0, 0, 0,
+				    colors[BLACK].pixel);
     messageGC = WinXCreateWinDC(msgWindow);
-    motdGC = WinXCreateWinDC(top);
+    motdGC = WinXCreateWinDC(topWindow);
 
-    for (i = 0; i < MAX_COLORS; i++) {
+    for (i = 0; i < MAX_COLORS; i++)
 	colors[i].pixel = i;
-    }
+
     players_exposed = 1;
-    /* p_radar = XCreatePixmap(dpy, radar, 256, RadarHeight, dispDepth); */
-    s_radar = XCreatePixmap(dpy, radar, 256, RadarHeight, dispDepth);
+    /* radarPixmap = XCreatePixmap(dpy, radar, 256, RadarHeight, dispDepth); */
+    radarPixmap2 = XCreatePixmap(dpy, radarWindow, 256, RadarHeight, dispDepth);
     /*
      * Create item bitmaps AFTER the windows
      */
     WinXCreateItemBitmaps();
     /* create the fonts AFTER the windows */
     gameFont
-	= Set_font(dpy, gc, gameFontName, "gameFont");
+	= Set_font(dpy, gameGC, gameFontName, "gameFont");
     messageFont
 	= Set_font(dpy, messageGC, messageFontName, "messageFont");
     textFont
@@ -835,9 +808,9 @@ int Init_playing_windows(void)
     motdFont
 	= Set_font(dpy, motdGC, motdFontName, "motdFont");
 
-    buttonWindow = XCreateSimpleWindow(dpy, top, 0, 0,
-				0, 0, 0, 0,
-				colors[BLACK].pixel);
+    buttonWindow = XCreateSimpleWindow(dpy, topWindow, 0, 0,
+				       0, 0, 0, 0,
+				       colors[BLACK].pixel);
     buttonGC = WinXCreateWinDC(buttonWindow);
     buttonFont
 	= Set_font(dpy, buttonGC, buttonFontName, "buttonFont");
@@ -848,8 +821,8 @@ int Init_playing_windows(void)
     ButtonHeight = buttonFont->ascent + buttonFont->descent + 2*BTN_BORDER;
 
     button_form
-	= Widget_create_form(0, top,
-			     0, RadarHeight,
+	= Widget_create_form(0, topWindow,
+			     0, (int)RadarHeight,
 			     256, ButtonHeight + 2,
 			     0);
     Widget_create_activate(button_form,
@@ -888,9 +861,9 @@ int Init_playing_windows(void)
     /* Create score list window */
     players_width = RadarWidth;
     players_height = top_height - (RadarHeight + ButtonHeight + 2);
-    players
-	= XCreateSimpleWindow(dpy, top,
-			      0, RadarHeight + ButtonHeight + 2,
+    playersWindow
+	= XCreateSimpleWindow(dpy, topWindow,
+			      0, (int)RadarHeight + ButtonHeight + 2,
 			      players_width, players_height,
 			      0, 0,
 			      colors[windowColor].pixel);
@@ -903,15 +876,13 @@ int Init_playing_windows(void)
     /*
      * Selecting the events we can handle.
      */
-    XSelectInput(dpy, radar, ExposureMask);
-    XSelectInput(dpy, players, ExposureMask);
+    XSelectInput(dpy, radarWindow, ExposureMask);
+    XSelectInput(dpy, playersWindow, ExposureMask);
 #ifndef _WINDOWS
-    if (!selectionAndHistory) {
-	XSelectInput(dpy, draw, 0);
-    } else {
-	XSelectInput(dpy, draw, ButtonPressMask | ButtonReleaseMask);
-    }
-
+    if (!selectionAndHistory)
+	XSelectInput(dpy, drawWindow, 0);
+    else
+	XSelectInput(dpy, drawWindow, ButtonPressMask | ButtonReleaseMask);
 
     /*
      * Initialize misc. pixmaps if we're not color switching.
@@ -920,35 +891,44 @@ int Init_playing_windows(void)
     switch (dbuf_state->type) {
 
     case PIXMAP_COPY:
-	p_radar = XCreatePixmap(dpy, radar, 256, RadarHeight, dispDepth);
-	s_radar = XCreatePixmap(dpy, radar, 256, RadarHeight, dispDepth);
-	p_draw  = XCreatePixmap(dpy, draw, draw_width, draw_height, dispDepth);
+	radarPixmap
+	    = XCreatePixmap(dpy, radarWindow, 256, RadarHeight, dispDepth);
+	radarPixmap2
+	    = XCreatePixmap(dpy, radarWindow, 256, RadarHeight, dispDepth);
+	drawPixmap
+	    = XCreatePixmap(dpy, drawWindow, draw_width, draw_height,
+			    dispDepth);
 	break;
 
     case MULTIBUFFER:
-	p_radar = XCreatePixmap(dpy, radar, 256, RadarHeight, dispDepth);
-	s_radar = XCreatePixmap(dpy, radar, 256, RadarHeight, dispDepth);
+	radarPixmap
+	    = XCreatePixmap(dpy, radarWindow, 256, RadarHeight, dispDepth);
+	radarPixmap2
+	    = XCreatePixmap(dpy, radarWindow, 256, RadarHeight, dispDepth);
 	dbuff_init_buffer(dbuf_state);
 	break;
 
     case COLOR_SWITCH:
-	s_radar = radar;
-	p_radar = radar;
-	p_draw = draw;
+	radarPixmap2 = radarWindow;
+	radarPixmap = radarWindow;
+	drawPixmap = drawWindow;
 	Paint_sliding_radar();
+	break;
+
+    default:
+	assert(0 && "Init_playing_windows: unknown dbuf state type.");
 	break;
     }
 
     XAutoRepeatOff(dpy);	/* We don't want any autofire, yet! */
-    if (kdpy) {
+    if (kdpy)
 	XAutoRepeatOff(kdpy);
-    }
 
     /*
      * Define a blank cursor for use with pointer control
      */
-    XQueryBestCursor(dpy, draw, 1, 1, &w, &h);
-    pix = XCreatePixmap(dpy, draw, w, h, 1);
+    XQueryBestCursor(dpy, drawWindow, 1, 1, &w, &h);
+    pix = XCreatePixmap(dpy, drawWindow, w, h, 1);
     cursorGC = XCreateGC(dpy, pix, 0, NULL);
     XSetForeground(dpy, cursorGC, 0);
     XFillRectangle(dpy, pix, cursorGC, 0, 0, w, h);
@@ -960,17 +940,17 @@ int Init_playing_windows(void)
     /*
      * Maps the windows, makes the visible. Voila!
      */
-    XMapSubwindows(dpy, top);
-    XMapWindow(dpy, top);
+    XMapSubwindows(dpy, topWindow);
+    XMapWindow(dpy, topWindow);
     XSync(dpy, False);
 
     if (kdpy) {
-	XMapWindow(kdpy, keyboard);
+	XMapWindow(kdpy, keyboardWindow);
 	XSync(kdpy, False);
     }
 #else
-	/* WinXSetEvent(players, WM_PAINT, WinXPaintPlayers); */
-	pointerControlCursor = !None;
+    /* WinXSetEvent(players, WM_PAINT, WinXPaintPlayers); */
+    pointerControlCursor = !None;
 #endif
 
     Init_spark_colors();
@@ -979,158 +959,106 @@ int Init_playing_windows(void)
 }
 
 #ifdef _WINDOWS
-void WinXCreateItemBitmaps()
+void WinXCreateItemBitmaps(void)
 {
     int			i;
 
     for (i = 0; i < NUM_ITEMS; i++) {
 	itemBitmaps[i][ITEM_HUD]
-	    = WinXCreateBitmapFromData(dpy, draw,
+	    = WinXCreateBitmapFromData(dpy, drawWindow,
 				       (char *)itemBitmapData[i].data,
-				       ITEM_SIZE, ITEM_SIZE, colors[hudColor].pixel);
+				       ITEM_SIZE, ITEM_SIZE,
+				       colors[hudColor].pixel);
 	itemBitmaps[i][ITEM_PLAYFIELD]
-	    = WinXCreateBitmapFromData(dpy, draw,
+	    = WinXCreateBitmapFromData(dpy, drawWindow,
 				       (char *)itemBitmapData[i].data,
-				       ITEM_SIZE, ITEM_SIZE, colors[RED].pixel);
+				       ITEM_SIZE, ITEM_SIZE,
+				       colors[RED].pixel);
     }
-    Colors_init_block_bitmaps();
+    Colors_init_bitmaps();
     
 }
 #endif
 
-int Alloc_msgs(void)
-{
-    message_t		*x, *x2 = 0;
-    int			i;
-
-    if ((x = (message_t *)malloc(2 * MAX_MSGS * sizeof(message_t))) == NULL){
-	error("No memory for messages");
-	return -1;
-    }
-
-#ifndef _WINDOWS
-    if (selectionAndHistory &&
-	((x2 = (message_t *)malloc(2 * MAX_MSGS * sizeof(message_t))) == NULL)){
-	error("No memory for history messages");
-	free(x);
-	return -1;
-    }
-    if (selectionAndHistory) {
-	MsgBlock_pending	= x2;
-    }
-#endif
-
-    MsgBlock		= x;
-
-    for (i = 0; i < 2 * MAX_MSGS; i++) {
-	if (i < MAX_MSGS) {
-	    TalkMsg[i] = x;
-	    IFNWINDOWS( if (selectionAndHistory) TalkMsg_pending[i] = x2 );
-	} else {
-	    GameMsg[i - MAX_MSGS] = x;
-	    IFNWINDOWS( if (selectionAndHistory) GameMsg_pending[i - MAX_MSGS] = x2 );
-	}
-	x->txt[0] = '\0';
-	x->len = 0;
-	x->lifeTime = 0.0;
-	x++;
-
-#ifndef _WINDOWS
-	if (selectionAndHistory) {
-	    x2->txt[0] = '\0';
-	    x2->len = 0;
-	    x2->lifeTime = 0.0;
-	    x2++;
-	}
-#endif
-    }
-    return 0;
-}
-
-void Free_msgs(void)
-{
-    if (MsgBlock) {
-	free(MsgBlock);
-	MsgBlock = NULL;
-    }
-
-#ifndef _WINDOWS
-    if (MsgBlock_pending) {
-	free(MsgBlock_pending);
-	MsgBlock_pending = NULL;
-    }
-#endif
-}
-
-
 static int Config_callback(int widget_desc, void *data, const char **str)
 {
+    (void)widget_desc; (void)data; (void)str;
     Config(true, CONFIG_DEFAULT);
     return 0;
 }
 
 static int Colors_callback(int widget_desc, void *data, const char **str)
 {
+    (void)widget_desc; (void)data; (void)str;
     Config(true, CONFIG_COLORS);
     return 0;
 }
 
 static int Score_callback(int widget_desc, void *data, const char **str)
 {
+    (void)widget_desc; (void)data; (void)str;
     Config(false, CONFIG_NONE);
     if (showRealName != false) {
 	showRealName = false;
-	scoresChanged = 1;
+	scoresChanged = true;
     }
     return 0;
 }
 
 static int Player_callback(int widget_desc, void *data, const char **str)
 {
+    (void)widget_desc; (void)data; (void)str;
     Config(false, CONFIG_NONE);
     if (showRealName != true) {
 	showRealName = true;
-	scoresChanged = 1;
+	scoresChanged = true;
     }
     return 0;
 }
 
 static int Quit_callback(int widget_desc, void *data, const char **str)
 {
+    (void)widget_desc; (void)data; (void)str;
     quitting = true;
     return 0;
 }
 
-
-void Resize(Window w, int width, int height)
+void Raise_window(void)
 {
-    if (w != top) {
+    XMapRaised(dpy, topWindow);
+}
+
+void Resize(Window w, unsigned width, unsigned height)
+{
+    if (w != topWindow)
 	return;
-    }
+
     /* ignore illegal resizes */
     LIMIT(width, MIN_TOP_WIDTH, MAX_TOP_WIDTH);
     LIMIT(height, MIN_TOP_HEIGHT, MAX_TOP_HEIGHT);
-    if (width == top_width && height == top_height) {
-	return;
-    }
     top_width = width;
     top_height = height;
-    if (!draw) {
+    if (!drawWindow)
 	return;
-    }
-    draw_width = top_width - 258;
+
+    if (radar_score_mapped)
+	draw_width = top_width - 258;
+    else
+	draw_width = top_width;
     draw_height = top_height;
-    Send_display();
+
+    Check_view_dimensions();
     Net_flush();
-    XResizeWindow(dpy, draw, draw_width, draw_height);
+    XResizeWindow(dpy, drawWindow, draw_width, draw_height);
 #ifndef _WINDOWS
     if (dbuf_state->type == PIXMAP_COPY) {
-	XFreePixmap(dpy, p_draw);
-	p_draw = XCreatePixmap(dpy, draw, draw_width, draw_height, dispDepth);
+	XFreePixmap(dpy, drawPixmap);
+	drawPixmap = XCreatePixmap(dpy, drawWindow, draw_width, draw_height,
+				   dispDepth);
     }
 #endif
     players_height = top_height - (RadarHeight + ButtonHeight + 2);
-    XResizeWindow(dpy, players,
+    XResizeWindow(dpy, playersWindow,
 		  players_width, players_height);
 #ifdef _WINDOWS
     WinXResize();
@@ -1163,13 +1091,13 @@ void Quit(void)
 	button_form = 0;
     }
 #endif
-    Free_msgs();
     Widget_cleanup();
 }
 
 
-int FatalError(Display *dpy)
+int FatalError(Display *display)
 {
+    (void)display;
     Net_cleanup();
     /*
      * Quit(&client);
@@ -1179,7 +1107,7 @@ int FatalError(Display *dpy)
     return(0);
 }
 
-void Scale_dashes()
+void Scale_dashes(void)
 {
     dashes[0] = WINSCALE(8);
     dashes[1] = WINSCALE(4);
@@ -1187,5 +1115,5 @@ void Scale_dashes()
     cdashes[0] = WINSCALE(3);
     cdashes[1] = WINSCALE(9);
 
-    XSetDashes(dpy, gc, 0, dashes, NUM_DASHES);
+    XSetDashes(dpy, gameGC, 0, dashes, NUM_DASHES);
 }

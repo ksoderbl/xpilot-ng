@@ -1,5 +1,4 @@
-/* $Id: sched.c,v 5.6 2001/11/29 14:48:12 bertg Exp $
- *
+/*
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,47 +21,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <signal.h>
-#include <errno.h>
-#include <time.h>
-#include <sys/types.h>
-
-#ifndef _WINDOWS
-# include <unistd.h>
-# ifndef __hpux
-#  include <sys/time.h>
-# endif
-# ifdef _AIX
-#  include <sys/select.h> /* _BSD not defined in <sys/types.h>, so done by hand */
-# endif
-#endif
-
-#ifdef _OS2_
-	#define  INCL_DOSSEMAPHORES
-	#define  INCL_DOSDATETIME
-	#define  INCL_DOSPROCESS
-	#include <os2emx.h>
-#endif
-
-#ifdef _WINDOWS
-# include "NT/winServer.h"
-# include "NT/winSvrThread.h"
-#endif
-
-#define	SERVER
-#include "version.h"
-#include "config.h"
-#include "serverconst.h"
-#include "error.h"
-#include "types.h"
-#include "sched.h"
-#include "global.h"
-#include "srecord.h"
-
-#include "portability.h"
+#include "xpserver.h"
 
 char sched_version[] = VERSION;
 
@@ -132,110 +91,17 @@ void allow_timer(void)
 static void catch_timer(int signum)
 {
     static unsigned int		timer_count = 0;
-#ifdef OS2DEBUG
-    static int counter = 0;
-    /*  Should get one dot per second for 14 FPS  */
-    if( (++counter) > 13 )
-    {
-	counter = 0;
-    	printf( "." );
-	fflush( stdout );
-    }
-#endif
+
     timer_count += FPS;
     if (timer_count >= (unsigned)timerResolution) {
 	timer_count -= timerResolution;
 	timer_ticks++;
+	if (timer_count >= (unsigned)timerResolution)
+	    /* Don't let timer_count grow boundlessly with timerResolution 0
+	     * now that timerResolution can be changed at runtime. */
+	    timer_count = 0;
     }
 }
-
-
-#ifdef _OS2_
-/*
- *  Thread to catch the OS/2 timer.  Raise a SIGALRM on the main thread
- *  at each timer tick.  I.e., perform the function of setitimer in Unix.
- */
-void timerThread( void *arg )
-{
-	ULONG count;         /*  Post count of hev.  Required by call.  */
-	ULONG pid = 0;       /*  Process ID for this process  */
-	PTIB  ptib = NULL;   /*  Thread Information Block     */
-	PPIB  ppib = NULL;   /*  Process Information Block    */
-
-	HEV     hev;         /*  Event semaphore handle  */
-	HTIMER  htimer;      /*  Timer handle            */
-
-	APIRET  rc;          /*  Return code for Dos* calls  */
-
-	#ifdef OS2DEBUG
-	        ULONG  aulSysInfo[1] = {0};
-		DosQuerySysInfo( 22, 22, (PVOID)aulSysInfo, sizeof(ULONG) );
-		printf( "Timer interval in tenths of milliseconds: %ld\n", aulSysInfo[0] );
-	#endif
-
-	#ifdef OS2DEBUG
-		printf( "Entering timer processing thread.  Will set for %ld FPS.\n", timer_freq );
-	#endif
-
-	/*  Get the ID of this process, so we can send a SIGALRM
-	 *  to the main thread.
-	 */
-	if( rc = DosGetInfoBlocks( &ptib, &ppib ) )
-	{
-		error("Error getting process information.  rc = %d", rc );
-		exit( 1 );
-	}
-
-	pid = ppib->pib_ulpid;
-
-	/*  Increase the priority of this thread to regular time critical.
-	 *  This should ensure that our timer ticks get delivered as quickly
-	 *  as possible.
-	 */
-	if( rc = DosSetPriority(  PRTYS_THREAD, PRTYC_TIMECRITICAL, 0L, 0L ) )
-	{
-		error("Error setting timer thread priority.  rc = %d", rc );
-		exit(1);
-	}
-
-	/*  Create the event semaphore that will be posted by the timer.  */
-	if( rc = DosCreateEventSem( NULL, &hev, DC_SEM_SHARED, FALSE ) )
-	{
-		error("DosCreateEventSem - error creating timer semaphore.  rc = %d", rc );
-		exit( 1 );
-	}
-
-	/*  Start the timer.  The semaphore hev will be posted at each
-	 *  timer tick.
-	 */
-	if( rc = DosStartTimer( 1000/timer_freq, (HSEM)hev, &htimer ) )
-	{
-		error("DosStartTimer - error starting timer.  rc = %d", rc );
-		exit( 1 );
-	}
-
-	/*  Now just loop forever, waiting for the timer and then
-	 *  signalling a SIGALRM on the main thread.
-	 */
-	while( 1 )
-	{
-		/*  Wait for the timer tick.  */
-		DosWaitEventSem( hev, SEM_INDEFINITE_WAIT );
-
-		/*  Reset the semaphore.  */
-		DosResetEventSem( hev, &count );
-
-		/*  raise( SIGALRM ) sends the signal to this thread,
-		 *  not to the main thread where we have the handler
-		 *  installed.  So, we must use kill( ) instead to raise
-		 *  the signal.
-		 */
-		kill( pid, SIGALRM );
-	}
-	return;
-}
-
-#endif
 
 
 /*
@@ -246,9 +112,7 @@ static void setup_timer(void)
 {
 #ifndef _WINDOWS
 
-#ifndef _OS2_
     struct itimerval itv;
-#endif
     struct sigaction act;
 
     /*
@@ -276,7 +140,6 @@ static void setup_timer(void)
 	exit(1);
     }
 
-#ifndef _OS2_
     itv.it_interval.tv_sec = 0;
     itv.it_interval.tv_usec = 1000000 / timer_freq;
     itv.it_value = itv.it_interval;
@@ -284,24 +147,6 @@ static void setup_timer(void)
 	error("setitimer");
 	exit(1);
     }
-#else  /*  !defined( _OS2_ )  */
-
-    /*  setitimer  isn't implemented in EMX, so we must fake our
-     *  own.  Create a thread that starts a timer and raises SIGALRM
-     *  at each tick.
-     *
-     *  Of course, this timer is rather course, given the time-slicing
-     *  of OS/2, but it is the best we can do at the moment.  The next
-     *  step is to look into the high-resolution timer that Timur Tabi
-     *  wrote (which, I believe, is now part of OS/2?).
-     */
-
-    if( _beginthread( timerThread, NULL, 8192L, NULL ) == -1 ) {
-	error("_beginthread - error starting timer thread");
-	exit( 1 );
-    }
-
-#endif  /*  !defined( _OS2_ )  */
 
     timers_used = timer_ticks;
     time(&current_time);
@@ -326,17 +171,19 @@ static void setup_timer(void)
 #ifndef _WINDOWS
 void install_timer_tick(void (*func)(void), int freq)
 {
-    timer_handler = func;
+    if (func != NULL) /* NULL to change freq, keep same handler */
+	timer_handler = func;
     timer_freq = freq;
     setup_timer();
-} 
+}
 #else
 
 typedef void (__stdcall *windows_timer_t)(void *, unsigned int, unsigned int, unsigned long);
 
 void install_timer_tick(windows_timer_t func, int freq)
 {
-    timer_handler = (TIMERPROC)func;
+    if (func != NULL)
+	timer_handler = (TIMERPROC)func;
     timer_freq = freq;
     setup_timer();
 }
@@ -581,9 +428,6 @@ void stop_sched(void)
 }
 
 
-extern int End_game(void);
-
-
 static void sched_select_error(void)
 {
 #ifndef _WINDOWS
@@ -602,11 +446,12 @@ static void sched_select_error(void)
 
 /*
  * I/O + timer dispatcher.
- * Windows pumps this one time 
+ * Windows pumps this one time
  */
 
 unsigned long skip_to = 0;
 
+#ifndef _WINDOWS
 void sched(void)
 {
     int			i, n, io_todo = 3;
@@ -614,7 +459,6 @@ void sched(void)
 
     playback = rplayback;
 
-#ifndef _WINDOWS
     if (sched_running) {
 	error("sched already running");
 	exit(1);
@@ -627,25 +471,6 @@ void sched(void)
 	tv.tv_sec = 0;
 	tv.tv_usec = 0;
 
-#else
-
-	if (NumPlayers > NumRobots + NumPseudoPlayers
-	    || login_in_progress != 0
-	    || NumQueuedPlayers > 0) {
-
-	    /* need fast I/O checks now! (2 or 3 times per frames) */
-	    tv.tv_sec = 0;
-	    /* KOERBER */
-	    /*	tv.tv_usec = 1000000 / (3 * timer_freq + 1); */
-	    tv.tv_usec = 1000000 / (10 * timer_freq + 1); 
-	}
-	else {
-	    /* slow I/O checks are possible here... (2 times per second) */ ; 
-	    tv.tv_sec = 0;
-	    tv.tv_usec = 500000;
-	}
-
-#endif
 	if (main_loops < skip_to && timers_used >= timer_ticks)
 	    timer_ticks++;
 	if (io_todo == 0 && timers_used < timer_ticks) {
@@ -667,11 +492,9 @@ void sched(void)
 	    }
 	    else if (record)
 		*playback_sched++ = 0;
-#ifndef _WINDOWS
-	    if (timer_handler) {
+
+	    if (timer_handler)
 		(*timer_handler)();
-	    }
-#endif
 
 	    do {
 		++timers_used;
@@ -688,9 +511,8 @@ void sched(void)
 	    Handle_recording_buffers();
 	    n = select(max_fd + 1, &readmask, 0, 0, tvp);
 	    if (n <= 0) {
-		if (n == -1 && errno != EINTR) {
+		if (n == -1 && errno != EINTR)
 		    sched_select_error();
-		}
 		io_todo = 0;
 	    }
 	    else {
@@ -711,21 +533,84 @@ void sched(void)
 			(*(ioh->func))(ioh->fd, ioh->arg);
 			record = rrecord;
 			playback = rplayback;
-			if (--n == 0) {
+			if (--n == 0)
 			    break;
-			}
 		    }
 		}
-		if (io_todo > 0) {
+		if (io_todo > 0)
 		    io_todo--;
-		}
 	    }
-	    if (io_todo == 0) {
+	    if (io_todo == 0)
 		tvp = NULL;
-	    }
 	}
-#ifndef _WINDOWS
     }
-#endif
 }
 
+#else /* _WINDOWS */
+void sched(void)
+{
+    int			i, n, io_todo = 3;
+    struct timeval	tv, *tvp = &tv;
+
+    if (NumPlayers > NumRobots + NumPseudoPlayers
+	|| login_in_progress != 0
+	|| NumQueuedPlayers > 0) {
+
+	/* need fast I/O checks now! (2 or 3 times per frames) */
+	tv.tv_sec = 0;
+	/* KOERBER */
+	/*	tv.tv_usec = 1000000 / (3 * timer_freq + 1); */
+	tv.tv_usec = 1000000 / (10 * timer_freq + 1); 
+    }
+    else {
+	/* slow I/O checks are possible here... (2 times per second) */ ; 
+	tv.tv_sec = 0;
+	tv.tv_usec = 500000;
+    }
+
+
+    if (io_todo == 0 && timers_used < timer_ticks) {
+	io_todo = 1 + (timer_ticks - timers_used);
+	tvp = &tv;
+
+	do {
+	    ++timers_used;
+	    if (--ticks_till_second <= 0) {
+		ticks_till_second += timer_freq;
+		current_time++;
+		timeout_chime();
+	    }
+	} while (timers_used + 1 < timer_ticks);
+    }
+    else {
+	fd_set readmask;
+	readmask = input_mask;
+	n = select(max_fd + 1, &readmask, 0, 0, tvp);
+	if (n <= 0) {
+	    if (n == -1 && errno != EINTR) {
+		sched_select_error();
+	    }
+	    io_todo = 0;
+	}
+	else {
+	    for (i = max_fd; i >= min_fd; i--) {
+		if (FD_ISSET(i, &readmask)) {
+		    struct io_handler *ioh;
+		    ioh = &input_handlers[i - min_fd];
+		    (*(ioh->func))(ioh->fd, ioh->arg);
+		    if (--n == 0) {
+			break;
+		    }
+		}
+	    }
+	    if (io_todo > 0) {
+		io_todo--;
+	    }
+	}
+	if (io_todo == 0) {
+	    tvp = NULL;
+	}
+    }
+}
+
+#endif /* _WINDOWS */

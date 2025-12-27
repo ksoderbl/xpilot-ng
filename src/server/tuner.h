@@ -1,4 +1,4 @@
-/* $Id: tuner.h,v 1.4 2001/11/28 22:34:33 kimiko Exp $
+/*
  *
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
@@ -26,7 +26,6 @@
 #define	TUNER_H
 
 void tuner_plock(void);
-void tuner_shotsmax(void);
 void tuner_shipmass(void);
 void tuner_ballmass(void);
 void tuner_maxrobots(void);
@@ -39,8 +38,6 @@ void tuner_teamcannons(void);
 void tuner_cannonsuseitems(void);
 void tuner_wormtime(void);
 void tuner_modifiers(void);
-void tuner_minelife(void);
-void tuner_missilelife(void);
 void tuner_gameduration(void);
 void tuner_racelaps(void);
 void tuner_allowalliances(void);

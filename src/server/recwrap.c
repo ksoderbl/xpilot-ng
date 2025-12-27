@@ -1,53 +1,33 @@
+/*
+ * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2003 by
+ *
+ *      Bjørn Stabell        <bjoern@xpilot.org>
+ *      Ken Ronny Schouten   <ken@xpilot.org>
+ *      Bert Gijsbers        <bert@xpilot.org>
+ *      Dick Balaska         <dick@xpilot.org>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ */
+
+#include "xpserver.h"
+
+char recwrap_version[] = VERSION;
+
 /* RECORDING WON'T WORK PROPERLY ON WINDOWS BECAUSE OF
  * errno = WSAGetLastError();
  */
-
-#ifndef	_WINDOWS
-#include <unistd.h>
-#endif
-#include <stdlib.h>
-#include <stdio.h>
-#include <errno.h>
-#include <string.h>
-#include <sys/types.h>
-#if defined(__hpux) || defined(_WINDOWS)
-#include <time.h>
-#else
-#include <sys/time.h>
-#endif
-
-#if defined(_WINDOWS)
-#include "../client/NT/winClient.h"
-#include "NT/winNet.h"
-#else
-#include <sys/socket.h>
-#include <netinet/in.h>
-#endif
-
-#ifndef	_WINDOWS
-#include <netdb.h>
-#endif
-
-#ifdef __sgi
-#include <bstring.h>
-#endif
-
-#ifdef	_WINDOWS
-#undef	va_start		/* there are bad versions in windows.h's "stdarg.h" */
-#undef	va_end
-#include <varargs.h>
-#endif
-
-#include "srecord.h"
-#include "version.h"
-#include "config.h"
-#include "const.h"
-#include "error.h"
-#include "net.h"
-#include "packet.h"
-#include "bit.h"
-#include "socklib.h"
-
 
 int sock_closeRec(sock_t *sock)
 {
@@ -97,7 +77,7 @@ int sock_receive_anyRec(sock_t *sock, char *rbuf, int size)
     if (playback) {
 	i = *(playback_shorts++);
 	if (i > 0) {
-	    memcpy(rbuf, playback_data, i);
+	    memcpy(rbuf, playback_data, (size_t)i);
 	    playback_data += i;
 	}
 	else
@@ -108,7 +88,7 @@ int sock_receive_anyRec(sock_t *sock, char *rbuf, int size)
     if (record) {
 	*(playback_shorts++) = i;
 	if (i > 0) {
-	    memcpy(playback_data, rbuf, i);
+	    memcpy(playback_data, rbuf, (size_t)i);
 	    playback_data += i;
 	}
 	else
@@ -125,7 +105,7 @@ int sock_readRec(sock_t *sock, char *rbuf, int size)
     if (playback) {
 	i = *(playback_shorts++);
 	if (i > 0) {
-	    memcpy(rbuf, playback_data, i);
+	    memcpy(rbuf, playback_data, (size_t)i);
 	    playback_data += i;
 	}
 	else
@@ -136,7 +116,7 @@ int sock_readRec(sock_t *sock, char *rbuf, int size)
     if (record) {
 	*(playback_shorts++) = i;
 	if (i > 0) {
-	    memcpy(playback_data, rbuf, i);
+	    memcpy(playback_data, rbuf, (size_t)i);
 	    playback_data += i;
 	}
 	else
@@ -361,14 +341,12 @@ int Sockbuf_writeRec(sockbuf_t *sbuf, char *buf, int len)
 		  sbuf->state, sbuf->size, sbuf->len, len);
 	    return -1;
 	}
-	if (Sockbuf_flushRec(sbuf) == -1) {
+	if (Sockbuf_flushRec(sbuf) == -1)
 	    return -1;
-	}
-	if (sbuf->size - sbuf->len < len) {
+	if (sbuf->size - sbuf->len < len)
 	    return 0;
-	}
     }
-    memcpy(sbuf->buf + sbuf->len, buf, len);
+    memcpy(sbuf->buf + sbuf->len, buf, (size_t)len);
     sbuf->len += len;
 
     return len;

@@ -1,5 +1,4 @@
-/* $Id: global.h,v 5.32 2002/03/21 18:20:20 kimiko Exp $
- *
+/*
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -35,7 +34,7 @@
 #include "map.h"
 #endif
 
-#ifndef LIST_H_INCLUDED
+#ifndef LIST_H
 /* need list_t */
 #include "list.h"
 #endif
@@ -45,34 +44,25 @@
 #define MIN(a,b)  ((a) < (b) ? (a) : (b))
 #endif
 
-#define	STR80	(80)
-
 typedef struct {
-    char	owner[STR80]; /* ng wants this to be name */
-    char	host[STR80];
+    char	owner[80];
+    char	host[80];
 } server;
-
-/* determine if a block is one of SPACE_BLOCKS */
-#define EMPTY_SPACE(s)	BIT(1U << (s), SPACE_BLOCKS)
 
 /*
  * Global data.
  */
 
-extern DFLOAT		tbl_sin[];
-extern DFLOAT		tbl_cos[];
-
-#ifdef SERVER
 #define FPS		framesPerSecond
 #define NumObjs		(ObjCount + 0)
 
-extern player		**Players;
+extern player		**PlayersArray;
 extern object		*Obj[];
-extern pulse_t		*Pulses[];
 extern ecm_t		*Ecms[];
 extern trans_t		*Transporters[];
 extern long		frame_loops;
-extern unsigned long	frame_time;
+extern long		frame_loops_slow;
+extern double		frame_time;
 extern int		observerStart;
 extern int		NumPlayers;
 extern int		NumObservers;
@@ -80,31 +70,38 @@ extern int		NumOperators;
 extern int		NumPseudoPlayers;
 extern int		NumQueuedPlayers;
 extern int		ObjCount;
-extern int		NumPulses;
 extern int		NumEcms;
 extern int		NumTransporters;
 extern int		NumAlliances;
 extern int		NumRobots, maxRobots, minRobots;
 extern int		login_in_progress;
-
+extern char		ShutdownReason[];
+extern sock_t		contactSocket;
+extern time_t		serverTime;
 extern char		*robotFile;
 extern int		robotsTalk, robotsLeave, robotLeaveLife;
 extern int		robotLeaveScore, robotLeaveRatio;
 extern int		robotTeam;
 extern bool		restrictRobots, reserveRobotTeam;
+extern int 		robotTicksPerSecond;
 extern World_map	World;
 extern server		Server;
 extern list_t		expandList;
-extern DFLOAT		ShotsMass, ShipMass, ShotsSpeed, Gravity;
-extern DFLOAT		ballMass;
-extern int		ShotsMax, ShotsLife;
+extern double		ShotsMass, ShipMass, ShotsSpeed, Gravity;
+extern double		ballMass;
+extern int		ShotsMax;
+extern double		ShotsLife;
+extern double		pulseSpeed, pulseLength;
+extern double		pulseLife;
 extern bool		ShotsGravity;
 extern bool		shotHitFuelDrainUsesKineticEnergy;
-extern int		fireRepeatRate;
-extern int		laserRepeatRate;
+extern double		fireRepeatRate;
+extern double		laserRepeatRate;
 extern long		DEF_BITS, KILL_BITS, DEF_HAVE, DEF_USED, USED_KILL;
-extern int		GetInd[];
+extern int		GetIndArray[];
 extern int		ShutdownServer, ShutdownDelay;
+extern bool		Log;
+extern bool		silent;
 extern bool		RawMode;
 extern bool		NoQuit;
 extern bool		logRobots;
@@ -120,6 +117,7 @@ extern char		*mapAuthor;
 extern int 		contactPort;
 extern char		*serverHost;
 extern char		*serverAddr;
+extern char		*greeting;
 extern bool		crashWithPlayer;
 extern bool		bounceWithPlayer;
 extern bool		playerKillings;
@@ -135,24 +133,25 @@ extern bool		missilesWallBounce;
 extern bool		sparksWallBounce;
 extern bool		debrisWallBounce;
 extern bool		asteroidsWallBounce;
+extern bool		pulsesWallBounce;
 extern bool		cloakedExhaust;
 extern bool		cloakedShield;
 extern bool		ecmsReprogramMines;
 extern bool		ecmsReprogramRobots;
-extern DFLOAT		maxObjectWallBounceSpeed;
-extern DFLOAT		maxShieldedWallBounceSpeed;
-extern DFLOAT		maxUnshieldedWallBounceSpeed;
-extern DFLOAT		maxShieldedWallBounceAngle;
-extern DFLOAT		maxUnshieldedWallBounceAngle;
-extern DFLOAT		playerWallBrakeFactor;
-extern DFLOAT		objectWallBrakeFactor;
-extern DFLOAT		objectWallBounceLifeFactor;
-extern DFLOAT		wallBounceFuelDrainMult;
-extern DFLOAT		wallBounceDestroyItemProb;
+extern double		maxObjectWallBounceSpeed;
+extern double		maxShieldedWallBounceSpeed;
+extern double		maxUnshieldedWallBounceSpeed;
+extern double		maxShieldedWallBounceAngle;
+extern double		maxUnshieldedWallBounceAngle;
+extern double		playerWallBrakeFactor;
+extern double		objectWallBrakeFactor;
+extern double		objectWallBounceLifeFactor;
+extern double		wallBounceFuelDrainMult;
+extern double		wallBounceDestroyItemProb;
 
 extern bool		limitedVisibility;
-extern DFLOAT		minVisibilityDistance;
-extern DFLOAT		maxVisibilityDistance;
+extern double		minVisibilityDistance;
+extern double		maxVisibilityDistance;
 extern bool		limitedLives;
 extern int		worldLives;
 extern bool		endOfRoundReset;
@@ -178,7 +177,7 @@ extern bool		edgeWrap;
 extern bool		edgeBounce;
 extern bool		extraBorder;
 extern ipos		gravityPoint;
-extern DFLOAT		gravityAngle;
+extern double		gravityAngle;
 extern bool		gravityPointSource;
 extern bool		gravityClockwise;
 extern bool		gravityAnticlockwise;
@@ -189,36 +188,36 @@ extern bool		asteroidConcentratorVisible;
 extern int		wormTime;
 extern int		nukeMinSmarts;
 extern int		nukeMinMines;
-extern DFLOAT		nukeClusterDamage;
+extern double		nukeClusterDamage;
 extern int		mineFuseTime;
 extern int		mineLife;
-extern DFLOAT		minMineSpeed;
-extern int		missileLife;
+extern double		minMineSpeed;
+extern double		missileLife;
 extern int		baseMineRange;
 extern int		mineShotDetonateDistance;
 
-extern DFLOAT		shotKillScoreMult;
-extern DFLOAT		torpedoKillScoreMult;
-extern DFLOAT		smartKillScoreMult;
-extern DFLOAT		heatKillScoreMult;
-extern DFLOAT		clusterKillScoreMult;
-extern DFLOAT		laserKillScoreMult;
-extern DFLOAT		tankKillScoreMult;
-extern DFLOAT		runoverKillScoreMult;
-extern DFLOAT		ballKillScoreMult;
-extern DFLOAT		explosionKillScoreMult;
-extern DFLOAT		shoveKillScoreMult;
-extern DFLOAT		crashScoreMult;
-extern DFLOAT		mineScoreMult;
-extern DFLOAT		selfKillScoreMult;
-extern DFLOAT		selfDestructScoreMult;
-extern DFLOAT		unownedKillScoreMult;
-extern DFLOAT		asteroidPoints;
-extern DFLOAT		cannonPoints;
-extern DFLOAT		asteroidMaxScore;
-extern DFLOAT		cannonMaxScore;
+extern double		shotKillScoreMult;
+extern double		torpedoKillScoreMult;
+extern double		smartKillScoreMult;
+extern double		heatKillScoreMult;
+extern double		clusterKillScoreMult;
+extern double		laserKillScoreMult;
+extern double		tankKillScoreMult;
+extern double		runoverKillScoreMult;
+extern double		ballKillScoreMult;
+extern double		explosionKillScoreMult;
+extern double		shoveKillScoreMult;
+extern double		crashScoreMult;
+extern double		mineScoreMult;
+extern double		selfKillScoreMult;
+extern double		selfDestructScoreMult;
+extern double		unownedKillScoreMult;
+extern double		asteroidPoints;
+extern double		cannonPoints;
+extern double		asteroidMaxScore;
+extern double		cannonMaxScore;
 
-extern DFLOAT		destroyItemInCollisionProb;
+extern double		destroyItemInCollisionProb;
 extern bool		updateScores;
 extern bool 		allowSmartMissiles;
 extern bool 		allowHeatSeekers;
@@ -258,37 +257,35 @@ extern bool		treasureCollisionMayKill;
 extern bool		wreckageCollisionMayKill;
 extern bool		asteroidCollisionMayKill;
 
-extern DFLOAT		ballConnectorSpringConstant;
-extern DFLOAT		ballConnectorDamping;
-extern DFLOAT		maxBallConnectorRatio;
-extern DFLOAT		ballConnectorLength;
+extern double		ballConnectorSpringConstant;
+extern double		ballConnectorDamping;
+extern double		maxBallConnectorRatio;
+extern double		ballConnectorLength;
 extern bool		connectorIsString;
-extern bool		treatBallAsPoint;
+extern double		ballRadius;
 
-extern DFLOAT 		dropItemOnKillProb;
-extern DFLOAT		detonateItemOnKillProb;
-extern DFLOAT 		movingItemProb;
-extern DFLOAT		randomItemProb;
-extern DFLOAT            rogueHeatProb;
-extern DFLOAT            rogueMineProb;
-extern DFLOAT		itemProbMult;
-extern DFLOAT		cannonItemProbMult;
-extern DFLOAT		asteroidItemProb;
+extern double 		dropItemOnKillProb;
+extern double		detonateItemOnKillProb;
+extern double 		movingItemProb;
+extern double		randomItemProb;
+extern double            rogueHeatProb;
+extern double            rogueMineProb;
+extern double		itemProbMult;
+extern double		cannonItemProbMult;
+extern double		asteroidItemProb;
 extern int		asteroidMaxItems;
-extern DFLOAT		maxItemDensity;
-extern DFLOAT		maxAsteroidDensity;
+extern double		maxItemDensity;
+extern double		maxAsteroidDensity;
 extern int		itemConcentratorRadius;
-extern DFLOAT		itemConcentratorProb;
+extern double		itemConcentratorProb;
 extern int		asteroidConcentratorRadius;
-extern DFLOAT		asteroidConcentratorProb;
-extern DFLOAT		gameDuration;
-extern bool		fullFramerate;
-extern bool		fullZeroFramerate;
-extern bool		teamZeroPausing;
+extern double		asteroidConcentratorProb;
+extern double		gameDuration;
+extern bool		baselessPausing;
+extern int		pausedFPS;
+extern int		waitingFPS;
 extern int		game_lock;
-extern int		lock_zero;
-extern int		mute_zero;
-extern char		team_0[];
+extern int		mute_baseless;
 
 extern char		*motdFileName;
 extern char	       	*scoreTableFileName;
@@ -296,11 +293,11 @@ extern char		*adminMessageFileName;
 extern int		adminMessageFileSizeLimit;
 extern time_t		gameOverTime;
 
-extern DFLOAT		friction;
-extern DFLOAT		blockFriction;
+extern double		friction;
+extern double		blockFriction;
 extern bool		blockFrictionVisible;
-extern int		coriolis;
-extern DFLOAT		checkpointRadius;
+extern double		coriolis, coriolisCosine, coriolisSine;
+extern double		checkpointRadius;
 extern int		raceLaps;
 extern bool		lockOtherTeam;
 extern bool 		loseItemDestroys;
@@ -317,7 +314,7 @@ extern int		round_delay_send;
 extern int		maxRoundTime;
 extern int		roundtime;
 extern int		roundsToPlay;
-/*extern int		roundsPlayed;*/
+extern int		roundsPlayed;
 
 extern bool		useWreckage;
 extern bool		ignore20MaxFPS;
@@ -330,7 +327,6 @@ extern char		*tankRealName;
 extern char		*tankHostName;
 extern int		tankScoreDecrement;
 
-extern bool		turnThrust;
 extern bool		selfImmunity;
 
 extern char		*defaultShipShape;
@@ -344,30 +340,45 @@ extern int		maxPauseTime;
 extern long		KILLING_SHOTS;
 extern unsigned		SPACE_BLOCKS;
 
-extern int		timerResolution;
-extern char		*password;
 extern int		numberOfRounds;
 extern int		playerLimit;
+extern int		playerLimit_orig;
 extern int		recordMode;
 extern int		recordFlushInterval;
 extern int		constantScoring;
 extern int		eliminationRace;
 extern char		*dataURL;
-extern int		clientPortStart;
-extern int		clientPortEnd;
 extern char		*recordFileName;
-extern DFLOAT		FPSMultiplier;
-extern DFLOAT		gameSpeed;
-extern int		timeStep;
-extern DFLOAT		timeStep2;
+extern double		gameSpeed;
+extern double		timeStep;
+extern double		ecmSizeFactor;
 extern char		*playerPasswordsFileName;
 extern int		playerPasswordsFileSizeLimit;
-
-/* kps hack */
-extern bool		useOldCode;
+extern bool		maraTurnqueue;
+extern bool		ignoreMaxFPS;
 extern bool		polygonMode;
 
-#endif /* SERVER */
+#define Bases(ind)		(&World.bases[(ind)])
+#define Fuels(ind)		(&World.fuels[(ind)])
+#define Cannons(ind)		(&World.cannons[(ind)])
+#define Checks(ind)		(&World.checks[(ind)])
+#define Gravs(ind)		(&World.gravs[(ind)])
+#define Targets(ind)		(&World.targets[(ind)])
+#define Treasures(ind)		(&World.treasures[(ind)])
+#define Wormholes(ind)		(&World.wormholes[(ind)])
+#define AsteroidConcs(ind)	(&World.asteroidConcs[(ind)])
+#define ItemConcs(ind)		(&World.itemConcs[(ind)])
+#define Teams(team)		(&World.teams[(team)])
+
+/* determine if a block is one of SPACE_BLOCKS */
+#define EMPTY_SPACE(s)	BIT(1U << (s), SPACE_BLOCKS)
+
+#define Player_by_id(id)	Players(GetInd(id))
+
+static inline vector World_gravity(clpos pos)
+{
+    return World.gravity[CLICK_TO_BLOCK(pos.cx)][CLICK_TO_BLOCK(pos.cy)];
+}
 
 #endif /* GLOBAL_H */
 

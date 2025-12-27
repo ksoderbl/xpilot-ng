@@ -1,5 +1,4 @@
-/* $Id: setup.h,v 5.1 2001/10/11 20:27:35 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -124,7 +123,8 @@ typedef struct {
     short		width;			/* width in pixels */
     short		height;			/* height in pixels */
     short		frames_per_second;	/* FPS */
-    short		map_order;		/* OLD row major or col major */
+    short		map_order;		/* OLD row or col major */
+    short		unused1;		/* padding */
     char		name[MAX_CHARS];	/* name of map */
     char		author[MAX_CHARS];	/* name of author of map */
     char		data_url[MSG_LEN];	/* location where client
@@ -135,7 +135,7 @@ typedef struct {
     /* plus more mapdata here (HACK) */
 } setup_t;
 
-#ifndef NETSERVER_C
+#ifndef SERVER
 # ifdef FPS
 #  error "FPS needs a different definition in the client"
 #  undef FPS

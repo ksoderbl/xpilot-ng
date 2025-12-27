@@ -1,5 +1,4 @@
-/* $Id: types.h,v 5.0 2001/04/07 20:00:59 dik Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -40,19 +39,10 @@ typedef unsigned char	u_byte;
 
 #ifndef	_XPMONNT_
 #define bool	int
+/*typedef enum { false = 0, true = 1 } bool;*/
 #endif
 
-/*
- * Windows does all its FPU work in doubles.  Using floats gives warnings
- * and causes everything to be promoted to doubles anyway...
- */
-#ifndef _WINDOWS
-typedef	float	DFLOAT;
-#else
-typedef	double	DFLOAT;
-#endif
-
-typedef struct { DFLOAT x, y; }	vector;
+typedef struct { double x, y; }	vector;
 typedef vector			position;
 typedef struct { int x, y; }	ivec;
 typedef ivec			ipos;

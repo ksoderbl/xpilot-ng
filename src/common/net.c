@@ -1,5 +1,4 @@
-/* $Id: net.c,v 5.3 2001/07/08 10:09:06 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,57 +21,22 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <errno.h>
-#include <string.h>
-#include <sys/types.h>
-#include <time.h>
-
-#ifndef _WINDOWS
-# include <unistd.h>
-# ifndef __hpux
-#  include <sys/time.h>
-# endif
-# include <sys/socket.h>
-# include <netinet/in.h>
-# include <netdb.h>
-#endif
-
-#ifdef __sgi
-# include <bstring.h>
-#endif
-
-#ifdef _WINDOWS
-# include "NT/winNet.h"
-# undef	va_start		/* there are bad versions in windows.h's "stdarg.h" */
-# undef	va_end
-# include <varargs.h>
-#endif
-
-#include "version.h"
-#include "config.h"
-#include "const.h"
-#include "error.h"
-#include "net.h"
-#include "packet.h"
-#include "bit.h"
-#include "socklib.h"
+#include "xpcommon.h"
 
 char net_version[] = VERSION;
 
 int last_packet_of_frame;
 
-int Sockbuf_init(sockbuf_t *sbuf, sock_t *sock, int size, int state)
+int Sockbuf_init(sockbuf_t *sbuf, sock_t *sock, size_t size, int state)
 {
-    if ((sbuf->buf = sbuf->ptr = (char *) malloc(size)) == NULL) {
+    if ((sbuf->buf = sbuf->ptr = malloc(size)) == NULL)
 	return -1;
-    }
-    if (sock != (sock_t *) NULL) {
+
+    if (sock != (sock_t *) NULL)
 	sbuf->sock = *sock;
-    } else {
+    else
 	sock_init(&sbuf->sock);
-    }
+
     sbuf->state = state;
     sbuf->len = 0;
     sbuf->size = size;
@@ -83,9 +47,9 @@ int Sockbuf_init(sockbuf_t *sbuf, sock_t *sock, int size, int state)
 
 int Sockbuf_cleanup(sockbuf_t *sbuf)
 {
-    if (sbuf->buf != NULL) {
+    if (sbuf->buf != NULL)
 	free(sbuf->buf);
-    }
+
     sbuf->buf = sbuf->ptr = NULL;
     sbuf->size = sbuf->len = 0;
     sbuf->state = 0;
@@ -105,50 +69,38 @@ int Sockbuf_advance(sockbuf_t *sbuf, int len)
      * First do a few buffer consistency checks.
      */
     if (sbuf->ptr > sbuf->buf + sbuf->len) {
-	errno = 0;
-	error("Sockbuf pointer too far");
+	warn("Sockbuf pointer too far");
 	sbuf->ptr = sbuf->buf + sbuf->len;
     }
     if (sbuf->ptr < sbuf->buf) {
-	errno = 0;
-	error("Sockbuf pointer bad");
+	warn("Sockbuf pointer bad");
 	sbuf->ptr = sbuf->buf;
     }
     if (sbuf->len > sbuf->size) {
-	errno = 0;
-	error("Sockbuf len too far");
+	warn("Sockbuf len too far");
 	sbuf->len = sbuf->size;
     }
     if (sbuf->len < 0) {
-	errno = 0;
-	error("Sockbuf len bad");
+	warn("Sockbuf len bad");
 	sbuf->len = 0;
     }
     if (len <= 0) {
-	if (len < 0) {
-	    errno = 0;
-	    error("Sockbuf advance negative (%d)", len);
-	}
+	if (len < 0)
+	    warn("Sockbuf advance negative (%d)", len);
     }
     else if (len >= sbuf->len) {
-	if (len > sbuf->len) {
-	    errno = 0;
-	    error("Sockbuf advancing too far");
-	}
+	if (len > sbuf->len)
+	    warn("Sockbuf advancing too far");
+
 	sbuf->len = 0;
 	sbuf->ptr = sbuf->buf;
     } else {
-#if defined(__hpux) || defined(SVR4) || defined(_SEQUENT_) || defined(SYSV) || defined(_WINDOWS)
-	memmove(sbuf->buf, sbuf->buf + len, sbuf->len - len);
-#else
-	bcopy(sbuf->buf + len, sbuf->buf, sbuf->len - len);
-#endif
+	memmove(sbuf->buf, sbuf->buf + len, (size_t)(sbuf->len - len));
 	sbuf->len -= len;
-	if (sbuf->ptr - sbuf->buf <= len) {
+	if (sbuf->ptr - sbuf->buf <= len)
 	    sbuf->ptr = sbuf->buf;
-	} else {
+	else
 	    sbuf->ptr -= len;
-	}
     }
     return 0;
 }
@@ -159,25 +111,19 @@ int Sockbuf_flush(sockbuf_t *sbuf)
 			i;
 
     if (BIT(sbuf->state, SOCKBUF_WRITE) == 0) {
-	errno = 0;
-	error("No flush on non-writable socket buffer");
-	error("(state=%02x,buf=%08x,ptr=%08x,size=%d,len=%d,sock=%d)",
+	warn("No flush on non-writable socket buffer");
+	warn("(state=%02x,buf=%08x,ptr=%08x,size=%d,len=%d,sock=%d)",
 	    sbuf->state, sbuf->buf, sbuf->ptr, sbuf->size, sbuf->len,
 	    sbuf->sock);
 	return -1;
     }
-	/*Trace("Sockbuf_flush: state=%02x,buf=%08x,ptr=%08x,size=%d,len=%d,sock=%d\n",
-	    sbuf->state, sbuf->buf, sbuf->ptr, sbuf->size, sbuf->len,
-	    sbuf->sock); */
     if (BIT(sbuf->state, SOCKBUF_LOCK) != 0) {
-	errno = 0;
-	error("No flush on locked socket buffer (0x%02x)", sbuf->state);
+	warn("No flush on locked socket buffer (0x%02x)", sbuf->state);
 	return -1;
     }
     if (sbuf->len <= 0) {
 	if (sbuf->len < 0) {
-	    errno = 0;
-	    error("Write socket buffer length negative");
+	    warn("Write socket buffer length negative");
 	    sbuf->len = 0;
 	    sbuf->ptr = sbuf->buf;
 	}
@@ -243,10 +189,9 @@ int Sockbuf_flush(sockbuf_t *sbuf)
 	    }
 	    errno = 0;
 	}
-	if (len != sbuf->len) {
-	    errno = 0;
-	    error("Can't write complete datagram (%d,%d)", len, sbuf->len);
-	}
+	if (len != sbuf->len)
+	    warn("Can't write complete datagram (%d,%d)", len, sbuf->len);
+
 	Sockbuf_clear(sbuf);
     } else {
 	errno = 0;
@@ -270,25 +215,22 @@ int Sockbuf_flush(sockbuf_t *sbuf)
 int Sockbuf_write(sockbuf_t *sbuf, char *buf, int len)
 {
     if (BIT(sbuf->state, SOCKBUF_WRITE) == 0) {
-	errno = 0;
-	error("No write to non-writable socket buffer");
+	warn("No write to non-writable socket buffer");
 	return -1;
     }
     if (sbuf->size - sbuf->len < len) {
 	if (BIT(sbuf->state, SOCKBUF_LOCK | SOCKBUF_DGRAM) != 0) {
-	    errno = 0;
-	    error("No write to locked socket buffer (%d,%d,%d,%d)",
+	    warn("No write to locked socket buffer (%d,%d,%d,%d)",
 		sbuf->state, sbuf->size, sbuf->len, len);
 	    return -1;
 	}
-	if (Sockbuf_flush(sbuf) == -1) {
+	if (Sockbuf_flush(sbuf) == -1)
 	    return -1;
-	}
-	if (sbuf->size - sbuf->len < len) {
+
+	if (sbuf->size - sbuf->len < len)
 	    return 0;
-	}
     }
-    memcpy(sbuf->buf + sbuf->len, buf, len);
+    memcpy(sbuf->buf + sbuf->len, buf, (size_t)len);
     sbuf->len += len;
 
     return len;
@@ -301,23 +243,21 @@ int Sockbuf_read(sockbuf_t *sbuf)
 			len;
 
     if (BIT(sbuf->state, SOCKBUF_READ) == 0) {
-	errno = 0;
-	error("No read from non-readable socket buffer (%d)", sbuf->state);
+	warn("No read from non-readable socket buffer (%d)", sbuf->state);
 	return -1;
     }
-    if (BIT(sbuf->state, SOCKBUF_LOCK) != 0) {
+    if (BIT(sbuf->state, SOCKBUF_LOCK) != 0)
 	return 0;
-    }
-    if (sbuf->ptr > sbuf->buf) {
+
+    if (sbuf->ptr > sbuf->buf)
 	Sockbuf_advance(sbuf, sbuf->ptr - sbuf->buf);
-    }
+
     if ((max = sbuf->size - sbuf->len) <= 0) {
 	static int before;
-	if (before++ == 0) {
-	    errno = 0;
-	    error("Read socket buffer not big enough (%d,%d)",
+
+	if (before++ == 0)
+	    warn("Read socket buffer not big enough (%d,%d)",
 		  sbuf->size, sbuf->len);
-	}
 	return -1;
     }
     if (BIT(sbuf->state, SOCKBUF_DGRAM) != 0) {
@@ -328,12 +268,12 @@ int Sockbuf_read(sockbuf_t *sbuf)
 	    len = sbuf->len;
 	else
 #endif
-	while ((len = sock_read(&sbuf->sock, sbuf->buf + sbuf->len, max)) <= 0) {
-	    if (len == 0) {
+	while ((len = sock_read(&sbuf->sock, sbuf->buf + sbuf->len, max))
+	       <= 0) {
+	    if (len == 0)
 		return 0;
-	    }
 #ifdef _WINDOWS
-		errno = WSAGetLastError();
+	    errno = WSAGetLastError();
 #endif
 	    if (errno == EINTR) {
 		errno = 0;
@@ -357,10 +297,11 @@ int Sockbuf_read(sockbuf_t *sbuf)
 		error("Can't recv on socket");
 		return -1;
 	    }
-	    { static int recv_err;
-		if ((recv_err++ & 0x3F) == 0) {
+	    {
+		static int recv_err;
+		
+		if ((recv_err++ & 0x3F) == 0)
 		    error("recv (%d)", i);
-		}
 	    }
 	    if (sock_get_error(&sbuf->sock) == -1) {
 		error("GetSocketError recv");
@@ -371,10 +312,11 @@ int Sockbuf_read(sockbuf_t *sbuf)
 	sbuf->len += len;
     } else {
 	errno = 0;
-	while ((len = sock_read(&sbuf->sock, sbuf->buf + sbuf->len, max)) <= 0) {
-	    if (len == 0) {
+	while ((len = sock_read(&sbuf->sock, sbuf->buf + sbuf->len, max))
+	       <= 0) {
+	    if (len == 0)
 		return 0;
-	    }
+
 	    if (errno == EINTR) {
 		errno = 0;
 		continue;
@@ -386,7 +328,6 @@ int Sockbuf_read(sockbuf_t *sbuf)
 	    }
 	    return 0;
 	}
-/*	IFWINDOWS( Trace("Read stream %d bytes from %d\n", len, sbuf->sock) );*/
 	sbuf->len += len;
     }
 
@@ -396,27 +337,20 @@ int Sockbuf_read(sockbuf_t *sbuf)
 int Sockbuf_copy(sockbuf_t *dest, sockbuf_t *src, int len)
 {
     if (len < dest->size - dest->len) {
-	errno = 0;
-	error("Not enough room in destination copy socket buffer");
+	warn("Not enough room in destination copy socket buffer");
 	return -1;
     }
     if (len < src->len) {
-	errno = 0;
-	error("Not enough data in source copy socket buffer");
+	warn("Not enough data in source copy socket buffer");
 	return -1;
     }
-    memcpy(dest->buf + dest->len, src->buf, len);
+    memcpy(dest->buf + dest->len, src->buf, (size_t)len);
     dest->len += len;
 
     return len;
 }
 
-#if STDVA
 int Packet_printf(sockbuf_t *sbuf, const char *fmt, ...)
-#else
-int Packet_printf(va_alist)
-    va_dcl
-#endif
 {
 #define PRINTF_FMT	1
 #define PRINTF_IO	2
@@ -438,16 +372,8 @@ int Packet_printf(va_alist)
 			*buf,
 			*stop;
     va_list		ap;
-#if !STDVA
-    char		*fmt;
-    sockbuf_t		*sbuf;
 
-    va_start(ap);
-    sbuf = va_arg(ap, sockbuf_t *);
-    fmt = va_arg(ap, char *);
-#else
     va_start(ap, fmt);
-#endif
 
     /*
      * Stream socket buffers should flush the buffer if running
@@ -464,9 +390,9 @@ int Packet_printf(va_alist)
      * our available buffer space.
      */
     end = sbuf->buf + sbuf->size;
-    if (last_packet_of_frame != 1) {
+    if (last_packet_of_frame != 1)
 	end -= SOCKBUF_WRITE_SPARE;
-    }
+
     buf = sbuf->buf + sbuf->len;
     for (i = 0; failure == 0 && fmt[i] != '\0'; i++) {
 	if (fmt[i] == '%') {
@@ -558,21 +484,18 @@ int Packet_printf(va_alist)
 		}
 		/* Send the nul byte too */
 		do {
-		    if (buf >= stop) {
+		    if (buf >= stop)
 			break;
-		    }
 		} while ((*buf++ = *str++) != '\0');
-		if (buf > stop) {
+		if (buf > stop)
 		    failure = PRINTF_SIZE;
-		}
 		break;
 	    default:
 		failure = PRINTF_FMT;
 		break;
 	    }
-	} else {
+	} else
 	    failure = PRINTF_FMT;
-	}
     }
     if (failure != 0) {
 	count = -1;
@@ -589,10 +512,8 @@ int Packet_printf(va_alist)
 		failure = 0;
 	    }
 	}
-	else if (failure == PRINTF_FMT) {
-	    errno = 0;
-	    error("Error in format string (\"%s\")", fmt);
-	}
+	else if (failure == PRINTF_FMT)
+	    warn("Error in format string (\"%s\")", fmt);
     } else {
 	count = buf - (sbuf->buf + sbuf->len);
 	sbuf->len += count;
@@ -603,12 +524,7 @@ int Packet_printf(va_alist)
     return count;
 }
 
-#if STDVA
 int Packet_scanf(sockbuf_t *sbuf, const char *fmt, ...)
-#else
-int Packet_scanf(va_alist)
-    va_dcl
-#endif
 {
     int			i,
 			j,
@@ -625,16 +541,8 @@ int Packet_scanf(va_alist)
     char		*cptr,
 			*str;
     va_list		ap;
-#if !STDVA
-    char		*fmt;
-    sockbuf_t		*sbuf;
 
-    va_start(ap);
-    sbuf = va_arg(ap, sockbuf_t *);
-    fmt = va_arg(ap, char *);
-#else
     va_start(ap, fmt);
-#endif
 
     for (i = j = 0; failure == 0 && fmt[i] != '\0'; i++) {
 	if (fmt[i] == '%') {
@@ -773,7 +681,8 @@ int Packet_scanf(va_alist)
 		k = 0;
 		for (;;) {
 		    if (&sbuf->buf[sbuf->len] < &sbuf->ptr[j + 1]) {
-			if (BIT(sbuf->state, SOCKBUF_DGRAM | SOCKBUF_LOCK) != 0) {
+			if (BIT(sbuf->state, SOCKBUF_DGRAM | SOCKBUF_LOCK)
+			    != 0) {
 			    failure = 3;
 			    break;
 			}
@@ -786,9 +695,8 @@ int Packet_scanf(va_alist)
 			    break;
 			}
 		    }
-		    if ((str[k++] = sbuf->ptr[j++]) == '\0') {
+		    if ((str[k++] = sbuf->ptr[j++]) == '\0')
 			break;
-		    }
 		    else if (k >= max_str_size) {
 			/*
 			 * What to do now is unclear to me.
@@ -796,35 +704,27 @@ int Packet_scanf(va_alist)
 			 * the client has more difficulty with that
 			 * if this is the reliable data buffer.
 			 */
-#ifndef SILENT
-			errno = 0;
-			error("String overflow while scanning (%d,%d)",
+			warn("String overflow while scanning (%d,%d)",
 			      k, max_str_size);
-#endif
-			if (BIT(sbuf->state, SOCKBUF_LOCK) != 0) {
+			if (BIT(sbuf->state, SOCKBUF_LOCK) != 0)
 			    failure = 2;
-			} else {
+			else
 			    failure = 3;
-			}
 			break;
 		    }
 		}
-		if (failure != 0) {
+		if (failure != 0)
 		    strcpy(str, "ErRoR");
-		}
 		break;
 	    default:
 		failure = 1;
 		break;
 	    }
-	} else {
+	} else
 	    failure = 1;
-	}
     }
-    if (failure == 1) {
-	errno = 0;
-	error("Error in format string (%s)", fmt);
-    }
+    if (failure == 1)
+	warn("Error in format string (%s)", fmt);
     else if (failure == 3) {
 	/* Not enough input for one complete packet */
 	count = 0;
@@ -832,12 +732,10 @@ int Packet_scanf(va_alist)
     }
     else if (failure == 0) {
 	if (&sbuf->buf[sbuf->len] < &sbuf->ptr[j]) {
-	    errno = 0;
-	    error("Input buffer exceeded (%s)", fmt);
+	    warn("Input buffer exceeded (%s)", fmt);
 	    failure = 1;
-	} else {
+	} else
 	    sbuf->ptr += j;
-	}
     }
 
     va_end(ap);

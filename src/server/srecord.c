@@ -1,18 +1,30 @@
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <errno.h>
-#include <time.h>
+/*
+ * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2003 by
+ *
+ *      Bjørn Stabell        <bjoern@xpilot.org>
+ *      Ken Ronny Schouten   <ken@xpilot.org>
+ *      Bert Gijsbers        <bert@xpilot.org>
+ *      Dick Balaska         <dick@xpilot.org>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ */
 
-/* Hopefully htons etc are in one of these. */
-#include <arpa/inet.h>
-#include <netinet/in.h>
+#include "xpserver.h"
 
-#define SERVER
-#include "const.h"
-#include "global.h"
-#include "error.h"
-#include "proto.h"
+char srecord_version[] = VERSION;
+
 
 int   playback = 0;
 int   record = 0;
@@ -30,7 +42,8 @@ int   rplayback;
 int   recOpt;
 
 enum types {CHAR, INT, SHORT, ERRNO };
-struct buf {
+#define BUF_INITIALIZER(p,t,s,tr,st,nr) { p, t, s, tr, st, nr }
+static struct buf {
     void ** const curp;
     const enum types type;
     const int size;
@@ -39,14 +52,14 @@ struct buf {
     int num_read;
 } bufs[] =
 {
-    {(void **)&playback_ints, INT, 5000, 4000},
-    {(void **)&playback_errnos, ERRNO, 5000, 4000},
-    {(void **)&playback_shorts, SHORT, 25000, 23000},
-    {(void **)&playback_data, CHAR, 200000, 100000},
-    {(void **)&playback_sched, CHAR, 50000, 40000},
-    {(void **)&playback_ei, INT, 2000, 1000},
-    {(void **)&playback_es, CHAR, 5000, 4000},
-    {(void **)&playback_opttout, INT, 2000, 1000}
+    BUF_INITIALIZER((void **)&playback_ints, INT, 5000, 4000, NULL, 0),
+    BUF_INITIALIZER((void **)&playback_errnos, ERRNO, 5000, 4000, NULL, 0),
+    BUF_INITIALIZER((void **)&playback_shorts, SHORT, 25000, 23000, NULL, 0),
+    BUF_INITIALIZER((void **)&playback_data, CHAR, 200000, 100000, NULL, 0),
+    BUF_INITIALIZER((void **)&playback_sched, CHAR, 50000, 40000, NULL, 0),
+    BUF_INITIALIZER((void **)&playback_ei, INT, 2000, 1000, NULL, 0),
+    BUF_INITIALIZER((void **)&playback_es, CHAR, 5000, 4000, NULL, 0),
+    BUF_INITIALIZER((void **)&playback_opttout, INT, 2000, 100, NULL, 0)
 };
 
 const int num_types = sizeof(bufs) / sizeof(struct buf);
@@ -57,7 +70,7 @@ static FILE *recf1;
 static void Convert_from_host(void *start, int len, int type)
 {
     int *iptr, *iend, err;
-    short *sptr, *send;
+    short *sptr, *sendp;
 
     switch (type) {
     case CHAR:
@@ -72,8 +85,8 @@ static void Convert_from_host(void *start, int len, int type)
 	return;
     case SHORT:
 	sptr = start;
-	send = sptr + len / 2;
-	while (sptr < send) {
+	sendp = sptr + len / 2;
+	while (sptr < sendp) {
 	    *sptr = htons(*sptr);
 	    sptr++;
 	}
@@ -102,7 +115,7 @@ static void Convert_from_host(void *start, int len, int type)
 static void Convert_to_host(void *start, int len, int type)
 {
     int *iptr, *iend, err;
-    short *sptr, *send;
+    short *sptr, *sendp;
 
     switch (type) {
     case CHAR:
@@ -117,8 +130,8 @@ static void Convert_to_host(void *start, int len, int type)
 	return;
     case SHORT:
 	sptr = start;
-	send = sptr + len / 2;
-	while (sptr < send) {
+	sendp = sptr + len / 2;
+	while (sptr < sendp) {
 	    *sptr = ntohs(*sptr);
 	    sptr++;
 	}

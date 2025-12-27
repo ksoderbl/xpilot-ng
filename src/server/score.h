@@ -1,5 +1,4 @@
-/* $Id: score.h,v 5.6 2002/06/11 03:59:38 dik Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -25,37 +24,18 @@
 #ifndef SCORE_H
 #define SCORE_H
 
-#define ED_SHOT			(-0.2*FUEL_SCALE_FACT)
-#define ED_SMART_SHOT		(-30*FUEL_SCALE_FACT)
-#define ED_MINE			(-60*FUEL_SCALE_FACT)
-#define ED_ECM			(-60*FUEL_SCALE_FACT)
-#define ED_TRANSPORTER		(-60*FUEL_SCALE_FACT)
-#define ED_HYPERJUMP		(-60*FUEL_SCALE_FACT)
-#define ED_SHIELD		(-0.20*FUEL_SCALE_FACT)
-#define ED_PHASING_DEVICE	(-0.40*FUEL_SCALE_FACT)
-#define ED_CLOAKING_DEVICE	(-0.07*FUEL_SCALE_FACT)
-#define ED_DEFLECTOR		(-0.15*FUEL_SCALE_FACT)
-#define ED_SHOT_HIT		(-25.0*FUEL_SCALE_FACT)
-#define ED_SMART_SHOT_HIT	(-120.0*FUEL_SCALE_FACT)
-#define ED_PL_CRASH		(-100.0*FUEL_SCALE_FACT)
-#define ED_BALL_HIT		(-50.0*FUEL_SCALE_FACT)
-#define ED_LASER		(-10.0*FUEL_SCALE_FACT)
-/* was 90 -> 2 -> 40 -> 20 -> 10 */
-#define ED_LASER_HIT		(-100.0*FUEL_SCALE_FACT)
-/* was 120 -> 80 -> 40 -> 50 -> 60 -> 100 */
-
-#define CANNON_SCORE	    	-1436
-#define WALL_SCORE	    	2000
+#define CANNON_SCORE	    	-1436.0
+#define WALL_SCORE	    	2000.0
 
 #define RATE_SIZE	    	20
 #define RATE_RANGE	    	1024
 
 /* score.c */
 
-void SCORE(int ind, DFLOAT points, int cx, int cy, const char *msg);
-void TEAM_SCORE(int team, DFLOAT points);
-void Alliance_score(int id, DFLOAT points);
-DFLOAT Rate(DFLOAT winner, DFLOAT loser);
+void Score(player *pl, double points, clpos pos, const char *msg);
+void TEAM_SCORE(int team, double points);
+void Alliance_score(int id, double points);
+double Rate(double winner, double loser);
 
 /*
  * Cause `winner' to get `winner_score' points added with message
@@ -72,7 +52,7 @@ DFLOAT Rate(DFLOAT winner, DFLOAT loser);
  * KK 28-4-98: Same for killing your own tank.
  * KK 7-11-1: And for killing a member of your alliance
  */
-void Score_players(int winner, DFLOAT winner_score, char *winner_msg,
-		   int loser, DFLOAT loser_score, char *loser_msg);
+void Score_players(player *winner_pl, double winner_score, char *winner_msg,
+		   player *loser_pl, double loser_score, char *loser_msg);
 
 #endif

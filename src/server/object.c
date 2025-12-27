@@ -1,5 +1,4 @@
-/* $Id: object.c,v 5.1 2001/12/11 12:45:13 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -27,27 +26,7 @@
  * This file deals with low-level object structure manipulations.
  */
 
-
-#include <stdlib.h>
-#include <time.h>
-
-#ifndef _WINDOWS
-#endif
-
-#ifdef _WINDOWS
-#endif
-
-#define	SERVER
-#include "version.h"
-#include "config.h"
-#include "types.h"
-#include "serverconst.h"
-#include "global.h"
-#include "proto.h"
-#include "error.h"
-#include "portability.h"
-#include "commonproto.h"
-
+#include "xpserver.h"
 
 char object_version[] = VERSION;
 
@@ -60,7 +39,6 @@ int			NumPulses = 0;
 int			NumEcms = 0;
 int			NumTransporters = 0;
 object			*Obj[MAX_TOTAL_SHOTS];
-pulse_t			*Pulses[MAX_TOTAL_PULSES];
 ecm_t			*Ecms[MAX_TOTAL_ECMS];
 trans_t			*Transporters[MAX_TOTAL_TRANSPORTERS];
 
@@ -97,11 +75,9 @@ void Object_free_ind(int ind)
 	Object_decr_count();
 	Obj[ind] = Obj[ObjCount];
 	Obj[ObjCount] = obj;
-    }
-    else {
+    } else
 	warn("Cannot free object %d, when count = %d, and total = %d !",
 	     ind, ObjCount, MAX_TOTAL_SHOTS);
-    }
 }
 
 void Object_free_ptr(object *obj)
@@ -114,9 +90,8 @@ void Object_free_ptr(object *obj)
 	    break;
 	}
     }
-    if (i < 0) {
+    if (i < 0)
 	warn("Could NOT free object!");
-    }
 }
 
 static anyobject *objArray;
@@ -151,7 +126,7 @@ void Free_shots(void)
 
 
 /* kps debug hack */
-char *Object_typename(object *obj)
+const char *Object_typename(object *obj)
 {
     int type;
 

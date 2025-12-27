@@ -1,5 +1,4 @@
-/* $Id: math.c,v 5.1 2001/05/08 11:35:29 bertg Exp $
- *
+/*
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,30 +21,13 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <errno.h>
-#include <math.h>
-
-#include "version.h"
-#include "config.h"
-#include "const.h"
-#include "error.h"
-#include "commonproto.h"
-
+#include "xpcommon.h"
 
 char math_version[] = VERSION;
 
 
-
-DFLOAT		tbl_sin[TABLE_SIZE];
-DFLOAT		tbl_cos[TABLE_SIZE];
-
-int ON(char *optval);
-int OFF(char *optval);
-DFLOAT findDir(DFLOAT x, DFLOAT y);
-void Make_table(void);
+double		tbl_sin[TABLE_SIZE];
+double		tbl_cos[TABLE_SIZE];
 
 int ON(char *optval)
 {
@@ -74,9 +56,9 @@ int mod(int x, int y)
     return x;
 }
 
-DFLOAT findDir(DFLOAT x, DFLOAT y)
+double findDir(double x, double y)
 {
-    DFLOAT angle;
+    double angle;
 
     if (x != 0.0 || y != 0.0)
 	angle = atan2(y, x) / (2 * PI);
@@ -89,13 +71,13 @@ DFLOAT findDir(DFLOAT x, DFLOAT y)
 }
 
 
-DFLOAT rfrac(void)
+double rfrac(void)
 {
     /*
      * Return a pseudo-random value in the range { 0.0 <= x < 1.0 }.
      * Use randomMT() which returns a 32 bit PRN and multiply by 1/(1<<32).
      */
-    return (DFLOAT)((double) randomMT() * 0.00000000023283064365386962890625);
+    return (double) (randomMT() * 0.00000000023283064365386962890625);
 }
 
 
@@ -108,4 +90,3 @@ void Make_table(void)
 	tbl_cos[i] = cos(i * (2.0 * PI / TABLE_SIZE));
     }
 }
-

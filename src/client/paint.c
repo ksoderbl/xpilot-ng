@@ -1,5 +1,4 @@
-/* $Id: paint.c,v 5.7 2002/01/30 21:29:39 bertg Exp $
- *
+/*
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,117 +21,16 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <errno.h>
-#include <limits.h>
-#include <time.h>
-#include <sys/types.h>
-
-#ifndef _WINDOWS
-# include <unistd.h>
-# include <X11/Xlib.h>
-# include <X11/Xos.h>
-#endif
-
-#ifdef _WINDOWS
-# include "NT/winX.h"
-# include "NT/winClient.h"
-# include "NT/winXXPilot.h"
-# include "netclient.h"
-#endif
-
-#include "version.h"
-#include "config.h"
-#include "const.h"
-#include "error.h"
-#include "bit.h"
-#include "types.h"
-#include "keys.h"
-#include "rules.h"
-#include "setup.h"
-#include "dbuff.h"
-#include "texture.h"
-#include "paint.h"
-#include "paintdata.h"
-#include "record.h"
-#include "xinit.h"
-#include "bitmaps.h"
-#include "portability.h"
-#include "client.h"
-#include "commonproto.h"
+#include "xpclient.h"
 
 char paint_version[] = VERSION;
-
-extern setup_t		*Setup;
-extern int		RadarHeight;
 
 /*
  * Globals.
  */
-bool roundend = false;
-int killratio_kills = 0;
-int killratio_deaths = 0;
-int killratio_totalkills = 0;
-int killratio_totaldeaths = 0;
+ipos	world;
+ipos	realWorld;
 
-XFontStruct* gameFont;		/* The fonts used in the game */
-XFontStruct* messageFont;
-XFontStruct* scoreListFont;
-XFontStruct* buttonFont;
-XFontStruct* textFont;
-XFontStruct* talkFont;
-XFontStruct* motdFont;
-char	gameFontName[FONT_LEN];	/* The fonts used in the game */
-char	messageFontName[FONT_LEN];
-char	scoreListFontName[FONT_LEN];
-char	buttonFontName[FONT_LEN];
-char	textFontName[FONT_LEN];
-char	talkFontName[FONT_LEN];
-char	motdFontName[FONT_LEN];
-
-Display	*dpy;			/* Display of player (pointer) */
-Display	*kdpy;			/* Keyboard display */
-short	about_page;		/* Which page is the player on? */
-unsigned short	team;		/* What team is the player on? */
-
-GC	gc;			/* GC for the game area */
-GC	messageGC;		/* GC for messages in the game area */
-GC	radarGC;		/* GC for the radar */
-GC	buttonGC;		/* GC for the buttons */
-GC	scoreListGC;		/* GC for the player list */
-GC	textGC;			/* GC for the info text */
-GC	talkGC;			/* GC for the message window */
-GC	motdGC;			/* GC for the motd text */
-XGCValues	gcv;
-
-Window	top;			/* Top-level window (topshell) */
-Window	draw;			/* Main play window */
-Window	keyboard;		/* Keyboard window */
-#ifdef _WINDOWS		/* Windows needs some dummy windows (size 0,0) */
-				/* so we can store the active fonts.  Windows only */
-				/* supports 1 active font per window */
-Window	textWindow;		/* for the GC into the config window */
-Window	msgWindow;		/* for meesages into the playfield */
-Window	buttonWindow;		/* to calculate size of buttons */
-#endif
-
-Pixmap	p_draw;			/* Saved pixmap for the drawing */
-				/* area (monochromes use this) */
-Window	players;		/* Player list window */
-				/* monochromes) */
-int	maxMessages;		/* Max. number of messages to display */
-int	messagesToStdout;	/* Send messages to standard output */
-Window	about_w;		/* About window */
-Window	about_close_b;		/* About window's close button */
-Window	about_next_b;		/* About window's next button */
-Window	about_prev_b;		/* About window's previous button */
-Window	keys_close_b;		/* Help window's close button */
-Window	talk_w;			/* Talk window */
-XColor	colors[MAX_COLORS];	/* Colors */
-Colormap	colormap;	/* Private colormap */
 int	maxColors;		/* Max. number of colors to use */
 bool	gotFocus;
 bool	players_exposed;
@@ -143,600 +41,299 @@ int	active_view_height;	/* Height of active map area displayed. */
 int	ext_view_x_offset;	/* Offset ext_view_width */
 int	ext_view_y_offset;	/* Offset ext_view_height */
 
-int	titleFlip;		/* Do special title bar flipping? */
-int	shieldDrawMode = -1;	/* Either LineOnOffDash or LineSolid */
-char	modBankStr[NUM_MODBANKS][MAX_CHARS];	/* modifier banks */
-char	*texturePath = NULL;		/* Path list of texture directories */
-bool	useErase;		/* use Erase hack for slow X */
+bool	titleFlip;		/* Do special title bar flipping? */
 
-int		maxKeyDefs;
-keydefs_t	*keyDefs = NULL;
+long	loops = 0;
+long	loopsSlow = 0;	/* Proceeds slower than loops */
+double	timePerFrame = 0.0;
 
-other_t	*self;			/* player info */
+int	clockColor;		/* Clock color index */
+int	scoreColor;		/* Score list color index */
+int	scoreSelfColor;		/* Score list own score color index */
+int	scoreInactiveColor;	/* Score list inactive player color index */
+int	scoreInactiveSelfColor;	/* Score list inactive self color index */
+int	scoreOwnTeamColor;	/* Score list own team color index */
+int	scoreEnemyTeamColor;	/* Score list enemy team color index */
+int	scoreObjectColor;	/* Color index for map score objects */
 
-long		loops = 0;
+int	zeroLivesColor;		/* Color to associate with 0 lives */
+int	oneLifeColor;		/* Color to associate with 1 life */
+int	twoLivesColor;		/* Color to associate with 2 lives */
+int	manyLivesColor;		/* Color to associate with >2 lives */
 
-unsigned long	loopsSlow = 0;	/* Proceeds slower than loops */
-int		clientFPS = 0;	/* How many fps we actually paint */
-static time_t	old_time = 0;	/* Previous value of time */
-time_t		currentTime;	/* Current value of time() */
-static int	frame_count = 0;/* Used to estimate paint fps */
-DFLOAT		timePerFrame = 0.0;/* How much real time proceeds per frame */
-static DFLOAT	time_counter = 0.0;
+int	wallColor;		/* Color index for wall drawing */
+int	fuelColor;		/* Color index for fuel station drawing */
+int	decorColor;		/* Color index for decoration drawing */
+int	backgroundPointColor;	/* Color index for background point drawing */
+int	visibilityBorderColor;	/* Color index for visibility border drawing */
 
-int	cacheShips = 0;		/* cache some ship bitmaps every frame */
+unsigned	draw_width, draw_height;
+char	sparkColors[MSG_LEN];
+int	spark_color[MAX_COLORS];
+int	num_spark_colors;
 
 
-static void Paint_clock(int redraw);
-
-void Game_over_action(u_byte stat)
+int Check_view_dimensions(void)
 {
-    static u_byte old_stat = 0;
+    int			width_wanted, height_wanted;
+    int			srv_width, srv_height;
 
-    if (BIT(old_stat, GAME_OVER) && !BIT(stat, GAME_OVER)
-	&& !BIT(stat,PAUSE)) {
-	XMapRaised(dpy, top);
-    }
-    /* GAME_OVER -> PLAYING */
-    if (BIT(old_stat, PLAYING|PAUSE|GAME_OVER) != PLAYING) {
-	if (BIT(stat, PLAYING|PAUSE|GAME_OVER) == PLAYING) {
-	    Reset_shields();
-	}
-    }
+    width_wanted = (int)(draw_width * scaleFactor + 0.5);
+    height_wanted = (int)(draw_height * scaleFactor + 0.5);
 
-    old_stat = stat;
+    srv_width = width_wanted;
+    srv_height = height_wanted;
+    LIMIT(srv_height, MIN_VIEW_SIZE, MAX_VIEW_SIZE);
+    LIMIT(srv_width, MIN_VIEW_SIZE, MAX_VIEW_SIZE);
+    if (server_display.view_width != srv_width ||
+	server_display.view_height != srv_height ||
+	server_display.num_spark_colors != num_spark_colors ||
+	server_display.spark_rand != spark_rand) {
+	if (Send_display(srv_width, 
+			 srv_height, 
+			 spark_rand, 
+			 num_spark_colors))
+	    return -1;
+    }
+    spark_rand = server_display.spark_rand;
+    active_view_width = server_display.view_width;
+    active_view_height = server_display.view_height;
+    ext_view_x_offset = 0;
+    ext_view_y_offset = 0;
+    if (width_wanted > active_view_width) {
+	ext_view_width = width_wanted;
+	ext_view_x_offset = (width_wanted - active_view_width) / 2;
+    } else
+	ext_view_width = active_view_width;
+
+    if (height_wanted > active_view_height) {
+	ext_view_height = height_wanted;
+	ext_view_y_offset = (height_wanted - active_view_height) / 2;
+    } else
+	ext_view_height = active_view_height;
+
+    return 0;
 }
 
 
-void Paint_frame(void)
+
+
+struct team_score {
+    double	score;
+    int		life;
+    int		playing;
+};
+
+
+static void Determine_team_order(struct team_score *team_order[],
+				 struct team_score team[])
 {
-    static long		scroll_i = 0;
-    static int		prev_damaged = 0;
-    static int		prev_prev_damaged = 0;
+    int i, j, k;
 
-#ifdef _WINDOWS	/* give any outgoing data a head start to the server */
-    Net_flush();	/* send anything to the server before returning to Windows */
-#endif
-
-    if (start_loops != end_loops) {
-	errno = 0;
-	error("Start neq. End (%ld,%ld,%ld)", start_loops, end_loops, loops);
-    }
-    loops = end_loops;
-
-    /*
-     * Instead of using loops to determining if things are drawn this frame,
-     * loopsSlow should be used.
-     */
-    frame_count++;
-    currentTime = time(NULL);
-    if (currentTime != old_time) {
-	/* assume one second has passed */
-	old_time = currentTime;
-	clientFPS = frame_count;
-	frame_count = 0;
-	if (clientFPS != 0)
-	    timePerFrame = 1.0 / clientFPS;
-	/*xpprintf("clientFPS = %d\n", clientFPS);*/
-    }
-
-    /*
-     * We don't want things to happen too fast at high fps.
-     */
-    time_counter += timePerFrame;
-    if (time_counter >= 1.0 / 15) {
-	loopsSlow++;
-	time_counter = 0.0;
-    }
-
-    /*
-     * Estimate suitable number of frames to do the base warning.
-     * kps - maybe add baseWarningTime option ;).
-     */
-    baseWarningFrames = 3 * FPS;
-
-    /*
-     * Switch between two different window titles.
-     */
-    if (titleFlip && (loopsSlow % TITLE_DELAY) == 0) {
-	scroll_i = !scroll_i;
-	if (scroll_i)
-	    XStoreName(dpy, top, COPYRIGHT);
-	else
-	    XStoreName(dpy, top, TITLE);
-
-    }
-    /* This seems to have a bug (in Windows) 'cause last frame we ended
-       with an XSetForeground(white) confusing SET_FG */
-    SET_FG(colors[BLACK].pixel);
-
-#ifdef _WINDOWS
-    p_draw = draw;		/* let's try this */
-    XSetForeground(dpy, gc, colors[BLACK].pixel);
-    XFillRectangle(dpy, p_draw, gc, 0, 0, draw_width, draw_height);
-#endif
-
-    rd.newFrame();
-
-
-    /*
-     * Do we really need to draw all this if the player is damaged?
-     */
-    if (damaged <= 0) {
-	if (prev_damaged || prev_prev_damaged) {
-	    /* clean up ecm damage */
-	    SET_FG(colors[BLACK].pixel);
-	    XFillRectangle(dpy, draw, gc, 0, 0, draw_width, draw_height);
-	}
-
-	Erase_start();
-
-	Arc_start();
-
-	Rectangle_start();
-	Segment_start();
-
-	Paint_world();
-
-	Segment_end();
-	Rectangle_end();
-
-	Rectangle_start();
-	Segment_start();
-
-	if (oldServer) {
-	    Paint_vfuel();
-	    Paint_vdecor();
-	    Paint_vcannon();
-	    Paint_vbase();
-	} else {
-	    Paint_objects();
-	}
-	Paint_shots();
-
-	Rectangle_end();
-	Segment_end();
-
-	Rectangle_start();
-	Segment_start();
-
-	Paint_ships();
-	Paint_meters();
-	Paint_HUD();
-	Paint_recording();
-	Paint_client_fps();
-
-	Rectangle_end();
-	Segment_end();
-
-	Arc_end();
-
-	Paint_messages();
-	Paint_radar();
-	Paint_score_objects();
-    }
-    else {
-	/* Damaged. */
-
-	XSetFunction(dpy, gc, GXxor);
-	SET_FG(colors[BLACK].pixel ^ colors[BLUE].pixel);
-	XFillRectangle(dpy, draw, gc, 0, 0, draw_width, draw_height);
-	XSetFunction(dpy, gc, GXcopy);
-	SET_FG(colors[BLACK].pixel);
-    }
-    prev_prev_damaged = prev_damaged;
-    prev_damaged = damaged;
-
-    rd.endFrame();
-
-    if (radar_exposures == 1) {
-	Paint_world_radar();
-    }
-
-    /*
-     * Now switch planes and clear the screen.
-     */
-    if (p_radar != radar && radar_exposures > 0) {
-	if (BIT(instruments, SHOW_SLIDING_RADAR) == 0
-	    || BIT(Setup->mode, WRAP_PLAY) == 0) {
-#ifndef _WINDOWS
-	    XCopyArea(dpy, p_radar, radar, gc,
-		      0, 0, 256, RadarHeight, 0, 0);
-#else
-	    WinXBltPixToWin(p_radar, radar, 
-			    0, 0, 256, RadarHeight, 0, 0);
-#endif
-	} else {
-
-	    int x, y, w, h;
-	    float xp, yp, xo, yo;
-
-	    xp = (float) (pos.x * 256) / Setup->width;
-	    yp = (float) (pos.y * RadarHeight) / Setup->height;
-	    xo = (float) 256 / 2;
-	    yo = (float) RadarHeight / 2;
-	    if (xo <= xp) {
-		x = (int) (xp - xo + 0.5);
-	    } else {
-		x = (int) (256 + xp - xo + 0.5);
+    num_playing_teams = 0;
+    for (i = 0; i < MAX_TEAMS; i++) {
+	if (team[i].playing) {
+	    for (j = 0; j < num_playing_teams; j++) {
+		if (team[i].score > team_order[j]->score
+		    || (team[i].score == team_order[j]->score
+			&& ((BIT(Setup->mode, LIMITED_LIVES))
+			    ? (team[i].life > team_order[j]->life)
+			    : (team[i].life < team_order[j]->life)))) {
+		    for (k = i; k > j; k--)
+			team_order[k] = team_order[k - 1];
+		    break;
+		}
 	    }
-	    if (yo <= yp) {
-		y = (int) (yp - yo + 0.5);
-	    } else {
-		y = (int) (RadarHeight + yp - yo + 0.5);
-	    }
-	    y = RadarHeight - y - 1;
-	    w = 256 - x;
-	    h = RadarHeight - y;
-
-#ifndef _WINDOWS	
-	    XCopyArea(dpy, p_radar, radar, gc,
-		      0, 0, x, y, w, h);
-	    XCopyArea(dpy, p_radar, radar, gc,
-		      x, 0, w, y, 0, h);
-	    XCopyArea(dpy, p_radar, radar, gc,
-		      0, y, x, h, w, 0);
-	    XCopyArea(dpy, p_radar, radar, gc,
-		      x, y, w, h, 0, 0);
-#else
-	    Paint_world_radar();			  
-#endif
+	    team_order[j] = &team[i];
+	    num_playing_teams++;
 	}
     }
-    else if (radar_exposures > 2) {
-	Paint_world_radar();
-    }
+}
 
-#ifndef _WINDOWS
-    if (dbuf_state->type == PIXMAP_COPY) {
-	XCopyArea(dpy, p_draw, draw, gc,
-		  0, 0, draw_width, draw_height, 0, 0);
-    }
+static void Determine_order(other_t **order, struct team_score team[])
+{
+    other_t		*other;
+    int			i, j, k;
 
-    dbuff_switch(dbuf_state);
-
-    if (dbuf_state->type == COLOR_SWITCH) {
-	XSetPlaneMask(dpy, gc, dbuf_state->drawing_planes);
-	XSetPlaneMask(dpy, messageGC, dbuf_state->drawing_planes);
-    }
-#endif
-
-    if (!damaged) {
-	/* Prepare invisible buffer for next frame by clearing. */
-	if (useErase) {
-	    Erase_end();
+    for (i = 0; i < num_others; i++) {
+	other = &Others[i];
+	if (BIT(Setup->mode, TIMING)) {
+	    /*
+	     * Sort the score table on position in race.
+	     * Put paused and waiting players last as well as tanks.
+	     */
+	    if (strchr("PTW", other->mychar))
+		j = i;
+	    else {
+		for (j = 0; j < i; j++) {
+		    if (order[j]->timing < other->timing)
+			break;
+		    if (strchr("PTW", order[j]->mychar))
+			break;
+		    if (order[j]->timing == other->timing) {
+			if (order[j]->timing_loops > other->timing_loops)
+			    break;
+		    }
+		}
+	    }
 	}
 	else {
-	    /*
-	     * DBE's XdbeBackground switch option is
-	     * probably faster than XFillRectangle.
-	     */
-#ifndef _WINDOWS
-	    if (dbuf_state->multibuffer_type != MULTIBUFFER_DBE) {
-		SET_FG(colors[BLACK].pixel);
-		XFillRectangle(dpy, p_draw, gc, 0, 0, draw_width, draw_height);
+	    for (j = 0; j < i; j++) {
+		if (order[j]->score < other->score)
+		    break;
 	    }
+	}
+	for (k = i; k > j; k--)
+	    order[k] = order[k - 1];
+	order[j] = other;
+
+	if (BIT(Setup->mode, TEAM_PLAY|TIMING) == TEAM_PLAY) {
+	    switch (other->mychar) {
+	    case 'P':
+	    case 'W':
+	    case 'T':
+		break;
+	    case ' ':
+	    case 'R':
+		if (BIT(Setup->mode, LIMITED_LIVES))
+		    team[other->team].life += other->life + 1;
+		else
+		    team[other->team].life += other->life;
+		/*FALLTHROUGH*/
+	    default:
+		team[other->team].playing++;
+		team[other->team].score += other->score;
+		break;
+	    }
+	}
+    }
+    return;
+}
+
+#define TEAM_PAUSEHACK 100
+
+static int Team_heading(int entrynum, int teamnum,
+			int teamlives, double teamscore)
+{
+    other_t tmp;
+    tmp.id = -1;
+    tmp.team = teamnum;
+    tmp.war_id = -1;
+    tmp.name_width = 0;
+    tmp.ship = NULL;
+    if (teamnum != TEAM_PAUSEHACK)
+	sprintf(tmp.name, "TEAM %d", tmp.team);
+    else
+	sprintf(tmp.name, "Pause Wusses");
+    strcpy(tmp.real, tmp.name);
+    strcpy(tmp.host, "");
+#if 0
+    if (BIT(Setup->mode, LIMITED_LIVES) && teamlives == 0)
+	tmp.mychar = 'D';
+    else
+	tmp.mychar = ' ';
+#else
+    tmp.mychar = ' ';
 #endif
-	}
-    }
+    tmp.score = teamscore;
+    tmp.life = teamlives;
 
-#ifndef _WINDOWS
-    if (talk_mapped == true) {
-	static bool toggle;
-	static long last_toggled;
-
-	if (loops >= last_toggled + FPS / 2 || loops < last_toggled) {
-	    toggle = (toggle == false) ? true : false;
-	    last_toggled = loops;
-	}
-	Talk_cursor(toggle);
-    }
-#endif
-
-#ifdef _WINDOWS
-    Client_score_table();
-    PaintWinClient();
-#endif
-
-    Paint_clock(0);
-
-    XFlush(dpy);
+    Paint_score_entry(entrynum++, &tmp, true);
+    return entrynum;
 }
 
-
-#define SCORE_BORDER		6
-
-
-static void Paint_score_background(int thisLine)
+static int Team_score_table(int entrynum, int teamnum,
+			    struct team_score team, other_t **order)
 {
-    if (fullColor &&
-	Bitmap_get(players, BM_SCORE_BG, 0) != NULL &&
-	Bitmap_get(players, BM_LOGO, 0) != NULL) {
-	int bgh, lh;
+    other_t *other;
+    int i, j;
+    bool drawn = false;
 
-	XSetForeground(dpy, scoreListGC, colors[BLACK].pixel);
+    for (i = 0; i < num_others; i++) {
+	other = order[i];
 
-	bgh = pixmaps[BM_SCORE_BG].height;
-	lh = pixmaps[BM_LOGO].height;	
-
-	IFWINDOWS( XFillRectangle(dpy, players, scoreListGC, 
-				  0, 0, players_width, players_height) );
-
-	Bitmap_paint(players, BM_SCORE_BG, 0, 0, 0);
-	if (players_height > bgh + lh) {
-	    XFillRectangle(dpy, players, scoreListGC,
-			   0, bgh,
-			   players_width, players_height - (bgh + lh));
-	}
-	Bitmap_paint(players, BM_LOGO, 0, players_height - lh, 0);
-	XFlush(dpy);
-    } else {
-	XSetForeground(dpy, scoreListGC, colors[windowColor].pixel);
-	XFillRectangle(dpy, players, scoreListGC,
-		       0, 0, players_width, players_height);
-	XFlush(dpy);
-    }
-}
-
-
-void Paint_score_start(void)
-{
-    char	headingStr[MSG_LEN];
-    static int thisLine;
-
-    thisLine = SCORE_BORDER + scoreListFont->ascent;
-
-    if (showRealName) {
-	strlcpy(headingStr, "NICK=USER@HOST", sizeof(headingStr));
-    } else if (BIT(Setup->mode, TEAM_PLAY)) {
-	;
-    } else {
-	strlcpy(headingStr, "  ", sizeof(headingStr));
-	if (BIT(Setup->mode, TIMING)) {
-	    if (version >= 0x3261) {
-		strcat(headingStr, "LAP ");
-	    }
-	}
-	strlcpy(headingStr, " AL ", sizeof(headingStr));
-	strcat(headingStr, "  SCORE  ");
-	if (BIT(Setup->mode, LIMITED_LIVES)) {
-	    strlcat(headingStr, "LIFE", sizeof(headingStr));
-	}
-	strlcat(headingStr, " NAME", sizeof(headingStr));
-    }
-    Paint_score_background(thisLine);
-
-    if (!BIT(Setup->mode, TEAM_PLAY) || showRealName) {
-	ShadowDrawString(dpy, players, scoreListGC,
-			 SCORE_BORDER, thisLine,
-			 headingStr,
-			 colors[WHITE].pixel,
-			 colors[BLACK].pixel);
-
-	gcv.line_style = LineSolid;
-	XChangeGC(dpy, scoreListGC, GCLineStyle, &gcv);
-	XDrawLine(dpy, players, scoreListGC,
-		  SCORE_BORDER, thisLine,
-		  players_width - SCORE_BORDER, thisLine);
-
-	gcv.line_style = LineOnOffDash;
-	XChangeGC(dpy, scoreListGC, GCLineStyle, &gcv);
-    }
-
-    Paint_clock(1);
-}
-
-
-void Paint_score_entry(int entry_num,
-		       other_t* other,
-		       bool is_team)
-{
-    static char		raceStr[8], teamStr[4], lifeStr[8], label[MSG_LEN];
-    static int		lineSpacing = -1, firstLine;
-    int			thisLine;
-    char		scoreStr[16];
-
-    /*
-     * First time we're here, set up miscellaneous strings for
-     * efficiency and calculate some other constants.
-     */
-    if (lineSpacing == -1) {
-	memset(raceStr, '\0', sizeof raceStr);
-	memset(teamStr, '\0', sizeof teamStr);
-	memset(lifeStr, '\0', sizeof lifeStr);
-	teamStr[1] = ' ';
-	raceStr[2] = ' ';
-
-	lineSpacing
-	    = scoreListFont->ascent + scoreListFont->descent + 3;
-	firstLine
-	    = 2*SCORE_BORDER + scoreListFont->ascent + lineSpacing;
-    }
-    thisLine = firstLine + lineSpacing * entry_num;
-
-    /*
-     * Setup the status line
-     */
-    if (showRealName) {
-	sprintf(label, "%s=%s@%s", other->name, other->real, other->host);
-    } else {
-	other_t*	war = Other_by_id(other->war_id);
-
-	if (BIT(Setup->mode, TIMING)) {
-	    raceStr[0] = ' ';
-	    raceStr[1] = ' ';
-	    if (version >= 0x3261) {
-		if ((other->mychar == ' ' || other->mychar == 'R')
-		    && other->round + other->check > 0) {
-		    if (other->round > 99) {
-			sprintf(raceStr, "%3d", other->round);
-		    }
-		    else {
-			sprintf(raceStr, "%d.%c",
-				other->round, other->check + 'a');
-		    }
-		}
-	    }
-	}
-	if (BIT(Setup->mode, TEAM_PLAY)) {
-	    teamStr[0] = other->team + '0';
+	if (teamnum == TEAM_PAUSEHACK) {
+	    if (other->mychar != 'P')
+		continue;
 	} else {
-	    sprintf(teamStr, "%c", other->alliance);
+	    if (other->team != teamnum || other->mychar == 'P')
+		continue;
 	}
 
-	if (BIT(Setup->mode, LIMITED_LIVES))
-	    sprintf(lifeStr, " %3d", other->life);
-
-	if (Using_score_decimals()) {
-	    sprintf(scoreStr, "%*.*f",
-		    9 - showScoreDecimals, showScoreDecimals,
-		    other->score);
-	} else {
-	    sprintf(scoreStr, "%6d", (int) rint(other->score));
-	}
-	if (BIT(Setup->mode, TEAM_PLAY)) {
-	    sprintf(label, "%c %s  %-18s%s",
-		    other->mychar, scoreStr, other->name, lifeStr);
-	} else {
-	    sprintf(label, "%c %s%s%s%s  %s",
-		    other->mychar, raceStr, teamStr,
-		    scoreStr, lifeStr,
-		    other->name);
-	    if (war) {
-		if (strlen(label) + strlen(war->name) + 5 < sizeof(label)) {
-		    sprintf(label + strlen(label), " (%s)", war->name);
-		}
-	    }
-	}
+	if (!drawn)
+	    entrynum = Team_heading(entrynum, teamnum, team.life, team.score);
+	j = other - Others;
+	Paint_score_entry(entrynum++, other, false);
+	drawn = true;
     }
 
-    /*
-     * Draw the line
-     * e94_msu eKthHacks
-     */
-    if ((other->mychar == 'D'
-	|| other->mychar == 'P'
-	|| other->mychar == 'W')
-	&& !mono) {
-
-	if (BIT(hackedInstruments, TREAT_ZERO_SPECIAL) && other->team == 0)
-	    XSetForeground(dpy, scoreListGC, colors[scoreZeroColor].pixel);
-	else if (other->id == self->id)
-	    XSetForeground(dpy, scoreListGC,
-			   colors[scoreInactiveSelfColor].pixel);
-	else
-	    XSetForeground(dpy, scoreListGC, colors[scoreInactiveColor].pixel);
-
-	XDrawString(dpy, players, scoreListGC,
-		    SCORE_BORDER, thisLine,
-		    label, strlen(label));
-    } else {
-	if (!mono &&
-	    other->id == self->id)
-	    ShadowDrawString(dpy, players, scoreListGC, SCORE_BORDER,
-			     thisLine, label,
-			     colors[scoreSelfColor].pixel,
-			     colors[BLACK].pixel);
-	else
-	    ShadowDrawString(dpy, players, scoreListGC,
-			     SCORE_BORDER, thisLine,
-			     label,
-			     colors[scoreColor].pixel,
-			     colors[BLACK].pixel);
-    }
-
-    /*
-     * Underline the teams
-     */
-    if (is_team) {
-	XSetForeground(dpy, scoreListGC, colors[BLUE].pixel);
-	gcv.line_style = LineSolid;
-	XChangeGC(dpy, scoreListGC, GCLineStyle, &gcv);
-	XDrawLine(dpy, players, scoreListGC,
-		  SCORE_BORDER, thisLine,
-		  players_width - SCORE_BORDER, thisLine);
-	gcv.line_style = LineOnOffDash;
-	XChangeGC(dpy, scoreListGC, GCLineStyle, &gcv);
-    }
+    if (drawn)
+	entrynum += 1;
+    return entrynum;
 }
 
 
-static void Paint_clock(int redraw)
+void Paint_score_table(void)
 {
-    int			minute,
-			hour,
-			height = scoreListFont->ascent + scoreListFont->descent
-				+ 3,
-			border = 3;
-    struct tm		*m;
-    char		buf[16];
-    static long		prev_loops;
-    static int		width;
 
-    if (BIT(instruments, SHOW_CLOCK) == 0) {
-	if (width != 0) {
-	    XSetForeground(dpy, scoreListGC, colors[windowColor].pixel);
-	    XFillRectangle(dpy, players, scoreListGC,
-			   256 - (width + 2 * border), 0,
-			   width + 2 * border, height);
-	    width = 0;
-	}
+    struct team_score	team[MAX_TEAMS],
+			pausers,
+			*team_order[MAX_TEAMS];
+    other_t		*other,
+			**order;
+    int			i, j, entrynum = 0;
+
+    if (!scoresChanged || !players_exposed)
+	return;
+
+    if (num_others < 1) {
+	Paint_score_start();
+	scoresChanged = false;
 	return;
     }
-    /* kps - fix */
-    if (redraw == 0
-	&& loops > prev_loops
-	&& loops - prev_loops < (FPS << 5)) {
+
+    if ((order = (other_t **)malloc(num_others * sizeof(other_t *))) == NULL) {
+	error("No memory for score");
 	return;
     }
-    prev_loops = loops;
-    m = localtime(&currentTime);
-
-    /* round seconds up to next minute. */
-    minute = m->tm_min;
-    hour = m->tm_hour;
-    if (minute++ == 59) {
-	minute = 0;
-	if (hour++ == 23) {
-	    hour = 0;
-	}
+    if (BIT(Setup->mode, TEAM_PLAY|TIMING) == TEAM_PLAY) {
+	memset(&team[0], 0, sizeof team);
+	memset(&pausers, 0, sizeof pausers);
     }
-    if (!BIT(instruments, SHOW_CLOCK_AMPM_FORMAT)) {
-	sprintf(buf, "%02d:%02d", hour, minute);
+    Determine_order(order, team);
+    Paint_score_start();
+    if (!(BIT(Setup->mode, TEAM_PLAY|TIMING) == TEAM_PLAY)) {
+	for (i = 0; i < num_others; i++) {
+	    other = order[i];
+	    j = other - Others;
+	    Paint_score_entry(i, other, false);
+	}
     } else {
-	char tmpchar = 'A';
-	/* strftime(buf, sizeof(buf), "%l:%M%p", m); */
-	if (m->tm_hour > 12){
-	    tmpchar = 'P';
-	    m->tm_hour %= 12;
+	Determine_team_order(team_order, team);
+
+	/* add an empty line */
+	entrynum++;
+	for (i = 0; i < MAX_TEAMS; i++)
+	    entrynum = Team_score_table(entrynum, i, team[i], order);
+	/* paint pausers */
+	entrynum = Team_score_table(entrynum, TEAM_PAUSEHACK, pausers, order);
+#if 0
+	for (i = 0; i < num_playing_teams; i++) {
+	    entrynum = Team_heading(entrynum,
+				    team_order[i] - &team[0],
+				    team_order[i]->life,
+				    team_order[i]->score);
 	}
-	sprintf(buf, "%2d:%02d%cM", m->tm_hour, m->tm_min, tmpchar);
+#endif
     }
-    width = XTextWidth(scoreListFont, buf, strlen(buf));
-    XSetForeground(dpy, scoreListGC, colors[windowColor].pixel);
-    XFillRectangle(dpy, players, scoreListGC,
-		   256 - (width + 2 * border), 0,
-		   width + 2 * border, height);
-    ShadowDrawString(dpy, players, scoreListGC,
-		     256 - (width + border),
-		     scoreListFont->ascent + 4,
-		     buf,
-		     colors[WHITE].pixel,
-		     colors[BLACK].pixel);
+
+    if (roundend)
+	Add_roundend_messages(order);
+
+    free(order);
+
+    IFWINDOWS( MarkPlayersForRedraw() );
+
+    scoresChanged = false;
 }
-
-
-void ShadowDrawString(Display* dpy, Window w, GC gc,
-		      int x, int y, const char* str,
-		      unsigned long fg, unsigned long bg)
-{
-    if (!mono) {
-	XSetForeground(dpy, gc, bg);
-	XDrawString(dpy, w, gc, x+1, y+1, str, strlen(str));
-	x--; y--;
-    }
-    XSetForeground(dpy, gc, fg);
-    XDrawString(dpy, w, gc, x, y, str, strlen(str));
-}
-
 

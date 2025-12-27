@@ -1,4 +1,4 @@
-/* $Id: walls.h,v 5.3 2001/05/27 16:37:06 bertg Exp $
+/* 
  *
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
@@ -29,8 +29,6 @@
 #include "click.h"
 #endif
 
-extern char walls_version[];
-
 /*
  * Wall collision detection and bouncing.
  *
@@ -60,19 +58,6 @@ typedef enum {
     CrashWallAngle = 0x200
 } move_crash_t;
 
-typedef enum {
-    NotABounce = 0,
-    BounceHorLo = 0x01,
-    BounceHorHi = 0x02,
-    BounceVerLo = 0x04,
-    BounceVerHi = 0x08,
-    BounceLeftDown = 0x10,
-    BounceLeftUp = 0x20,
-    BounceRightDown = 0x40,
-    BounceRightUp = 0x80,
-    BounceEdge = 0x0100
-} move_bounce_t;
-
 typedef struct {
     int			edge_wrap;
     int			edge_bounce;
@@ -89,7 +74,6 @@ typedef struct {
 typedef struct {
     const move_info_t	*mip;
     move_crash_t	crash;
-    move_bounce_t	bounce;
     clpos		pos;
     vector		vel;
     clvec		todo;

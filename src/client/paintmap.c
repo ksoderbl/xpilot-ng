@@ -1,5 +1,4 @@
-/* $Id: paintmap.c,v 5.3 2001/10/11 20:27:35 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,64 +21,21 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <errno.h>
-#include <sys/types.h>
-
-#ifndef _WINDOWS
-# include <unistd.h>
-# include <X11/Xlib.h>
-# include <X11/Xos.h>
-#endif
-
-#ifdef _WINDOWS
-# include "NT/winX.h"
-#endif
-
-#include "version.h"
-#include "config.h"
-#include "const.h"
-#include "error.h"
-#include "bit.h"
-#include "types.h"
-#include "keys.h"
-#include "rules.h"
-#include "setup.h"
-#include "texture.h"
-#include "paint.h"
-#include "paintdata.h"
-#include "paintmacros.h"
-#include "record.h"
-#include "xinit.h"
-#include "protoclient.h"
-#include "guimap.h"
-
+#include "xpclient.h"
 
 char paintmap_version[] = VERSION;
 
 
-int	wallColor;		/* Color index for wall drawing */
-int	fuelColor;		/* Color index for fuel station drawing */
-int	decorColor;		/* Color index for decoration drawing */
-char	*wallTextureFile;	/* Filename of wall texture */
-char	*decorTextureFile;	/* Filename of decor texture */
-
-extern setup_t		*Setup;
-
-extern XPoint *polys[500];
-extern int polyc;
-extern int polypc[500];
+static double 	hrLimitTime = 0.0;
 
 
 void Paint_vcannon(void)
 {
     int	i;
     if (num_vcannon > 0) {
-	for (i = 0; i < num_vcannon; i++) {
-    	    Gui_paint_cannon(vcannon_ptr[i].x, vcannon_ptr[i].y, vcannon_ptr[i].type);
-	}
+	for (i = 0; i < num_vcannon; i++)
+    	    Gui_paint_cannon(vcannon_ptr[i].x, vcannon_ptr[i].y,
+			     vcannon_ptr[i].type);
 	RELEASE(vcannon_ptr, num_vcannon, max_vcannon);
     }
 }
@@ -88,34 +44,20 @@ void Paint_vfuel(void)
 {
     int	i;
     if (num_vfuel > 0) {
-	for (i = 0; i < num_vfuel; i++) {
+	for (i = 0; i < num_vfuel; i++)
 	    Gui_paint_fuel(vfuel_ptr[i].x, vfuel_ptr[i].y, vfuel_ptr[i].fuel);
-	}
 	RELEASE(vfuel_ptr, num_vfuel, max_vfuel);
     }
 }
 
-/* Easier to paint appearing ships from here for old servers, therefore
- * this declaration of a function from guiobjects.c */
-extern void Gui_paint_appearing(int x, int y, int id, int count);
-
 void Paint_vbase(void)
 {
-    int	i, j, id, team;;
+    int	i, id, team;
     if (num_vbase > 0) {
 	for (i = 0; i < num_vbase; i++) {
 	    Base_info_by_pos(vbase_ptr[i].xi, vbase_ptr[i].yi, &id, &team);
 	    Gui_paint_base(vbase_ptr[i].x, vbase_ptr[i].y, id, team,
 			   vbase_ptr[i].type);
-	    if (baseWarningType & 1) {
-		for (j = 0; j < num_bases; j++) {
-		    if (bases[j].id == id &&
-			bases[j].deathtime > loops - baseWarningFrames)
-			Gui_paint_appearing(vbase_ptr[i].x + BLOCK_SZ / 2,
-					    vbase_ptr[i].y + BLOCK_SZ / 2, id,
-					    1);
-		}
-	    }
 	}
 	RELEASE(vbase_ptr, num_vbase, max_vbase);
     }
@@ -140,33 +82,34 @@ void Paint_vdecor(void)
 
 static void Paint_background_dots(void)
 {
-    float dx, dy;
+    double dx, dy;
     int xi, yi;
     ipos min, max, count;
 
-    if (map_point_distance == 0) return;
+    if (map_point_distance == 0)
+	return;
 
     count.x = Setup->width / (BLOCK_SZ * map_point_distance);
     count.y = Setup->height / (BLOCK_SZ * map_point_distance);
 
-    dx = (float)Setup->width / count.x;
-    dy = (float)Setup->height / count.y;
+    dx = (double)Setup->width / count.x;
+    dy = (double)Setup->height / count.y;
 
     min.x = world.x / dx;
-    if (world.x > 0) min.x++;
+    if (world.x > 0)
+	min.x++;
     min.y = world.y / dy;
-    if (world.y > 0) min.y++;
+    if (world.y > 0)
+	min.y++;
 
     max.x = (world.x + ext_view_width) / dx;
     max.y = (world.y + ext_view_height) / dy;
 
     for (yi = min.y; yi <= max.y; yi++) {
         for (xi = min.x; xi <= max.x; xi++) {
-
-            Gui_paint_decor_dot
-                (xi * dx - BLOCK_SZ / 2,
-                 yi * dy - BLOCK_SZ / 2,
-                 map_point_size);
+            Gui_paint_decor_dot((int)(xi * dx - BLOCK_SZ / 2),
+				(int)(yi * dy - BLOCK_SZ / 2),
+				map_point_size);
         }
     }
 }
@@ -228,14 +171,6 @@ void Paint_objects(void)
                      bases[i].bounds.y + yoff * Setup->height,
                      bases[i].id, bases[i].team,
                      bases[i].type);
-
-		if ((baseWarningType & 1)
-		    && bases[i].deathtime > loops - baseWarningFrames) {
-		    Gui_paint_appearing(
-			bases[i].bounds.x + xoff * Setup->width + BLOCK_SZ / 2,
-			bases[i].bounds.y + yoff * Setup->height+ BLOCK_SZ / 2,
-			bases[i].id, 1);
-		}
             }
         }
     }
@@ -293,7 +228,7 @@ void Paint_objects(void)
 
 void Paint_world(void)
 {
-    int			xi, yi, xb, yb, xe, ye, fuel;
+    int			xi, yi, xb, yb, xe, ye;
     int			rxb, ryb;
     int			x, y;
     int			type;
@@ -302,50 +237,55 @@ void Paint_world(void)
 			fill_top_right = -1,
 			fill_bottom_left = -1,
 			fill_bottom_right = -1;
-    static int		wormDrawCount;
     unsigned char	*mapptr, *mapbase;
-    static int		wallTileReady = 0;
-    static Pixmap	wallTile = None;
-    static int		wallTileDoit = false;
-    XPoint		points[5];
-    static DFLOAT	oldHRLimit = -1.0;
-
-    wormDrawCount = (wormDrawCount + 1) & 7;
+    static double	oldHRLimit = -1.0;
 
     if (!BIT(Setup->mode, WRAP_PLAY)) {
-	if (world.x <= 0) {
+	if (world.x <= 0)
 	    Gui_paint_border(0, 0, 0, Setup->height);
-	}
-	if (world.x + ext_view_width >= Setup->width) {
+	if (world.x + ext_view_width >= Setup->width)
 	    Gui_paint_border(Setup->width, 0, Setup->width, Setup->height);
-	}
-	if (world.y <= 0) {
+	if (world.y <= 0)
 	    Gui_paint_border(0, 0, Setup->width, 0);
-	}
-	if (world.y + ext_view_height >= Setup->height) {
+	if (world.y + ext_view_height >= Setup->height)
 	    Gui_paint_border(0, Setup->height, Setup->width, Setup->height);
-	}
     }
 
-    if (ext_view_width > MAX_VIEW_SIZE || ext_view_height > MAX_VIEW_SIZE) {
+    if ((ext_view_width > MAX_VIEW_SIZE || ext_view_height > MAX_VIEW_SIZE)) {
 	Gui_paint_visible_border(world.x + ext_view_width/2 - MAX_VIEW_SIZE/2,
 				 world.y + ext_view_height/2 - MAX_VIEW_SIZE/2,
 				 world.x + ext_view_width/2 + MAX_VIEW_SIZE/2,
 				 world.y + ext_view_height/2 + MAX_VIEW_SIZE/2);
     }
 
-    /* kps - this should be drawn more than one frame if fps is high */
-    if (oldHRLimit != hrLimit) {
-	Gui_paint_visible_border(
-	    (int)(world.x + ext_view_width/2  - hrLimit * MAX_VIEW_SIZE/2),
-	    (int)(world.y + ext_view_height/2 - hrLimit * MAX_VIEW_SIZE/2),
-	    (int)(world.x + ext_view_width/2  + hrLimit * MAX_VIEW_SIZE/2),
-	    (int)(world.y + ext_view_height/2 + hrLimit * MAX_VIEW_SIZE/2));
-	oldHRLimit = hrLimit;
+    /* Paint a rectangle showing the HUD radar limit. */
+    if (hrLimitTime > 0.0) {
+	hrLimitTime -= timePerFrame;
+	if (hrLimitTime <= 0.0)
+	    hrLimitTime = 0.0;
+    }
+
+    if (oldHRLimit < 0.0)
+	oldHRLimit = hudRadarLimit;
+    if (oldHRLimit != hudRadarLimit) {
+	oldHRLimit = hudRadarLimit;
+	hrLimitTime = 1.0;
+    }
+
+    if (hrLimitTime > 0.0) {
+	Gui_paint_hudradar_limit(
+	    (int)(world.x + ext_view_width/2
+		  - hudRadarLimit * MAX_VIEW_SIZE/2),
+	    (int)(world.y + ext_view_height/2
+		  - hudRadarLimit * MAX_VIEW_SIZE/2),
+	    (int)(world.x + ext_view_width/2
+		  + hudRadarLimit * MAX_VIEW_SIZE/2),
+	    (int)(world.y + ext_view_height/2
+		  + hudRadarLimit * MAX_VIEW_SIZE/2));
     }
 
     if (!oldServer) {
-        Paint_background_dots();
+	Paint_background_dots();
         return;
     }
 
@@ -367,20 +307,6 @@ void Paint_world(void)
     y = yb * BLOCK_SZ;
     yi = mod(yb, Setup->y);
     mapbase = Setup->map_data + yi;
-
-    if (BIT(instruments, SHOW_TEXTURED_WALLS)) {
-	if (!wallTileReady) {
-	    wallTile = Texture_wall();
-	    wallTileReady = (wallTile == None) ? -1 : 1;
-	}
-	if (wallTileReady == 1) {
-	    wallTileDoit = true;
-	    XSetTile(dpy, gc, wallTile);
-	    XSetTSOrigin(dpy, gc, -WINSCALE(realWorld.x),
-                         WINSCALE(realWorld.y));
-	}
-    }
-
 
     for (ryb = yb; ryb <= ye; ryb++, yi++, y += BLOCK_SZ, mapbase++) {
 
@@ -412,10 +338,10 @@ void Paint_world(void)
 		switch (type) {
 
 		case SETUP_FILLED_NO_DRAW:
-		    if (BIT(instruments, SHOW_FILLED_WORLD|SHOW_TEXTURED_WALLS)
-			&& fill_top_left == -1 && oldServer) {
+		    if ((instruments.showFilledWorld
+			 || instruments.showTexturedWalls)
+			&& fill_top_left == -1 && oldServer)
 			fill_top_left = fill_bottom_left = x;
-		    }
 		    break;
 		case SETUP_CHECK:
 		    Gui_paint_setup_check
@@ -456,7 +382,7 @@ void Paint_world(void)
 
 		case SETUP_WORM_IN:
 		case SETUP_WORM_NORMAL:
-		    Gui_paint_setup_worm(x, y, wormDrawCount);
+		    Gui_paint_setup_worm(x, y);
 		    break;
 
 		case SETUP_ITEM_CONCENTRATOR:
@@ -501,7 +427,7 @@ void Paint_world(void)
 		case SETUP_DECOR_RU:
 		case SETUP_DECOR_LD:
 		case SETUP_DECOR_LU:
-		    if (BIT(instruments, SHOW_DECOR))
+		    if (instruments.showDecor)
 			Handle_vdecor(x, y, xi, yi, type);
 		    break;
 
@@ -516,15 +442,16 @@ void Paint_world(void)
 		case SETUP_TARGET+8:
 		case SETUP_TARGET+9:
 		    {
-			int damage, target, own;
+			int team, own;
+			double damage;
 
 			if (Target_alive(xi, yi, &damage) != 0)
 			    break;
 
-			target = type - SETUP_TARGET;
-			own = (eyeTeam == target);
+			team = type - SETUP_TARGET;
+			own = (eyeTeam == team);
 
-			Gui_paint_setup_target(x, y, target, damage, own);
+			Gui_paint_setup_target(x, y, team, damage, own);
 
 		    }
 		    break;
@@ -540,13 +467,13 @@ void Paint_world(void)
 		case SETUP_TREASURE+8:
 		case SETUP_TREASURE+9:
 		    {
-			int	treasure;
+			int	team;
 			bool	own;
 
-			treasure = type - SETUP_TREASURE;
-			own = (eyeTeam == treasure);
+			team = type - SETUP_TREASURE;
+			own = (eyeTeam == team);
 
-			Gui_paint_setup_treasure(x, y, treasure, own);
+			Gui_paint_setup_treasure(x, y, team, own);
 		    }
 		    break;
 
@@ -555,19 +482,16 @@ void Paint_world(void)
 		}
 	    }
 	    else if (oldServer) {
-		if (!BIT(instruments, SHOW_FILLED_WORLD|SHOW_TEXTURED_WALLS)) {
-		    Gui_paint_walls(x, y, type, xi, yi);
+		if (!(instruments.showFilledWorld
+		      || instruments.showTexturedWalls)) {
+		    Gui_paint_walls(x, y, type);
 
-		    if ((type & BLUE_FUEL) == BLUE_FUEL) {
-			fuel = Fuel_by_pos(xi, yi);
-			Handle_vfuel(x, y, fuel);
-		    }
+		    if ((type & BLUE_FUEL) == BLUE_FUEL)
+			Handle_vfuel(x, y, Fuel_by_pos(xi, yi));
 		}
 		else {
-		    if ((type & BLUE_FUEL) == BLUE_FUEL) {
-			fuel = Fuel_by_pos(xi, yi);
-			Handle_vfuel(x, y, fuel);
-		    }
+		    if ((type & BLUE_FUEL) == BLUE_FUEL)
+			Handle_vfuel(x, y, Fuel_by_pos(xi, yi));
 		    else if (type & BLUE_OPEN) {
 			if (type & BLUE_BELOW) {
 			    fill_top_left = x + BLOCK_SZ;
@@ -588,41 +512,18 @@ void Paint_world(void)
 			    fill_bottom_right = x + BLOCK_SZ;
 			}
 		    }
-		    if (type & BLUE_RIGHT) {
+		    if (type & BLUE_RIGHT)
 			fill_top_right = fill_bottom_right = x + BLOCK_SZ;
-		    }
-		    if (fill_top_left == -1) {
+
+		    if (fill_top_left == -1)
 			fill_top_left = fill_bottom_left = x;
-		    }
+
 		    if (fill_top_right != -1) {
-			points[0].x = WINSCALE(X(fill_bottom_left));
-			points[0].y = WINSCALE(Y(y));
-			points[1].x = WINSCALE(X(fill_top_left));
-			points[1].y = WINSCALE(Y(y + BLOCK_SZ));
-			points[2].x = WINSCALE(X(fill_top_right));
-			points[2].y = WINSCALE(Y(y + BLOCK_SZ));
-			points[3].x = WINSCALE(X(fill_bottom_right));
-			points[3].y = WINSCALE(Y(y));
-			points[4] = points[0];
-			if (wallTileDoit) {
-			    XSetFillStyle(dpy, gc, FillTiled);
-			} else {
-			    SET_FG(colors[wallColor].pixel);
-			}
-			rd.fillPolygon(dpy, p_draw, gc,
-				       points, 5,
-				       Convex, CoordModeOrigin);
-			if (wallTileDoit) {
-			    XSetFillStyle(dpy, gc, FillSolid);
-			}
-			if (useErase){
-			    int left_x = MIN(fill_bottom_left, fill_top_left);
-			    int right_x = MAX(fill_bottom_right, fill_top_right);
-			    Erase_rectangle(WINSCALE(X(left_x)) - 1,
-					    WINSCALE(Y(y + BLOCK_SZ)) - 1,
-					    WINSCALE(right_x - left_x) + 4,
-					    WINSCALE(BLOCK_SZ) +3);
-			}
+			Gui_paint_filled_slice(fill_bottom_left,
+					       fill_top_left,
+					       fill_top_right,
+					       fill_bottom_right,
+					       y);
 			fill_top_left =
 			fill_top_right =
 			fill_bottom_left =
@@ -633,33 +534,9 @@ void Paint_world(void)
 	}
 
 	if (fill_top_left != -1) {
-	    points[0].x = WINSCALE(X(fill_bottom_left));
-	    points[0].y = WINSCALE(Y(y));
-	    points[1].x = WINSCALE(X(fill_top_left));
-	    points[1].y = WINSCALE(Y(y + BLOCK_SZ));
-	    points[2].x = WINSCALE(X(x));
-	    points[2].y = WINSCALE(Y(y + BLOCK_SZ));
-	    points[3].x = WINSCALE(X(x));
-	    points[3].y = WINSCALE(Y(y));
-	    points[4] = points[0];
-	    if (wallTileDoit) {
-		XSetFillStyle(dpy, gc, FillTiled);
-	    } else {
-		SET_FG(colors[wallColor].pixel);
-	    }
-	    rd.fillPolygon(dpy, p_draw, gc,
-			   points, 5,
-			   Convex, CoordModeOrigin);
-	    if (wallTileDoit) {
-		XSetFillStyle(dpy, gc, FillSolid);
-	    }
-	    if (useErase){
-		int left_x = MIN(fill_bottom_left, fill_top_left);
-		Erase_rectangle(WINSCALE(X(left_x)) - 1,
-				WINSCALE(Y(y + BLOCK_SZ)) - 1,
-				WINSCALE(x - left_x) + 4,
-				WINSCALE(BLOCK_SZ) + 3);
-	    }
+	    Gui_paint_filled_slice(fill_bottom_left,
+				   fill_top_left,
+				   x, x, y);
 	    fill_top_left =
 	    fill_top_right =
 	    fill_bottom_left =

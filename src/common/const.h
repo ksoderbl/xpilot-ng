@@ -1,5 +1,4 @@
-/* $Id: const.h,v 5.9 2001/11/29 14:48:11 bertg Exp $
- *
+/*
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -25,9 +24,8 @@
 #ifndef CONST_H
 #define CONST_H
 
-#ifndef _WINDOWS
-#include <limits.h>
-#include <math.h>
+#ifndef XPCONFIG_H
+#include "xpconfig.h"
 #endif
 
 #ifndef TYPES_H
@@ -39,19 +37,10 @@
  * MAXFLOAT instead.
  */
 #ifndef	FLT_MAX
-#   if defined(__sgi) || defined(__FreeBSD__)
-#       include <float.h>	/* FLT_MAX for SGI Personal Iris or FreeBSD */
+#   if defined(MAXFLOAT)
+#      define FLT_MAX	MAXFLOAT
 #   else
-#	if defined(__sun__)
-#           include <values.h>	/* MAXFLOAT for suns */
-#	endif
-#   endif
-#   if !defined(FLT_MAX)
-#	if defined(MAXFLOAT)
-#	    define FLT_MAX	MAXFLOAT
-#	else
-#	    define FLT_MAX	1e30f	/* should suffice :-) */
-#	endif
+#      define FLT_MAX	1e30f	/* should suffice :-) */
 #   endif
 #endif
 
@@ -73,8 +62,8 @@
 
 #define TABLE_SIZE	RES
 
-extern DFLOAT		tbl_sin[];
-extern DFLOAT		tbl_cos[];
+extern double		tbl_sin[];
+extern double		tbl_cos[];
 
 #if 0
   /* The way it was: one table, and always range checking. */
@@ -134,37 +123,8 @@ extern DFLOAT		tbl_cos[];
 #define MAX_PLAYER_TURNRESISTANCE	1.0
 #define MIN_PLAYER_TURNRESISTANCE	0.0
 
-#define FUEL_SCALE_BITS         8
-#define FUEL_SCALE_FACT         (1<<FUEL_SCALE_BITS)
-#define FUEL_MASS(f)            ((f)*0.005/FUEL_SCALE_FACT)
-#define MAX_STATION_FUEL	(500<<FUEL_SCALE_BITS)
-/* changed the default to max to avoid sending lots of fuel ACKs */
-/*#define START_STATION_FUEL	(20<<FUEL_SCALE_BITS)*/
-#define START_STATION_FUEL	MAX_STATION_FUEL
-#define STATION_REGENERATION	((0.06*FUEL_SCALE_FACT*timeStep)/TIME_FACT)
-#define MAX_PLAYER_FUEL		(2600<<FUEL_SCALE_BITS)
-#define MIN_PLAYER_FUEL		(350<<FUEL_SCALE_BITS)
-#define REFUEL_RATE		(((5<<FUEL_SCALE_BITS)*timeStep)/TIME_FACT)
-#define ENERGY_PACK_FUEL        ((500+(randomMT()&511))<<FUEL_SCALE_BITS)
-#define FUEL_NOTIFY		(3*12)
-
-#define TARGET_DAMAGE		(250<<FUEL_SCALE_BITS)
-#if 0
-#define TARGET_FUEL_REPAIR_PER_FRAME (TARGET_DAMAGE / (12 * 10 * TIME_FACT))
-#define TARGET_REPAIR_PER_FRAME	(TARGET_DAMAGE / (12 * 600 * TIME_FACT))
-#define TARGET_UPDATE_DELAY	(TARGET_DAMAGE / (TARGET_REPAIR_PER_FRAME \
-				    * BLOCK_SZ * TIME_FACT))
-#endif
-
-#define TARGET_FUEL_REPAIR_PER_FRAME ((TARGET_DAMAGE * timeStep) \
-                                     / (12 * 10 * TIME_FACT))
-
-#define TARGET_REPAIR_PER_FRAME	((TARGET_DAMAGE * timeStep) \
-                                 / (12 * 600 * TIME_FACT))
-
-#define TARGET_UPDATE_DELAY	(TARGET_DAMAGE / (TARGET_REPAIR_PER_FRAME \
-				    * BLOCK_SZ))
-
+#define MAX_STATION_FUEL	500.0
+#define TARGET_DAMAGE		250.0
 
 /*
  * Size (pixels) of radius for legal HIT!
@@ -184,21 +144,7 @@ extern DFLOAT		tbl_cos[];
 
 #define DEBRIS_TYPES		(8 * 4 * 4)
 
-#ifndef FALSE
-#define FALSE   0
-#endif
-#ifndef TRUE
-#define TRUE    1
-#endif
-
-#ifdef __GNUC__
-#define INLINE	inline
-#else
-#define INLINE
-#endif /* __GNUC__ */
-
 #undef rand
 #define rand()	please dont use rand.
 
 #endif
-

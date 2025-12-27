@@ -1,5 +1,4 @@
-/* $Id: cmdline.c,v 5.53 2002/03/26 21:34:51 bertg Exp $
- *
+/*
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -23,42 +22,26 @@
  */
 /* Options parsing code contributed by Ted Lemon <mellon@ncd.com> */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <errno.h>
-#include <time.h>
-
-#ifdef _WINDOWS
-# include "NT/winServer.h"
-#endif
-
-#define SERVER
-#include "version.h"
-#include "config.h"
-#include "serverconst.h"
-#include "global.h"
-#include "proto.h"
-#include "defaults.h"
-#include "error.h"
-#include "portability.h"
-#include "checknames.h"
-#include "commonproto.h"
-#include "tuner.h"
+#include "xpserver.h"
 
 char cmdline_version[] = VERSION;
 
 
 list_t		expandList;		/* List of predefined settings. */
-DFLOAT		Gravity;		/* Power of gravity */
-DFLOAT		ShipMass;		/* Default mass of ship */
-DFLOAT		ballMass;		/* Default mass of balls */
-DFLOAT		ShotsMass;		/* Default mass of shots */
-DFLOAT		ShotsSpeed;		/* Default speed of shots */
-int		ShotsLife;		/* Default number of ticks */
+double		Gravity;		/* Power of gravity */
+double		ShipMass;		/* Default mass of ship */
+double		ballMass;		/* Default mass of balls */
+double		ShotsMass;		/* Default mass of shots */
+double		ShotsSpeed;		/* Default speed of shots */
+double		ShotsLife;		/* Default number of ticks */
 					/* each shot will live */
-static DFLOAT	ShotsLifeSetting;	/* Above is set through this */
+
 bool		shotHitFuelDrainUsesKineticEnergy;	/* see option name */
+
+double		pulseSpeed;		/* Default speed of laser pulse */
+double		pulseLength;		/* Max length of laser pulse */
+double		pulseLife;		/* Default number of ticks */
+					/* each pulse will live */
 int		maxRobots;		/* How many robots should enter */
 int		minRobots;		/* the game? */
 char		*robotFile;		/* Filename for robot parameters */
@@ -70,13 +53,13 @@ int		robotLeaveRatio;	/* Min ratio for robot to live (0=off)*/
 int		robotTeam;		/* Team for robots */
 bool		restrictRobots;		/* Restrict robots to robotTeam? */
 bool		reserveRobotTeam;	/* Allow only robots in robotTeam? */
+int		robotTicksPerSecond;	/* How often to do robot round tick? */
 int		ShotsMax;		/* Max shots pr. player */
 bool		ShotsGravity;		/* Shots affected by gravity */
-int		fireRepeatRate;		/* Frames per autorepeat fire (0=off) */
-static DFLOAT	fireRepeatRateSetting;	/* Above is set through this */
-int		laserRepeatRate;	/* Frames per autorepeat laser (0=off) */
-static DFLOAT	laserRepeatRateSetting;	/* Above is set through this */
-
+double		fireRepeatRate;		/* Ticks per autorepeat fire (0=off) */
+double		laserRepeatRate = 2;	/* Ticks per laser fire (0=off) */
+bool		Log;			/* Log server start to log file */
+bool		silent;			/* Make server really silent ? */
 bool		RawMode;		/* Let robots live and calculate
 					   frames even if there are n
 					   players logged in */
@@ -92,7 +75,7 @@ char		*mapAuthor;		/* Name of the creator */
 char		*dataURL;		/* URL to client for extra data */
 int		contactPort;		/* Contact port number */
 char		*serverHost;		/* Host name (for multihomed hosts) */
-
+char		*greeting;		/* Player greeting upon login */
 bool		crashWithPlayer;	/* Can players overrun other players? */
 bool		bounceWithPlayer;	/* Can players bounce other players? */
 bool		playerKillings;		/* Can players kill each other? */
@@ -108,23 +91,22 @@ bool		ballsWallBounce;	/* Do balls bounce off walls? */
 bool		ballCollisions;		/* Do balls participate in colls.? */
 bool		ballSparkCollisions;	/* Do sparks push balls around? */
 bool		asteroidsWallBounce;	/* Do asteroids bounce off walls? */
+bool		pulsesWallBounce;	/* Do laser pulses bounce off walls? */
 bool		cloakedExhaust;		/* Generate exhaust when cloaked? */
 bool		cloakedShield;		/* Allowed to use shields when cloaked? */
 bool		ecmsReprogramMines;	/* Do ecms reprogram mines? */
 bool		ecmsReprogramRobots;	/* Do ecms reprogram robots? */
-DFLOAT		maxObjectWallBounceSpeed;	/* max object bounce speed */
-DFLOAT		maxShieldedWallBounceSpeed;	/* max shielded bounce speed */
-DFLOAT		maxUnshieldedWallBounceSpeed; /* max unshielded bounce speed */
-DFLOAT		maxShieldedWallBounceAngle;	/* max angle for landing */
-DFLOAT		maxUnshieldedWallBounceAngle;	/* max angle for landing */
-DFLOAT		playerWallBrakeFactor;	/* wall lowers speed if less than 1 */
-DFLOAT		objectWallBrakeFactor;	/* wall lowers speed if less than 1 */
-DFLOAT		objectWallBounceLifeFactor;	/* reduce object life */
-DFLOAT		wallBounceFuelDrainMult;/* Wall bouncing fuel drain factor */
-DFLOAT		wallBounceDestroyItemProb;/* Wall bouncing item destroy prob */
+double		maxObjectWallBounceSpeed;	/* max object bounce speed */
+double		maxShieldedWallBounceSpeed;	/* max shielded bounce speed */
+double		maxUnshieldedWallBounceSpeed; /* max unshielded bounce speed */
+double		playerWallBrakeFactor;	/* wall lowers speed if less than 1 */
+double		objectWallBrakeFactor;	/* wall lowers speed if less than 1 */
+double		objectWallBounceLifeFactor;	/* reduce object life */
+double		wallBounceFuelDrainMult;/* Wall bouncing fuel drain factor */
+double		wallBounceDestroyItemProb;/* Wall bouncing item destroy prob */
 bool		limitedVisibility;	/* Is visibility limited? */
-DFLOAT		minVisibilityDistance;	/* Minimum visibility when starting */
-DFLOAT		maxVisibilityDistance;	/* Maximum visibility */
+double		minVisibilityDistance;	/* Minimum visibility when starting */
+double		maxVisibilityDistance;	/* Maximum visibility */
 bool		limitedLives;		/* Are lives limited? */
 int		worldLives;		/* If so, what's the max? */
 bool		endOfRoundReset;	/* Reset the world when round ends? */
@@ -150,7 +132,7 @@ bool		edgeBounce;		/* Do objects bounce when they hit
 					   the edge of the Universe? */
 bool		extraBorder;		/* Give map an extra border? */
 ipos		gravityPoint;		/* Where does gravity originate? */
-DFLOAT		gravityAngle;		/* If gravity is along a uniform line,
+double		gravityAngle;		/* If gravity is along a uniform line,
 					   at what angle is that line? */
 bool		gravityPointSource;	/* Is gravity a point source? */
 bool		gravityClockwise;	/* If so, is it clockwise? */
@@ -162,8 +144,10 @@ bool		asteroidConcentratorVisible;	/* Are asteroid concentrators visible? */
 int		wormTime;
 char		*defaultsFileName;	/* Name of defaults file... */
 char		*passwordFileName;	/* Name of password file... */
+#if 0
 char		*playerPasswordsFileName;	/* Name of player passwords file... */
 int		playerPasswordsFileSizeLimit;	/* Limit on player passwords file size */
+#endif
 char		*motdFileName;		/* Name of motd file */
 char		*scoreTableFileName;	/* Name of score table file */
 char		*adminMessageFileName;	/* Name of admin message file */
@@ -171,56 +155,56 @@ int		adminMessageFileSizeLimit;/* Limit on admin message file size */
 
 int		nukeMinSmarts;		/* minimum smarts for a nuke */
 int		nukeMinMines;		/* minimum number of mines for nuke */
-DFLOAT		nukeClusterDamage;	/* multiplier for damage from nuke */
+double		nukeClusterDamage;	/* multiplier for damage from nuke */
 					/* cluster debris, reduces number */
 					/* of particles by similar amount */
 int		mineFuseTime;		/* Length of time mine is fused */
 int		mineLife;		/* lifetime of mines */
-DFLOAT		minMineSpeed;		/* minimum speed of mines */
-int		missileLife;		/* lifetime of missiles */
+double		minMineSpeed;		/* minimum speed of mines */
+double		missileLife;		/* lifetime of missiles */
 int		baseMineRange;		/* Distance from base mines may be used */
 int		mineShotDetonateDistance; /* When does a shot trigger a mine? */
 
-DFLOAT		shotKillScoreMult;
-DFLOAT		torpedoKillScoreMult;
-DFLOAT		smartKillScoreMult;
-DFLOAT		heatKillScoreMult;
-DFLOAT		clusterKillScoreMult;
-DFLOAT		laserKillScoreMult;
-DFLOAT		tankKillScoreMult;
-DFLOAT		runoverKillScoreMult;
-DFLOAT		ballKillScoreMult;
-DFLOAT		explosionKillScoreMult;
-DFLOAT		shoveKillScoreMult;
-DFLOAT		crashScoreMult;
-DFLOAT		mineScoreMult;
-DFLOAT		selfKillScoreMult;
-DFLOAT		selfDestructScoreMult;
-DFLOAT		unownedKillScoreMult;
-DFLOAT		asteroidPoints;
-DFLOAT		cannonPoints;
-DFLOAT		asteroidMaxScore;
-DFLOAT		cannonMaxScore;
+double		shotKillScoreMult;
+double		torpedoKillScoreMult;
+double		smartKillScoreMult;
+double		heatKillScoreMult;
+double		clusterKillScoreMult;
+double		laserKillScoreMult;
+double		tankKillScoreMult;
+double		runoverKillScoreMult;
+double		ballKillScoreMult;
+double		explosionKillScoreMult;
+double		shoveKillScoreMult;
+double		crashScoreMult;
+double		mineScoreMult;
+double		selfKillScoreMult;
+double		selfDestructScoreMult;
+double		unownedKillScoreMult;
+double		asteroidPoints;
+double		cannonPoints;
+double		asteroidMaxScore;
+double		cannonMaxScore;
 
-DFLOAT 		movingItemProb;		/* Probability for moving items */
-DFLOAT		randomItemProb;		/* Probability for random-appearing items */
-DFLOAT		dropItemOnKillProb;	/* Probability for players items to */
+double 		movingItemProb;		/* Probability for moving items */
+double		randomItemProb;		/* Probability for random-appearing items */
+double		dropItemOnKillProb;	/* Probability for players items to */
 					/* drop when player is killed */
-DFLOAT		detonateItemOnKillProb;	/* Probaility for remaining items to */
+double		detonateItemOnKillProb;	/* Probaility for remaining items to */
 					/* detonate when player is killed */
-DFLOAT		destroyItemInCollisionProb;
-DFLOAT		asteroidItemProb;	/* prob. that a broken asteroid will */
+double		destroyItemInCollisionProb;
+double		asteroidItemProb;	/* prob. that a broken asteroid will */
 int		asteroidMaxItems;	/* have one or more items */
-DFLOAT		rogueHeatProb;          /* prob. that unclaimed rocketpack */
-DFLOAT		rogueMineProb;          /* or minepack will "activate" */
-DFLOAT		itemProbMult;
-DFLOAT		cannonItemProbMult;
-DFLOAT		maxItemDensity;
-DFLOAT		maxAsteroidDensity;
+double		rogueHeatProb;          /* prob. that unclaimed rocketpack */
+double		rogueMineProb;          /* or minepack will "activate" */
+double		itemProbMult;
+double		cannonItemProbMult;
+double		maxItemDensity;
+double		maxAsteroidDensity;
 int		itemConcentratorRadius;
-DFLOAT		itemConcentratorProb;
+double		itemConcentratorProb;
 int		asteroidConcentratorRadius;
-DFLOAT		asteroidConcentratorProb;
+double		asteroidConcentratorProb;
 
 bool		allowSmartMissiles;
 bool		allowHeatSeekers;
@@ -230,7 +214,7 @@ bool		allowClusters;
 bool		allowModifiers;
 bool		allowLaserModifiers;
 bool		allowShipShapes;
-bool		allowPlayerPasswords;
+/*bool		allowPlayerPasswords;*/
 
 bool		playersOnRadar;		/* Are players visible on radar? */
 bool		missilesOnRadar;	/* Are missiles visible on radar? */
@@ -248,12 +232,7 @@ bool		laserIsStunGun;		/* Is the laser a stun gun? */
 bool		reportToMetaServer;	/* Send status to meta-server? */
 bool		searchDomainForXPilot;	/* Do a DNS lookup for XPilot.domain? */
 char		*denyHosts;		/* Computers which are denied service */
-DFLOAT		gameDuration;		/* total duration of game in minutes */
-bool		fullFramerate;		/* Are players allowed to watch
-					   others with full framerate? */
-bool		fullZeroFramerate;	/* Are team zero pausers allowed to
-					   watch others with full framerate? */
-bool		teamAssign;		/* Assign player to team if not set? */
+double		gameDuration;		/* total duration of game in minutes */
 bool		teamImmunity;		/* Is team immune from player action */
 bool		teamShareScore;		/* Are scores shared between members? */
 
@@ -268,20 +247,21 @@ bool		treasureCollisionMayKill;
 bool		wreckageCollisionMayKill;
 bool		asteroidCollisionMayKill;
 
-DFLOAT		ballConnectorSpringConstant;
-DFLOAT		ballConnectorDamping;
-DFLOAT		maxBallConnectorRatio;
-DFLOAT		ballConnectorLength;
+double		ballConnectorSpringConstant;
+double		ballConnectorDamping;
+double		maxBallConnectorRatio;
+double		ballConnectorLength;
 bool		connectorIsString;	/* can the connector get shorter? */
-bool		treatBallAsPoint;	/* ball is treated as a single point */
+double		ballRadius;		/* ball radius in pixels */
 
-DFLOAT		friction;		/* friction only affects ships */
-static DFLOAT	frictionSetting;	/* Above set through this */
-DFLOAT		blockFriction;		/* friction in friction blocks */
+double		friction;		/* friction only affects ships */
+static double	frictionSetting;	/* Above set through this */
+double		blockFriction;		/* friction in friction blocks */
 bool		blockFrictionVisible;	/* if yes, friction blocks are decor; */
 					/* if no, friction blocks are space */
-int		coriolis;		/* angle velocity turns each frame */
-DFLOAT		checkpointRadius;      	/* in blocks */
+double		coriolis;		/* angle velocity turns each time unit */
+double		coriolisCosine, coriolisSine;	/* cosine and sine of cor. angle */
+double		checkpointRadius;      	/* in blocks */
 int		raceLaps;		/* how many laps per race */
 bool		lockOtherTeam;		/* lock ply from other teams when dead? */
 bool		loseItemDestroys; 	/* destroy item on loseItem? */
@@ -292,10 +272,8 @@ int		maxDefensiveItems;	/* items can player carry */
 
 int		roundDelaySeconds;	/* delay before start of each round */
 int		maxRoundTime;		/* max. duration of each round */
-#if 0
-int		roundsToPlay;		/* # of rounds to play. */
 int		roundsPlayed;		/* # of rounds played sofar. */
-#endif
+
 int		maxVisibleObject;	/* how many objects a player can see */
 bool		pLockServer;		/* Is server swappable out of memory?  */
 bool		ignore20MaxFPS;		/* ignore client maxFPS request if 20 */
@@ -312,7 +290,6 @@ char		*tankHostName;		/* Host name for tank */
 int		tankScoreDecrement;	/* Amount by which the tank's score */
 					/* is decreased from the player's */
 
-bool		turnThrust;		/* Does turning use fuel and shoot sparks? */
 bool		selfImmunity;		/* Are players immune to their own weapons? */
 
 char		*defaultShipShape;	/* What ship shape is used for players */
@@ -324,37 +301,36 @@ int		maxPauseTime;		/* Max. time you can stay paused for */
 extern char	conf_logfile_string[];	/* Default name of log file */
 
 int		roundsToPlay;		/* how many rounds to play */
-int		playerLimit;		/* allow less players than bases */
+int		playerLimit;		/* how many connections at once */
+int		playerLimit_orig;	/* how many connections at once */
 
 int		constantScoring;	/* Fixed points for kills etc? */
 int		eliminationRace;	/* Last player drops each lap? */
 
-DFLOAT		FPSMultiplier;		/* Slow everything by this factor */
-DFLOAT		gameSpeed;		/* FPS/FPSMultiplier */
-int		timeStep;		/* Game time step per frame */
-DFLOAT		timeStep2;		/* timeStep /TIME_FACT */
-					/* before: framespeed, framespeed2 */
-
+double		gameSpeed;		/* Speed of game action */
+double		timeStep;		/* Game time step per frame */
+double		ecmSizeFactor;		/* Factor for ecm size update */
 
 int		recordMode;		/* 0=off, 1=record, 2=playback */
 int		recordFlushInterval;	/* Max seconds between storing data */
 char		*recordFileName;
 
-bool		useOldCode;		/* Choice of new and old code */
 bool		polygonMode;		/* Run server in polygon mode even
 					   with block based (.xp) mapfile */
+bool		ignoreMaxFPS;		/* Temporary hack */
+bool		baselessPausing;
+bool		maraTurnqueue;		/* Mara's "turnqueue" hack */
+int		pausedFPS;		/* Limited FPS for pausers */
+int		waitingFPS;		/* Limited FPS for waiters */
 
 /*
-** Two functions which can be used if an option
-** does not have its own function which should
-** be called after the option value has been
-** changed during runtime.  The tuner_none
-** function should be specified when an option
-** cannot be changed at all during runtime.
-** The tuner_dummy can be specified if it
-** is OK to modify the option during runtime
-** and no follow up action is needed.
-*/
+ * Two functions which can be used if an option does not have its own
+ * function which should be called after the option value has been
+ * changed during runtime.  The tuner_none function should be
+ * specified when an option cannot be changed at all during runtime.
+ * The tuner_dummy can be specified if it is OK to modify the option
+ * during runtime and no follow up action is needed.
+ */
 void tuner_none(void)  {}
 void tuner_dummy(void) {}
 
@@ -363,7 +339,7 @@ static void Tune_robot_real_name(void) { Fix_real_name(robotRealName); }
 static void Tune_robot_host_name(void) { Fix_host_name(robotHostName); }
 static void Tune_tank_real_name(void)  { Fix_real_name(tankRealName); }
 static void Tune_tank_host_name(void)  { Fix_host_name(tankHostName); }
-
+static void Check_baseless(void);
 
 static option_desc options[] = {
     {
@@ -462,7 +438,7 @@ static option_desc options[] = {
 	"shotLife",
 	"shotLife",
 	"60.0",
-	&ShotsLifeSetting,
+	&ShotsLife,
 	valReal,
 	Timing_setup,
 	"Life of bullets in ticks.\n",
@@ -470,37 +446,58 @@ static option_desc options[] = {
     },
     {
 	"shotHitFuelDrainUsesKineticEnergy",
-	"shotHitFuelDrainUsesKineticEnergy",
+	"kineticEnergyFuelDrain",
 	"yes",
 	&shotHitFuelDrainUsesKineticEnergy,
 	valBool,
 	tuner_dummy,
 	"Does the fuel drain from shot hits depend on their mass and speed?\n"
-	"This is a temporary option that will be removed in March 2002.\n",
-	/* we don't allow this option to be set from map files to discourage
-	   long term use of it */
-	OPT_DEFAULTS | OPT_COMMAND | OPT_VISIBLE
+	"This should be set to false on Blood's Music maps.\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
 	"fireRepeatRate",
 	"fireRepeat",
 	"2.0",
-	&fireRepeatRateSetting,
+	&fireRepeatRate,
 	valReal,
 	Timing_setup,
-	"Number of frames per automatic fire (0=off).\n",
+	"Number of ticks per automatic fire (0=off).\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
-	"laserRepeatRate",
-	"laserRepeat",
-	"2.0",
-	&laserRepeatRateSetting,
+	"pulseSpeed",
+	"pulseSpeed",
+	"90.0",
+	&pulseSpeed,
 	valReal,
-	Timing_setup,
-	"Number of frames per automatic laser pulse (0=off).\n",
+	tuner_dummy,
+	"Speed of laser pulses.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
+    {
+	"pulseLife",
+	"pulseLife",
+	"6.0", /* kps - should be PULSE_LIFE(lasers) */
+	&pulseLife,
+	valReal,
+	Timing_setup,
+	"Life of laser pulses shot by ships, in ticks.\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
+	"pulseLength",
+	"pulseLength",
+	"85.0",
+	&pulseLength,
+	valReal,
+	tuner_dummy,
+	"Max length of laser pulse.\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    /* kps - this is stupid */
+    /* 1. default should be 0 */
+    /* 2. robots = 4 should mean 4 robots, not 4 - numplayers robots */
     {
 	"maxRobots",
 	"robots",
@@ -614,6 +611,18 @@ static option_desc options[] = {
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
+	"robotTicksPerSecond",
+	"robotTicks",
+	"0",
+	&robotTicksPerSecond,
+	valInt,
+	Timing_setup,
+	"How many times per second to call robot round tick?\n"
+	"The value will be limited into the range 1 to server FPS.\n" 
+	"A value of 0 means one tick per frame.\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
 	"robotRealName",
 	"robotRealName",
 	"robot",
@@ -664,16 +673,6 @@ static option_desc options[] = {
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
-	"turnThrust",
-	"turnFuel",
-	"false",
-	&turnThrust,
-	valBool,
-	tuner_dummy,
-	"Does turning use fuel and create sparks?\n",
-	OPT_ORIGIN_ANY | OPT_VISIBLE
-    },
-    {
 	"selfImmunity",
 	"selfImmunity",
 	"false",
@@ -699,10 +698,9 @@ static option_desc options[] = {
     {
 	"tankShipShape",
 	"tankShipShape",
-	"(NM:fueltank)(AU:John E. Norlin)"
-	"(SH: 15,0 14,-5 9,-8 -5,-8 -3,-8 -3,0 "
-	"2,0 2,2 -3,2 -3,6 5,6 5,8 -5,8 -5,-8 "
-	"-9,-8 -14,-5 -15,0 -14,5 -9,8 9,8 14,5)"
+	"(NM:fueltank)"
+	"(SH: 15,0 14,5 9,8 -9,8 -14,5 -15,0 -14,-5 -9,-8 "
+	"9,-8 14,-5)"
 	"(EN: -15,0)(MG: 15,0)",
 	&tankShipShape,
 	valString,
@@ -716,7 +714,7 @@ static option_desc options[] = {
 	"256",
 	&ShotsMax,
 	valInt,
-	tuner_shotsmax,
+	tuner_dummy,
 	"Maximum allowed bullets per player.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
@@ -728,6 +726,26 @@ static option_desc options[] = {
 	valBool,
 	tuner_dummy,
 	"Are bullets afflicted by gravity.\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
+	"Log",
+	"Log",
+	"false",
+	&Log,
+	valBool,
+	tuner_dummy,
+	"Log major server events to log file?\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
+	"silent",
+	"silent",
+	"false",
+	&silent,
+	valBool,
+	tuner_dummy,
+	"Is the server really silent?\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
@@ -839,15 +857,25 @@ static option_desc options[] = {
 	"The server's fully qualified domain name (for multihomed hosts).\n",
 	OPT_COMMAND | OPT_DEFAULTS | OPT_VISIBLE
     },
-    { /* kps - ng does not want mapdata */
+    {
+	"greeting",
+	"xpilotGreeting",
+	NULL,
+	&greeting,
+	valString,
+	tuner_dummy,
+	"Short greeting string for players when they login to server.\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
 	"mapData",
 	"mapData",
 	NULL,
 	&mapData,
 	valString,
 	tuner_none,
-	"The map's topology.\n",
-	OPT_ORIGIN_ANY | OPT_VISIBLE
+	"Block map topology.\n",
+	OPT_MAP
     },
     {
 	"allowPlayerCrashes",
@@ -937,7 +965,7 @@ static option_desc options[] = {
 	valBool,
 	tuner_dummy,
 	"Can balls be blown around by exhaust? (Needs ballCollisions too)\n",
-	OPT_ORIGIN_ANY | OPT_VISIBLE	
+	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
 	"minesWallBounce",
@@ -1000,6 +1028,16 @@ static option_desc options[] = {
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
+	"pulsesWallBounce",
+	"pulsesWallBounce",
+	"no",
+	&pulsesWallBounce,
+	valBool,
+	Move_init,
+	"Do laser pulses bounce off walls?\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
 	"cloakedExhaust",
 	"cloakedExhaust",
 	"yes",
@@ -1029,7 +1067,7 @@ static option_desc options[] = {
 	"The maximum allowed speed for objects to bounce off walls.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
-    { /* kps - ng does not want these 2 */
+    {
 	"maxShieldedWallBounceSpeed",
 	"maxShieldedBounceSpeed",
 	"50",
@@ -1047,26 +1085,6 @@ static option_desc options[] = {
 	valReal,
 	Move_init,
 	"Maximum allowed speed for an unshielded player to bounce off walls.\n",
-	OPT_ORIGIN_ANY | OPT_VISIBLE
-    },
-    {
-	"maxShieldedPlayerWallBounceAngle",
-	"maxShieldedBounceAngle",
-	"90",
-	&maxShieldedWallBounceAngle,
-	valReal,
-	Move_init,
-	"Maximum allowed angle for a shielded player to bounce off walls.\n",
-	OPT_ORIGIN_ANY | OPT_VISIBLE
-    },
-    {
-	"maxUnshieldedPlayerWallBounceAngle",
-	"maxUnshieldedBounceAngle",
-	"30",
-	&maxUnshieldedWallBounceAngle,
-	valReal,
-	Move_init,
-	"Maximum allowed angle for an unshielded player to bounce off walls.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
@@ -1373,24 +1391,13 @@ static option_desc options[] = {
 	"Do shots, mines and missiles remain after their owner leaves?\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
-    { /* kps - ng does not want this  */
-	"teamAssign",
-	"teamAssign",
-	"yes",
-	&teamAssign,
-	valBool,
-	tuner_dummy,
-	"If players have not specified which team they like to join\n"
-	"should the server choose a team for them automatically?\n",
-	OPT_ORIGIN_ANY | OPT_VISIBLE
-    },
     {
 	"teamImmunity",
 	"teamImmunity",
 	"yes",
 	&teamImmunity,
 	valBool,
-	tuner_dummy,
+	Team_immunity_init,
 	"Should other team members be immune to various shots thrust etc.?\n"
 	"This works for alliances too.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
@@ -1442,7 +1449,7 @@ static option_desc options[] = {
 	"yes",
 	&targetTeamCollision,
 	valBool,
-	tuner_dummy,
+	Target_init,
 	"Do team members collide with their own target or not.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
@@ -1548,13 +1555,16 @@ static option_desc options[] = {
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
-	"treatBallAsPoint",
-	"treatBallAsPoint",
-	"no",
-	&treatBallAsPoint,
-	valBool,
+	"ballRadius",
+	"ballRadius",
+	"10",
+	&ballRadius,
+	valReal,
 	Ball_line_init,
-	"Is the ball treated as single point?\n",
+	"What radius, measured in pixels, the treasure balls have on\n"
+	"the server. In traditional XPilot, the ball was treated as a\n"
+	"point (radius = 0), but visually appeared on the client with\n"
+	"a radius of 10 pixels.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
@@ -1587,13 +1597,13 @@ static option_desc options[] = {
 	"Can ships be destroyed when hit by an asteroid?\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
-    {   "ignore20MaxFPS", /* kps - ng does not want this */
+    {   "ignore20MaxFPS",
 	"ignore20MaxFPS",
 	"true",
 	&ignore20MaxFPS,
 	valBool,
 	tuner_dummy,
-	"Ignore client maxFPS request if it is 20 (the default setting).\n",
+	"Ignore client maxFPS request if it is 20 (old default, too low).\n",
 	OPT_COMMAND | OPT_DEFAULTS | OPT_VISIBLE
     },
     {
@@ -1826,11 +1836,25 @@ static option_desc options[] = {
     {
 	"framesPerSecond",
 	"FPS",
-	"12",
+	"50",
 	&framesPerSecond,
 	valInt,
-	tuner_none,
+	Timing_setup,
 	"The number of frames per second the server should strive for.\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
+	"gameSpeed",
+	"gameSpeed",
+	"12.5",
+	&gameSpeed,
+	valReal,
+	Timing_setup,
+	"Rate at which game events happen. Allows using higher\n"
+	"FPS without making the game too fast.\n"
+	"A game speed of X means the game proceeds as fast as on an old\n"
+	"server running at X FPS. A value of 0 means the value of game\n"
+	"speed is the same as that of FPS.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
@@ -1909,7 +1933,7 @@ static option_desc options[] = {
 	"True",
 	&allowShipShapes,
 	valBool,
-	tuner_none,
+	tuner_dummy,
 	"Are players allowed to define their own ship shape?\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
@@ -2091,7 +2115,7 @@ static option_desc options[] = {
 	"0",
 	&mineLife,
 	valInt,
-	tuner_minelife,
+	tuner_dummy,
 	"Life of mines in ticks, zero means use default.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
@@ -2110,8 +2134,8 @@ static option_desc options[] = {
 	"missileLife",
 	"0",
 	&missileLife,
-	valInt,
-	tuner_missilelife,
+	valReal,
+	tuner_dummy,
 	"Life of missiles in ticks, zero means use default.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
@@ -3177,35 +3201,14 @@ static option_desc options[] = {
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
-	"fullFramerate",
-	"fullFramerate",
-	"true",
-	&fullFramerate,
-	valBool,
-	tuner_dummy,
-	"Are active players allowed to watch other players with full "
-	"framerate?\n",
-	OPT_ORIGIN_ANY | OPT_VISIBLE
-    },
-    {
-	"fullZeroFramerate",
-	"fullZeroFramerate",
+	"baselessPausing",
+	"baselessPausing",
 	"false",
-	&fullZeroFramerate,
+	&baselessPausing,
 	valBool,
-	tuner_dummy,
-	"Are teamzero pausers allowed to watch other players with full "
-	"framerate?\n",
-	OPT_ORIGIN_ANY | OPT_VISIBLE
-    },
-    {
-	"teamZeroPausing",
-	"teamZeroPausing",
-	"false",
-	&teamZeroPausing,
-	valBool,
-	tuner_dummy, /* kps - changed from tuner_none */
-	"Should team zero be considered a pause only team?\n",
+	Check_baseless,
+	"Should paused players keep their bases?\n"
+	"Can only be used on teamplay maps for now.\n",
  	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
@@ -3244,9 +3247,9 @@ static option_desc options[] = {
 	"coriolis",
 	"0",
 	&coriolis,
-	valInt,
-	tuner_dummy,
-	"The clockwise angle (in degrees) a ship's velocity turns each frame.\n",
+	valReal,
+	Timing_setup,
+	"The clockwise angle (in degrees) a ship's velocity turns each time unit.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
@@ -3272,7 +3275,7 @@ static option_desc options[] = {
     {
 	"lockOtherTeam",
 	"lockOtherTeam",
-	"true", /* kps - ng wants false */
+	"true",
 	&lockOtherTeam,
 	valBool,
 	tuner_dummy,
@@ -3289,7 +3292,7 @@ static option_desc options[] = {
 	"Destroy item that player drops. Otherwise drop it.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
-    { /* kps - ng does not want usewreckage, max*siveitems */
+    {
 	"useWreckage",
 	"useWreckage",
 	"true",
@@ -3350,6 +3353,16 @@ static option_desc options[] = {
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
+	"numberOfRounds",
+	"numRounds",
+	"0",
+	&roundsToPlay,
+	valInt,
+	tuner_dummy,
+	"The number of rounds to play.  Unlimited if 0.\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
 	"maxVisibleObject",
 	"maxVisibleObjects",
 	"1000",
@@ -3373,14 +3386,13 @@ static option_desc options[] = {
 	"Whether the server is prevented from being swapped out of memory.\n",
 	OPT_COMMAND | OPT_DEFAULTS | OPT_VISIBLE
     },
-    /* kps - what to do about this ? */
     {
 	"timerResolution",
 	"timerResolution",
 	"0",
 	&timerResolution,
 	valInt,
-	tuner_dummy,
+	Timing_setup,
 	"If set to nonzero xpilots will requests signals from the OS at\n"
 	"1/timerResolution second intervals.  The server will then compute\n"
 	"a new frame FPS times out of every timerResolution signals.\n",
@@ -3431,6 +3443,7 @@ static option_desc options[] = {
 	"Setting this option to 0 disables the feature.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
+#if 0
     {
 	"playerPasswordsFileName",
 	"playerPasswordsFile",
@@ -3439,8 +3452,10 @@ static option_desc options[] = {
 	valString,
 	tuner_none,
 	"The filename of the player passwords file to read when authenticating.\n",
-	OPT_ORIGIN_ANY | OPT_DEFAULTS /* kps - was OPT_ANY */
+	OPT_COMMAND | OPT_DEFAULTS
     },
+#endif
+#if 0
     {
 	"playerPasswordsFileSizeLimit",
 	"playerPasswordsLimit",
@@ -3450,8 +3465,10 @@ static option_desc options[] = {
 	tuner_none,
 	"Maximum size of player passwords file in bytes (may become bigger\n"
 	"if players change passwords!).\n",
-	OPT_ORIGIN_ANY | OPT_DEFAULTS /* kps - was OPT_ANY */
+	OPT_COMMAND | OPT_DEFAULTS
     },
+#endif
+#if 0
     {
 	"allowPlayerPasswords",
 	"PlayerPasswords",
@@ -3460,17 +3477,6 @@ static option_desc options[] = {
 	valBool,
 	tuner_dummy,
 	"May players protect their nicks with a password?\n",
-	OPT_ORIGIN_ANY | OPT_DEFAULTS /* kps - was OPT_ANY */
-    },
-#if 0
-    {
-	"numberOfRounds",
-	"numRounds",
-	"0",
-	&numberOfRounds,
-	valInt,
-	tuner_dummy,
-	"The number of rounds to play. If 0, unlimited.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
 #endif
@@ -3480,10 +3486,12 @@ static option_desc options[] = {
 	"0",
 	&playerLimit,
 	valInt,
-	tuner_dummy,
-	"Allow only (number of bases)-playerLimit players to enter.\n"
-	"This option will probably change in future versions.\n",
-	OPT_ORIGIN_ANY | OPT_VISIBLE  /* kps - was OPT_ANY */
+	Check_playerlimit,
+	"Allow playerLimit players to enter at once.\n"
+	"If set to 0, allow 10 more players than there are bases.\n"
+	"(If baselessPausing is off, more than bases cannot enter.)\n"
+	"During game, cannot be set higher than the starting value.\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
 	"recordMode",
@@ -3498,7 +3506,7 @@ static option_desc options[] = {
 	"spectators who can watch the recorded game from anyone's\n"
 	"viewpoint. Can be set to 0 in the middle of a game to stop"
 	"recording.\n",
-	OPT_COMMAND | OPT_DEFAULTS /* kps - was OPT_CMDLINE */
+	OPT_COMMAND | OPT_DEFAULTS
     },
     {
 	"recordFileName",
@@ -3508,7 +3516,7 @@ static option_desc options[] = {
 	valString,
 	tuner_none,
 	"Name of the file where server recordings are saved.\n",
-	OPT_COMMAND | OPT_DEFAULTS /* kps - was OPT_CMDLINE */
+	OPT_COMMAND | OPT_DEFAULTS
     },
     {
 	"recordFlushInterval",
@@ -3522,7 +3530,7 @@ static option_desc options[] = {
 	"This is useful if you want to replay the game on another server\n"
 	"while it is still being played. There is a small overhead\n"
 	"(some dozens of bytes extra recording file size) for each flush.\n",
-	OPT_ORIGIN_ANY | OPT_VISIBLE /* kps - was OPT_ANY */
+	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
 	"constantScoring",
@@ -3532,7 +3540,7 @@ static option_desc options[] = {
 	valBool,
 	tuner_dummy,
 	"Whether the scores given from various things are fixed.\n",
-	OPT_ORIGIN_ANY | OPT_DEFAULTS /* kps - was OPT_ANY */
+	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
 	"elimination",
@@ -3542,7 +3550,7 @@ static option_desc options[] = {
 	valBool,
 	tuner_dummy,
 	"Race mode where the last player drops out each lap.\n",
-	OPT_ORIGIN_ANY | OPT_DEFAULTS /* kps - was OPT_ANY */
+	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
 	"dataURL",
@@ -3552,43 +3560,7 @@ static option_desc options[] = {
 	valString,
 	tuner_dummy,
 	"URL where the client can get extra data for this map\n",
-	OPT_ORIGIN_ANY | OPT_DEFAULTS /* kps - was OPT_ANY */
-    },
-#if 0
-    {
-	"FPSMultiplier",
-	"FPSMultiplier",
-	"1.0",
-	&FPSMultiplier,
-	valReal,
-	Timing_setup,
-	"Everything is slowed by this factor. Allows using higher\n"
-	"FPS without making the game too fast.\n",
-	OPT_ORIGIN_ANY | OPT_DEFAULTS /* kps - was OPT_ANY */
-    },
-#endif
-    {
-	"gameSpeed",
-	"gameSpeed",
-	"0.0",
-	&gameSpeed,
-	valReal,
-	Timing_setup,
-	"Rate at which game events happen. Allows using higher\n"
-	"FPS without making the game too fast.\n"
-	"A value of 0 means the game speed is the same as FPS.\n",
-	OPT_ORIGIN_ANY | OPT_DEFAULTS
-    },
-    /* useOldCode - kps tmp hack */
-    {
-	"useOldCode",
-	"useOldCode",
-	"false",
-	&useOldCode,
-	valBool,
-	tuner_dummy,
-	"Use old code in some places when playing on a block based map?\n",
-	OPT_ORIGIN_ANY | OPT_DEFAULTS
+	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
 	"polygonMode",
@@ -3600,19 +3572,108 @@ static option_desc options[] = {
 	"Force use of polygon protocol when communicating with clients?\n"
 	"(useful for debugging if you want to see the polygons created\n"
 	"in the blocks to polygons conversion function).\n",
-	OPT_ORIGIN_ANY | OPT_DEFAULTS
+	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
+    {
+	"maraTurnqueue",
+	"maraTurnqueue",
+	"false",
+	&maraTurnqueue,
+	valBool,
+	tuner_dummy,
+	"This is a temporary option to test Mara's \"turnqueue\" hack.\n"
+	"The idea is that if a ship is turning when it hits the wall,\n"
+	"the turn will be completed after the bounce.\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
+	"ignoreMaxFPS",
+	"ignoreMaxFPS",
+	"false",
+	&ignoreMaxFPS,
+	valBool,
+	tuner_dummy,
+	"Ignore client maxFPS requests and always send all frames.\n"
+	"This is a hack for demonstration purposes to allow changing\n"
+	"the server FPS when there are old clients with broken maxFPS\n"
+	"handling. Those clients could be better dealt with separately.\n"
+	"This option will be removed in the future (hopefully).\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
+	"pausedFramesPerSecond",
+	"pausedFPS",
+	"0",
+	&pausedFPS,
+	valInt,
+	tuner_dummy,
+	"Maximum FPS shown to paused players. 0 means full framerate.\n"
+	"Can be used to reduce server bandwidth consumption.\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
+	"waitingFramesPerSecond",
+	"waitingFPS",
+	"0",
+	&waitingFPS,
+	valInt,
+	tuner_dummy,
+	"Maximum FPS shown to players waiting for a new round to start.\n"
+	"0 means full framerate. Can be used to limit bandwidth used.\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    /* teamcup related options */
+    {
+	"teamcup",
+	"teamcup",
+	false,
+	&teamcup,
+	valBool,
+	tuner_dummy,
+	"Is this a teamcup match?.\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
+	"teamcupStatServer",
+	"statServer",
+	"shell.e.kth.se",
+	&teamcupStatServer,
+	valString,
+	tuner_dummy,
+	"Teamcup status server to report to.\n",
+	OPT_COMMAND | OPT_VISIBLE
+    },
+    {
+	"teamcupStatPort",
+	"statPort",
+	TEAMCUP_STATUS_PORTSTR,
+	&teamcupStatPort,
+	valInt,
+	tuner_dummy,
+	"Port of the teamcup status server.\n",
+	OPT_COMMAND | OPT_VISIBLE
+    },
+    {
+	"teamcupMatchNumber",
+	"match",
+	"0",
+	&teamcupMatchNumber,
+	valInt,
+	tuner_dummy,
+	"The number of the teamcup match.\n",
+	OPT_COMMAND | OPT_VISIBLE
+    }
+    /* end of teamcup related options */
 };
 
 
-static bool options_inited = FALSE;
+static bool options_inited = false;
 
 
 option_desc* Get_option_descs(int *count_ptr)
 {
-    if (options_inited != TRUE) {
+    if (!options_inited)
 	dumpcore("options not initialized");
-    }
 
     *count_ptr = NELEM(options);
     return &options[0];
@@ -3623,29 +3684,24 @@ static void Init_default_options(void)
 {
     option_desc*	desc;
 
-    if ((desc = Find_option_by_name("mapFileName")) == NULL) {
+    if ((desc = Find_option_by_name("mapFileName")) == NULL)
 	dumpcore("Could not find map file option");
-    }
     desc->defaultValue = Conf_default_map();
 
-    if ((desc = Find_option_by_name("motdFileName")) == NULL) {
+    if ((desc = Find_option_by_name("motdFileName")) == NULL)
 	dumpcore("Could not find motd file option");
-    }
     desc->defaultValue = Conf_servermotdfile();
 
-    if ((desc = Find_option_by_name("robotFile")) == NULL) {
+    if ((desc = Find_option_by_name("robotFile")) == NULL)
 	dumpcore("Could not find robot file option");
-    }
     desc->defaultValue = Conf_robotfile();
 
-    if ((desc = Find_option_by_name("defaultsFileName")) == NULL) {
+    if ((desc = Find_option_by_name("defaultsFileName")) == NULL)
 	dumpcore("Could not find defaults file option");
-    }
     desc->defaultValue = Conf_defaults_file_name();
 
-    if ((desc = Find_option_by_name("passwordFileName")) == NULL) {
+    if ((desc = Find_option_by_name("passwordFileName")) == NULL)
 	dumpcore("Could not find password file option");
-    }
     desc->defaultValue = Conf_password_file_name();
 }
 
@@ -3655,21 +3711,19 @@ bool Init_options(void)
     int			i;
     int			option_count = NELEM(options);
 
-    if (options_inited != FALSE) {
+    if (options_inited)
 	dumpcore("Can't init options twice.");
-    }
 
     Init_default_options();
 
     for (i = 0; i < option_count; i++) {
-	if (Option_add_desc(&options[i]) == FALSE) {
-	    return FALSE;
-	}
+	if (Option_add_desc(&options[i]) == false)
+	    return false;
     }
 
-    options_inited = TRUE;
+    options_inited = true;
 
-    return TRUE;
+    return true;
 }
 
 
@@ -3678,8 +3732,8 @@ void Free_options(void)
     int			i;
     int			option_count = NELEM(options);
 
-    if (options_inited == TRUE) {
-	options_inited = FALSE;
+    if (options_inited == true) {
+	options_inited = false;
 	for (i = 0; i < option_count; i++) {
 	    if (options[i].type == valString) {
 		char **str_ptr = (char **)options[i].variable;
@@ -3702,22 +3756,40 @@ option_desc* Find_option_by_name(const char* name)
     for (j = 0; j < option_count; j++) {
 	if (!strcasecmp(options[j].commandLineOption, name)
 	    || !strcasecmp(options[j].name, name))
-	{
 	    return(&options[j]);
-	}
     }
     return NULL;
 }
 
 
+void Check_playerlimit(void)
+{
+    if (playerLimit == 0)
+	playerLimit = World.NumBases + 10;
 
+    if (playerLimit_orig == 0)
+	playerLimit_orig = MAX(playerLimit, World.NumBases + 10);
 
+    if (playerLimit > playerLimit_orig)
+	playerLimit = playerLimit_orig;
+}
+
+static void Check_baseless(void)
+{
+    if (!BIT(World.rules->mode, TEAM_PLAY))
+	baselessPausing = false;
+}
 
 void Timing_setup(void)
 {
-#if 0
-    FPSMultiplier = FPS / gameSpeed;
-#else
+    if (FPS > 100)
+	FPS = 100;
+    if (FPS < 1)
+	FPS = 1;
+    if (timerResolution > 100)
+	timerResolution = 100;
+    if (timerResolution < 0)
+	timerResolution = 0;
     if (gameSpeed > FPS)
 	gameSpeed = FPS;
     if (gameSpeed < 0.0)
@@ -3725,55 +3797,37 @@ void Timing_setup(void)
 
     if (gameSpeed == 0.0)
 	gameSpeed = FPS;
-
-    FPSMultiplier = FPS / gameSpeed;
-
-    /* this can't happen */
-    if (FPSMultiplier < 1.0) {
-	printf("BUG - FPSMultiplier < 1.0\n");
-	FPSMultiplier = 1.0;
-    }
-
-    /* we want timeStep >= 1 */
-    if (FPSMultiplier > 64.0)
-	FPSMultiplier = 64.0;
-
-    gameSpeed = FPS / FPSMultiplier;
-#endif
+    if (gameSpeed < FPS / 50.)
+	gameSpeed = FPS / 50.;
 
     /*
      * Calculate amount of game time that elapses per frame.
      */
-    timeStep = (int)(TIME_FACT / FPSMultiplier);
-    timeStep2 = 1. / FPSMultiplier;
-
-    ShotsLife = ShotsLifeSetting * TIME_FACT;
-    fireRepeatRate = fireRepeatRateSetting * TIME_FACT;
-    laserRepeatRate = laserRepeatRateSetting * TIME_FACT;
+    timeStep = gameSpeed / FPS;
 
     friction = frictionSetting;
 
-#if 0 
-    /* kps - changed ng code so the above works */
-    /* ng wants this - requires other changes elsewhere */
-    friction = 1 - frictionSetting;
-
-
-    /* If friction < 0, the result is silly - allow such settings but
+    /* If friction > 1, the result is silly - allow such settings but
      * don't bother making it "FPSMultiplier independent" */
-    if (friction > 0)
-	friction = pow(friction, 1. / FPSMultiplier);
-#endif
+    if (friction < 1)
+	friction = 1. - pow(1. - friction, timeStep);
 
-#if 0
-    xpprintf(__FILE__ ": gameSpeed         = %f\n", gameSpeed);
-    xpprintf(__FILE__ ": FPSMultiplier     = %f\n", FPSMultiplier);
-    xpprintf(__FILE__ ": timeStep          = %d\n", timeStep);
-    xpprintf(__FILE__ ": timeStep2         = %f\n", timeStep2);
-    xpprintf(__FILE__ ": ShotsLife         = %d\n", ShotsLife);
-    xpprintf(__FILE__ ": fireRepeatRate    = %d\n", fireRepeatRate);
-    xpprintf(__FILE__ ": friction          = %f\n", friction);
-#endif
+    /* ecm size used to be halved every update on old servers */
+    ecmSizeFactor = pow(0.5, timeStep);
+
+    /* coriolis stuff */
+    {
+	double cor_angle;
+
+	cor_angle = coriolis * PI / 180.0;
+
+	coriolisCosine = cos(cor_angle / timeStep);
+	coriolisSine = sin(cor_angle / timeStep);
+    }
+
+    if (robotTicksPerSecond == 0)
+	robotTicksPerSecond = FPS;
+    LIMIT(robotTicksPerSecond, 1, FPS);
+
+    install_timer_tick(NULL, timerResolution ? timerResolution : FPS);
 }
-
-

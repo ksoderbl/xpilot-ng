@@ -1,4 +1,4 @@
-/* $Id: wreckshape.h,v 5.1 2001/05/19 10:11:58 bertg Exp $
+/* 
  *
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
@@ -24,6 +24,8 @@
 
 #ifndef WRECKSHAPE_H
 #define WRECKSHAPE_H
+
+#include "types.h"
 
 #define NUM_WRECKAGE_SHAPES 3
 #define NUM_WRECKAGE_POINTS 12

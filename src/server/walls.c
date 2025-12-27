@@ -1,5 +1,4 @@
-/* $Id: walls.c,v 5.27 2002/04/21 09:31:18 bertg Exp $
- *
+/*
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,74 +21,33 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <errno.h>
-#include <math.h>
-#include <limits.h>
-#include <time.h>
-
-#ifndef _WINDOWS
-# include <sys/types.h>  /* freebsd for in.h to work */
-# include <sys/socket.h> /* freebsd for in.h to work */
-# include <netinet/in.h>
-#endif
-
-#ifdef _WINDOWS
-# include "NT/winServer.h"
-# include "../common/NT/winNet.h"
-#endif
-
-#define SERVER
-#include "version.h"
-#include "config.h"
-#include "serverconst.h"
-#include "global.h"
-#include "proto.h"
-#include "score.h"
-#include "saudio.h"
-#include "item.h"
-#include "error.h"
-#include "walls.h"
-#include "click.h"
-#include "objpos.h"
-
-#include "const.h"
-#include "map.h"
-#include "netserver.h"
-#include "pack.h"
-#include "srecord.h"
+#include "xpserver.h"
 
 char walls_version[] = VERSION;
 
+/* kps - remove when all code has been polygonized */
+unsigned SPACE_BLOCKS = (
+	SPACE_BIT | BASE_BIT | WORMHOLE_BIT |
+	POS_GRAV_BIT | NEG_GRAV_BIT | CWISE_GRAV_BIT | ACWISE_GRAV_BIT |
+	UP_GRAV_BIT | DOWN_GRAV_BIT | RIGHT_GRAV_BIT | LEFT_GRAV_BIT |
+	DECOR_LU_BIT | DECOR_LD_BIT | DECOR_RU_BIT | DECOR_RD_BIT |
+	DECOR_FILLED_BIT | CHECK_BIT | ITEM_CONCENTRATOR_BIT |
+	FRICTION_BIT | ASTEROID_CONCENTRATOR_BIT
+    );
 
-
-extern struct move_parameters mp;
-DFLOAT wallBounceExplosionMult;
+struct move_parameters mp;
+double wallBounceExplosionMult;
 static char msg[MSG_LEN];
-
-/* kps compatibility hacks - plz remove if you can */
-void Walls_init_old(void);
-void Move_object_old(object *obj);
-void Move_player_old(int ind);
-void Turn_player_old(int ind);
-
-static void Walls_init_new(void);
-static void Move_object_new(object *obj);
-static void Move_player_new(int ind);
-static void Turn_player_new(int ind);
-
 
 /* polygon map related stuff */
 
 /* start */
 
 /* Maximum line length 32767-B_CLICKS, 30000 used in checks
-   There's a minimum map size to avoid "too much wrapping". A bit smaller
-   than that would cause rare errors for fast-moving things. I haven't
-   bothered to figure out what the limit is. 80k x 80k clicks should
-   be more than enough (probably...). */
+ * There's a minimum map size to avoid "too much wrapping". A bit smaller
+ * than that would cause rare errors for fast-moving things. I haven't
+ * bothered to figure out what the limit is. 80k x 80k clicks should
+ * be more than enough (probably...). */
 #define B_SHIFT 11
 #define B_CLICKS (1 << B_SHIFT)
 #define B_MASK (B_CLICKS - 1)
@@ -97,7 +55,7 @@ static void Turn_player_new(int ind);
 #define MAX_MOVE 32000
 #define SEPARATION_DIST 64
 /* This must be increased if the ship corners are allowed to go farther
-   when turning! */
+ * when turning! */
 #define MAX_SHAPE_OFFSET (15 * CLICK)
 
 #if ((-3) / 2 != -1) || ((-3) % 2 != -1)
@@ -119,8 +77,8 @@ struct tl2 {
 struct bline {
     clvec start;
     clvec delta;
-    DFLOAT c;
-    DFLOAT s;
+    double c;
+    double s;
     short group;
 };
 
@@ -149,7 +107,7 @@ struct test {
 
 struct test *temparray;
 
-shipobj ball_wire;
+shape_t ball_wire;
 
 #define LINEY(X, Y, BASE, ARG)  (((Y)*(ARG)+(BASE))/(X))
 #define SIDE(X, Y, LINE) (linet[(LINE)].delta.cy * (X) - linet[(LINE)].delta.cx * (Y))
@@ -160,9 +118,9 @@ struct bline *linet;
 
 /* kps - dynamic creation of groups asap! */
 struct group groups[1000] = { /* !@# */
-    {0, 0, 0, 0, NULL},
-    {0, 0, 0, 0, NULL},
-    {0, 0, 0, 0, NULL}};
+    {0, 0, 0, NULL, NO_IND},
+    {0, 0, 0, NULL, NO_IND},
+    {0, 0, 0, NULL, NO_IND}};
 
 struct blockinfo *blockline;
 unsigned short *llist;
@@ -173,44 +131,25 @@ int num_groups = 0;
 int mapx, mapy;
 
 #if 1
-#define can_hit(group, move) \
-(((group)->hit_mask & (move)->hit_mask) ? false : \
- ((group)->hit_func == NULL ? true : (group)->hit_func(group, move)))
+#define can_hit(gp, move) \
+(((gp)->hitmask & (move)->hitmask) ? false : \
+ ((gp)->hitfunc == NULL ? true : (gp)->hitfunc(gp, move)))
 #else
-bool can_hit(struct group *group, struct move *move)
+bool can_hit(struct group *gp, struct move *move)
 {
-    if (group->hit_mask & move->hit_mask)
+    if (gp->hitmask & move->hitmask)
 	return false;
-    if (group->hit_func == NULL)
+    if (gp->hitfunc == NULL)
 	return true;
-    return group->hit_func(group, move);
+    return gp->hitfunc(gp, move);
 }
 #endif
 
-
-void Walls_init(void)
-{
-    /*
-     * Always do the walls_init_new(), since we treat the
-     * block map as a polygon map.
-     */
-    if (!is_polygon_map)
-	Walls_init_old();
-    Walls_init_new();
-}
-
 void Move_init(void)
 {
-    mp.click_width = PIXEL_TO_CLICK(World.width);
-    mp.click_height = PIXEL_TO_CLICK(World.height);
-
     LIMIT(maxObjectWallBounceSpeed, 0, World.hypotenuse);
     LIMIT(maxShieldedWallBounceSpeed, 0, World.hypotenuse);
     LIMIT(maxUnshieldedWallBounceSpeed, 0, World.hypotenuse);
-
-    /* kps - ng does not want the following 2 */
-    LIMIT(maxShieldedWallBounceAngle, 0, 180);
-    LIMIT(maxUnshieldedWallBounceAngle, 0, 180);
 
     LIMIT(playerWallBrakeFactor, 0, 1);
     LIMIT(objectWallBrakeFactor, 0, 1);
@@ -218,35 +157,25 @@ void Move_init(void)
     LIMIT(wallBounceFuelDrainMult, 0, 1000);
     wallBounceExplosionMult = sqrt(wallBounceFuelDrainMult);
 
-    /* kps - ng does not want the following 2 */
-    mp.max_shielded_angle = (int)(maxShieldedWallBounceAngle * RES / 360);
-    mp.max_unshielded_angle = (int)(maxUnshieldedWallBounceAngle * RES / 360);
-
     mp.obj_bounce_mask = 0;
-    if (sparksWallBounce) {
+    if (sparksWallBounce)
 	SET_BIT(mp.obj_bounce_mask, OBJ_SPARK);
-    }
-    if (debrisWallBounce) {
+    if (debrisWallBounce)
 	SET_BIT(mp.obj_bounce_mask, OBJ_DEBRIS);
-    }
-    if (shotsWallBounce) {
+    if (shotsWallBounce)
 	SET_BIT(mp.obj_bounce_mask, OBJ_SHOT|OBJ_CANNON_SHOT);
-    }
-    if (itemsWallBounce) {
+    if (itemsWallBounce)
 	SET_BIT(mp.obj_bounce_mask, OBJ_ITEM);
-    }
-    if (missilesWallBounce) {
+    if (missilesWallBounce)
 	SET_BIT(mp.obj_bounce_mask, OBJ_SMART_SHOT|OBJ_TORPEDO|OBJ_HEAT_SHOT);
-    }
-    if (minesWallBounce) {
+    if (minesWallBounce)
 	SET_BIT(mp.obj_bounce_mask, OBJ_MINE);
-    }
-    if (ballsWallBounce) {
+    if (ballsWallBounce)
 	SET_BIT(mp.obj_bounce_mask, OBJ_BALL);
-    }
-    if (asteroidsWallBounce) {
+    if (asteroidsWallBounce)
 	SET_BIT(mp.obj_bounce_mask, OBJ_ASTEROID);
-    }
+    if (pulsesWallBounce)
+	SET_BIT(mp.obj_bounce_mask, OBJ_PULSE);
 
     mp.obj_cannon_mask = (KILLING_SHOTS) | OBJ_MINE | OBJ_SHOT | OBJ_PULSE |
 			OBJ_SMART_SHOT | OBJ_TORPEDO | OBJ_HEAT_SHOT |
@@ -257,120 +186,32 @@ void Move_init(void)
     mp.obj_treasure_mask = mp.obj_bounce_mask | OBJ_BALL | OBJ_PULSE;
 }
 
-void Move_object(object *obj)
+static void Object_hits_target(object *obj, target_t *targ, double player_cost)
 {
-    if (is_polygon_map || !useOldCode)
-	Move_object_new(obj);
-    else
-	Move_object_old(obj);
-}
-
-void Move_player(int ind)
-{
-    if (is_polygon_map || !useOldCode)
-	Move_player_new(ind);
-    else
-	Move_player_old(ind);
-}
-
-void Turn_player(int ind)
-{
-    if (is_polygon_map || !useOldCode)
-	Turn_player_new(ind);
-    else
-	Turn_player_old(ind);
-}
-
-
-void Cannon_dies(int ind, player *pl)
-{
-    cannon_t		*cannon = &World.cannon[ind];
-    int			cx = cannon->pos.cx;
-    int			cy = cannon->pos.cy;
-    int			killer = -1;
-
-    cannon->dead_time = cannonDeadTime * TIME_FACT;
-    cannon->conn_mask = 0;
-    World.block[CLICK_TO_BLOCK(cx)][CLICK_TO_BLOCK(cy)] = SPACE;
-    Cannon_throw_items(ind);
-    Cannon_init(ind);
-    sound_play_sensors(cx, cy, CANNON_EXPLOSION_SOUND);
-    Make_debris(
-	/* pos.cx, pos.cy   */ cx, cy,
-	/* vel.x, vel.y   */ 0.0, 0.0,
-	/* owner id       */ NO_ID,
-	/* owner team	  */ cannon->team,
-	/* kind           */ OBJ_DEBRIS,
-	/* mass           */ 4.5,
-	/* status         */ GRAVITY,
-	/* color          */ RED,
-	/* radius         */ 6,
-	/* num debris     */ 20 + 20 * rfrac(),
-	/* min,max dir    */ (int)(cannon->dir - (RES * 0.2)), (int)(cannon->dir + (RES * 0.2)),
-	/* min,max speed  */ 20, 50,
-	/* min,max life   */ 8 * TIME_FACT, 68 * TIME_FACT
-	);
-    Make_wreckage(
-	/* pos.cx, pos.cy   */ cx, cy,
-	/* vel.x, vel.y   */ 0.0, 0.0,
-	/* owner id       */ NO_ID,
-	/* owner team	  */ cannon->team,
-	/* min,max mass   */ 3.5, 23,
-	/* total mass     */ 28,
-	/* status         */ GRAVITY,
-	/* color          */ WHITE,
-	/* max wreckage   */ 10,
-	/* min,max dir    */ (int)(cannon->dir - (RES * 0.2)), (int)(cannon->dir + (RES * 0.2)),
-	/* min,max speed  */ 10, 25,
-	/* min,max life   */ 8 * TIME_FACT, 68 * TIME_FACT
-	);
-
-    if (pl) {
-	killer = GetInd[pl->id];
-	if (cannonPoints > 0) {
-	    if (BIT(World.rules->mode, TEAM_PLAY)
-		&& teamCannons) {
-		TEAM_SCORE(cannon->team, -cannonPoints);
-	    }
-	    if (pl->score <= cannonMaxScore
-		&& !(BIT(World.rules->mode, TEAM_PLAY)
-		     && pl->team == cannon->team)) {
-		SCORE(killer, cannonPoints, cannon->pos.cx,
-					    cannon->pos.cy, "");
-	    }
-	}
-    }
-}
-
-
-void Object_hits_target(target_t *targ, object *obj, long player_cost)
-{
-    int			j,
-			x, y,
-			killer;
-    DFLOAT		sc, por,
-			win_score = 0,
-			lose_score = 0;
+    int			j;
+    player		*kp;
+    double		sc, por,
+			win_score = 0.0,
+			lose_score = 0.0;
     int			win_team_members = 0,
 			lose_team_members = 0,
 			somebody_flag = 0,
 			targets_remaining = 0,
 			targets_total = 0;
-    DFLOAT 		drainfactor;
+    double 		drainfactor;
+    vector 		zero_vel = {0.0, 0.0};
 
     /* a normal shot or a direct mine hit work, cannons don't */
     /* KK: should shots/mines by cannons of opposing teams work? */
     /* also players suiciding on target will cause damage */
-    if (!BIT(obj->type, KILLING_SHOTS|OBJ_MINE|OBJ_PULSE|OBJ_PLAYER)) {
+    if (!BIT(obj->type, KILLING_SHOTS|OBJ_MINE|OBJ_PULSE|OBJ_PLAYER))
 	return;
-    }
-    if (obj->id <= 0) {
+    if (obj->id <= 0)
 	return;
-    }
-    killer = GetInd[obj->id];
-    if (targ->team == obj->team) {
+
+    kp = Player_by_id(obj->id);
+    if (targ->team == obj->team)
 	return;
-    }
 
     switch(obj->type) {
     case OBJ_SHOT:
@@ -378,38 +219,33 @@ void Object_hits_target(target_t *targ, object *obj, long player_cost)
 	    drainfactor = VECTOR_LENGTH(obj->vel);
 	    drainfactor = (drainfactor * drainfactor * ABS(obj->mass))
 			  / (ShotsSpeed * ShotsSpeed * ShotsMass);
-	} else {
-	    drainfactor = 1.0f;
-	}
-	targ->damage += (int)(ED_SHOT_HIT * drainfactor * SHOT_MULT(obj));
+	} else
+	    drainfactor = 1.0;
+	targ->damage += ED_SHOT_HIT * drainfactor * SHOT_MULT(obj);
 	break;
     case OBJ_PULSE:
-	targ->damage += (int)(ED_LASER_HIT);
+	targ->damage += ED_LASER_HIT;
 	break;
     case OBJ_SMART_SHOT:
     case OBJ_TORPEDO:
     case OBJ_HEAT_SHOT:
-	if (!obj->mass) {
+	if (!obj->mass)
 	    /* happens at end of round reset. */
 	    return;
-	}
-	if (BIT(obj->mods.nuclear, NUCLEAR)) {
-	    targ->damage = 0;
-	}
-	else {
-	    targ->damage += (int)(ED_SMART_SHOT_HIT / (obj->mods.mini + 1));
-	}
+	if (BIT(obj->mods.nuclear, NUCLEAR))
+	    targ->damage = 0.0;
+	else
+	    targ->damage += ED_SMART_SHOT_HIT / (obj->mods.mini + 1);
 	break;
     case OBJ_MINE:
-	if (!obj->mass) {
+	if (!obj->mass)
 	    /* happens at end of round reset. */
 	    return;
-	}
 	targ->damage -= TARGET_DAMAGE / (obj->mods.mini + 1);
 	break;
     case OBJ_PLAYER:
-	if (player_cost <= 0 || player_cost > TARGET_DAMAGE / 4)
-	    player_cost = TARGET_DAMAGE / 4;
+	if (player_cost <= 0.0 || player_cost > TARGET_DAMAGE / 4.0)
+	    player_cost = TARGET_DAMAGE / 4.0;
 	targ->damage -= player_cost;
 	break;
 
@@ -420,24 +256,14 @@ void Object_hits_target(target_t *targ, object *obj, long player_cost)
 
     targ->conn_mask = 0;
     targ->last_change = frame_loops;
-    if (targ->damage > 0)
+    if (targ->damage > 0.0)
 	return;
 
-    targ->update_mask = (unsigned) -1;
-    targ->damage = TARGET_DAMAGE;
-    targ->dead_time = targetDeadTime * TIME_FACT;
-
-    /*
-     * Destroy target.
-     * Turn it into a space to simplify other calculations.
-     */
-    x = targ->pos.cx / BLOCK_CLICKS;
-    y = targ->pos.cy / BLOCK_CLICKS;
-    World.block[x][y] = SPACE;
+    Target_remove_from_map(targ);
 
     Make_debris(
-	/* pos.cx, pos.cy   */ targ->pos.cx, targ->pos.cy,
-	/* vel.x, vel.y   */ 0.0, 0.0,
+	/* pos.cx, pos.cy   */ targ->pos,
+	/* vel.x, vel.y   */ zero_vel,
 	/* owner id       */ NO_ID,
 	/* owner team	  */ targ->team,
 	/* kind           */ OBJ_DEBRIS,
@@ -445,31 +271,32 @@ void Object_hits_target(target_t *targ, object *obj, long player_cost)
 	/* status         */ GRAVITY,
 	/* color          */ RED,
 	/* radius         */ 6,
-	/* num debris     */ 75 + 75 * rfrac(),
+	/* num debris     */ (int)(75 + 75 * rfrac()),
 	/* min,max dir    */ 0, RES-1,
-	/* min,max speed  */ 20, 70,
-	/* min,max life   */ 10 * TIME_FACT, 100 * TIME_FACT
+	/* min,max speed  */ 20.0, 70.0,
+	/* min,max life   */ 10.0, 100.0
 	);
 
     if (BIT(World.rules->mode, TEAM_PLAY)) {
 	for (j = 0; j < NumPlayers; j++) {
-	    if (IS_TANK_IND(j)
-		|| (BIT(Players[j]->status, PAUSE)
-		    && Players[j]->count <= 0)
-		|| (BIT(Players[j]->status, GAME_OVER)
-		    && Players[j]->mychar == 'W'
-		    && Players[j]->score == 0)) {
+	    player *pl_j = Players(j);
+
+	    if (IS_TANK_PTR(pl_j)
+		|| (BIT(pl_j->status, PAUSE)
+		    && pl_j->count <= 0)
+		|| (BIT(pl_j->status, GAME_OVER)
+		    && pl_j->mychar == 'W'
+		    && pl_j->score == 0)) {
 		continue;
 	    }
-	    if (Players[j]->team == targ->team) {
-		lose_score += Players[j]->score;
+	    if (pl_j->team == targ->team) {
+		lose_score += pl_j->score;
 		lose_team_members++;
-		if (BIT(Players[j]->status, GAME_OVER) == 0) {
+		if (BIT(pl_j->status, GAME_OVER) == 0)
 		    somebody_flag = 1;
-		}
 	    }
-	    else if (Players[j]->team == Players[killer]->team) {
-		win_score += Players[j]->score;
+	    else if (pl_j->team == kp->team) {
+		win_score += pl_j->score;
 		win_team_members++;
 	    }
 	}
@@ -478,25 +305,21 @@ void Object_hits_target(target_t *targ, object *obj, long player_cost)
 	for (j = 0; j < World.NumTargets; j++) {
 	    if (World.targets[j].team == targ->team) {
 		targets_total++;
-		if (World.targets[j].dead_time == 0) {
+		if (World.targets[j].dead_time <= 0)
 		    targets_remaining++;
-		}
 	    }
 	}
     }
-    if (!somebody_flag) {
+    if (!somebody_flag)
 	return;
-    }
 
-    sound_play_sensors(PIXEL_TO_CLICK(x), PIXEL_TO_CLICK(y),
-		       DESTROY_TARGET_SOUND);
+    sound_play_sensors(targ->pos, DESTROY_TARGET_SOUND);
 
     if (targets_remaining > 0) {
-	sc = Rate(Players[killer]->score, CANNON_SCORE)/4;
+	sc = Rate(kp->score, CANNON_SCORE)/4;
 	sc = sc * (targets_total - targets_remaining) / (targets_total + 1);
-	if (sc >= 0.01) {
-	    SCORE(killer, sc, targ->pos.cx, targ->pos.cy, "Target: ");
-	}
+	if (sc >= 0.01)
+	    Score(kp, sc, targ->pos, "Target: ");
 	/*
 	 * If players can't collide with their own targets, we
 	 * assume there are many used as shields.  Don't litter
@@ -504,58 +327,50 @@ void Object_hits_target(target_t *targ, object *obj, long player_cost)
 	 */
 	if (targetTeamCollision && targets_total < 10) {
 	    sprintf(msg, "%s blew up one of team %d's targets.",
-		    Players[killer]->name, (int) targ->team);
+		    kp->name, targ->team);
 	    Set_message(msg);
 	}
 	return;
     }
 
     sprintf(msg, "%s blew up team %d's %starget.",
-	    Players[killer]->name,
-	    (int) targ->team,
-	    (targets_total > 1) ? "last " : "");
+	    kp->name, targ->team, (targets_total > 1) ? "last " : "");
     Set_message(msg);
 
-    if (targetKillTeam) {
-	Rank_AddTargetKill(Players[killer]);
-    }
+    if (targetKillTeam)
+	Rank_AddTargetKill(kp);
 
     sc  = Rate(win_score, lose_score);
-    por = (sc*lose_team_members)/win_team_members;
+    por = (sc * lose_team_members) /win_team_members;
 
     for (j = 0; j < NumPlayers; j++) {
-	if (IS_TANK_IND(j)
-	    || (BIT(Players[j]->status, PAUSE)
-		&& Players[j]->count <= 0)
-	    || (BIT(Players[j]->status, GAME_OVER)
-		&& Players[j]->mychar == 'W'
-		&& Players[j]->score == 0)) {
+	player *pl = Players(j);
+
+	if (IS_TANK_PTR(pl)
+	    || (BIT(pl->status, PAUSE)
+		&& pl->count <= 0)
+	    || (BIT(pl->status, GAME_OVER)
+		&& pl->mychar == 'W'
+		&& pl->score == 0)) {
 	    continue;
 	}
-	if (Players[j]->team == targ->team) {
+	if (pl->team == targ->team) {
 	    if (targetKillTeam
 		&& targets_remaining == 0
-		&& !BIT(Players[j]->status, KILLED|PAUSE|GAME_OVER))
-		SET_BIT(Players[j]->status, KILLED);
-	    SCORE(j, -sc, targ->pos.cx, targ->pos.cy, "Target: ");
+		&& !BIT(pl->status, KILLED|PAUSE|GAME_OVER))
+		SET_BIT(pl->status, KILLED);
+	    Score(pl, -sc, targ->pos, "Target: ");
 	}
-	else if (Players[j]->team == Players[killer]->team &&
-		 (Players[j]->team != TEAM_NOT_SET || j == killer)) {
-	    SCORE(j, por, targ->pos.cx, targ->pos.cy, "Target: ");
-	}
+	else if (pl->team == kp->team &&
+		 (pl->team != TEAM_NOT_SET || pl->id == kp->id))
+	    Score(pl, por, targ->pos, "Target: ");
     }
 }
 
 
 
-void Object_crash(object *obj, struct move *move, int crashtype, int item_id)
+void Object_crash(object *obj, int crashtype, int mapobj_ind)
 {
-    player *pl = NULL;
-
-    /* kps hack - not ok, check Cannon_dies_old() */
-    if (obj->id != NO_ID)
-	pl = Players[GetInd[obj->id]];
-
     switch (crashtype) {
 
     case CrashWormHole:
@@ -566,15 +381,14 @@ void Object_crash(object *obj, struct move *move, int crashtype, int item_id)
 	/*
 	 * Ball type has already been handled.
 	 */
-	if (obj->type == OBJ_BALL) {
+	if (obj->type == OBJ_BALL)
 	    break;
-	}
 	obj->life = 0;
 	break;
 
     case CrashTarget:
 	obj->life = 0;
-	Object_hits_target(&World.targets[item_id], obj, -1);
+	Object_hits_target(obj, Targets(mapobj_ind), -1.0);
 	break;
 
     case CrashWall:
@@ -587,19 +401,20 @@ void Object_crash(object *obj, struct move *move, int crashtype, int item_id)
 	break;
 
     case CrashCannon:
-	/*
-	 * kps - determine which player fired the shot that killed the cannon
-	 * and change to Cannon_dies(item_id, pl);
-	 */
-	obj->life = 0;
-	if (BIT(obj->type, OBJ_ITEM)) {
-	    Cannon_add_item(item_id, obj->info, obj->count);
-	} else {
-	    if (!BIT(World.cannon[item_id].used, HAS_EMERGENCY_SHIELD)) {
-		if (World.cannon[item_id].item[ITEM_ARMOR] > 0)
-		    World.cannon[item_id].item[ITEM_ARMOR]--;
-		else
-		    Cannon_dies(item_id, pl);
+        {
+	    cannon_t *c = Cannons(mapobj_ind);
+	    obj->life = 0;
+	    if (BIT(obj->type, OBJ_ITEM))
+		Cannon_add_item(c, obj->info, obj->count);
+	    else {
+		player *pl = Player_by_id(obj->id);
+
+		if (!BIT(c->used, HAS_EMERGENCY_SHIELD)) {
+		    if (c->item[ITEM_ARMOR] > 0)
+			c->item[ITEM_ARMOR]--;
+		    else
+			Cannon_dies(c, pl);
+		}
 	    }
 	}
 	break;
@@ -611,10 +426,8 @@ void Object_crash(object *obj, struct move *move, int crashtype, int item_id)
 }
 
 
-void Player_crash(player *pl, struct move *move, int crashtype,
-		  int item_id, int pt)
+void Player_crash(player *pl, int crashtype, int mapobj_ind, int pt)
 {
-    int			ind = GetInd[pl->id];
     const char		*howfmt = NULL;
     const char          *hudmsg = NULL;
 
@@ -629,69 +442,74 @@ void Player_crash(player *pl, struct move *move, int crashtype,
 
     case CrashWormHole:
 	SET_BIT(pl->status, WARPING);
-	pl->wormHoleHit = item_id;
+	pl->wormHoleHit = mapobj_ind;
 	break;
 
     case CrashWall:
 	howfmt = "%s crashed%s against a wall";
 	hudmsg = "[Wall]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos, PLAYER_HIT_WALL_SOUND);
 	break;
 
     case CrashWallSpeed:
 	howfmt = "%s smashed%s against a wall";
 	hudmsg = "[Wall]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos, PLAYER_HIT_WALL_SOUND);
 	break;
 
     case CrashWallNoFuel:
 	howfmt = "%s smacked%s against a wall";
 	hudmsg = "[Wall]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos, PLAYER_HIT_WALL_SOUND);
 	break;
 
     case CrashWallAngle:
 	howfmt = "%s was trashed%s against a wall";
 	hudmsg = "[Wall]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos, PLAYER_HIT_WALL_SOUND);
 	break;
 
     case CrashTarget:
 	howfmt = "%s smashed%s against a target";
 	hudmsg = "[Target]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
-	/*Object_hits_target_old(ms, -1);*/
-	Object_hits_target(&World.targets[item_id], (object *)pl, -1);
+	sound_play_sensors(pl->pos, PLAYER_HIT_WALL_SOUND);
+	Object_hits_target(OBJ_PTR(pl), Targets(mapobj_ind), -1.0);
 	break;
 
     case CrashTreasure:
 	howfmt = "%s smashed%s against a treasure";
 	hudmsg = "[Treasure]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos, PLAYER_HIT_WALL_SOUND);
 	break;
 
     case CrashCannon:
-	if (BIT(pl->used, HAS_SHIELD|HAS_EMERGENCY_SHIELD)
-	    != (HAS_SHIELD|HAS_EMERGENCY_SHIELD)) {
-	    howfmt = "%s smashed%s against a cannon";
-	    hudmsg = "[Cannon]";
-	    sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_CANNON_SOUND);
-	}
-	if (!BIT(World.cannon[item_id].used, HAS_EMERGENCY_SHIELD)) {
-	    Cannon_dies(item_id, pl);
+        {
+	    cannon_t *cannon = Cannons(mapobj_ind);
+	    if (!Player_used_emergency_shield(pl)) {
+		howfmt = "%s smashed%s against a cannon";
+		hudmsg = "[Cannon]";
+		sound_play_sensors(pl->pos, PLAYER_HIT_CANNON_SOUND);
+	    }
+	    if (!BIT(cannon->used, HAS_EMERGENCY_SHIELD)) {
+		/* pl gets points if the cannon is rammed with shields up */
+		if (Player_used_emergency_shield(pl))
+		    Cannon_dies(cannon, pl);
+		else
+		    Cannon_dies(cannon, NULL);
+	    }
 	}
 	break;
 
     case CrashUniverse:
 	howfmt = "%s left the known universe%s";
 	hudmsg = "[Universe]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos, PLAYER_HIT_WALL_SOUND);
 	break;
 
     case CrashUnknown:
 	howfmt = "%s slammed%s into a programming error";
 	hudmsg = "[Bug]";
-	sound_play_sensors(pl->pos.cx, pl->pos.cy, PLAYER_HIT_WALL_SOUND);
+	sound_play_sensors(pl->pos, PLAYER_HIT_WALL_SOUND);
 	break;
     }
 
@@ -700,24 +518,23 @@ void Player_crash(player *pl, struct move *move, int crashtype,
 	int		cnt[MAX_RECORDED_SHOVES];
 	int		num_pushers = 0;
 	int		total_pusher_count = 0;
-	DFLOAT		total_pusher_score = 0;
+	double		total_pusher_score = 0;
 	int		i, j;
-	DFLOAT		sc;
+	double		sc;
 
 	SET_BIT(pl->status, KILLED);
-	move->delta.cx = 0;
-	move->delta.cy = 0;
 	sprintf(msg, howfmt, pl->name, (!pt) ? " head first" : "");
 
 	/* get a list of who pushed me */
 	for (i = 0; i < MAX_RECORDED_SHOVES; i++) {
 	    shove_t *shove = &pl->shove_record[i];
-	    if (shove->pusher_id == NO_ID) {
+
+	    if (shove->pusher_id == NO_ID)
 		continue;
-	    }
-	    if (shove->time < frame_loops - 20) {
+
+	    if (shove->time < frame_loops - 20)
 		continue;
-	    }
+
 	    for (j = 0; j < num_pushers; j++) {
 		if (shove->pusher_id == pushers[j]->id) {
 		    cnt[j]++;
@@ -725,7 +542,7 @@ void Player_crash(player *pl, struct move *move, int crashtype,
 		}
 	    }
 	    if (j == num_pushers) {
-		pushers[num_pushers++] = Players[GetInd[shove->pusher_id]];
+		pushers[num_pushers++] = Player_by_id(shove->pusher_id);
 		cnt[j] = 1;
 	    }
 	    total_pusher_count++;
@@ -733,23 +550,23 @@ void Player_crash(player *pl, struct move *move, int crashtype,
 	}
 	if (num_pushers == 0) {
 	    sc = Rate(WALL_SCORE, pl->score);
-	    SCORE(ind, -sc, pl->pos.cx, pl->pos.cy, hudmsg);
+	    Score(pl, -sc, pl->pos, hudmsg);
 	    strcat(msg, ".");
 	    Set_message(msg);
 	}
 	else {
 	    int		msg_len = strlen(msg);
 	    char	*msg_ptr = &msg[msg_len];
-	    int		average_pusher_score = total_pusher_score
-						/ total_pusher_count;
+	    double	average_pusher_score
+		= total_pusher_score / total_pusher_count;
 
 	    for (i = 0; i < num_pushers; i++) {
 		player		*pusher = pushers[i];
 		const char	*sep = (!i) ? " with help from "
 					    : (i < num_pushers - 1) ? ", "
 					    : " and ";
-		int		sep_len = strlen(sep);
-		int		name_len = strlen(pusher->name);
+		size_t		sep_len = strlen(sep);
+		size_t		name_len = strlen(pusher->name);
 
 		if (msg_len + sep_len + name_len + 2 < sizeof msg) {
 		    strcpy(msg_ptr, sep);
@@ -761,31 +578,26 @@ void Player_crash(player *pl, struct move *move, int crashtype,
 		}
 		sc = cnt[i] * Rate(pusher->score, pl->score)
 				    * shoveKillScoreMult / total_pusher_count;
-		SCORE(GetInd[pusher->id], sc,
-		      pl->pos.cx, pl->pos.cy, pl->name);
-		if (i >= num_pushers - 1) {
-		    pusher->kills++;
-		}
-
+		Score(pusher, sc, pl->pos, pl->name);
+		if (i >= num_pushers - 1)
+		    Rank_AddKill(pusher);
 	    }
 	    sc = Rate(average_pusher_score, pl->score)
-		       * shoveKillScoreMult;
-	    SCORE(ind, -sc, pl->pos.cx, pl->pos.cy, "[Shove]");
+		* shoveKillScoreMult;
+	    Score(pl, -sc, pl->pos, "[Shove]");
 
 	    strcpy(msg_ptr, ".");
 	    Set_message(msg);
 
 	    /* Robots will declare war on anyone who shoves them. */
 	    i = (int)(rfrac() * num_pushers);
-	    Robot_war(ind, GetInd[pushers[i]->id]);
+	    Robot_war(pl, pushers[i]);
 	}
     }
 
-    if (BIT(pl->status, KILLED)
-	&& pl->score < 0
-	&& IS_ROBOT_PTR(pl)) {
-	pl->home_base = 0;
-	Pick_startpos(ind);
+    if (BIT(pl->status, KILLED) && pl->score < 0 && IS_ROBOT_PTR(pl)) {
+	pl->home_base = Bases(0);
+	Pick_startpos(pl);
     }
 }
 
@@ -801,50 +613,55 @@ static void *ralloc(void *ptr, size_t size)
     return ptr;
 }
 
-static unsigned short *Shape_lines(const shipobj *shape, int dir)
+static unsigned short *Shape_lines(const shape_t *s, int dir)
 {
-    int p;
+    int i;
     static unsigned short foo[100];
-    static const shipobj *lastshape;
+    static const shape_t *lastshape;
     static int lastdir;
     const int os = num_lines;
+    shapepos *pts;
 
     /* linet[i].group MUST BE INITIALIZED TO 0 */
 
-    if (shape == lastshape && dir == lastdir)
+    if (s == lastshape && dir == lastdir)
 	return foo;
 
-    lastshape = shape;
+    lastshape = s;
     lastdir = dir;
 
-    for (p = 0; p < shape->num_points; p++) {
-	linet[p + os].start.cx = -shape->pts[p][dir].cx;
-	linet[p + os].start.cy = -shape->pts[p][dir].cy;
+    pts = Shape_get_points((shape_t *)s, dir);
+    for (i = 0; i < s->num_points; i++) {
+	clpos pt = pts[i].clk;
+
+	linet[i + os].start.cx = -pt.cx;
+	linet[i + os].start.cy = -pt.cy;
     }
-    for (p = 0; p < shape->num_points - 1; p++) {
-	linet[p + os].delta.cx
-	    = linet[p + os + 1].start.cx - linet[p + os].start.cx;
-	linet[p + os].delta.cy
-	    = linet[p + os + 1].start.cy - linet[p + os].start.cy;
+    for (i = 0; i < s->num_points - 1; i++) {
+	linet[i + os].delta.cx
+	    = linet[i + os + 1].start.cx - linet[i + os].start.cx;
+	linet[i + os].delta.cy
+	    = linet[i + os + 1].start.cy - linet[i + os].start.cy;
     }
-    linet[p + os].delta.cx = linet[os].start.cx - linet[p + os].start.cx;
-    linet[p + os].delta.cy = linet[os].start.cy - linet[p + os].start.cy;
-    for (p = 0; p < shape->num_points; p++)
-	foo[p] = p + os;
-    foo[p] = 65535;
+    linet[i + os].delta.cx = linet[os].start.cx - linet[i + os].start.cx;
+    linet[i + os].delta.cy = linet[os].start.cy - linet[i + os].start.cy;
+    for (i = 0; i < s->num_points; i++)
+	foo[i] = i + os;
+    foo[i] = 65535;
     return foo;
 }
 
 
 static int Bounce_object(object *obj, struct move *move, int line, int point)
 {
-    DFLOAT fx, fy;
-    DFLOAT c, s;
-    int group, type, item_id;
+    double fx, fy;
+    double c, s, wall_brake_factor = objectWallBrakeFactor;
+    int group, type;
+    int mapobj_ind;
 
     group = linet[line >= num_lines ? point : line].group;
     type = groups[group].type;
-    item_id = groups[group].item_id;
+    mapobj_ind = groups[group].mapobj_ind;
 
     if (obj->collmode == 1) {
 	fx = ABS(obj->vel.x) + ABS(obj->vel.y);
@@ -859,40 +676,34 @@ static int Bounce_object(object *obj, struct move *move, int line, int point)
 
     if (type == TREASURE) {
 	if (obj->type == OBJ_BALL)
-	    Ball_hits_goal(BALL_PTR(obj), group);
+	    Ball_hits_goal(BALL_PTR(obj), groupptr_by_id(group));
 	obj->life = 0;
 	return 0;
     }
 
-    /* kps hack */
     if (type == TARGET) {
-	Object_hits_target(&World.targets[item_id], obj, -1);
+	obj->life = 0;
+	Object_hits_target(obj, Targets(mapobj_ind), -1.0);
 	return 0;
     }
-    /* kps hack */
 
-    /* kps hack */
     if (type == CANNON) {
-	Object_crash(obj, move, CrashCannon, item_id);
+	Object_crash(obj, CrashCannon, mapobj_ind);
 	return 0;
     }
-    /* kps hack */
 
-#if 1
-    /* kps hack */
     if (type == WORMHOLE) {
-	/* kps - ??? */
-	Object_crash(obj, move, CrashWormHole, item_id);
+	Object_crash(obj, CrashWormHole, mapobj_ind);
 	return 0;
     }
-    /* kps hack */
-#endif
+
     if (!BIT(mp.obj_bounce_mask, obj->type)) {
 	obj->life = 0;
 	return 0;
     }
 
-    if (obj->type != OBJ_BALL) {
+    if (obj->type != OBJ_BALL
+	&& obj->type != OBJ_PULSE) {
 	obj->life = (long)(obj->life * objectWallBounceLifeFactor);
 	if (obj->life <= 0)
 	    return 0;
@@ -907,7 +718,8 @@ static int Bounce_object(object *obj, struct move *move, int line, int point)
      * should bounce, it is not reactive thrust otherwise wall
      * bouncing would cause acceleration of the player.
      */
-    if (sqr(obj->vel.x) + sqr(obj->vel.y) > sqr(maxObjectWallBounceSpeed)){
+    if (obj->type != OBJ_PULSE &&
+	sqr(obj->vel.x) + sqr(obj->vel.y) > sqr(maxObjectWallBounceSpeed)) {
 	obj->life = 0;
 	return 0;
     }
@@ -916,7 +728,7 @@ static int Bounce_object(object *obj, struct move *move, int line, int point)
 
 
     if (line >= num_lines) {
-	DFLOAT x, y, l2;
+	double x, y, l2;
 	x = linet[line].delta.cx;
 	y = linet[line].delta.cy;
 	l2 = (x*x + y*y);
@@ -927,16 +739,28 @@ static int Bounce_object(object *obj, struct move *move, int line, int point)
 	c = linet[line].c;
 	s = linet[line].s;
     }
+
+    if (obj->type == OBJ_PULSE)
+	wall_brake_factor = 1.0;
     fx = move->delta.cx * c + move->delta.cy * s;
     fy = move->delta.cx * s - move->delta.cy * c;
-    move->delta.cx = fx * objectWallBrakeFactor;
-    move->delta.cy = fy * objectWallBrakeFactor;
+    move->delta.cx = fx * wall_brake_factor;
+    move->delta.cy = fy * wall_brake_factor;
     fx = obj->vel.x * c + obj->vel.y * s;
     fy = obj->vel.x * s - obj->vel.y * c;
-    obj->vel.x = fx * objectWallBrakeFactor;
-    obj->vel.y = fy * objectWallBrakeFactor;
+    obj->vel.x = fx * wall_brake_factor;
+    obj->vel.y = fy * wall_brake_factor;
     if (obj->collmode == 2)
 	obj->collmode = 3;
+
+    /* find direction of pulse after bounce */
+    if (obj->type == OBJ_PULSE) {
+	pulseobject *pulse = PULSE_PTR(obj);
+
+	pulse->dir = (int)Wrap_findDir(pulse->vel.x, pulse->vel.y);
+	pulse->len = 0;
+    }
+
     return 1;
 }
 
@@ -944,12 +768,12 @@ static int Bounce_object(object *obj, struct move *move, int line, int point)
 
 static void Bounce_player(player *pl, struct move *move, int line, int point)
 {
-    DFLOAT fx, fy;
-    DFLOAT c, s;
-    int group, type, item_id;
+    double fx, fy;
+    double c, s;
+    int group, type, mapobj_ind;
 
     if (line >= num_lines) {
-	DFLOAT x, y, l2;
+	double x, y, l2;
 	x = linet[line].delta.cx;
 	y = linet[line].delta.cy;
 	l2 = (x*x + y*y);
@@ -963,43 +787,52 @@ static void Bounce_player(player *pl, struct move *move, int line, int point)
 	s = linet[line].s;
     }
     type = groups[group].type;
-    item_id = groups[group].item_id;
+    mapobj_ind = groups[group].mapobj_ind;
     if (type == TREASURE) {
-	Player_crash(pl, move, CrashTreasure, NO_ID, 1);
+	Player_crash(pl, CrashTreasure, NO_IND, 1);
 	return;
     }
-    /* kps hack - fix this */
-    if (type == TARGET) {
-	/*Object_hits_target(&World.targets[item_id], obj, -1);*/
-	Player_crash(pl, move, CrashTarget, item_id, 1);
-	return;
-    }
-    /* kps hack */
 
-    /* kps hack */
     if (type == WORMHOLE) {
-	Player_crash(pl, move, CrashWormHole, item_id, 1);
+	Player_crash(pl, CrashWormHole, mapobj_ind, 1);
 	return;
     }
-    /* kps hack */
+
+    if (type == CANNON) {
+	Player_crash(pl, CrashCannon, mapobj_ind, 1);
+	if (BIT(pl->status, KILLED))
+	    return;
+	/* The player may bounce from the cannon if both have shields up. */
+    }
 
     pl->last_wall_touch = frame_loops;
     {
-	DFLOAT	speed = VECTOR_LENGTH(pl->vel);
-	int	v = (int) speed >> 2;
-	int	m = (int) (pl->mass - pl->emptymass * 0.75f);
-	DFLOAT	b = 1 - 0.5f * playerWallBrakeFactor;
-	long	cost = (long) (b * m * v);
-	DFLOAT	max_speed = BIT(pl->used, HAS_SHIELD)
+	double	speed = VECTOR_LENGTH(pl->vel);
+	double	v = speed * 0.25;
+	double	m = pl->mass - pl->emptymass * 0.75;
+	double	b = 1.0 - 0.5 * playerWallBrakeFactor;
+	double	cost = b * m * v;
+	double	max_speed = BIT(pl->used, HAS_SHIELD)
 		? maxShieldedWallBounceSpeed
 		: maxUnshieldedWallBounceSpeed;
 
-	if (BIT(pl->used, (HAS_SHIELD|HAS_EMERGENCY_SHIELD))
-	    == (HAS_SHIELD|HAS_EMERGENCY_SHIELD)) {
-	    max_speed = 100;
+	if (Player_used_emergency_shield(pl))
+	    max_speed = 100.0;
+
+	/* only use armor if neccessary */
+	if (speed > max_speed
+	    && max_speed < maxShieldedWallBounceSpeed
+	    && !BIT(pl->used, HAS_SHIELD)
+	    && BIT(pl->have, HAS_ARMOR)) {
+	    max_speed = maxShieldedWallBounceSpeed;
+	    Player_hit_armor(pl);
 	}
+
 	if (speed > max_speed) {
-	    Player_crash(pl, move, CrashWallSpeed, NO_ID, 1);
+	    if (type == TARGET)
+		Player_crash(pl, CrashTarget, mapobj_ind, 1);
+	    else
+		Player_crash(pl, CrashWallSpeed, NO_IND, 1);
 	    return;
 	}
 
@@ -1009,46 +842,43 @@ static void Bounce_player(player *pl, struct move *move, int line, int point)
 	 * which don't collide with player.
 	 */
 	cost *= 0.9; /* used to depend on bounce angle, .5 .. 1.0 */
-	if (BIT(pl->used, (HAS_SHIELD|HAS_EMERGENCY_SHIELD))
-	    != (HAS_SHIELD|HAS_EMERGENCY_SHIELD)) {
-	    Add_fuel(&pl->fuel, (long)(-((cost << FUEL_SCALE_BITS)
-					 * wallBounceFuelDrainMult)));
-	    Item_damage(GetInd[pl->id], wallBounceDestroyItemProb);
+	if (!Player_used_emergency_shield(pl)) {
+	    Player_add_fuel(pl, -cost * wallBounceFuelDrainMult);
+	    Item_damage(pl, wallBounceDestroyItemProb);
 	}
-	if (!pl->fuel.sum && wallBounceFuelDrainMult != 0) {
-	    Player_crash(pl, move, CrashWallNoFuel, NO_ID, 1);
+	if (pl->fuel.sum == 0.0 && wallBounceFuelDrainMult != 0.0) {
+	    if (type == TARGET)
+		Player_crash(pl, CrashTarget, mapobj_ind, 1);
+	    else
+		Player_crash(pl, CrashWallNoFuel, NO_IND, 1);
 	    return;
 	}
-/* !@# I didn't implement wall direction calculation yet. */
+	/* !@# I didn't implement wall direction calculation yet. */
+	/* kps - neither did I */
 	if (cost) {
 #if 0
 	    int intensity = (int)(cost * wallBounceExplosionMult);
 	    Make_debris(
-			/* pos.cx, pos.cy   */ pl->pos.cx, pl->pos.cy,
-			/* vel.x, vel.y   */ pl->vel.x, pl->vel.y,
-			/* owner id       */ pl->id,
-			/* owner team	  */ pl->team,
-			/* kind           */ OBJ_SPARK,
-			/* mass           */ 3.5,
-			/* status         */ GRAVITY | OWNERIMMUNE | FROMBOUNCE,
-			/* color          */ RED,
-			/* radius         */ 1,
-			/* min,max debris */ intensity>>1, intensity,
-			/* min,max dir    */ wall_dir - (RES/4), wall_dir + (RES/4),
-			/* min,max speed  */ 20, 20 + (intensity>>2),
-			/* min,max life   */ 10, 10 + (intensity>>1)
-					     );
+		/* pos            */ pl->pos,
+		/* vel.x, vel.y   */ pl->vel,
+		/* owner id       */ pl->id,
+		/* owner team	  */ pl->team,
+		/* kind           */ OBJ_SPARK,
+		/* mass           */ 3.5,
+		/* status         */ GRAVITY | OWNERIMMUNE | FROMBOUNCE,
+		/* color          */ RED,
+		/* radius         */ 1,
+		/* num max debris */ (intensity>>1) + (intensity>>1) * rfrac(),
+		/* min,max dir    */ wall_dir - (RES/4), wall_dir + (RES/4),
+		/* min,max speed  */ 20, 20 + (intensity >> 2),
+		/* min,max life   */ 10, 10 + (intensity >> 1)
+		);
 #endif
-	    sound_play_sensors(pl->pos.cx, pl->pos.cy,
-			       PLAYER_BOUNCED_SOUND);
-#if 0
-	    /* I'll leave this here until i implement targets */
-	    if (ms[worst].target >= 0) {
-		cost <<= FUEL_SCALE_BITS;
-		cost = (long)(cost * (wallBounceFuelDrainMult / 4.0));
-		Object_hits_target_old(&ms[worst], cost);
+	    sound_play_sensors(pl->pos, PLAYER_BOUNCED_SOUND);
+	    if (type == TARGET) {
+		cost *= wallBounceFuelDrainMult / 4.0;
+		Object_hits_target(OBJ_PTR(pl), Targets(mapobj_ind), cost);
 	    }
-#endif
 	}
     }
     fx = move->delta.cx * c + move->delta.cy * s;
@@ -1061,205 +891,19 @@ static void Bounce_player(player *pl, struct move *move, int line, int point)
     pl->vel.y = fy * playerWallBrakeFactor;
 }
 
-static int Away(struct move *move, int line)
-{
-    int i, dx, dy, lsx, lsy, res;
-    unsigned short *lines;
 
-    lsx = linet[line].start.cx - move->start.cx;
-    lsy = linet[line].start.cy - move->start.cy;
-    lsx = CENTER_XCLICK(lsx);
-    lsy = CENTER_YCLICK(lsy);
-
-    if (ABS(linet[line].delta.cx) >= ABS(linet[line].delta.cy)) {
-	dx = 0;
-	dy = -SIGN(linet[line].delta.cx);
-    }
-    else {
-	dy = 0;
-	dx = SIGN(linet[line].delta.cy);
-    }
-
-    if ((ABS(lsx) > SEPARATION_DIST || ABS(lsy) > SEPARATION_DIST)
-	&& (ABS(lsx + linet[line].delta.cx) > SEPARATION_DIST
-	    || ABS(lsy + linet[line].delta.cy) > SEPARATION_DIST)) {
-	move->start.cx = WRAP_XCLICK(move->start.cx + dx);
-	move->start.cy = WRAP_YCLICK(move->start.cy + dy);
-	return -1;
-    }
-
-    lines = blockline[(move->start.cx >> B_SHIFT)
-		     + mapx * (move->start.cy >> B_SHIFT)].lines;
-    while ( (i = *lines++) != 65535) {
-	if (i == line)
-	    continue;
-	if (linet[i].group
-	    /*&& (groups[linet[i].group].hit_mask & move->hit_mask))*/
-	    && (!can_hit(&groups[linet[i].group], move)))
-	    continue;
-
-	lsx = linet[i].start.cx - move->start.cx;
-	lsy = linet[i].start.cy - move->start.cy;
-	lsx = CENTER_XCLICK(lsx);
-	lsy = CENTER_YCLICK(lsy);
-
-	if ((ABS(lsx) > SEPARATION_DIST || ABS(lsy) > SEPARATION_DIST)
-	    && (ABS(lsx + linet[i].delta.cx) > SEPARATION_DIST
-		|| ABS(lsy + linet[i].delta.cy) > SEPARATION_DIST))
-	    continue;
-
-	if (lsx < dx && lsx + linet[i].delta.cx < dx)
-	    continue;
-	if (lsx > dx && lsx + linet[i].delta.cx > dx)
-	    continue;
-	if (lsy < dy && lsy + linet[i].delta.cy < dy)
-	    continue;
-	if (lsy > dy && lsy + linet[i].delta.cy > dy)
-	    continue;
-
-	if ((res = SIDE(lsx - dx, lsy - dy, i)) == 0
-	    || res > 0 != SIDE(lsx, lsy, i) > 0) {
-	    if (res) {
-		if (lsx < 0 && lsx + linet[i].delta.cx < 0)
-		    continue;
-		if (lsx > 0 && lsx + linet[i].delta.cx > 0)
-		    continue;
-		if (lsy < 0 && lsy + linet[i].delta.cy < 0)
-		    continue;
-		if (lsy > 0 && lsy + linet[i].delta.cy > 0)
-		    continue;
-	    }
-	    return i;
-	}
-    }
-
-    move->start.cx = WRAP_XCLICK(move->start.cx + dx);
-    move->start.cy = WRAP_YCLICK(move->start.cy + dy);
-    return -1;
-}
-
-static int Shape_move1(int dx, int dy, struct move *move,
-		       const shipobj *shape, int dir, int *line, int *point)
-{
-    int i, p, lsx, lsy, res;
-    unsigned short *lines, *points;
-    int block;
-
-    block = (move->start.cx >> B_SHIFT) + mapx * (move->start.cy >> B_SHIFT);
-    for (p = 0; p < shape->num_points; p++) {
-	lines = blockline[block].lines;
-	/* Can use the same block for all points because the block of the
-	   center point contains lines for their start & end positions. */
-	while ( (i = *lines++) != 65535) {
-	    if (linet[i].group
-		/*&& (groups[linet[i].group].hit_mask & move->hit_mask))*/
-		&& (!can_hit(&groups[linet[i].group], move)))
-		continue;
-	    lsx = linet[i].start.cx - move->start.cx - shape->pts[p][dir].cx;
-	    lsy = linet[i].start.cy - move->start.cy - shape->pts[p][dir].cy;
-	    lsx = CENTER_XCLICK(lsx);
-	    lsy = CENTER_YCLICK(lsy);
-
-	    if (lsx < dx && lsx + linet[i].delta.cx < dx)
-		continue;
-	    if (lsx > dx && lsx + linet[i].delta.cx > dx)
-		continue;
-	    if (lsy < dy && lsy + linet[i].delta.cy < dy)
-		continue;
-	    if (lsy > dy && lsy + linet[i].delta.cy > dy)
-		continue;
-
-	    if ( (res = SIDE(lsx - dx, lsy - dy, i)) == 0
-		 || res > 0 != SIDE(lsx, lsy, i) > 0) {
-		if (res) {
-		    if (lsx < 0 && lsx + linet[i].delta.cx < 0)
-			continue;
-		    if (lsx > 0 && lsx + linet[i].delta.cx > 0)
-			continue;
-		    if (lsy < 0 && lsy + linet[i].delta.cy < 0)
-			continue;
-		    if (lsy > 0 && lsy + linet[i].delta.cy > 0)
-			continue;
-		}
-		*line = i;
-		return 0;
-	    }
-	}
-    }
-
-    points = blockline[block].points;
-    while ( (p = *points++) != 65535) {
-	if (linet[p].group
-	    /*&& (groups[linet[p].group].hit_mask & move->hit_mask))*/
-	    && (!can_hit(&groups[linet[p].group], move)))
-	    continue;
-	lines = Shape_lines(shape, dir);
-	while ( (i = *lines++) != 65535) {
-	    lsx = linet[i].start.cx + (linet[p].start.cx - move->start.cx);
-	    lsy = linet[i].start.cy + (linet[p].start.cy - move->start.cy);
-	    lsx = CENTER_XCLICK(lsx);
-	    lsy = CENTER_YCLICK(lsy);
-
-	    if (lsx < dx && lsx + linet[i].delta.cx < dx)
-		continue;
-	    if (lsx > dx && lsx + linet[i].delta.cx > dx)
-		continue;
-	    if (lsy < dy && lsy + linet[i].delta.cy < dy)
-		continue;
-	    if (lsy > dy && lsy + linet[i].delta.cy > dy)
-		continue;
-
-	    if ( (res = SIDE(lsx - dx, lsy - dy, i)) == 0
-		 || res > 0 != SIDE(lsx, lsy, i) > 0) {
-		if (res) {
-		    if (lsx < 0 && lsx + linet[i].delta.cx < 0)
-			continue;
-		    if (lsx > 0 && lsx + linet[i].delta.cx > 0)
-			continue;
-		    if (lsy < 0 && lsy + linet[i].delta.cy < 0)
-			continue;
-		    if (lsy > 0 && lsy + linet[i].delta.cy > 0)
-			continue;
-		}
-		*line = i;
-		*point = p;
-		return 0;
-	    }
-	}
-    }
-
-    move->start.cx = WRAP_XCLICK(move->start.cx + dx);
-    move->start.cy = WRAP_YCLICK(move->start.cy + dy);
-    return 1;
-}
-
-static int Shape_away(struct move *move, const shipobj *shape,
-		      int dir, int line, int *rline, int *rpoint)
-{
-    int dx, dy;
-
-    if (ABS(linet[line].delta.cx) >= ABS(linet[line].delta.cy)) {
-	dx = 0;
-	dy = -SIGN(linet[line].delta.cx);
-    }
-    else {
-	dy = 0;
-	dx = SIGN(linet[line].delta.cy);
-    }
-    return Shape_move1(dx, dy, move, shape, dir, rline, rpoint);
-}
-
+/* Used internally by the movement routines to find the first line
+ * (in the list given by *lines) that the given trajectory hits. */
 static int Lines_check(int msx, int msy, int mdx, int mdy, int *mindone,
 		       const unsigned short *lines, int chx, int chy,
 		       int chxy, const struct move *move, int *minline,
 		       int *height)
 {
-    int lsx, lsy, ldx, ldy, temp, bigger, start, end, i, x, sy, ey, prod;
+    int lsx, lsy, ldx, ldy, temp, mirror, start, end, i, x, sy, ey, prod;
     int mbase = mdy >> 1, hit = 0;
 
     while ( (i = *lines++) != 65535) {
 	if (linet[i].group
-	    /*&& (groups[linet[i].group].hit_mask & move->hit_mask))*/
 	    && (!can_hit(&groups[linet[i].group], (struct move *)move)))
 	    continue;
 	lsx = linet[i].start.cx;
@@ -1298,13 +942,13 @@ static int Lines_check(int msx, int msy, int mdx, int mdy, int *mindone,
 	if (0 > lsy + (ldy < 0 ? 0 : ldy))
 	    continue;
 
-	lsx = CENTER_XCLICK(lsx);
-
+	mirror = chx ^ chy ^ chxy;
 	if (ldx < 0) {
 	    lsx += ldx;
 	    ldx = -ldx;
 	    lsy += ldy;
 	    ldy = -ldy;
+	    mirror ^= 1;
 	}
 
 	start = MAX(0, lsx);
@@ -1319,14 +963,17 @@ static int Lines_check(int msx, int msy, int mdx, int mdy, int *mindone,
 	    if (!ldx && (lsy + (ldy < 0 ? ldy : 0) > sy ||
 			 lsy + (ldy < 0 ? 0 : ldy) < sy))
 		continue;
+	    if ( (prod = -lsx * ldy + lsy * ldx) > 0 == mirror || prod == 0)
+		continue;
 	    start--;
 	}
 	else {
-	    bigger = prod > 0;
+	    if (prod > 0 == mirror)
+		continue;
 	    ey = LINEY(mdx, mdy, mbase, end);
 	    if ( ABS(prod) >= ldx
-		 && ABS( (prod = (end - lsx) * ldy - (ey - lsy) * ldx) ) 
-		 >= ldx && prod > 0 == bigger)
+		 && ABS( (prod = (end - lsx) * ldy - (ey - lsy) * ldx) )
+		 >= ldx && prod > 0 != mirror)
 		continue;
 	    {
 		int schs, sche;
@@ -1355,7 +1002,7 @@ static int Lines_check(int msx, int msy, int mdx, int mdy, int *mindone,
 		for (x = schs; x <= sche; x++)
 		    if ( (prod = (x - lsx) * ldy
 			  - (LINEY(mdx, mdy, mbase, x) - lsy) * ldx)
-			 >= 0 != bigger || prod == 0)
+			 >= 0 == mirror || prod == 0)
 			goto found;
 		continue;
 	    found:
@@ -1363,10 +1010,10 @@ static int Lines_check(int msx, int msy, int mdx, int mdy, int *mindone,
 	    }
 	}
 
+	/* delta components can be big, so (float) to avoid overflow */
 	if (start < *mindone
-	    || (start == *mindone
-		&& *minline != -1
-		&& SIDE(move->delta.cx, move->delta.cy, i) < 0)) {
+	    || (start == *mindone && *minline != -1
+	      && SIDE((float)move->delta.cx, (float)move->delta.cy, i) < 0)) {
 	    hit = 1;
 	    *mindone = start;
 	    *minline = i;
@@ -1376,9 +1023,32 @@ static int Lines_check(int msx, int msy, int mdx, int mdy, int *mindone,
     return hit;
 }
 
+
+/* Try to move a pointlike object along the path determined by *move.
+ * The amount moved is returned in *answer. If the movement hits a line
+ * the number of that line is included. The 'point' parameter in
+ * struct collans is not relevant to this function. Even if the movement
+ * doesn't hit a line, the amount moved can be less than the requested
+ * amount (so that this function needs to be called again for the rest).
+ * If the movement hits several lines at the same click, the line returned
+ * in collans will be such that it is hit "from the outside" if possible.
+ * Example:
+ * X
+ * X inside of polygon
+ * X
+ * *YYYYYYYYYY
+ *  3
+ *   2
+ *    1
+ * Here the lines X and Y meet at click *, and the movement marked with
+ * numbers hits the common point. The function will return line Y as the
+ * one that was hit, because it was hit "from the outside" as opposed to
+ * line X which was hit from the side facing the inside of the polygon.
+ * See  the comments for function 'Away' to see how the trajectory can
+ * hit a line even though it is moving away from the line. */
 /* Do not call this with no movement. */
 /* May not be called with point already on top of line.
-   Maybe I should change that to allow lines that could be crossed. */
+ * Maybe I should change that to allow lines that could be crossed. */
 static void Move_point(const struct move *move, struct collans *answer)
 {
     int minline, mindone, minheight;
@@ -1461,19 +1131,29 @@ static void Move_point(const struct move *move, struct collans *answer)
 
     return;
 }
+
+
+/* Similar to Move_point above, except that it gets the shape parameter
+ * (and direction of that shape), and in case of collision, the 'point'
+ * field in struct collans is used. A corner in the shape can hit a map
+ * line, or a corner in the map can hit a shape line. The 'line' field
+ * will contain the line, the 'point' field the corner (given as a line
+ * whose first point is that corner - that is always possible because
+ * polygons are closed and there is at least one line ending at and one
+ * line starting from a given point). */
 /* Do not call this with no movement. */
 /* May not be called with point already on top of line.
    maybe I should change that to allow lines which could be
    crossed. */
 /* This could be sped up by a lot in several ways if needed.
  * For example, there's no need to consider all the points
- * separately if the ship is not close to a wall.
+ * separately if the shape is not close to a wall.
  */
-static void Shape_move(const struct move *move, const shipobj *shape,
+static void Shape_move(const struct move *move, const shape_t *s,
 		       int dir, struct collans *answer)
 {
     int minline, mindone, minheight, minpoint;
-    int p, block;
+    int i, block;
     int msx = move->start.cx, msy = move->start.cy;
     int mdx = move->delta.cx, mdy = move->delta.cy;
     int mbase;
@@ -1481,6 +1161,7 @@ static void Shape_move(const struct move *move, const shipobj *shape,
     int x, temp;
     unsigned short *lines;
     unsigned short *points;
+    shapepos *pts;
 
     if (mdx < 0) {
 	mdx = -mdx;
@@ -1512,9 +1193,12 @@ static void Shape_move(const struct move *move, const shipobj *shape,
     minline = -1;
     minpoint = -1;
 
-    for (p = 0; p < shape->num_points; p++) {
-	msx = WRAP_XCLICK(move->start.cx + shape->pts[p][dir].cx);
-	msy = WRAP_YCLICK(move->start.cy + shape->pts[p][dir].cy);
+    pts = Shape_get_points((shape_t *)s, dir);
+    for (i = 0; i < s->num_points; i++) {
+	clpos pt = pts[i].clk;
+
+	msx = WRAP_XCLICK(move->start.cx + pt.cx);
+	msy = WRAP_YCLICK(move->start.cy + pt.cy);
 	block = (msx >> B_SHIFT) + mapx * (msy >> B_SHIFT);
 	if (chx)
 	    msx = -msx;
@@ -1547,20 +1231,19 @@ static void Shape_move(const struct move *move, const shipobj *shape,
 
 	if (Lines_check(msx, msy, mdx, mdy, &mindone, lines, chx, chy,
 			chxy, move, &minline, &minheight))
-	    minpoint = p;
+	    minpoint = i;
     }
 
     block = (move->start.cx >> B_SHIFT) + mapx * (move->start.cy >> B_SHIFT);
     points = blockline[block].points;
-    lines = Shape_lines(shape, dir);
+    lines = Shape_lines(s, dir);
     x = -1;
-    while ( ( p = *points++) != 65535) {
-	if (linet[p].group
-	    /*&& (groups[linet[p].group].hit_mask & move->hit_mask))*/
-	    && (!can_hit(&groups[linet[p].group], (struct move *)move)))
+    while ( ( i = *points++) != 65535) {
+	if (linet[i].group
+	    && (!can_hit(&groups[linet[i].group], (struct move *)move)))
 	    continue;
-	msx = move->start.cx - linet[p].start.cx;
-	msy = move->start.cy - linet[p].start.cy;
+	msx = move->start.cx - linet[i].start.cx;
+	msy = move->start.cy - linet[i].start.cy;
 	if (chx)
 	    msx = -msx;
 	if (chy)
@@ -1572,7 +1255,7 @@ static void Shape_move(const struct move *move, const shipobj *shape,
 	}
 	if (Lines_check(msx, msy, mdx, mdy, &mindone, lines, chx, chy,
 			chxy, move, &minline, &minheight))
-	    minpoint = p;
+	    minpoint = i;
     }
 
     answer->point = minpoint;
@@ -1593,51 +1276,102 @@ static void Shape_move(const struct move *move, const shipobj *shape,
     return;
 }
 
-static int Shape_turn1(const shipobj *shape, struct move *move, int x, int y,
-		       int dir, int sign)
+
+/* Check whether there is room at the given position (x, y) to change
+ * from the shape shape1/dir1 to shape shape2/dir2. The shapes must have
+ * the same number of points. The morphing of the shapes happens linearly
+ * for each point. This should work correctly even if the intermediate
+ * shapes are degenerate or illegal shapes (the intermediate stages are
+ * not explicitly constructed in the algorithm). Return the number of a group
+ * that would be hit during morphing or NO_GROUP if there is enough room. */
+/* This might be useful elsewhere in the code, need not be kept static */
+static int Shape_morph(const shape_t *shape1, int dir1, const shape_t *shape2,
+		       int dir2, int hitmask, const object *obj, int x, int y)
 {
     struct collans answer;
     int i, p, xo1, xo2, yo1, yo2, xn1, xn2, yn1, yn2, xp, yp, s, t;
     unsigned short *points;
-    int newdir = MOD2(dir + sign, RES);
+    struct move mv;
+    /*shapepos *pts1, *pts2;*/
+    int num_points;
 
-    for (i = 0; i < shape->num_points; i++) {
-	move->start.cx = x + shape->pts[i][dir].cx;
-	move->start.cy = y + shape->pts[i][dir].cy;
-	move->delta.cx = x + shape->pts[i][newdir].cx - move->start.cx;
-	move->delta.cy = y + shape->pts[i][newdir].cy - move->start.cy;
-	move->start.cx = WRAP_XCLICK(move->start.cx);
-	move->start.cy = WRAP_YCLICK(move->start.cy);
-	while (move->delta.cx || move->delta.cy) {
-	    Move_point(move, &answer);
+    mv.hitmask = hitmask;
+    mv.obj = OBJ_PTR(obj);
+    /*pts1 = Shape_get_points((shape_t *)shape1, dir1);
+      pts2 = Shape_get_points((shape_t *)shape2, dir2);*/
+
+    /* kps - can this happen ?? */
+    if (shape1->num_points != shape2->num_points)
+	warn("Shape_morph: shapes have different number of points!");
+
+    num_points = shape1->num_points;
+
+    for (i = 0; i < num_points; i++) {
+	clpos pt1, pt2;
+	/*clpos ptx1, ptx2;
+
+	  ptx1 = pts1[i].clk;
+	  ptx2 = pts2[i].clk;*/
+	pt1 = Ship_get_point_clpos((shipshape_t *)shape1, i, dir1);
+	pt2 = Ship_get_point_clpos((shipshape_t *)shape2, i, dir2);
+
+	/*assert(ptx1.cx == pt1.cx);
+	  assert(ptx1.cy == pt1.cy);
+	  assert(ptx2.cx == pt2.cx);
+	  assert(ptx2.cy == pt2.cy);*/
+
+	mv.start.cx = x + pt1.cx;
+	mv.start.cy = y + pt1.cy;
+	mv.delta.cx = x + pt2.cx - mv.start.cx;
+	mv.delta.cy = y + pt2.cy - mv.start.cy;
+	mv.start.cx = WRAP_XCLICK(mv.start.cx);
+	mv.start.cy = WRAP_YCLICK(mv.start.cy);
+	while (mv.delta.cx || mv.delta.cy) {
+	    Move_point(&mv, &answer);
 	    if (answer.line != -1)
-		return 0;
-	    move->start.cx = WRAP_XCLICK(move->start.cx + answer.moved.cx);
-	    move->start.cy = WRAP_YCLICK(move->start.cy + answer.moved.cy);
-	    move->delta.cx -= answer.moved.cx;
-	    move->delta.cy -= answer.moved.cy;
+		return linet[answer.line].group;
+	    mv.start.cx = WRAP_XCLICK(mv.start.cx + answer.moved.cx);
+	    mv.start.cy = WRAP_YCLICK(mv.start.cy + answer.moved.cy);
+	    mv.delta.cx -= answer.moved.cx;
+	    mv.delta.cy -= answer.moved.cy;
 	}
     }
 
     /* Convex shapes would be much easier. */
     points = blockline[(x >> B_SHIFT) + mapx * (y >> B_SHIFT)].points;
     while ( (p = *points++) != 65535) {
+	clpos pto1, ptn1;
 	if (linet[p].group
-	    /*&& (groups[linet[p].group].hit_mask & hitmask))*/
-	    && (!can_hit(&groups[linet[p].group], move)))
+	    && (!can_hit(&groups[linet[p].group], &mv)))
 	    continue;
 	xp = CENTER_XCLICK(linet[p].start.cx - x);
 	yp = CENTER_YCLICK(linet[p].start.cy - y);
-	xo1 = shape->pts[shape->num_points - 1][dir].cx - xp;
-	yo1 = shape->pts[shape->num_points - 1][dir].cy - yp;
-	xn1 = shape->pts[shape->num_points - 1][newdir].cx - xp;
-	yn1 = shape->pts[shape->num_points - 1][newdir].cy - yp;
+
+	/*pto1 = pts1[num_points - 1].clk;
+	  ptn1 = pts2[num_points - 1].clk;*/
+	pto1 = Ship_get_point_clpos(
+	    (shipshape_t *)shape1, num_points - 1, dir1);
+	ptn1 = Ship_get_point_clpos(
+	    (shipshape_t *)shape2, num_points - 1, dir2);
+
+	xo1 = pto1.cx - xp;
+	yo1 = pto1.cy - yp;
+	xn1 = ptn1.cx - xp;
+	yn1 = ptn1.cy - yp;
 	t = 0;
-	for (i = 0; i < shape->num_points; i++) {
-	    xo2 = shape->pts[i][dir].cx - xp;
-	    yo2 = shape->pts[i][dir].cy - yp;
-	    xn2 = shape->pts[i][newdir].cx - xp;
-	    yn2 = shape->pts[i][newdir].cy - yp;
+
+	for (i = 0; i < num_points; i++) {
+	    clpos pto2, ptn2;
+
+	    /*pto2 = pts1[i].clk;
+	      ptn2 = pts2[i].clk;*/
+	    pto2 = Ship_get_point_clpos((shipshape_t *)shape1, i, dir1);
+	    ptn2 = Ship_get_point_clpos((shipshape_t *)shape2, i, dir2);
+
+	    xo2 = pto2.cx - xp;
+	    yo2 = pto2.cy - yp;
+	    xn2 = ptn2.cx - xp;
+	    yn2 = ptn2.cy - yp;
 
 #define TEMPFUNC(X1, Y1, X2, Y2)                                           \
 	    if ((X1) < 0) {                                                \
@@ -1647,7 +1381,7 @@ static int Shape_turn1(const shipobj *shape, struct move *move, int x, int y,
 		    else if (((Y1) >= 0 || (Y2) >= 0) &&                   \
 			     (s = (X1)*((Y1)-(Y2))-(Y1)*((X1)-(X2))) >= 0){\
 			if (s == 0)                                        \
-			    return 0;                                      \
+			    return linet[p].group;                         \
 			else                                               \
 			    t++;                                           \
 		    }                                                      \
@@ -1658,14 +1392,14 @@ static int Shape_turn1(const shipobj *shape, struct move *move, int x, int y,
 		    if ((X2) == 0) {                                       \
 			if ((Y2)==0||((X1)==0 && (((Y1)<=0 && (Y2)>= 0) || \
 						 ((Y1) >= 0 && (Y2)<=0)))) \
-			    return 0;                                      \
+			    return linet[p].group;                         \
 		    }                                                      \
 		    else if ((Y1) > 0 && (Y2) >= 0)                        \
 			t++;                                               \
 		    else if (((Y1) >= 0 || (Y2) >= 0) &&                   \
 			     (s = (X1)*((Y1)-(Y2))-(Y1)*((X1)-(X2))) <= 0){\
 			if (s == 0)                                        \
-			    return 0;                                      \
+			    return linet[p].group;                         \
 			else                                               \
 			    t++;                                           \
 		    }                                                      \
@@ -1678,37 +1412,104 @@ static int Shape_turn1(const shipobj *shape, struct move *move, int x, int y,
 #undef TEMPFUNC
 
 	    if (t & 1)
-		return 0;
+		return linet[p].group;
 	    xo1 = xo2;
 	    yo1 = yo2;
 	    xn1 = xn2;
 	    yn1 = yn2;
 	}
     }
-    return 1;
+    return NO_GROUP;
 }
 
 
+/* Try to move one click away from a line after a collision. Needed because
+ * otherwise we could keep hitting it even though direction of movement
+ * was away from the line. Example case:
+ * XXX
+ *   1*XX
+ *     34XXX
+ *       56 XXX
+ *         78  XXX
+ * Line (marked with 'X') and path of object (marked with numbers) collide
+ * at '*' because of discreteness even though the object is moving away
+ * from the line.
+ * Return -1 if successful, number of another line blocking movement
+ * otherwise (the number of the line is not used when writing this). */
+static int Away(struct move *move, int line)
+{
+    int dx, dy, lsx, lsy;
+    clvec delta_saved;
+    struct collans ans;
+
+    lsx = linet[line].start.cx - move->start.cx;
+    lsy = linet[line].start.cy - move->start.cy;
+    lsx = CENTER_XCLICK(lsx);
+    lsy = CENTER_YCLICK(lsy);
+
+    if (ABS(linet[line].delta.cx) >= ABS(linet[line].delta.cy)) {
+	dx = 0;
+	dy = -SIGN(linet[line].delta.cx);
+    }
+    else {
+	dy = 0;
+	dx = SIGN(linet[line].delta.cy);
+    }
+
+    if ((ABS(lsx) > SEPARATION_DIST || ABS(lsy) > SEPARATION_DIST)
+	&& (ABS(lsx + linet[line].delta.cx) > SEPARATION_DIST
+	    || ABS(lsy + linet[line].delta.cy) > SEPARATION_DIST)) {
+	move->start.cx = WRAP_XCLICK(move->start.cx + dx);
+	move->start.cy = WRAP_YCLICK(move->start.cy + dy);
+	return -1;
+    }
+
+    delta_saved = move->delta;
+    move->delta.cx = dx;
+    move->delta.cy = dy;
+    Move_point(move, &ans);
+    move->start.cx = WRAP_XCLICK(move->start.cx + ans.moved.cx);
+    move->start.cy = WRAP_YCLICK(move->start.cy + ans.moved.cy);
+    move->delta = delta_saved;
+    return ans.line;
+}
+
+
+/* Used internally to get a point out of a tight corner where there is
+ * no room to move it. Situation like this:
+ * E***X
+ *     Y***XX
+ *         YY**XXX
+ *             YYY*XXXX
+ *                 YYYYXXXXX
+ *                     YYYY XXXXX
+ *                         YYYY  XXXXX
+ *                             YYYY   XXXXX
+ *                                 YYYY !  XXXXX
+ *                                     YYYY     XXXXX
+ *                                         YYYY      XXXXX
+ *                                             YYYY       XXXXX
+ * X and Y are lines meeting at E. '*' is where lines overlap. An object
+ * can get to position !, but is hard to move out of there (and the situation
+ * can be worse than shown here - the angles of the lines don't need to
+ * differ so much that the gap would get 1 click bigger for each step of
+ * the y coordinate). This function is used to move the object a bit
+ * outwards from the corner so discreteness doesn't make moving it so hard. */
 /* This function should get called only rarely, so it doesn't need to
-   be too efficient. */
+ * be too efficient. */
 static int Clear_corner(struct move *move, object *obj, int l1, int l2)
 {
-    int x, y, xm, ym, s1, s2;
-    int l1sx, l2sx, l1sy, l2sy, l1dx, l2dx, l1dy, l2dy;
-    int side;
+    int x, y, xm, ym;
+    int l1sx, l2sx, l1sy, l2sy;
 
-    l1sx = linet[l1].start.cx - move->start.cx;
-    l1sy = linet[l1].start.cy - move->start.cy;
+    l1sx = move->start.cx - linet[l1].start.cx;
+    l1sy = move->start.cy - linet[l1].start.cy;
     l1sx = CENTER_XCLICK(l1sx);
     l1sy = CENTER_YCLICK(l1sy);
-    l1dx = linet[l1].delta.cx;
-    l1dy = linet[l2].delta.cy;
-    l2sx = linet[l2].start.cx - move->start.cx;
-    l2sy = linet[l2].start.cy - move->start.cy;
+    l2sx = move->start.cx - linet[l2].start.cx;
+    l2sy = move->start.cy - linet[l2].start.cy;
     l2sx = CENTER_XCLICK(l2sx);
     l2sy = CENTER_YCLICK(l2sy);
-    l2dx = linet[l2].delta.cx;
-    l2dy = linet[l2].delta.cy;
 
     for (;;) {
 	if (SIDE(obj->vel.x, obj->vel.y, l1) < 0) {
@@ -1723,28 +1524,24 @@ static int Clear_corner(struct move *move, object *obj, int l1, int l2)
 	break;
     }
 
-    xm = SIGN(move->delta.cx);
-    ym = SIGN(move->delta.cy);
+    xm = SIGN(obj->vel.x);
+    ym = SIGN(obj->vel.y);
 
-    s1 = SIDE(move->start.cx - l1sx, move->start.cy - l1sy, l1) > 0;
-    s2 = SIDE(move->start.cx - l2sx, move->start.cy - l2sy, l2) > 0;
-
-#define TMPFUNC(X, Y) ((side = SIDE((X), (Y), l1)) == 0 || side > 0 != s1 || (side = SIDE((X), (Y), l2)) == 0 || side > 0 != s2)
+#define TMPFUNC(X, Y) (SIDE((X) + l1sx, (Y) + l1sy, l1) <= 0 || SIDE((X) + l2sx, (Y) + l2sy, l2) <= 0)
 
     if (ABS(obj->vel.x) >= ABS(obj->vel.y)) {
 	x = xm;
 	y = 0;
 	for (;;) {
-	    if (TMPFUNC(move->start.cx + x, move->start.cy + y)) {
+	    if (TMPFUNC(x, y)) {
 		y += ym;
-		if (!TMPFUNC(move->start.cx + x, move->start.cy + y + ym))
+		if (!TMPFUNC(x, y + ym))
 		    break;
 		else
-		    x += xm;;
+		    x += xm;
 	    }
 	    else {
-		if (TMPFUNC(move->start.cx + x, move->start.cy + y + 1) &&
-		    TMPFUNC(move->start.cx + x, move->start.cy + y - 1))
+		if (TMPFUNC(x, y + 1) && TMPFUNC(x, y - 1))
 		    x += xm;
 		else
 		    break;
@@ -1761,16 +1558,15 @@ static int Clear_corner(struct move *move, object *obj, int l1, int l2)
 	x = 0;
 	y = ym;
 	for (;;) {
-	    if (TMPFUNC(move->start.cx + x, move->start.cy + y)) {
+	    if (TMPFUNC(x, y)) {
 		x += xm;
-		if (!TMPFUNC(move->start.cx + x + xm, move->start.cy + y))
+		if (!TMPFUNC(x + xm, y))
 		    break;
 		else
 		    y += ym;
 	    }
 	    else {
-		if (TMPFUNC(move->start.cx + x + 1, move->start.cy + y) &&
-		    TMPFUNC(move->start.cx + x - 1, move->start.cy + y))
+		if (TMPFUNC(x + 1, y) && TMPFUNC(x - 1, y))
 		    y += ym;
 		else
 		    break;
@@ -1792,93 +1588,142 @@ static int Clear_corner(struct move *move, object *obj, int l1, int l2)
 }
 
 
-static void store_short(unsigned char **ptr, int i)
+/* Move a shape away from a line after a collision. Needed for the same
+ * reason as Away(). */
+static int Shape_away(struct move *move, const shape_t *s,
+		      int dir, int line, struct collans *ans)
 {
-    *(*ptr)++ = i >> 8;
-    *(*ptr)++ = i & 0xff;
+    int dx, dy;
+    clvec delta_saved;
+
+    if (ABS(linet[line].delta.cx) >= ABS(linet[line].delta.cy)) {
+	dx = 0;
+	dy = -SIGN(linet[line].delta.cx);
+    }
+    else {
+	dy = 0;
+	dx = SIGN(linet[line].delta.cy);
+    }
+
+    delta_saved = move->delta;
+    move->delta.cx = dx;
+    move->delta.cy = dy;
+    Shape_move(move, s, dir, ans);
+    move->start.cx = WRAP_XCLICK(move->start.cx + ans->moved.cx);
+    move->start.cy = WRAP_YCLICK(move->start.cy + ans->moved.cy);
+    move->delta = delta_saved;
+    return ans->line == -1 && ans->point == -1;
 }
 
 
-static void store_32bit(unsigned char **ptr, int i)
+static void store_byte(int value, unsigned char **start, int *offset, int *sz)
 {
-    store_short(ptr, i >> 16);
-    store_short(ptr, i & 0xffff);
+    (*start)[(*offset)++] = value;
+    if (*offset == *sz) {
+	*sz *= 2;
+	*start = ralloc(*start, *sz);
+    }
+}
+
+static void store_2byte(int value, unsigned char **start, int *offset, int *sz)
+{
+    store_byte(value >> 8, start, offset, sz);
+    store_byte(value & 0xff, start, offset, sz);
 }
 
 
-int Polys_to_client(unsigned char *ptr)
+static void store_4byte(int value, unsigned char **start, int *offset, int *sz)
+{
+    store_2byte(value >> 16, start, offset, sz);
+    store_2byte(value & 0xffff, start, offset, sz);
+}
+
+
+int Polys_to_client(unsigned char **start)
 {
     int i, j, startx, starty, dx, dy;
     int *edges;
-    unsigned char *start = ptr;
+    int size, offset;
+#define STORE1(x) store_byte(x, start, &offset, &size)
+#define STORE2(x) store_2byte(x, start, &offset, &size)
+#define STORE4(x) store_4byte(x, start, &offset, &size)
 
-    *ptr++ = num_pstyles;
-    *ptr++ = num_estyles;
-    *ptr++ = num_bstyles;
+    *start = ralloc(NULL, 100);
+    size = 100;
+    offset = 0;
+
+    STORE1(num_pstyles);
+    STORE1(num_estyles);
+    STORE1(num_bstyles);
     for (i = 0; i < num_pstyles; i++) {
-	store_32bit(&ptr, pstyles[i].color);
-	*ptr++ = pstyles[i].texture_id;
-	*ptr++ = pstyles[i].defedge_id;
-	*ptr++ = pstyles[i].flags;
+	STORE4(pstyles[i].color);
+	STORE1(pstyles[i].texture_id);
+	STORE1(pstyles[i].defedge_id);
+	STORE1(pstyles[i].flags);
     }
     for (i = 0; i < num_estyles; i++) {
-	*ptr++ = estyles[i].width;
-	store_32bit(&ptr, estyles[i].color);
-	*ptr++ = estyles[i].style;
+	STORE1(estyles[i].width);
+	STORE4(estyles[i].color);
+	STORE1(estyles[i].style);
     }
     for (i = 0; i < num_bstyles; i++) {
-	strcpy((char *)ptr, bstyles[i].filename);
-	ptr += strlen((char *)ptr) + 1;
-	*ptr++ = bstyles[i].flags;
+	j = 0;
+	while (1) {
+	    STORE1(bstyles[i].filename[j]);
+	    if (!bstyles[i].filename[j])
+		break;
+	    j++;
+	}
+	STORE1(bstyles[i].flags);
     }
-    store_short(&ptr, num_polys);
+    STORE2(num_polys);
     for (i = 0; i < num_polys; i++) {
-	*ptr++ = pdata[i].style;
+	STORE1(pdata[i].style);
 	j = pdata[i].num_points;
-	store_short(&ptr, pdata[i].num_echanges);
+	STORE2(pdata[i].num_echanges);
 	edges = estyleptr + pdata[i].estyles_start;
 	while (*edges != INT_MAX)
-	    store_short(&ptr, *edges++);
-	startx = pdata[i].x;
-	starty = pdata[i].y;
-	edges = pdata[i].edges;
-	store_short(&ptr, j);
-	store_short(&ptr, startx >> CLICK_SHIFT);
-	store_short(&ptr, starty >> CLICK_SHIFT);
+	    STORE2(*edges++);
+	startx = pdata[i].pos.cx;
+	starty = pdata[i].pos.cy;
+	edges = edgeptr + pdata[i].edges;
+	STORE2(j);
+	STORE2(startx >> CLICK_SHIFT);
+	STORE2(starty >> CLICK_SHIFT);
 	dx = startx;
 	dy = starty;
 	for (; j > 0; j--) {
 	    dx += *edges++;
 	    dy += *edges++;
 	    if (j != 1) {
-		store_short(&ptr, (dx >> CLICK_SHIFT) - (startx>>CLICK_SHIFT));
-		store_short(&ptr, (dy >> CLICK_SHIFT) - (starty>>CLICK_SHIFT));
+		STORE2((dx >> CLICK_SHIFT) - (startx>>CLICK_SHIFT));
+		STORE2((dy >> CLICK_SHIFT) - (starty>>CLICK_SHIFT));
 	    }
 	    startx = dx;
 	    starty = dy;
 	}
     }
-    *ptr++ = World.NumBases;
+    STORE1(World.NumBases);
     for (i = 0; i < World.NumBases; i++) {
-	if (World.base[i].team == TEAM_NOT_SET)
-	    *ptr++ = 0;
+	if (World.bases[i].team == TEAM_NOT_SET)
+	    STORE1(0);
 	else
-	    *ptr++ = World.base[i].team;
-	store_short(&ptr, World.base[i].pos.cx >> CLICK_SHIFT);
-	store_short(&ptr, World.base[i].pos.cy >> CLICK_SHIFT);
-	*ptr++ = World.base[i].dir;
+	    STORE1(World.bases[i].team);
+	STORE2(World.bases[i].pos.cx >> CLICK_SHIFT);
+	STORE2(World.bases[i].pos.cy >> CLICK_SHIFT);
+	STORE1(World.bases[i].dir);
     }
-    store_short(&ptr, World.NumFuels);
+    STORE2(World.NumFuels);
     for (i = 0; i < World.NumFuels; i++) {
-	store_short(&ptr, World.fuel[i].pos.cx >> CLICK_SHIFT);
-	store_short(&ptr, World.fuel[i].pos.cy >> CLICK_SHIFT);
+	STORE2(World.fuels[i].pos.cx >> CLICK_SHIFT);
+	STORE2(World.fuels[i].pos.cy >> CLICK_SHIFT);
     }
-    *ptr++ = World.NumChecks;
+    STORE1(World.NumChecks);
     for (i = 0; i < World.NumChecks; i++) {
-	store_short(&ptr, World.check[i].cx >> CLICK_SHIFT);
-	store_short(&ptr, World.check[i].cy >> CLICK_SHIFT);
+	STORE2(World.checks[i].pos.cx >> CLICK_SHIFT);
+	STORE2(World.checks[i].pos.cy >> CLICK_SHIFT);
     }
-    return ptr - start;
+    return offset;
 }
 
 
@@ -1894,33 +1739,24 @@ struct templine {
 };
 
 
-#define STORE(T,P,N,M,V)						\
-    if (N >= M && ((M <= 0)						\
-	? (P = (T *) malloc((M = 1) * sizeof(*P)))			\
-	: (P = (T *) realloc(P, (M += M) * sizeof(*P)))) == NULL) {	\
-	warn("No memory");						\
-	exit(1);							\
-    } else								\
-	(P[N++] = V)
-
-
-#define POSMOD(x, y) ((x) >= 0 ? (x) % (y) : ((x) + 1) % (y) + (y) - 1)
-
-int is_inside(int cx, int cy, int hit_mask, object *obj)
+/* Check whether the given position (cx, cy) is such that it is inside
+ * a polygon belonging to a group that could be hit by the given
+ * hitmask/object.
+ * Return the number of a group that would be hit or NO_GROUP. */
+int is_inside(int cx, int cy, int hitmask, const object *obj)
 {
     short *ptr;
     int inside, cx1, cx2, cy1, cy2, s;
     struct inside_block *gblock;
     struct move mv;
 
-    mv.hit_mask = hit_mask;
-    mv.obj = obj;
+    mv.hitmask = hitmask;
+    mv.obj = OBJ_PTR(obj);
     gblock = &inside_table[(cx >> B_SHIFT) + mapx * (cy >> B_SHIFT)];
-    if (gblock->group == -1)
-	return -1;
+    if (gblock->group == NO_GROUP)
+	return NO_GROUP;
     do {
 	if (gblock->group
-	    /*&& (groups[gblock->group].hit_mask & hit_mask)) {*/
 	    && (!can_hit(&groups[gblock->group], &mv))) {
 	    gblock = gblock->next;
 	    continue;
@@ -1981,7 +1817,40 @@ int is_inside(int cx, int cy, int hit_mask, object *obj)
 	    return gblock->group;
 	gblock = gblock->next;
     } while (gblock);
-    return -1;
+    return NO_GROUP;
+}
+
+
+/* Similar to the above, except check whether any part of the shape
+ * (edge or inside) would hit the group. */
+int shape_is_inside(int cx, int cy, int hitmask, const object *obj,
+		    const shape_t *s, int dir)
+{
+    static shapepos zeropos;
+    static shape_t zeroshape;
+    int i, group;
+
+    /* Implemented by first checking whether the middle point of the
+     * shape is on top of something. If not, check whether it is possible
+     * to enlarge a degenerate shape where all points are on top of each
+     * other (at the middle point) to the given one. (So it relies on the
+     * rule that the shape must contain the middle point. */
+
+    if ( (group = is_inside(cx, cy, hitmask, obj)) != NO_GROUP)
+	return group;
+
+    /*
+     * kps - Ship numpoints can be > MAX_SHIP_PTS because of
+     * SSHACK. This should somehow be fixed.
+     */
+    zeroshape.num_points = s->num_points;
+
+    if (zeroshape.pts[0] == NULL) {
+	for (i = 0; i < MAX_SHIP_PTS2; i++)
+	    zeroshape.pts[i] = &zeropos;
+    }
+
+    return Shape_morph(&zeroshape, 0, s, dir, hitmask, obj, cx, cy);
 }
 
 
@@ -2050,13 +1919,13 @@ static void finish_inside(int block, int group)
     int inside;
     struct inside_block *gblock;
     short *ptr;
-    int x1, x2, y1, y2, s, j;
+    int cx1, cx2, cy1, cy2, s, j;
     struct tempy *yptr;
     struct templine *lptr;
     void *tofree;
 
     gblock = &inside_table[block];
-    if (gblock->group != -1) {
+    if (gblock->group != NO_GROUP) {
 	while (gblock->next) /* Maintain group order*/
 	    gblock = gblock->next;
 	gblock->next = ralloc(NULL, sizeof(struct inside_block));
@@ -2110,25 +1979,25 @@ static void finish_inside(int block, int group)
     inside = temparray[block].inside;
     if ( (ptr = gblock->lines) != NULL) {
 	while (*ptr != 32767) {
-	    x1 = *ptr++ * 2 - B_CLICKS * 2 + 1;
-	    y1 = *ptr++ * 2 + 1;
-	    x2 = *ptr++ * 2 - B_CLICKS * 2 + 1;
-	    y2 = *ptr++ * 2 + 1;
-	    if (y1 < 0) {
-		if (y2 >= 0) {
-		    if (x1 > 0 && x2 >= 0)
+	    cx1 = *ptr++ * 2 - B_CLICKS * 2 + 1;
+	    cy1 = *ptr++ * 2 + 1;
+	    cx2 = *ptr++ * 2 - B_CLICKS * 2 + 1;
+	    cy2 = *ptr++ * 2 + 1;
+	    if (cy1 < 0) {
+		if (cy2 >= 0) {
+		    if (cx1 > 0 && cx2 >= 0)
 			inside++;
-		    else if ((x1 >= 0 || x2 >= 0) &&
-			     (s = y1 * (x1 - x2) - x1 * (y1 - y2)) > 0)
+		    else if ((cx1 >= 0 || cx2 >= 0) &&
+			     (s = cy1 * (cx1 - cx2) - cx1 * (cy1 - cy2)) > 0)
 			inside++;
 		}
 	    }
 	    else
-		if (y2 <= 0) {
-		    if (x1 > 0 && x2 >= 0)
+		if (cy2 <= 0) {
+		    if (cx1 > 0 && cx2 >= 0)
 			inside++;
-		    else if ((x1 >= 0 || x2 >= 0) &&
-			     (s = y1 * (x1 - x2) - x1 * (y1 - y2)) < 0)
+		    else if ((cx1 >= 0 || cx2 >= 0) &&
+			     (s = cy1 * (cx1 - cx2) - cx1 * (cy1 - cy2)) < 0)
 			inside++;
 		}
 	}
@@ -2141,7 +2010,7 @@ static void finish_inside(int block, int group)
 }
 
 
-static void init_inside(void)
+static void allocate_inside(void)
 {
     int i;
 
@@ -2155,7 +2024,7 @@ static void init_inside(void)
 	inside_table[i].y = NULL;
 	inside_table[i].lines = NULL;
 	inside_table[i].base_value = 0;
-	inside_table[i].group = -1;
+	inside_table[i].group = NO_GROUP;
 	inside_table[i].next = NULL;
     }
 }
@@ -2208,7 +2077,8 @@ static double edge_distance(int bx, int by, int ox, int oy, int dx, int dy,
 }
 
 
-static void inside_test(void)
+#define POSMOD(x, y) ((x) >= 0 ? (x) % (y) : ((x) + 1) % (y) + (y) - 1)
+static void Inside_init(void)
 {
     int dx, dy, bx, by, ox, oy, startx, starty;
     int i, j, num_points, minx = -1, miny = -1, poly, group;
@@ -2216,7 +2086,7 @@ static void inside_test(void)
     double dist;
     int *edges;
 
-    init_inside();
+    allocate_inside();
     for (group = 0; group <= num_groups; group++) {
 	minx = -1;
 	for (poly = 0; poly < num_polys; poly++) {
@@ -2225,8 +2095,8 @@ static void inside_test(void)
 	    num_points = pdata[poly].num_points;
 	    dx = 0;
 	    dy = 0;
-	    startx = pdata[poly].x;
-	    starty = pdata[poly].y;
+	    startx = pdata[poly].pos.cx;
+	    starty = pdata[poly].pos.cy;
 	    /* Better wrapping for bx2/by2 could be selected for speed here,
 	     * but this keeping track of min/max at all is probably
 	     * unnoticeable in practice. */
@@ -2236,7 +2106,7 @@ static void inside_test(void)
 		minx = maxx = bx2;
 		miny = maxy = by2;
 	    }
-	    edges = pdata[poly].edges;
+	    edges = edgeptr + pdata[poly].edges;
 	    closest_line(bx, by, 1e10, 0); /* For polygons within one block */
 	    for (j = 0; j < num_points; j++) {
 		if (((startx >> B_SHIFT) != bx)
@@ -2426,9 +2296,6 @@ static void Distance_init(void)
 			dist = MIN(ABS(dist), ABS(lsy - ldy * lsx / ldx));
 		    dist = dist / 2 - 3; /* 3? didn't bother to get the right value */
 		}
-		dist--;
-		/* Room for one extra click of movement after main collision
-		   detection. Used to get away from a line after a bounce. */
 		if (dist < CUTOFF + B_CLICKS / 2) {
 		    if (dist < B_CLICKS / 2 + DICLOSE)
 			distbound = LINSIZE;
@@ -2556,22 +2423,14 @@ static void Corner_init(void)
 void Ball_line_init(void)
 {
     int i;
-    static clpos coords[24];
+    static shapepos coords[MAX_SHIP_PTS];
 
-    if (!treatBallAsPoint) {
-	ball_wire.num_points = 24;
-	for (i = 0; i < 24; i++) {
-	    ball_wire.pts[i] = coords + i;
-	    coords[i].cx = cos(i * PI / 12) * BALL_RADIUS * CLICK;
-	    coords[i].cy = sin(i * PI / 12) * BALL_RADIUS * CLICK;
-	}
-	/*xpprintf(__FILE__ ": treating ball as polygon.\n");*/
-    } else {
-	ball_wire.num_points = 1;
-	ball_wire.pts[0] = coords;
-	coords[0].cx = 0;
-	coords[0].cy = 0;
-	/*xpprintf(__FILE__ ": treating ball as point.\n");*/
+    LIMIT(ballRadius, 0, BALL_RADIUS);
+    ball_wire.num_points = MAX_SHIP_PTS;
+    for (i = 0; i < MAX_SHIP_PTS; i++) {
+	ball_wire.pts[i] = coords + i;
+	coords[i].clk.cx = cos(i * 2 * PI / MAX_SHIP_PTS) * ballRadius * CLICK;
+	coords[i].clk.cy = sin(i * 2 * PI / MAX_SHIP_PTS) * ballRadius * CLICK;
     }
 
     return;
@@ -2593,9 +2452,9 @@ static void Poly_to_lines(void)
 	style = pstyles[pdata[i].style].defedge_id;
 	dx = 0;
 	dy = 0;
-	startx = pdata[i].x;
-	starty = pdata[i].y;
-	edges = pdata[i].edges;
+	startx = pdata[i].pos.cx;
+	starty = pdata[i].pos.cy;
+	edges = edgeptr + pdata[i].edges;
 	for (j = 0; j < np; j++) {
 	    if (j == *styleptr) {
 		styleptr++;
@@ -2617,8 +2476,8 @@ static void Poly_to_lines(void)
 	    dy += *edges++;
 	}
 	if (dx || dy) {
-	    warn("Polygon %d (%d points) doesn't start and end at the "
-		 "same place", i + 1, np);
+	    warn("Broken map: Polygon %d (%d points) doesn't form a "
+		 "closed loop", i + 1, np);
 	    exit(1);
 	}
     }
@@ -2627,20 +2486,36 @@ static void Poly_to_lines(void)
 }
 
 
-void Walls_init_new(void)
+void Walls_init(void)
 {
-    DFLOAT x, y, l2;
+    double x, y, l2;
     int i;
 
     mapx = (World.cwidth + B_MASK) >> B_SHIFT;
     mapy = (World.cheight + B_MASK) >> B_SHIFT;
+
+    /* Break polygons down to a list of separate lines. */
     Poly_to_lines();
+
+    /* For each B_CLICKS x B_CLICKS rectangle on the map, find a list of
+     * nearby lines that need to be checked for collision when moving
+     * in that area. */
     Distance_init();
+
+    /* Like above, except list the map corners that could be hit by the
+     * sides of a moving polygon shape. */
     Corner_init();
+
     Ball_line_init();
-    inside_test();
+
+    /* Initialize the data structures used when determining whether a given
+     * arbitrary point on the map is inside something. */
+    Inside_init();
+
     groups[0].type = FILLED;
 
+    /* Precalculate the .c and .s values used when calculating a bounce
+     * from the line. */
     for (i = 0; i < num_lines; i++) {
 	x = linet[i].delta.cx;
 	y = linet[i].delta.cy;
@@ -2650,29 +2525,28 @@ void Walls_init_new(void)
     }
 }
 
-
-/* end */
-
-static char msg[MSG_LEN];
-
-
-
-static void Move_ball_new(object *obj)
+void Treasure_init(void)
 {
-    /*object		*obj = Obj[ind];*/
-    int line, point;
+    int i;
+    for (i = 0; i < World.NumTreasures; i++)
+	Make_treasure_ball(Treasures(i));
+}
+
+
+static void Move_ball(object *obj)
+{
     struct move mv;
     struct collans ans;
     int owner;
 
-    mv.delta.cx = FLOAT_TO_CLICK(obj->vel.x * timeStep2);
-    mv.delta.cy = FLOAT_TO_CLICK(obj->vel.y * timeStep2);
+    mv.delta.cx = FLOAT_TO_CLICK(obj->vel.x * timeStep);
+    mv.delta.cy = FLOAT_TO_CLICK(obj->vel.y * timeStep);
     mv.obj = obj;
     obj->extmove.cx = mv.delta.cx;
     obj->extmove.cy = mv.delta.cy;
 
-    if (obj->id != -1
-	&& BIT(Players[GetInd[obj->id]]->used, HAS_PHASING_DEVICE)) {
+    if (obj->id != NO_ID
+	&& BIT(Player_by_id(obj->id)->used, HAS_PHASING_DEVICE)) {
 
 	int cx = obj->pos.cx + mv.delta.cx;
 	int cy = obj->pos.cy + mv.delta.cy;
@@ -2689,10 +2563,10 @@ static void Move_ball_new(object *obj)
 	return;
     }
     owner = BALL_PTR(obj)->owner;
-    if (owner == NO_ID || Players[GetInd[owner]]->team == TEAM_NOT_SET)
-	mv.hit_mask = BALL_BIT | NOTEAM_BIT;
+    if (owner == NO_ID)
+	mv.hitmask = BALL_BIT | NOTEAM_BIT;
     else
-	mv.hit_mask = BALL_BIT | 1 << Players[GetInd[owner]]->team;
+	mv.hitmask = BALL_BIT | HITMASK(Player_by_id(owner)->team);
     mv.start.cx = obj->pos.cx;
     mv.start.cy = obj->pos.cy;
     while (mv.delta.cx || mv.delta.cy) {
@@ -2702,28 +2576,25 @@ static void Move_ball_new(object *obj)
 	mv.delta.cx -= ans.moved.cx;
 	mv.delta.cy -= ans.moved.cy;
 	if (ans.line != -1) {
-	    if (!Shape_away(&mv, &ball_wire, 0, ans.line, &line, &point)) {
+	    if (SIDE(obj->vel.x, obj->vel.y, ans.line) < 0) {
+		if (!Bounce_object(obj, &mv, ans.line, ans.point))
+		    break;
+	    }
+	    else if (!Shape_away(&mv, &ball_wire, 0, ans.line, &ans)) {
 		if (SIDE(obj->vel.x, obj->vel.y, ans.line) < 0) {
 		    if (!Bounce_object(obj, &mv, ans.line, ans.point))
 			break;
 		}
-		else if (SIDE(obj->vel.x, obj->vel.y, line) < 0) {
-		    if (!Bounce_object(obj, &mv, line, point))
-			break;
-		}
 		else {
 		    /* This case could be handled better,
-		       I'll write the code for that if this
-		       happens too often. */
+		     * I'll write the code for that if this
+		     * happens too often. */
 		    mv.delta.cx = 0;
 		    mv.delta.cy = 0;
 		    obj->vel.x = 0;
 		    obj->vel.y = 0;
 		}
 	    }
-	    else if (SIDE(obj->vel.x, obj->vel.y, ans.line) < 0)
-		if (!Bounce_object(obj, &mv, ans.line, ans.point))
-		    break;
 	}
     }
     Object_position_set_clicks(obj, mv.start.cx, mv.start.cy);
@@ -2733,15 +2604,13 @@ static void Move_ball_new(object *obj)
 
 
 /* kps- collision.c has a move_object call in ng */
-/* used to have ind argument in ng */
-void Move_object_new(object *obj)
+void Move_object(object *obj)
 {
     int t;
     struct move mv;
     struct collans ans;
     int trycount = 5000;
     int team;            /* !@# should make TEAM_NOT_SET 0 */
-    /*object *obj = Obj[ind];*/
 
     mv.obj = obj;
     Object_position_remember(obj);
@@ -2750,43 +2619,37 @@ void Move_object_new(object *obj)
 
 #if 1
     if (obj->type == OBJ_BALL) {
-	Move_ball_new(obj);
+	Move_ball(obj);
 	return;
     }
 #else
     if (obj->type == OBJ_BALL) {
-	if (obj->owner != -1)
-	    team =  Players[GetInd[obj->owner]].team;
+	if (obj->owner != NO_ID)
+	    team =  Player_by_id(obj->owner).team;
 	else
 	    team = TEAM_NOT_SET;
-	mv.hit_mask = BALL_BIT;
+	mv.hitmask = BALL_BIT;
     }
     else
 #endif
 	{
-	    mv.hit_mask = NONBALL_BIT;
+	    mv.hitmask = NONBALL_BIT;
 	    team = obj->team;
 	}
-    if (team == TEAM_NOT_SET)
-	mv.hit_mask |= NOTEAM_BIT;
-    else
-	mv.hit_mask |= 1 << team;
-
+    mv.hitmask |= HITMASK(team);
     mv.start.cx = obj->pos.cx;
     mv.start.cy = obj->pos.cy;
-    mv.delta.cx = FLOAT_TO_CLICK(obj->vel.x * timeStep2);
-    mv.delta.cy = FLOAT_TO_CLICK(obj->vel.y * timeStep2);
+    mv.delta.cx = FLOAT_TO_CLICK(obj->vel.x * timeStep);
+    mv.delta.cy = FLOAT_TO_CLICK(obj->vel.y * timeStep);
     obj->extmove.cx = mv.delta.cx;
     obj->extmove.cy = mv.delta.cy;
     while (mv.delta.cx || mv.delta.cy) {
 	if (!trycount--) {
-#if 0
 	    sprintf(msg, "COULDN'T MOVE OBJECT!!!! Type = %s, x = %d, y = %d. "
 		    "Object was DELETED. [*DEBUG*]",
 		    Object_typename(obj), mv.start.cx, mv.start.cy);
 	    warn(msg);
 	    Set_message(msg);
-#endif
 	    obj->life = 0;
 	    return;
 	}
@@ -2796,13 +2659,13 @@ void Move_object_new(object *obj)
 	mv.start.cx = WRAP_XCLICK(mv.start.cx + ans.moved.cx);
 	mv.start.cy = WRAP_YCLICK(mv.start.cy + ans.moved.cy);
 	if (ans.line != -1) {
-	    if ( (t = Away(&mv, ans.line)) != -1) {
-		if (!Clear_corner(&mv, obj, ans.line, t))
-		    break;
-	    }
-	    else if (SIDE(obj->vel.x, obj->vel.y, ans.line) < 0) {
+	    if (SIDE(obj->vel.x, obj->vel.y, ans.line) < 0) {
 		if (!Bounce_object(obj, &mv, ans.line, 0))
-		    break;
+		    break;	/* Object destroyed by bounce */
+	    }
+	    else if ( (t = Away(&mv, ans.line)) != -1) {
+		if (!Clear_corner(&mv, obj, ans.line, t))
+		    break;	/* Object destroyed by bounces */
 	    }
 	}
     }
@@ -2812,19 +2675,18 @@ void Move_object_new(object *obj)
 }
 
 
-static void Move_player_new(int ind)
+void Move_player(player *pl)
 {
-    player *pl = Players[ind];
     clpos  pos;
-    int    line, point;
     struct move mv;
     struct collans ans;
+    double fric;
+    vector oldv;
 
-
-    if (BIT(pl->status, PLAYING|PAUSE|GAME_OVER|KILLED) != PLAYING) {
+    if (!Player_is_playing(pl)) {
 	if (!BIT(pl->status, KILLED|PAUSE)) {
-	    pos.cx = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x * timeStep2);
-	    pos.cy = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y * timeStep2);
+	    pos.cx = pl->pos.cx + FLOAT_TO_CLICK(pl->vel.x * timeStep);
+	    pos.cy = pl->pos.cy + FLOAT_TO_CLICK(pl->vel.y * timeStep);
 	    pos.cx = WRAP_XCLICK(pos.cx);
 	    pos.cy = WRAP_YCLICK(pos.cy);
 	    if (pos.cx != pl->pos.cx || pos.cy != pl->pos.cy) {
@@ -2836,17 +2698,36 @@ static void Move_player_new(int ind)
 	return;
     }
 
-    /* kps - changed from  vel *= friction */
-    pl->vel.x *= (1.0f - friction);
-    pl->vel.y *= (1.0f - friction);
+    /* Figure out which friction to use. */
+    if (BIT(pl->used, HAS_PHASING_DEVICE))
+	fric = friction;
+    else {
+	/*
+	 * kps - insert code here which checks if we are on a
+	 * friction polygon and use it's friction?
+	 */
+	fric = friction;
+    }
+
+    /* Velocity vector might change as a result of friction and coriolis. */
+    if (coriolis != 0.0) {
+	oldv = pl->vel;
+	pl->vel.x = oldv.x * coriolisCosine + oldv.y * coriolisSine;
+	pl->vel.y = oldv.y * coriolisCosine - oldv.x * coriolisSine;
+    }
+
+    if (fric != 0.0) {
+	pl->vel.x *= (1.0 - fric);
+	pl->vel.y *= (1.0 - fric);
+    }
 
     Player_position_remember(pl);
 
     pl->collmode = 1;
 
-    mv.obj = (object *)pl;
-    mv.delta.cx = FLOAT_TO_CLICK(pl->vel.x * timeStep2);
-    mv.delta.cy = FLOAT_TO_CLICK(pl->vel.y * timeStep2);
+    mv.obj = OBJ_PTR(pl);
+    mv.delta.cx = FLOAT_TO_CLICK(pl->vel.x * timeStep);
+    mv.delta.cy = FLOAT_TO_CLICK(pl->vel.y * timeStep);
 #if 0
     pl->extmove.cx = mv.delta.cx;
     pl->extmove.cy = mv.delta.cy;
@@ -2866,37 +2747,43 @@ static void Move_player_new(int ind)
 	Player_position_set_clicks(pl, cx, cy);
     }
     else {
-	if (pl->team != TEAM_NOT_SET)
-	    mv.hit_mask = NONBALL_BIT | 1 << pl->team;
-	else
-	    mv.hit_mask = NONBALL_BIT | NOTEAM_BIT;
+	mv.hitmask = NONBALL_BIT | HITMASK(pl->team);
 	mv.start.cx = pl->pos.cx;
 	mv.start.cy = pl->pos.cy;
 	while (mv.delta.cx || mv.delta.cy) {
-	    Shape_move(&mv, pl->ship, pl->dir, &ans);
+	    Shape_move(&mv, (shape_t *)pl->ship, pl->dir, &ans);
 	    mv.start.cx = WRAP_XCLICK(mv.start.cx + ans.moved.cx);
 	    mv.start.cy = WRAP_YCLICK(mv.start.cy + ans.moved.cy);
 	    mv.delta.cx -= ans.moved.cx;
 	    mv.delta.cy -= ans.moved.cy;
 	    if (ans.line != -1) {
-		if (!Shape_away(&mv, pl->ship, pl->dir,
-				ans.line, &line, &point)) {
-		    if (SIDE(pl->vel.x, pl->vel.y, ans.line) < 0)
+		if (SIDE(pl->vel.x, pl->vel.y, ans.line) < 0) {
+		    Bounce_player(pl, &mv, ans.line, ans.point);
+		    if (BIT(pl->status, KILLED))
+			break;
+		}
+		else if (!Shape_away(&mv, (shape_t *)pl->ship, pl->dir,
+				     ans.line, &ans)) {
+		    if (SIDE(pl->vel.x, pl->vel.y, ans.line) < 0) {
 			Bounce_player(pl, &mv, ans.line, ans.point);
-		    else if (SIDE(pl->vel.x, pl->vel.y, line) < 0)
-			Bounce_player(pl, &mv, line, point);
+			if (BIT(pl->status, KILLED))
+			    break;
+		    }
 		    else {
 			/* This case could be handled better,
-			   I'll write the code for that if this
-			   happens too often. */
+			 * I'll write the code for that if this
+			 * happens too often. */
+			/* At the moment it can be caused by illegal shipshapes
+			 * too, because they're not checked */
+			sprintf(msg, "%s got stuck (Illegal shape? "
+				"Shapes aren't checked) [*Notice*]", pl->name);
+			Set_message(msg);
 			mv.delta.cx = 0;
 			mv.delta.cy = 0;
 			pl->vel.x = 0;
 			pl->vel.y = 0;
 		    }
 		}
-		else if (SIDE(pl->vel.x, pl->vel.y, ans.line) < 0)
-		    Bounce_player(pl, &mv, ans.line, ans.point);
 	    }
 	}
 	Player_position_set_clicks(pl, mv.start.cx, mv.start.cy);
@@ -2910,12 +2797,10 @@ static void Move_player_new(int ind)
 }
 
 
-static void Turn_player_new(int ind)
+void Turn_player(player *pl)
 {
-    player	*pl = Players[ind];
-    int		new_dir = MOD2((int)(pl->float_dir + 0.5f), RES);
-    int		sign;
-    struct move	mv;
+    int		new_dir = MOD2((int)(pl->float_dir + 0.5), RES);
+    int		next_dir, sign, hitmask;
 
     if (recOpt) {
 	if (record)
@@ -2923,10 +2808,12 @@ static void Turn_player_new(int ind)
 	else if (playback)
 	    new_dir = *playback_data++;
     }
-    if (new_dir == pl->dir) {
+
+    if (new_dir == pl->dir)
 	return;
-    }
-    if (BIT(pl->status, PLAYING|PAUSE|GAME_OVER|KILLED) != PLAYING) {
+
+    if (!Player_is_playing(pl)) {
+	/* kps - what is the point of this ??? */
 	pl->dir = new_dir;
 	return;
     }
@@ -2936,23 +2823,19 @@ static void Turn_player_new(int ind)
     else
 	sign = (pl->dir - new_dir <= RES + new_dir - pl->dir) ? -1 : 1;
 
-    if (pl->team != TEAM_NOT_SET)
-	mv.hit_mask = NONBALL_BIT | 1 << pl->team;
-    else
-	mv.hit_mask = NONBALL_BIT | NOTEAM_BIT;
-    mv.obj = (object *)pl;
-#if 1
-    while (pl->dir != new_dir
-	   && (Shape_turn1(pl->ship, &mv, pl->pos.cx, pl->pos.cy,
-			   pl->dir, sign) || (pl->float_dir = pl->dir, 0)))
-	pl->dir = MOD2(pl->dir + sign, RES);
-#else
-    /* Mara's experimental "turnqueue" hack  */
-    while (pl->dir != new_dir
-	   && (Shape_turn1(pl->ship, &mv, pl->pos.cx, pl->pos.cy,
-			   pl->dir, sign) /*|| (pl->float_dir = pl->dir, 0)*/))
-	pl->dir = MOD2(pl->dir + sign, RES);
-#endif
+    hitmask = NONBALL_BIT | HITMASK(pl->team);
+
+    while (pl->dir != new_dir) {
+	next_dir = MOD2(pl->dir + sign, RES);
+	if (Shape_morph((shape_t *)pl->ship, pl->dir, (shape_t *)pl->ship,
+			next_dir, hitmask, OBJ_PTR(pl),
+			pl->pos.cx, pl->pos.cy) != NO_GROUP) {
+	    if (!maraTurnqueue)
+		pl->float_dir = pl->dir;
+	    break;
+	}
+	pl->dir = next_dir;
+    }
 
     return;
 }

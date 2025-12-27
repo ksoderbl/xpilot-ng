@@ -1,4 +1,4 @@
-/* $Id: rules.h,v 5.3 2001/11/29 13:38:49 bertg Exp $
+/* 
  *
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
@@ -65,7 +65,7 @@
 #define KILLED			(1L<<10)
 #define GRAVITY			(1L<<11)
 #define WARPING			(1L<<12)
-#define WARPED			(1L<<13)
+/*#define WARPED			(1L<<13)*/
 #define CONFUSED		(1L<<14)
 #define FROMCANNON		(1L<<15)	/* Object from cannon */
 #define HOVERPAUSE		(1L<<16)	/* Hovering pause */

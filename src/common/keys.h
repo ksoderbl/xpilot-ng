@@ -1,5 +1,4 @@
-/* $Id: keys.h,v 5.0 2001/04/07 20:00:59 dik Exp $
- *
+/*
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -59,10 +58,10 @@ typedef enum {
     KEY_SWAP_SETTINGS,
     KEY_REFUEL,
     KEY_CONNECTOR,
-    KEY_INCREASE_POWER,
-    KEY_DECREASE_POWER,
-    KEY_INCREASE_TURNSPEED,
-    KEY_DECREASE_TURNSPEED,
+    KEY_UNUSED_26,		/* Was KEY_INCREASE_POWER */
+    KEY_UNUSED_27,		/* Was KEY_DECREASE_POWER */
+    KEY_UNUSED_28,		/* Was KEY_INCREASE_TURNSPEED */
+    KEY_UNUSED_29,		/* Was KEY_DECREASE_TURNSPEED */
     KEY_THRUST,							/* 30 */
     KEY_CLOAK,
     KEY_ECM,
@@ -148,22 +147,13 @@ typedef enum {
     KEY_TALK_CURSOR_UP,
     KEY_TALK_CURSOR_DOWN,
     KEY_SWAP_SCALEFACTOR,
+    KEY_TOGGLE_RADAR_SCORE,
+    KEY_INCREASE_POWER,
+    KEY_DECREASE_POWER,
+    KEY_INCREASE_TURNSPEED,
+    KEY_DECREASE_TURNSPEED,
     NUM_CLIENT_KEYS	/* The number of keys really used by the client. */
 #endif
 } keys_t;
-
-
-#ifndef SERVER
-typedef struct {
-    KeySym	keysym;			/* Keysym-to-action array */
-    keys_t	key;
-} keydefs_t;
-
-extern keydefs_t	*keyDefs;
-
-extern char* Get_keyHelpString(keys_t key);
-extern const char *Get_keyResourceString(keys_t key);
-
-#endif
 
 #endif

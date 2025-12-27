@@ -1,5 +1,4 @@
-/* $Id: paintradar.c,v 5.1 2001/05/25 00:22:50 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,44 +21,13 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <errno.h>
-
-#ifndef _WINDOWS
-# include <unistd.h>
-# include <X11/Xlib.h>
-# include <X11/Xos.h>
-#endif
-
-#ifdef _WINDOWS
-# include "NT/winX_.h"
-# include "NT/winXXPilot.h"
-#endif
-
-#include "version.h"
-#include "config.h"
-#include "const.h"
-#include "error.h"
-#include "bit.h"
-#include "keys.h"
-#include "rules.h"
-#include "setup.h"
-#include "paint.h"
-#include "paintdata.h"
-#include "xinit.h"
-#include "portability.h"
+#include "xpclient_x11.h"
 
 char paintradar_version[] = VERSION;
 
-extern DFLOAT		tbl_sin[];
-extern DFLOAT		tbl_cos[];
-extern setup_t		*Setup;
-extern int		RadarHeight;
-
-Window	radar;			/* Radar window */
-Pixmap	p_radar, s_radar;	/* Pixmaps for the radar (implements */
+Window	radarWindow;
+Pixmap	radarPixmap, radarPixmap2;
+				/* Pixmaps for the radar (implements */
 				/* the planes hack on the radar for */
 				/* monochromes) */
 long	dpl_1[2], dpl_2[2];	/* Used by radar hack */
@@ -79,57 +47,57 @@ static int	slidingradar_y;
 static void Copy_static_radar(void)
 {
 #ifndef _WINDOWS
-    if (s_radar != p_radar) {
+    if (radarPixmap2 != radarPixmap) {
 	/* Draw static radar onto radar */
-	XCopyArea(dpy, s_radar, p_radar, gc,
+	XCopyArea(dpy, radarPixmap2, radarPixmap, gameGC,
 		  0, 0, 256, RadarHeight, 0, 0);
     } else {
 	/* Clear radar */
 	XSetForeground(dpy, radarGC, colors[BLACK].pixel);
-	XFillRectangle(dpy, p_radar,
+	XFillRectangle(dpy, radarPixmap,
 		       radarGC, 0, 0, 256, RadarHeight);
     }
 #else
-    WinXBltPixToWin(s_radar, radar, 0, 0, 256, RadarHeight, 0, 0);
-    p_radar = radar;
+    WinXBltPixToWin(radarPixmap2, radarWindow, 0, 0, 256, RadarHeight, 0, 0);
+    radarPixmap = radar;
 #endif
     XSetForeground(dpy, radarGC, colors[WHITE].pixel);
 }
 
 
 #ifdef _WINDOWS
-static void Windows_copy_sliding_radar(float xf, float yf)
+static void Windows_copy_sliding_radar(double xf, double yf)
 {
     slidingradar_x = (int)((pos.x * xf + 0.5) + 128) % 256;
-    slidingradar_y = (RadarHeight - (int)(pos.y * yf + 0.5) - 1 + RadarHeight/2)
-		    % RadarHeight;
+    slidingradar_y = (RadarHeight - (int)(pos.y * yf + 0.5)
+		      - 1 + RadarHeight/2) % RadarHeight;
 
     /*
      * Draw slidingradar in four chunks onto the screen.
      */
-    WinXBltPixToWin(s_radar, radar,
+    WinXBltPixToWin(radarPixmap2, radarWindow,
 		    slidingradar_x , slidingradar_y,
 		    256-slidingradar_x, RadarHeight-slidingradar_y,
 		    0, 0);
-    WinXBltPixToWin(s_radar, radar,
+    WinXBltPixToWin(radarPixmap2, radarWindow,
 		    0, slidingradar_y,
 		    slidingradar_x, RadarHeight-slidingradar_y,
 		    256-slidingradar_x, 0);
-    WinXBltPixToWin(s_radar, radar,
+    WinXBltPixToWin(radarPixmap2, radarWindow,
 		    slidingradar_x, 1,
 		    256-slidingradar_x, slidingradar_y
 		    , 0,
 		    RadarHeight-slidingradar_y);
-    WinXBltPixToWin(s_radar, radar,
+    WinXBltPixToWin(radarPixmap2, radarWindow,
 		    0, 1,
 		    slidingradar_x, slidingradar_y,
 		    256-slidingradar_x, RadarHeight-slidingradar_y);
-    p_radar = radar;
+    radarPixmap = radar;
 }
 #endif
 
 
-static void Paint_checkpoint_radar(float xf, float yf)
+static void Paint_checkpoint_radar(double xf, double yf)
 {
     int			x, y;
     XPoint		points[5];
@@ -146,12 +114,11 @@ static void Paint_checkpoint_radar(float xf, float yf)
 	    y = (RadarHeight - (int) (b.y * yf + 0.5) + DSIZE - 1) -
 		slidingradar_y;
 	}
-	if (x <= 0) {
+	if (x <= 0)
 	    x += 256;
-	}
-	if (y <= 0) {
+	if (y <= 0)
 	    y += RadarHeight;
-	}
+
 	/* top */
 	points[0].x = x ;
 	points[0].y = y ;
@@ -167,43 +134,39 @@ static void Paint_checkpoint_radar(float xf, float yf)
 	/* top */
 	points[4].x = x ;
 	points[4].y = y ;
-	XDrawLines(dpy, p_radar, radarGC,
+	XDrawLines(dpy, radarPixmap, radarGC,
 		   points, 5, 0);
     }
 }
 
-static void Paint_self_radar(float xf, float yf)
+static void Paint_self_radar(double xf, double yf)
 {
-    int		x, y, x1, y1, xw, yw;
+    int		x, y, x_1, y_1, xw, yw;
 
     if (selfVisible != 0 && loops % 16 < 13) {
-	x = (int)(pos.x * xf + 0.5) - slidingradar_x;
-	y = RadarHeight - (int)(pos.y * yf + 0.5) - 1 - slidingradar_y;
-	if (x <= 0) {
+	x = (int)(selfPos.x * xf + 0.5) - slidingradar_x;
+	y = RadarHeight - (int)(selfPos.y * yf + 0.5) - 1 - slidingradar_y;
+	if (x <= 0)
 	    x += 256;
-	}
-	if (y <= 0) {
+	if (y <= 0)
 	    y += RadarHeight;
-	}
 
-	x1 = (int)(x + 8 * tcos(heading));
-	y1 = (int)(y - 8 * tsin(heading));
-	XDrawLine(dpy, p_radar, radarGC,
-		  x, y, x1, y1);
+	x_1 = (int)(x + 8 * tcos(heading));
+	y_1 = (int)(y - 8 * tsin(heading));
+	XDrawLine(dpy, radarPixmap, radarGC,
+		  x, y, x_1, y_1);
 	if (BIT(Setup->mode, WRAP_PLAY)) {
-	    xw = x1 - (x1 + 256) % 256;
-	    yw = y1 - (y1 + RadarHeight) % RadarHeight;
-	    if (xw != 0) {
-		XDrawLine(dpy, p_radar, radarGC,
-			  x - xw, y, x1 - xw, y1);
-	    }
+	    xw = x_1 - (x_1 + 256) % 256;
+	    yw = y_1 - (y_1 + RadarHeight) % RadarHeight;
+	    if (xw != 0)
+		XDrawLine(dpy, radarPixmap, radarGC,
+			  x - xw, y, x_1 - xw, y_1);
 	    if (yw != 0) {
-		XDrawLine(dpy, p_radar, radarGC,
-			  x, y - yw, x1, y1 - yw);
-		if (xw != 0) {
-		    XDrawLine(dpy, p_radar, radarGC,
-			      x - xw, y - yw, x1 - xw, y1 - yw);
-		}
+		XDrawLine(dpy, radarPixmap, radarGC,
+			  x, y - yw, x_1, y_1 - yw);
+		if (xw != 0)
+		    XDrawLine(dpy, radarPixmap, radarGC,
+			      x - xw, y - yw, x_1 - xw, y_1 - yw);
 	    }
 	}
     }
@@ -211,70 +174,69 @@ static void Paint_self_radar(float xf, float yf)
 
 static void Paint_objects_radar(void)
 {
-    int			i, x, y, xw, yw;
+    int			i, x, y, xw, yw, color;
 
     for (i = 0; i < num_radar; i++) {
-	int s = radar_ptr[i].size;
+	int rs = radar_ptr[i].size;
+	unsigned s = (rs <= 0 ? 1 : radar_ptr[i].size);
 
-	if (s <= 0) {
-	    s = 1;
+	color = WHITE;
+	if (radar_ptr[i].type == friend) {
+	    if (maxColors > 4)
+		color = 4;
+	    else if (!colorSwitch)
+		color = RED;
 	}
-	XSetForeground(dpy, radarGC, colors[radar_ptr[i].color].pixel);
+	XSetForeground(dpy, radarGC, colors[color].pixel);
 	x = radar_ptr[i].x - s / 2 - slidingradar_x;
 	y = RadarHeight - radar_ptr[i].y - 1 - s / 2 - slidingradar_y;
-	if (x <= 0) {
-	    x += 256;
-	}
-	if (y <= 0) {
-	    y += RadarHeight;
-	}
 
-	(*radarDrawRectanglePtr)(dpy, p_radar, radarGC, x, y, s, s);
+	if (x <= 0)
+	    x += 256;
+	if (y <= 0)
+	    y += RadarHeight;
+
+	(*radarDrawRectanglePtr)(dpy, radarPixmap, radarGC, x, y, s, s);
 	if (BIT(Setup->mode, WRAP_PLAY)) {
 	    xw = (x < 0) ? -256 : (x + s >= 256) ? 256 : 0;
 	    yw = (y < 0) ? -RadarHeight
 			     : (y + s >= RadarHeight) ? RadarHeight : 0;
-	    if (xw != 0) {
-		(*radarDrawRectanglePtr)(dpy, p_radar, radarGC,
+	    if (xw != 0)
+		(*radarDrawRectanglePtr)(dpy, radarPixmap, radarGC,
 					 x - xw, y, s, s);
-	    }
 	    if (yw != 0) {
-		(*radarDrawRectanglePtr)(dpy, p_radar, radarGC,
+		(*radarDrawRectanglePtr)(dpy, radarPixmap, radarGC,
 					 x, y - yw, s, s);
 
-		if (xw != 0) {
-		    (*radarDrawRectanglePtr)(dpy, p_radar, radarGC,
+		if (xw != 0)
+		    (*radarDrawRectanglePtr)(dpy, radarPixmap, radarGC,
 					     x - xw, y - yw, s, s);
-		}
 	    }
 	}
 	/*XSetForeground(dpy, radarGC, colors[WHITE].pixel);*/
     }
-    if (num_radar) {
+    if (num_radar)
 	RELEASE(radar_ptr, num_radar, max_radar);
-    }
 }
 
 
 void Paint_radar(void)
 {
-    const float		xf = 256.0f / (float)Setup->width,
-			yf = (float)RadarHeight / (float)Setup->height;
+    const double	xf = 256.0 / (double)Setup->width,
+			yf = (double)RadarHeight / (double)Setup->height;
 
-    if (radar_exposures == 0) {
+    if (radar_exposures == 0)
 	return;
-    }
 
     slidingradar_x = 0;
     slidingradar_y = 0;
 
 #ifdef _WINDOWS
-    if (BIT(instruments, SHOW_SLIDING_RADAR) != 0) {
+    if (instruments.showSlidingRadar)
 	/*
 	 * Hack to fix slidingradar in windows.
 	 */
 	Windows_copy_sliding_radar(xf, yf);
-    }
     else
 	Copy_static_radar();
 #else
@@ -291,42 +253,86 @@ void Paint_radar(void)
 
 void Paint_sliding_radar(void)
 {
-    if (BIT(Setup->mode, WRAP_PLAY) == 0) {
+    if (BIT(Setup->mode, WRAP_PLAY) == 0)
 	return;
-    }
-    if (p_radar != s_radar) {
+
+    if (radarPixmap != radarPixmap2)
 	return;
-    }
-    if (BIT(instruments, SHOW_SLIDING_RADAR) != 0) {
-	if (s_radar != radar) {
+
+    if (instruments.showSlidingRadar) {
+	if (radarPixmap2 != radarWindow)
 	    return;
-	}
-	s_radar = XCreatePixmap(dpy, radar,
+
+	radarPixmap2 = XCreatePixmap(dpy, radarWindow,
 				256, RadarHeight,
 				dispDepth);
-	p_radar = s_radar;
-	if (radar_exposures > 0) {
+	radarPixmap = radarPixmap2;
+	if (radar_exposures > 0)
 	    Paint_world_radar();
-	}
     } else {
-	if (s_radar == radar) {
+	if (radarPixmap2 == radarWindow)
 	    return;
-	}
-	XFreePixmap(dpy, s_radar);
-	s_radar = radar;
-	p_radar = radar;
-	if (radar_exposures > 0) {
+	XFreePixmap(dpy, radarPixmap2);
+	radarPixmap2 = radarWindow;
+	radarPixmap = radarWindow;
+	if (radar_exposures > 0)
 	    Paint_world_radar();
-	}
     }
+}
+
+/*
+ * Try and draw an area of the radar which represents block position
+ * `xi' `yi'.  If `draw' is zero the area is cleared.
+ */
+static void Paint_radar_block(int xi, int yi, int color)
+{
+    double	xs, ys;
+    int		xp, yp, xw, yw;
+
+    if (radarPixmap2 == radarPixmap) {
+	XSetPlaneMask(dpy, radarGC, AllPlanes & ~(dpl_1[0] | dpl_1[1]));
+    }
+    XSetForeground(dpy, radarGC, colors[color].pixel);
+
+    if (Setup->x >= 256) {
+	xs = (double)(256 - 1) / (Setup->x - 1);
+	ys = (double)(RadarHeight - 1) / (Setup->y - 1);
+	xp = (int)(xi * xs + 0.5);
+	yp = RadarHeight - 1 - (int)(yi * ys + 0.5);
+	XDrawPoint(dpy, radarPixmap2, radarGC, xp, yp);
+    } else {
+	xs = (double)(Setup->x - 1) / (256 - 1);
+	ys = (double)(Setup->y - 1) / (RadarHeight - 1);
+	/*
+	 * Calculate the min and max points on the radar that would show
+	 * block position `xi' and `yi'.  Note `xp' is the minimum x coord
+	 * for `xi',which is one more than the previous xi value would give,
+	 * and `xw' is the maximum, which is then changed to a width value.
+	 * Similarly for `yw' and `yp' (the roles are reversed because the
+	 * radar is upside down).
+	 */
+	xp = (int)((xi - 0.5) / xs) + 1;
+	xw = (int)((xi + 0.5) / xs);
+	yw = (int)((yi - 0.5) / ys) + 1;
+	yp = (int)((yi + 0.5) / ys);
+	xw -= xp;
+	yw = yp - yw;
+	yp = RadarHeight - 1 - yp;
+	XFillRectangle(dpy, radarPixmap2, radarGC, xp, yp,
+		       (unsigned)xw+1, (unsigned)yw+1);
+    }
+    if (radarPixmap2 == radarPixmap)
+	XSetPlaneMask(dpy, radarGC,
+		      AllPlanes & ~(dpl_2[0] | dpl_2[1]));
 }
 
 static void Paint_world_radar_old(void)
 {
     int			i, xi, yi, xm, ym, xp, yp = 0;
     int			xmoff, xioff;
-    int			type, vis, damage;
-    float		xs, ys;
+    int			type, vis;
+    double		damage;
+    double		xs, ys;
     int			npoint = 0, nsegment = 0;
     int			start, end;
     int			currColor, visibleColorChange;
@@ -338,17 +344,16 @@ static void Paint_world_radar_old(void)
 
     radar_exposures = 2;
 
-    if (s_radar == p_radar) {
+    if (radarPixmap2 == radarPixmap)
 	XSetPlaneMask(dpy, radarGC,
 		      AllPlanes & ~(dpl_1[0] | dpl_1[1]));
-    }
-    if (s_radar != radar) {
+
+    if (radarPixmap2 != radarWindow) {
 	/* Clear radar */
 	XSetForeground(dpy, radarGC, colors[BLACK].pixel);
-	XFillRectangle(dpy, s_radar, radarGC, 0, 0, 256, RadarHeight);
-    } else {
-	XClearWindow(dpy, radar);
-    }
+	XFillRectangle(dpy, radarPixmap2, radarGC, 0, 0, 256, RadarHeight);
+    } else
+	XClearWindow(dpy, radarWindow);
 
     /*
      * Calculate an array which is later going to be indexed
@@ -364,13 +369,13 @@ static void Paint_world_radar_old(void)
     visible[SETUP_REC_LD] = 1;
     visible[SETUP_REC_RD] = 1;
     visible[SETUP_FUEL] = 1;
-    for (i = 0; i < 10; i++) {
+    for (i = 0; i < 10; i++)
 	visible[SETUP_TARGET+i] = 1;
-    }
-    for (i = BLUE_BIT; i < sizeof visible; i++) {
+
+    for (i = BLUE_BIT; i < (int)sizeof visible; i++)
 	visible[i] = 1;
-    }
-    if (BIT(instruments, SHOW_DECOR)) {
+
+    if (instruments.showDecor) {
 	visible[SETUP_DECOR_FILLED] = 1;
 	visible[SETUP_DECOR_LU] = 1;
 	visible[SETUP_DECOR_RU] = 1;
@@ -390,19 +395,18 @@ static void Paint_world_radar_old(void)
 	visibleColor[SETUP_REC_LD] =
 	visibleColor[SETUP_REC_RD] =
 	visibleColor[SETUP_FUEL] = wallRadarColor;
-    for (i = 0; i < 10; i++) {
+    for (i = 0; i < 10; i++)
 	visibleColor[SETUP_TARGET+i] = targetRadarColor;
-    }
-    for (i = BLUE_BIT; i < sizeof visible; i++) {
+
+    for (i = BLUE_BIT; i < (int)sizeof visible; i++)
 	visibleColor[i] = wallRadarColor;
-    }
-    if (BIT(instruments, SHOW_DECOR)) {
+
+    if (instruments.showDecor)
 	visibleColor[SETUP_DECOR_FILLED] =
 	    visibleColor[SETUP_DECOR_LU] =
 	    visibleColor[SETUP_DECOR_RU] =
 	    visibleColor[SETUP_DECOR_LD] =
 	    visibleColor[SETUP_DECOR_RD] = decorRadarColor;
-    }
 
     /* The following code draws the map on the radar.  Segments and
      * points arrays are use to build lists of things to be drawn.
@@ -415,8 +419,8 @@ static void Paint_world_radar_old(void)
      * different segments and points arrays for each visible color.
      */
     if (Setup->x >= 256) {
-	xs = (float)(256 - 1) / (Setup->x - 1);
-	ys = (float)(RadarHeight - 1) / (Setup->y - 1);
+	xs = (double)(256 - 1) / (Setup->x - 1);
+	ys = (double)(RadarHeight - 1) / (Setup->y - 1);
 	currColor = -1;
 	for (xi = 0; xi < Setup->x; xi++) {
 	    start = end = -1;
@@ -425,24 +429,23 @@ static void Paint_world_radar_old(void)
 	    for (yi = 0; yi < Setup->y; yi++) {
 		visibleColorChange = 0;
 		type = Setup->map_data[xioff + yi];
-		if (type >= SETUP_TARGET && type < SETUP_TARGET + 10) {
+		if (type >= SETUP_TARGET && type < SETUP_TARGET + 10)
 		    vis = (Target_alive(xi, yi, &damage) == 0);
-		}
-		else {
+		else
 		    vis = visible[type];
-		}
+
 		if (vis) {
 		    yp = (int)(yi * ys + 0.5);
 		    if (start == -1) {
 			if ((nsegment > 0 || npoint > 0)
 			    && currColor != visibleColor[type]) {
 			    if (nsegment > 0) {
-				XDrawSegments(dpy, s_radar, radarGC,
+				XDrawSegments(dpy, radarPixmap2, radarGC,
 					      segments, nsegment);
 				nsegment = 0;
 			    }
 			    if (npoint > 0) {
-				XDrawPoints(dpy, s_radar, radarGC,
+				XDrawPoints(dpy, radarPixmap2, radarGC,
 					    points, npoint, CoordModeOrigin);
 				npoint = 0;
 			    }
@@ -465,7 +468,7 @@ static void Paint_world_radar_old(void)
 			segments[nsegment].y2 = RadarHeight - 1 - end;
 			nsegment++;
 			if (nsegment >= max || yi == Setup->y - 1) {
-			    XDrawSegments(dpy, s_radar, radarGC,
+			    XDrawSegments(dpy, radarPixmap2, radarGC,
 					  segments, nsegment);
 			    nsegment = 0;
 			}
@@ -474,7 +477,7 @@ static void Paint_world_radar_old(void)
 			points[npoint].y = RadarHeight - 1 - start;
 			npoint++;
 			if (npoint >= max || yi == Setup->y - 1) {
-			    XDrawPoints(dpy, s_radar, radarGC,
+			    XDrawPoints(dpy, radarPixmap2, radarGC,
 					points, npoint, CoordModeOrigin);
 			    npoint = 0;
 			}
@@ -484,12 +487,12 @@ static void Paint_world_radar_old(void)
 
 		if (visibleColorChange) {
 		    if (nsegment > 0) {
-			XDrawSegments(dpy, s_radar, radarGC,
+			XDrawSegments(dpy, radarPixmap2, radarGC,
 				      segments, nsegment);
 			nsegment = 0;
 		    }
 		    if (npoint > 0) {
-			XDrawPoints(dpy, s_radar, radarGC,
+			XDrawPoints(dpy, radarPixmap2, radarGC,
 				    points, npoint, CoordModeOrigin);
 			npoint = 0;
 		    }
@@ -500,34 +503,33 @@ static void Paint_world_radar_old(void)
 	    }
 	}
     } else {
-	xs = (float)(Setup->x - 1) / (256 - 1);
-	ys = (float)(Setup->y - 1) / (RadarHeight - 1);
+	xs = (double)(Setup->x - 1) / (256 - 1);
+	ys = (double)(Setup->y - 1) / (RadarHeight - 1);
 	currColor = -1;
 	for (xi = 0; xi < 256; xi++) {
 	    xm = (int)(xi * xs + 0.5);
 	    xmoff = xm * Setup->y;
 	    start = end = -1;
 	    xp = xi;
-	    for (yi = 0; yi < RadarHeight; yi++) {
+	    for (yi = 0; yi < (int)RadarHeight; yi++) {
 		visibleColorChange = 0;
 		ym = (int)(yi * ys + 0.5);
 		type = Setup->map_data[xmoff + ym];
 		vis = visible[type];
-		if (type >= SETUP_TARGET && type < SETUP_TARGET + 10) {
+		if (type >= SETUP_TARGET && type < SETUP_TARGET + 10)
 		    vis = (Target_alive(xm, ym, &damage) == 0);
-		}
 		if (vis) {
 		    yp = yi;
 		    if (start == -1) {
 			if ((nsegment > 0 || npoint > 0)
 			    && currColor != visibleColor[type]) {
 			    if (nsegment > 0) {
-				XDrawSegments(dpy, s_radar, radarGC,
+				XDrawSegments(dpy, radarPixmap2, radarGC,
 					      segments, nsegment);
 				nsegment = 0;
 			    }
 			    if (npoint > 0) {
-				XDrawPoints(dpy, s_radar, radarGC,
+				XDrawPoints(dpy, radarPixmap2, radarGC,
 					    points, npoint, CoordModeOrigin);
 				npoint = 0;
 			    }
@@ -542,15 +544,16 @@ static void Paint_world_radar_old(void)
 		}
 
 		if (start != -1
-		    && (!vis || yi == RadarHeight - 1 || visibleColorChange)) {
+		    && (!vis || yi == (int)RadarHeight - 1
+			|| visibleColorChange)) {
 		    if (end > start) {
 			segments[nsegment].x1 = xp;
 			segments[nsegment].y1 = RadarHeight - 1 - start;
 			segments[nsegment].x2 = xp;
 			segments[nsegment].y2 = RadarHeight - 1 - end;
 			nsegment++;
-			if (nsegment >= max || yi == RadarHeight - 1) {
-			    XDrawSegments(dpy, s_radar, radarGC,
+			if (nsegment >= max || yi == (int)RadarHeight - 1) {
+			    XDrawSegments(dpy, radarPixmap2, radarGC,
 					  segments, nsegment);
 			    nsegment = 0;
 			}
@@ -558,8 +561,8 @@ static void Paint_world_radar_old(void)
 			points[npoint].x = xp;
 			points[npoint].y = RadarHeight - 1 - start;
 			npoint++;
-			if (npoint >= max || yi == RadarHeight - 1) {
-			    XDrawPoints(dpy, s_radar, radarGC,
+			if (npoint >= max || yi == (int)RadarHeight - 1) {
+			    XDrawPoints(dpy, radarPixmap2, radarGC,
 					points, npoint, CoordModeOrigin);
 			    npoint = 0;
 			}
@@ -569,12 +572,12 @@ static void Paint_world_radar_old(void)
 
 		if (visibleColorChange) {
 		    if (nsegment > 0) {
-			XDrawSegments(dpy, s_radar, radarGC,
+			XDrawSegments(dpy, radarPixmap2, radarGC,
 				      segments, nsegment);
 			nsegment = 0;
 		    }
 		    if (npoint > 0) {
-			XDrawPoints(dpy, s_radar, radarGC,
+			XDrawPoints(dpy, radarPixmap2, radarGC,
 				    points, npoint, CoordModeOrigin);
 			npoint = 0;
 		    }
@@ -585,36 +588,46 @@ static void Paint_world_radar_old(void)
 	    }
 	}
     }
-    if (nsegment > 0) {
-	XDrawSegments(dpy, s_radar, radarGC,
-		      segments, nsegment);
-    }
-    if (npoint > 0) {
-	XDrawPoints(dpy, s_radar, radarGC,
-		    points, npoint, CoordModeOrigin);
-    }
+    if (nsegment > 0)
+	XDrawSegments(dpy, radarPixmap2, radarGC, segments, nsegment);
 
-    if (s_radar == p_radar) {
+    if (npoint > 0)
+	XDrawPoints(dpy, radarPixmap2, radarGC,
+		    points, npoint, CoordModeOrigin);
+
+    if (radarPixmap2 == radarPixmap)
 	XSetPlaneMask(dpy, radarGC,
 		      AllPlanes & ~(dpl_2[0] | dpl_2[1]));
-    }
 
     for (i = 0;; i++) {
-	int dead_time, damage;
-	if (Target_by_index(i, &xi, &yi, &dead_time, &damage) == -1) {
+	int dead_time;
+	double targ_damage;
+
+	if (Target_by_index(i, &xi, &yi, &dead_time, &targ_damage) == -1)
 	    break;
-	}
-	if (dead_time) {
+	if (dead_time)
 	    continue;
-	}
 	Paint_radar_block(xi, yi, targetRadarColor);
     }
 }
 
 
+static void Compute_radar_bounds(ipos *min, ipos *max, const irec *b)
+{
+    min->x = (0 - (b->x + b->w)) / Setup->width;
+    if (0 > b->x + b->w) min->x++;
+    max->x = (0 + Setup->width - b->x) / Setup->width;
+    if (0 + Setup->width < b->x) max->x--;
+    min->y = (0 - (b->y + b->h)) / Setup->height;
+    if (0 > b->y + b->h) min->y++;
+    max->y = (0 + Setup->height - b->y) / Setup->height;
+    if (0 + Setup->height < b->y) max->y--;
+}
+
 static void Paint_world_radar_new(void)
 {
-    int i, j, k;
+    int i, j, xoff, yoff;
+    ipos min, max;
     static XPoint poly[10000];
     
 #define DBG if(0) printf
@@ -622,137 +635,78 @@ static void Paint_world_radar_new(void)
     /* what the heck is this? */
     radar_exposures = 2;
     
-    if (s_radar == p_radar)
+    if (radarPixmap2 == radarPixmap)
 	XSetPlaneMask(dpy, radarGC, AllPlanes & (~(dpl_1[0] | dpl_1[1])));
-    if (s_radar != radar) {
+    if (radarPixmap2 != radarWindow) {
 	/* Clear radar */
 	XSetForeground(dpy, radarGC, colors[BLACK].pixel);
-	XFillRectangle(dpy, s_radar, radarGC, 0, 0, 256, RadarHeight);
-    } else {
-	XClearWindow(dpy, radar);
-    }
+	XFillRectangle(dpy, radarPixmap2, radarGC, 0, 0, 256, RadarHeight);
+    } else
+	XClearWindow(dpy, radarWindow);
         
     XSetForeground(dpy, radarGC, colors[wallRadarColor].pixel);
     
-    /*
-     * The radar is drawn 9 times into different locations
-     * so that polygons going over the world edge seem to
-     * appear on the other side. The locations are like
-     * the following:
-     * 012
-     * 345
-     * 678
-     * The copy number 4 is the world being displayed. Now if
-     * a polygon extends from 4 to 5, it appears on the left
-     * side of 4 because the copy drawn in 3 extends to 4.
-     */
-    for (k = 0; k < 9; k++) {
-	
-	/* offsets of the current copy */
-	int x_offset = ((k % 3) - 1) * Setup->width;
-	int y_offset = ((k / 3) - 1) * Setup->height;
-	
-	/* loop through all the polygons */
-	for (i = 0; i < num_polygons; i++) {
-	    
-	    /* location of current polygon */
-	    int x = polygons[i].points[0].x + x_offset;
-	    int y = Setup->height - polygons[i].points[0].y + y_offset;
-	    
-	    if (BIT(polygon_styles[polygons[i].style].flags,
-		    STYLE_INVISIBLE_RADAR))
-		continue;
-	    
-	    poly[0].x = (x * 256) / Setup->width;
-	    poly[0].y = (y * RadarHeight) / Setup->height;
-	    
-	    DBG("poly[k=%d, i=%d, x=%d, y=%d] = ", k, i, x, y);
-	    DBG("(%d,%d) ", poly[0].x, poly[0].y);
-	    
-	    /* loop through the points in the current polygon */
-	    for (j = 1; j < polygons[i].num_points; j++) {
+    /* loop through all the polygons */
+    for (i = 0; i < num_polygons; i++) {
+	Compute_radar_bounds(&min, &max, &polygons[i].bounds);
+	for (xoff = min.x; xoff <= max.x; xoff++) {
+	    for (yoff = min.y; yoff <= max.y; yoff++) {
+		/*DBG("%d %d %d\n", i, xoff, yoff);*/
 		
-		x += polygons[i].points[j].x;
-		y -= polygons[i].points[j].y;
+		/* location of current polygon */
+		int x = polygons[i].points[0].x + xoff * Setup->width;
+		int y = - polygons[i].points[0].y + (1-yoff) * Setup->height;
 		
-		poly[j].x = (x * 256) / Setup->width;
-		poly[j].y = (y * RadarHeight) / Setup->height;
-		DBG("(%d,%d) ", poly[j].x, poly[j].y);
+		if (BIT(polygon_styles[polygons[i].style].flags,
+			STYLE_INVISIBLE_RADAR)) continue;
+		
+		poly[0].x = (x * 256) / Setup->width;
+		poly[0].y = (y * RadarHeight) / Setup->height;
+		
+		/* loop through the points in the current polygon */
+		for (j = 1; j < polygons[i].num_points; j++) {
+		    
+		    x += polygons[i].points[j].x;
+		    y -= polygons[i].points[j].y;
+		    
+		    poly[j].x = (x * 256) / Setup->width;
+		    poly[j].y = (y * RadarHeight) / Setup->height;
+		}
+
+		XSetForeground(dpy, radarGC, fullColor ?
+			       polygon_styles[polygons[i].style].color :
+			       colors[wallRadarColor].pixel);
+		XFillPolygon(dpy, radarPixmap2, radarGC, poly, polygons[i].num_points,
+			     Nonconvex, CoordModeOrigin);
 	    }
-	    
-	    DBG("\n");
-	    XSetForeground(dpy, radarGC, fullColor ?
-			   polygon_styles[polygons[i].style].color :
-			   colors[wallRadarColor].pixel);
-	    XFillPolygon(dpy, s_radar, radarGC, poly,
-			 polygons[i].num_points, Nonconvex,
-			 CoordModeOrigin);
 	}
     }
     
 #undef DBG
     
-    if (s_radar == p_radar)
+    if (radarPixmap2 == radarPixmap)
 	XSetPlaneMask(dpy, radarGC, AllPlanes & (~(dpl_2[0] | dpl_2[1])));
 }
 
 void Paint_world_radar(void)
 {
-    IFWINDOWS(xid[radarGC].hgc.xidhwnd = s_radar);
+    IFWINDOWS(xid[radarGC].hgc.xidhwnd = radarPixmap2);
     
-    if (oldServer) {
+    if (oldServer)
 	Paint_world_radar_old();
-    } else {
+    else
 	Paint_world_radar_new();
-    }
 	
-    IFWINDOWS(xid[radarGC].hgc.xidhwnd = radar;)
+    IFWINDOWS(xid[radarGC].hgc.xidhwnd = radar);
 }
 
-
-/*
- * Try and draw an area of the radar which represents block position
- * `xi' `yi'.  If `draw' is zero the area is cleared.
- */
-void Paint_radar_block(int xi, int yi, int color)
+void Radar_show_target(int x, int y)
 {
-    float	xs, ys;
-    int		xp, yp, xw, yw;
+    Paint_radar_block(x, y, targetRadarColor);
+}
 
-    if (s_radar == p_radar) {
-	XSetPlaneMask(dpy, radarGC, AllPlanes & ~(dpl_1[0] | dpl_1[1]));
-    }
-    XSetForeground(dpy, radarGC, colors[color].pixel);
-
-    if (Setup->x >= 256) {
-	xs = (float)(256 - 1) / (Setup->x - 1);
-	ys = (float)(RadarHeight - 1) / (Setup->y - 1);
-	xp = (int)(xi * xs + 0.5);
-	yp = RadarHeight - 1 - (int)(yi * ys + 0.5);
-	XDrawPoint(dpy, s_radar, radarGC, xp, yp);
-    } else {
-	xs = (float)(Setup->x - 1) / (256 - 1);
-	ys = (float)(Setup->y - 1) / (RadarHeight - 1);
-	/*
-	 * Calculate the min and max points on the radar that would show
-	 * block position `xi' and `yi'.  Note `xp' is the minimum x coord
-	 * for `xi',which is one more than the previous xi value would give,
-	 * and `xw' is the maximum, which is then changed to a width value.
-	 * Similarly for `yw' and `yp' (the roles are reversed because the
-	 * radar is upside down).
-	 */
-	xp = (int)((xi - 0.5) / xs) + 1;
-	xw = (int)((xi + 0.5) / xs);
-	yw = (int)((yi - 0.5) / ys) + 1;
-	yp = (int)((yi + 0.5) / ys);
-	xw -= xp;
-	yw = yp - yw;
-	yp = RadarHeight - 1 - yp;
-	XFillRectangle(dpy, s_radar, radarGC, xp, yp, xw+1, yw+1);
-    }
-    if (s_radar == p_radar) {
-	XSetPlaneMask(dpy, radarGC,
-		      AllPlanes & ~(dpl_2[0] | dpl_2[1]));
-    }
+void Radar_hide_target(int x, int y)
+{
+    Paint_radar_block(x, y, BLACK);
 }
 

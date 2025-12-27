@@ -49,7 +49,7 @@
 **	Indentation.
 **	No typedefs in external interface.
 **
-** $Id: randommt.c,v 5.1 2001/06/02 21:02:19 bertg Exp $
+** 
 */
 
 
@@ -67,17 +67,17 @@ unsigned int randomMT(void);
 
 typedef unsigned int uint32;
 
-#define N              (624)			/* length of state vector */
-#define M              (397)			/* a period parameter */
-#define K              (0x9908B0DFU)		/* a magic constant */
-#define hiBit(u)       ((u) & 0x80000000U)	/* mask all but highest   bit of u */
-#define loBit(u)       ((u) & 0x00000001U)	/* mask all but lowest    bit of u */
-#define loBits(u)      ((u) & 0x7FFFFFFFU)	/* mask     the highest   bit of u */
-#define mixBits(u, v)  (hiBit(u)|loBits(v))	/* move hi bit of u to hi bit of v */
+#define N            (624)		  /* length of state vector */
+#define M            (397)		  /* a period parameter */
+#define K            (0x9908B0DFU)	  /* a magic constant */
+#define hiBit(u)     ((u) & 0x80000000U)  /* mask all but highest bit of u */
+#define loBit(u)     ((u) & 0x00000001U)  /* mask all but lowest  bit of u */
+#define loBits(u)    ((u) & 0x7FFFFFFFU)  /* mask     the highest bit of u */
+#define mixBits(u,v) (hiBit(u)|loBits(v)) /* move hi bit of u to hi bit of v */
 
-static uint32 state[N + 1];	/* state vector + 1 extra to not violate ANSI C */
-static uint32 *next;		/* next random value is computed from here */
-static int left = -1;		/* can *next++ this many times before reloading */
+static uint32 state[N + 1]; /* state vector + 1 extra to not violate ANSI C */
+static uint32 *next;	    /* next random value is computed from here */
+static int left = -1;	    /* can *next++ this many times before reloading */
 
 
 void seedMT(unsigned int seed)
@@ -128,8 +128,8 @@ void seedMT(unsigned int seed)
     ** so-- that's why the only change I made is to restrict to odd seeds.
     */
 
-    register uint32 x = (seed | 1U) & 0xFFFFFFFFU, *s = state;
-    register int j;
+    uint32 x = (seed | 1U) & 0xFFFFFFFFU, *s = state;
+    int j;
 
     for (left = 0, *s++ = x, j = N; --j; *s++ = (x *= 69069U) & 0xFFFFFFFFU) ;
 }
@@ -137,8 +137,8 @@ void seedMT(unsigned int seed)
 
 unsigned int reloadMT(void)
 {
-    register uint32 *p0 = state, *p2 = state + 2, *pM = state + M, s0, s1;
-    register int j;
+    uint32 *p0 = state, *p2 = state + 2, *pM = state + M, s0, s1;
+    int j;
 
     if (left < -1)
 	seedMT(4357U);

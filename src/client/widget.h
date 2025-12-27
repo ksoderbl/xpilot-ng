@@ -1,5 +1,4 @@
-/* $Id: widget.h,v 5.1 2001/05/13 12:14:48 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -38,6 +37,7 @@ typedef enum widget_type {
     WIDGET_BUTTON_ARROW_LEFT,
     WIDGET_BUTTON_ARROW_RIGHT,
     WIDGET_INPUT_INT,
+    WIDGET_INPUT_COLOR,
     WIDGET_INPUT_FLOAT,
     WIDGET_INPUT_STRING,
     WIDGET_VIEWER,
@@ -105,17 +105,25 @@ typedef struct widget_arrow {
 
 typedef struct widget_int {
     int				*val,		/* Integer pointer */
-					min,		/* Minimum value */
-					max;		/* Maximum value */
+				min,		/* Minimum value */
+				max;		/* Maximum value */
     int				(*callback)(int, void *, int *);
     void			*user_data;
 } widget_int_t;
 
+typedef struct widget_color {
+    int				*val;		/* Color index pointer */
+    int				min;		/* Minimum value */
+    int				max;		/* Maximum value */
+    int				(*callback)(int, void *, int *);
+    void			*user_data;
+} widget_color_t;
+
 typedef struct widget_float {
-    DFLOAT			*val,		/* Float pointer */
-					min,		/* Minimum value */
-					max;		/* Maximum value */
-    int				(*callback)(int, void *, DFLOAT *);
+    double			*val,		/* Float pointer */
+				min,		/* Minimum value */
+				max;		/* Maximum value */
+    int				(*callback)(int, void *, double *);
     void			*user_data;
 } widget_float_t;
 
@@ -183,15 +191,25 @@ int Widget_create_int(int parent_desc,
 		      int border, int *val, int min, int max,
 		      int (*callback)(int, void *, int *),
 		      void *user_data);
+int Widget_create_color(int parent_desc, int color,
+ 		        int x, int y, int width, int height,
+ 		        int border, int *val, int min, int max,
+ 		        int (*callback)(int, void *, int *),
+ 		        void *user_data);
 int Widget_create_float(int parent_desc,
 			int x, int y, int width, int height,
-			int border, DFLOAT *val, DFLOAT min, DFLOAT max,
-			int (*callback)(int, void *, DFLOAT *),
+			int border, double *val, double min, double max,
+			int (*callback)(int, void *, double *),
 			void *user_data);
 int Widget_create_label(int parent_desc,
 			int x, int y,
-			int width, int height,
+			int width, int height, bool centered,
 			int border, const char *str);
+int Widget_create_colored_label(int parent_desc,
+				int x, int y,
+				int width, int height, bool centered,
+				int border, int bg, int bord,
+				const char *str);
 int Widget_create_arrow_right(int parent_desc, int x, int y,
 			      int width, int height,
 			      int border,

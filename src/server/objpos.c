@@ -1,5 +1,4 @@
-/* $Id: objpos.c,v 5.2 2001/11/29 14:48:12 bertg Exp $
- *
+/*
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,52 +21,29 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <time.h>
-
-#ifdef _WINDOWS
-# include <windows.h>
-#endif
-
-#define SERVER
-#include "version.h"
-#include "config.h"
-#include "serverconst.h"
-#include "global.h"
-#include "proto.h"
-#include "map.h"
-#include "object.h"
-#include "objpos.h"
-#include "walls.h"
+#include "xpserver.h"
 
 char objpos_version[] = VERSION;
 
 
 void Object_position_set_clicks(object *obj, int cx, int cy)
 {
-    struct _objposition		*pos = (struct _objposition *)&obj->pos;
+    clpos		*pos = (clpos *)&obj->pos;
 
-    if (cx < 0 || cx >= World.cwidth || cy < 0 || cy >= World.cheight) {
+    if (!INSIDE_MAP(cx, cy)) {
 	if (0) {
 	    printf("BUG!  Illegal object position %d,%d\n", cx, cy);
 	    printf("      Type = %d (%s)\n", obj->type, Object_typename(obj));
 	    *(double *)(-1) = 4321.0;
 	    abort();
 	} else {
-	    struct move mv;
-
-	    Object_crash(obj, &mv, CrashUnknown, -1);
+	    Object_crash(obj, CrashUnknown, NO_IND);
 	    return;
 	}
     }
 
     pos->cx = cx;
-    pos->px = CLICK_TO_PIXEL(cx);
-    pos->bx = CLICK_TO_BLOCK(cx);
     pos->cy = cy;
-    pos->py = CLICK_TO_PIXEL(cy);
-    pos->by = CLICK_TO_BLOCK(cy);
 }
 
 void Object_position_init_clicks(object *obj, int cx, int cy)
@@ -84,27 +60,21 @@ void Player_position_restore(player *pl)
 
 void Player_position_set_clicks(player *pl, int cx, int cy)
 {
-    struct _objposition		*pos = (struct _objposition *)&pl->pos;
+    clpos		*pos = (clpos *)&pl->pos;
 
-    if (cx < 0 || cx >= World.cwidth || cy < 0 || cy >= World.cheight) {
+    if (!INSIDE_MAP(cx, cy)) {
 	if (0) {
 	    printf("BUG!  Illegal player position %d,%d\n", cx, cy);
 	    *(double *)(-1) = 4321.0;
 	    abort();
 	} else {
-	    struct move mv;
-
-	    Player_crash(pl, &mv, CrashUnknown, -1, 1);
+	    Player_crash(pl, CrashUnknown, NO_IND, 1);
 	    return;
 	}
     }
 
     pos->cx = cx;
-    pos->px = CLICK_TO_PIXEL(cx);
-    pos->bx = CLICK_TO_BLOCK(cx);
     pos->cy = cy;
-    pos->py = CLICK_TO_PIXEL(cy);
-    pos->by = CLICK_TO_BLOCK(cy);
 }
 
 void Player_position_init_clicks(player *pl, int cx, int cy)
@@ -116,45 +86,49 @@ void Player_position_init_clicks(player *pl, int cx, int cy)
 
 void Player_position_limit(player *pl)
 {
-    int			x = pl->pos.px, ox = x;
-    int			y = pl->pos.py, oy = y;
+    int			cx = pl->pos.cx, ox = cx;
+    int			cy = pl->pos.cy, oy = cy;
 
-    LIMIT(x, 0, World.width - 1);
-    LIMIT(y, 0, World.height - 1);
-    if (x != ox || y != oy) {
-	Player_position_set_clicks(pl, PIXEL_TO_CLICK(x), PIXEL_TO_CLICK(y));
-    }
+    LIMIT(cx, 0, World.cwidth - 1);
+    LIMIT(cy, 0, World.cheight - 1);
+    if (cx != ox || cy != oy)
+	Player_position_set_clicks(pl, cx, cy);
 }
 
+#ifdef DEVELOPMENT
 void Player_position_debug(player *pl, const char *msg)
 {
-#if DEVELOPMENT
     int			i;
 
     printf("pl %s pos dump: ", pl->name);
     if (msg) printf("(%s)", msg);
     printf("\n");
     printf("\tB %d, %d, P %d, %d, C %d, %d, O %d, %d\n",
-	   pl->pos.bx,
-	   pl->pos.by,
-	   pl->pos.x,
-	   pl->pos.y,
+	   CLICK_TO_BLOCK(pl->pos.cx),
+	   CLICK_TO_BLOCK(pl->pos.cy),
+	   CLICK_TO_PIXEL(pl->pos.cx),
+	   CLICK_TO_PIXEL(pl->pos.cy),
 	   pl->pos.cx,
 	   pl->pos.cy,
-	   pl->prevpos.x,
-	   pl->prevpos.y);
+	   pl->prevpos.cx,
+	   pl->prevpos.cy);
     for (i = 0; i < pl->ship->num_points; i++) {
-	printf("\t%2d\tB %d, %d, P %d, %d, C %d, %d, O %d, %d\n",
-		i,
-	       (int)((pl->pos.x + pl->ship->pts[i][pl->dir].x) / BLOCK_SZ),
-	       (int)((pl->pos.y + pl->ship->pts[i][pl->dir].y) / BLOCK_SZ),
-	       (int)(pl->pos.x + pl->ship->pts[i][pl->dir].x),
-	       (int)(pl->pos.y + pl->ship->pts[i][pl->dir].y),
-	       (int)(pl->pos.cx + FLOAT_TO_CLICK(pl->ship->pts[i][pl->dir].x)),
-	       (int)(pl->pos.cy + FLOAT_TO_CLICK(pl->ship->pts[i][pl->dir].y)),
-	       (int)(pl->prevpos.x + pl->ship->pts[i][pl->dir].x),
-	       (int)(pl->prevpos.y + pl->ship->pts[i][pl->dir].y));
-    }
-#endif
-}
+	clpos pts = Ship_get_point_clpos(pl->ship, i, pl->dir);
+	clpos pt;
 
+	pt.cx = pl->pos.cx + pts.cx;
+	pt.cy = pl->pos.cy + pts.cy;
+
+	printf("\t%2d\tB %d, %d, P %d, %d, C %d, %d, O %d, %d\n",
+	       i,
+	       CLICK_TO_BLOCK(pt.cx),
+	       CLICK_TO_BLOCK(pt.cy),
+	       CLICK_TO_PIXEL(pt.cx),
+	       CLICK_TO_PIXEL(pt.cy),
+	       pt.cx,
+	       pt.cy,
+	       pl->prevpos.cx + pts.cx,
+	       pl->prevpos.cy + pts.cy);
+    }
+}
+#endif

@@ -1,5 +1,4 @@
-/* $Id: default.h,v 5.1 2001/05/08 11:35:29 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,8 +21,8 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef _DEFAULT_H_
-#define _DEFAULT_H_
+#ifndef DEFAULT_H
+#define DEFAULT_H
 
 typedef struct {
     const char		*name;		/* option name */
@@ -32,9 +31,11 @@ typedef struct {
     keys_t		key;		/* key if not KEY_DUMMY */
     const char		*help;		/* user help (multiline) */
     unsigned		hash;		/* option name hashed. */
-} option;
+} cl_option_t;
 
-extern option	options[];
-extern int		optionsCount;	/* NELEM(options) */
+#if 0
+extern cl_option_t	*options;
+extern int		num_options;	/* number of options */
+#endif
 
 #endif

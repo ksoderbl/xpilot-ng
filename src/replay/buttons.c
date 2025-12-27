@@ -1,5 +1,4 @@
-/* $Id: buttons.c,v 5.0 2001/04/07 20:01:00 dik Exp $
- *
+/* 
  * XP-Replay, playback an XPilot session.  Copyright (C) 1994-98 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,16 +21,6 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#ifndef _WINDOWS
-# include <unistd.h>
-# include <X11/Xlib.h>
-#endif
-
-#include "buttons.h"
 #include "xp-replay.h"
 
 #include "tools/grey.xbm"
@@ -44,8 +33,8 @@ struct button {
     unsigned int	width;
     unsigned int	height;
     union button_image	image;
-    int			imagewidth;
-    int			imageheight;
+    unsigned int	imagewidth;
+    unsigned int	imageheight;
     int			flags;
     int			group;
     void		(*callback)(void *);
@@ -67,8 +56,7 @@ void SetGlobalButtonAttributes(unsigned long bg,
     Button b;
     int flag = 0;
 
-    if (background != bg)
-    {
+    if (background != bg) {
 	for (b = buttonhead; b != NULL; b = b->next)
 	    XSetWindowBackground(b->display, b->window, bg);
 	background = bg;
@@ -97,7 +85,8 @@ static void SetButtonFont(Display *display)
 Button CreateButton(Display *display, Window parent,
 		    int x, int y,
 		    unsigned int width, unsigned int height,
-		    union button_image image, int iw, int ih,
+		    union button_image image,
+		    unsigned iw, unsigned ih,
 		    unsigned long foreground,
 		    void (*callback)(void *),
 		    void *data, int flags, int group)
@@ -107,13 +96,12 @@ Button CreateButton(Display *display, Window parent,
 
     b = (Button) MyMalloc(sizeof(struct button), MEM_UI);
 
-    if ((width == 0 || height == 0) && (flags & BUTTON_TEXT))
-    {
+    if ((width == 0 || height == 0) && (flags & BUTTON_TEXT)) {
 	if (buttonFont == NULL)
 	    SetButtonFont(display);
 	if (width == 0)
 	    width = XTextWidth(buttonFont, image.string,
-			       strlen(image.string)) + 10;
+			       (int)strlen(image.string)) + 10;
 	if (height == 0)
 	    height = buttonFont->ascent + buttonFont->descent + 10;
     }
@@ -140,8 +128,7 @@ Button CreateButton(Display *display, Window parent,
 
     if (buttontail == NULL)
 	buttonhead = buttontail = b;
-    else
-    {
+    else {
 	buttontail->next = b;
 	buttontail = b;
     }
@@ -158,11 +145,10 @@ static void ReleaseButtons(Button b)
 {
     Button c;
 
-    if (b->group != 0)
-    {
+    if (b->group != 0) {
 	for (c = buttonhead; c != NULL; c = c->next)
-	    if (c->group == b->group && c != b && (c->flags & BUTTON_PRESSED))
-	    {
+	    if (c->group == b->group && c != b
+		&& (c->flags & BUTTON_PRESSED)) {
 		c->flags &= ~BUTTON_PRESSED;
 		RedrawButton(c);
 	    }
@@ -213,8 +199,7 @@ int CheckButtonEvent(XEvent *event)
     if (b == NULL)
 	return(0);
 
-    switch(event->type)
-    {
+    switch(event->type) {
     case Expose:
 	if (event->xexpose.count != 0)
 	    return(1);
@@ -228,9 +213,12 @@ int CheckButtonEvent(XEvent *event)
 	if (event->xbutton.button == 1)
 	    ReleaseButton(b, (event->xbutton.x >= 0 &&
 			      event->xbutton.y >= 0 &&
-			      event->xbutton.x < b->width &&
-			      event->xbutton.y < b->height) ? True : False);
+			      event->xbutton.x < (int)b->width &&
+			      event->xbutton.y < (int)b->height)
+			  ? True : False);
 	return(1);
+    default:
+	break;
     }
 
     return(0);
@@ -240,17 +228,16 @@ void RedrawButton(Button b)
 {
     static GC gc = 0;
     static Pixmap grey = 0;
+    int bh = b->height, bw = b->width;
 
-    if (gc == 0)
-    {
+    if (gc == 0) {
 	gc = XCreateGC(b->display, b->window, 0, NULL);
 	if (buttonFont == NULL)
 	    SetButtonFont(b->display);
 	XSetFont(b->display, gc, buttonFont->fid);
     }
 
-    if (grey == 0)
-    {
+    if (grey == 0) {
 	grey = XCreateBitmapFromData(b->display, b->window, (char *) grey_bits,
 				     grey_width, grey_height);
 	XSetStipple(b->display, gc, grey);
@@ -264,10 +251,10 @@ void RedrawButton(Button b)
 
     if (b->flags & BUTTON_TEXT)
  	XDrawString(b->display, b->window, gc, 5, 5 + buttonFont->ascent,
-		    b->image.string, strlen(b->image.string));
-    else if (b->image.icon != None)
-    {
-	int x, y, w, h;
+		    b->image.string, (int)strlen(b->image.string));
+    else if (b->image.icon != None) {
+	int x, y;
+	unsigned w, h;
 	
 	w = (b->imagewidth);
 	if (w > b->width)
@@ -275,60 +262,48 @@ void RedrawButton(Button b)
 	h = (b->imageheight);
 	if (h > b->height)
 	    h = b->height;
-	x = (b->width-w)>>1;
-	y = (b->height-h)>>1;
+	x = (b->width - w) >> 1;
+	y = (b->height - h) >> 1;
 	XCopyPlane(b->display, b->image.icon, b->window, gc,
-		   (b->imagewidth-w)>>1, (b->imageheight-h)>>1, w, h,
-		   x, y, 1);
+		   (int)((b->imagewidth-w) >> 1),
+		   (int)((b->imageheight-h) >> 1),
+		   w, h, x, y, 1);
     }
 
-    if (b->flags & BUTTON_DISABLED)
-    {
+    if (b->flags & BUTTON_DISABLED) {
 	XSetForeground(b->display, gc, background);
 	    XSetFillStyle(b->display, gc, FillStippled);
 	XFillRectangle(b->display, b->window, gc, 0, 0, b->width, b->height);
 	XSetFillStyle(b->display, gc, FillSolid);
     }
 
-    if (b->flags & BUTTON_PRESSED)
-    {
+    if (b->flags & BUTTON_PRESSED) {
 	XSetForeground(b->display, gc, black);
-	XDrawRectangle(b->display, b->window, gc, 0, 0, b->width-1,
-		       b->height-1);
-	XDrawRectangle(b->display, b->window, gc, 1, 1, b->width-3,
-		       b->height-3);
-    }
-    else
-    {
+	XDrawRectangle(b->display, b->window, gc,
+		       0, 0, b->width-1, b->height-1);
+	XDrawRectangle(b->display, b->window, gc,
+		       1, 1, b->width-3, b->height-3);
+    } else {
 	XSetForeground(b->display, gc, bottomshadow);
-	XDrawLine(b->display, b->window, gc, 0, b->height-1, b->width-1,
-		  b->height-1);
-	XDrawLine(b->display, b->window, gc, b->width-1, b->height-1,
-		  b->width-1, 0);
+	XDrawLine(b->display, b->window, gc, 0, bh-1, bw-1, bh-1);
+	XDrawLine(b->display, b->window, gc, bw-1, bh-1, bw-1, 0);
 	XSetForeground(b->display, gc, topshadow);
-	XDrawLine(b->display, b->window, gc, 0, 0,
-		  b->width-1, 0);
-	XDrawLine(b->display, b->window, gc, 0, 0, 0, b->height-1);
+	XDrawLine(b->display, b->window, gc, 0, 0, bw-1, 0);
+	XDrawLine(b->display, b->window, gc, 0, 0, 0, bh-1);
 	XSetForeground(b->display, gc, bottomshadow);
-	XDrawLine(b->display, b->window, gc, 1, b->height-2, b->width-2,
-		  b->height-2);
-	XDrawLine(b->display, b->window, gc, b->width-2, b->height-2,
-		  b->width-2, 1);
+	XDrawLine(b->display, b->window, gc, 1, bh-2, bw-2, bh-2);
+	XDrawLine(b->display, b->window, gc, bw-2, bh-2, bw-2, 1);
 	XSetForeground(b->display, gc, topshadow);
-	XDrawLine(b->display, b->window, gc, 1, 1,
-		  b->width-2, 1);
-	XDrawLine(b->display, b->window, gc, 1, 1, 1, b->height-2);
+	XDrawLine(b->display, b->window, gc, 1, 1, bw-2, 1);
+	XDrawLine(b->display, b->window, gc, 1, 1, 1, bh-2);
     }
 
     XSetForeground(b->display, gc, bottomshadow);
-    XDrawLine(b->display, b->window, gc, 2, b->height-3, b->width-3,
-	      b->height-3);
-    XDrawLine(b->display, b->window, gc, b->width-3, b->height-3,
-	      b->width-3, 2);
+    XDrawLine(b->display, b->window, gc, 2, bh-3, bw-3, bh-3);
+    XDrawLine(b->display, b->window, gc, bw-3, bh-3, bw-3, 2);
     XSetForeground(b->display, gc, topshadow);
-    XDrawLine(b->display, b->window, gc, 2, 2,
-	      b->width-3, 2);
-    XDrawLine(b->display, b->window, gc, 2, 2, 2, b->height-3);
+    XDrawLine(b->display, b->window, gc, 2, 2, bw-3, 2);
+    XDrawLine(b->display, b->window, gc, 2, 2, 2, bh-3);
 
 }
 
@@ -391,7 +366,7 @@ void MoveButton(Button b, int x, int y)
     XConfigureWindow(b->display, b->window, CWX | CWY, &values);
 }
 
-void GetButtonSize(Button b, int *width, int *height)
+void GetButtonSize(Button b, unsigned *width, unsigned *height)
 {
     *width = b->width;
     *height = b->height;

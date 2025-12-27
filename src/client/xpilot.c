@@ -1,5 +1,4 @@
-/* $Id: xpilot.c,v 5.8 2001/11/29 12:08:37 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,53 +21,13 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <ctype.h>
-#include <errno.h>
-#include <time.h>
-#include <sys/types.h>
-
-#ifndef _WINDOWS
-# include <unistd.h>
-# ifndef __hpux
-#  include <sys/time.h>
-# endif
-# include <sys/param.h>
-# include <netdb.h>
-#endif
-
-#ifdef _WINDOWS
-# include "NT/winNet.h"
-# include "NT/winClient.h"
-#endif
-
-#include "version.h"
-#include "config.h"
-#include "const.h"
-#include "types.h"
-#include "pack.h"
-#include "bit.h"
-#include "error.h"
-#include "socklib.h"
-#include "net.h"
-#include "connectparam.h"
-#include "protoclient.h"
-#include "portability.h"
-#include "checknames.h"
-#include "commonproto.h"
-#include "clientrank.h"
-#include "client.h"
+#include "xpclient.h"
 
 char xpilot_version[] = VERSION;
 
 #ifndef	lint
 char xpilot_versionid[] = "@(#)$" TITLE " $";
 #endif
-
-
-char			hostname[SOCK_HOSTNAME_LENGTH];
 
 char			**Argv;
 int			Argc;
@@ -83,9 +42,8 @@ static void printfile(const char *filename)
     int			c;
 
 
-    if ((fp = fopen(filename, "r")) == NULL) {
+    if ((fp = fopen(filename, "r")) == NULL)
 	return;
-    }
 
     while ((c = fgetc(fp)) != EOF)
 	putchar(c);
@@ -100,7 +58,7 @@ static void printfile(const char *filename)
 int main(int argc, char *argv[])
 {
     int				result, retval = 1;
-    int				auto_connect = false,
+    bool			auto_connect = false,
 				text = false,
 				list_servers = false,
 				auto_shutdown = false,
@@ -115,12 +73,14 @@ int main(int argc, char *argv[])
     printf("  " COPYRIGHT ".\n"
 	   "  " TITLE " comes with ABSOLUTELY NO WARRANTY; "
 	      "for details see the\n"
-	   "  provided LICENSE file.\n\n");
+	   "  provided COPYING file.\n\n");
     if (strcmp(Conf_localguru(), "xpilot@xpilot.org")
 	&& strcmp(Conf_localguru(), "xpilot@cs.uit.no")) {
 	printf("  %s is responsible for the local installation.\n\n",
 	       Conf_localguru());
     }
+
+    /*Conf_print();*/
 
     Argc = argc;
     Argv = argv;
@@ -144,20 +104,16 @@ int main(int argc, char *argv[])
 
     *hostname = 0;
     cp = getenv("XPILOTHOST");
-    if (cp) {
+    if (cp)
 	strlcpy(hostname, cp, sizeof(hostname));
-    }
-    else {
+    else
         sock_get_local_hostname(hostname, sizeof hostname, 0);
-    }
 
     cp = getenv("XPILOTUSER");
-    if (cp) {
+    if (cp)
 	strlcpy(conpar->real_name, cp, sizeof(conpar->real_name));
-    }
-    else {
+    else
 	Get_login_name(conpar->real_name, sizeof(conpar->real_name) - 1);
-    }
 
     IFWINDOWS( conpar->disp_name[0] = '\0' );
 
@@ -176,12 +132,9 @@ int main(int argc, char *argv[])
     /* CLIENTRANK */
     Init_saved_scores();
 
-    /* BASEWARNING, BMS */
-    xpprintf("Multiple evil hacks ON\n");
-    
-    if (list_servers) {
+    if (list_servers)
 	auto_connect = true;
-    }
+
     if (shutdown_reason[0] != '\0') {
 	auto_shutdown = true;
 	auto_connect = true;
@@ -192,8 +145,6 @@ int main(int argc, char *argv[])
      */
     if (!noLocalMotd)
 	printfile(Conf_localmotdfile());
-
-    Simulate();
 
     if (text || auto_connect || argv[1] || is_this_windows()) {
 	if (list_servers)
@@ -210,13 +161,13 @@ int main(int argc, char *argv[])
     }
 
     if (result == 1) {
-      retval =
+	retval =
 	  Join(conpar->server_addr, conpar->server_name,
 	       conpar->login_port, conpar->real_name, conpar->nick_name,
 	       conpar->team, conpar->disp_name, conpar->server_version);
     }
     
-    if (BIT(hackedInstruments, CLIENT_RANKER))
+    if (instruments.useClientRanker)
 	Print_saved_scores();
 
     return retval;
@@ -236,6 +187,8 @@ extern char bitmaps_version[];
 extern char caudio_version[];
 extern char checknames_version[];
 extern char client_version[];
+extern char clientcommand_version[];
+extern char clientrank_version[];
 extern char colors_version[];
 extern char config_version[];
 extern char configure_version[];
@@ -243,11 +196,13 @@ extern char datagram_version[];
 extern char dbuff_version[];
 extern char default_version[];
 extern char error_version[];
+extern char event_version[];
 extern char gfx2d_version[];
 extern char guimap_version[];
 extern char guiobjects_version[];
 extern char join_version[];
 extern char math_version[];
+extern char messages_version[];
 extern char net_version[];
 extern char netclient_version[];
 extern char paint_version[];
@@ -259,19 +214,17 @@ extern char paintradar_version[];
 extern char portability_version[];
 extern char query_version[];
 extern char record_version[];
-extern char shipshape_c_version[];
+extern char shipshape_version[];
 extern char socklib_version[];
 extern char talk_version[];
 extern char talkmacros_version[];
 extern char textinterface_version[];
-extern char texture_version[];
 extern char welcome_version[];
 extern char widget_version[];
 extern char xevent_version[];
 extern char xeventhandlers_version[];
 extern char xinit_version[];
-extern char xpilot_version[];
-extern char xpmread_version[];
+extern char xpaint_version[];
 
 
 static void Check_client_versions(void)
@@ -289,6 +242,8 @@ static void Check_client_versions(void)
 	{ "caudio", caudio_version },
 	{ "checknames", checknames_version },
 	{ "client", client_version },
+	{ "clientcommand", clientcommand_version },
+	{ "clientrank", clientrank_version },
 	{ "colors", colors_version },
 	{ "config", config_version },
 	{ "configure", configure_version },
@@ -296,11 +251,13 @@ static void Check_client_versions(void)
 	{ "dbuff", dbuff_version },
 	{ "default", default_version },
 	{ "error", error_version },
+	{ "event", event_version },
 	{ "gfx2d", gfx2d_version },
 	{ "guimap", guimap_version },
 	{ "guiobjects", guiobjects_version },
 	{ "join", join_version },
 	{ "math", math_version },
+	{ "messages", messages_version },
 	{ "net", net_version },
 	{ "netclient", netclient_version },
 	{ "paint", paint_version },
@@ -312,19 +269,18 @@ static void Check_client_versions(void)
 	{ "portability", portability_version },
 	{ "query", query_version },
 	{ "record", record_version },
-	{ "shipshape_c", shipshape_c_version },
+	{ "shipshape", shipshape_version },
 	{ "socklib", socklib_version },
 	{ "talk", talk_version },
 	{ "talkmacros", talkmacros_version },
 	{ "textinterface", textinterface_version },
-	{ "texture", texture_version },
 	{ "welcome", welcome_version },
 	{ "widget", widget_version },
 	{ "xevent", xevent_version },
 	{ "xeventhandlers", xeventhandlers_version },
 	{ "xinit", xinit_version },
+	{ "xpaint", xpaint_version },
 	{ "xpilot", xpilot_version },
-	{ "xpmread", xpmread_version },
     };
     int			i;
     int			oops = 0;

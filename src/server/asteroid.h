@@ -1,5 +1,4 @@
-/* $Id: asteroid.h,v 5.4 2001/05/29 18:59:38 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-98 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -40,16 +39,16 @@
 /* maximum angle between asteroids produced by breaking */
 #define ASTEROID_DELTA_DIR	(RES / 8)
 /* lifetime of asteroid before breaking */
-#define ASTEROID_LIFE		(1000 * TIME_FACT)
+#define ASTEROID_LIFE		1000
 /* number of hits asteroid can take before breaking */
 #define ASTEROID_HITS(size)	(1 << ((size) - 1))
 /* fuel cost to lifetime reduction conversion */
 #define ASTEROID_FUEL_HIT(fuel, size)	(((fuel) * ASTEROID_LIFE) / \
-				(FUEL_SCALE_FACT * 25 * ASTEROID_HITS(size)))
+				(25.0 * ASTEROID_HITS(size)))
 /* initial speed of asteroid */
 #define ASTEROID_START_SPEED	(8 + rfrac() * 10)
 /* minimum distance asteroids start away from any player */
-#define ASTEROID_MIN_DIST	(5 * BLOCK_SZ)
+#define ASTEROID_MIN_DIST	(5 * BLOCK_CLICKS)
 /* radius of asteroid size n */
 #define ASTEROID_RADIUS(size)	((0.8 * SHIP_SZ * (size)) * CLICK)
 

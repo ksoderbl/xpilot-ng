@@ -1,5 +1,4 @@
-/* $Id: netclient.h,v 5.5 2002/01/18 22:34:25 kimiko Exp $
- *
+/*
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -33,9 +32,19 @@
 #define MIN_RECEIVE_WINDOW_SIZE		1
 #define MAX_RECEIVE_WINDOW_SIZE		4
 
-extern int	simulating;
-extern int	receive_window_size;
-extern long	last_loops;
+typedef struct {
+    int view_width;
+    int view_height;
+    int spark_rand;
+    int num_spark_colors;
+} display_t;
+
+extern char	 hostname[SOCK_HOSTNAME_LENGTH];
+extern int	 simulating;
+extern int	 receive_window_size;
+extern long	 last_loops;
+extern bool      packetMeasurement;
+extern display_t server_display; /* the servers idea about our display */
 
 int Net_setup(void);
 int Net_verify(char *real, char *nick, char *dpy, int my_team);
@@ -77,6 +86,7 @@ int Receive_fastshot(void);
 int Receive_ecm(void);
 int Receive_trans(void);
 int Receive_paused(void);
+int Receive_appearing(void);
 int Receive_radar(void);
 int Receive_fastradar(void);
 int Receive_damaged(void);
@@ -84,6 +94,7 @@ int Receive_leave(void);
 int Receive_war(void);
 int Receive_seek(void);
 int Receive_player(void);
+int Receive_team(void);
 int Receive_score(void);
 int Receive_score_object(void);
 int Receive_team_score(void);
@@ -99,17 +110,17 @@ int Receive_reply(int *replyto, int *result);
 int Send_ack(long rel_loops);
 int Send_keyboard(u_byte *);
 int Send_shape(char *);
-int Send_power(DFLOAT power);
-int Send_power_s(DFLOAT power_s);
-int Send_turnspeed(DFLOAT turnspeed);
-int Send_turnspeed_s(DFLOAT turnspeed_s);
-int Send_turnresistance(DFLOAT turnresistance);
-int Send_turnresistance_s(DFLOAT turnresistance_s);
+int Send_power(double pwr);
+int Send_power_s(double pwr_s);
+int Send_turnspeed(double turnspd);
+int Send_turnspeed_s(double turnspd_s);
+int Send_turnresistance(double turnres);
+int Send_turnresistance_s(double turnres_s);
 int Send_pointer_move(int movement);
 int Receive_audio(void);
 int Receive_talk_ack(void);
 int Send_talk(void);
-int Send_display(void);
+int Send_display(int width, int height, int sparks, int spark_colors);
 int Send_modifier_bank(int);
 int Net_talk(char *str);
 int Net_ask_for_motd(long offset, long maxlen);
@@ -117,7 +128,7 @@ int Receive_time_left(void);
 int Receive_eyes(void);
 int Receive_motd(void);
 int Receive_magic(void);
-int Send_audio_request(int onoff);
+int Send_audio_request(int on);
 int Send_fps_request(int fps);
 int Receive_loseitem(void);
 

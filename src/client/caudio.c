@@ -1,5 +1,4 @@
-/* $Id: caudio.c,v 5.3 2001/07/08 10:09:06 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -26,28 +25,13 @@
  * client audio
  */
 
+#include "xpclient.h"
+
+char caudio_version[] = VERSION;
+
 #ifdef SOUND
 
 #define	MAX_RANDOM_SOUNDS	6
-
-#define _CAUDIO_C_
-
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <errno.h>
-#include <sys/types.h>
-
-#include "version.h"
-#include "config.h"
-#include "const.h"
-#include "types.h"
-#include "audio.h"
-#include "client.h"
-#include "error.h"
-#include "commonproto.h"
-
-char caudio_version[] = VERSION;
 
 static int	audioEnabled;
 
@@ -177,11 +161,5 @@ int Handle_audio(int type, int volume)
 
     return 0;
 }
-
-#else
-
-#include "version.h"
-
-char caudio_version[] = VERSION;
 
 #endif /* SOUND */

@@ -1,5 +1,4 @@
-/* $Id: list.h,v 5.1 2001/05/14 19:28:45 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -22,8 +21,8 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef LIST_H_INCLUDED
-#define LIST_H_INCLUDED
+#ifndef LIST_H
+#define LIST_H
 
 /*
  * A double linked list similar to the STL list, but implemented in C.
@@ -64,7 +63,7 @@ list_iter_t	List_erase_range(list_t alist, list_iter_t first, list_iter_t last);
 
 /* insert a new element into the list at position
  * and return the new position or NULL on failure. */
-list_iter_t	List_insert(list_t alist, list_iter_t position, void *element);
+list_iter_t	List_insert(list_t alist, list_iter_t pos, void *element);
 
 /* remove the first element from the list and return a pointer to it. */
 void*		List_pop_front(list_t);

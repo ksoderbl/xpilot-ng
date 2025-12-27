@@ -1,5 +1,4 @@
-/* $Id: net.h,v 5.2 2001/06/02 21:02:14 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -79,7 +78,7 @@ typedef struct {
 
 extern int last_packet_of_frame;
 
-int Sockbuf_init(sockbuf_t *sbuf, sock_t *sock, int size, int state);
+int Sockbuf_init(sockbuf_t *sbuf, sock_t *sock, size_t size, int state);
 int Sockbuf_cleanup(sockbuf_t *sbuf);
 int Sockbuf_clear(sockbuf_t *sbuf);
 int Sockbuf_advance(sockbuf_t *sbuf, int len);
@@ -88,21 +87,8 @@ int Sockbuf_write(sockbuf_t *sbuf, char *buf, int len);
 int Sockbuf_read(sockbuf_t *sbuf);
 int Sockbuf_copy(sockbuf_t *dest, sockbuf_t *src, int len);
 
-#if !defined(STDVA)
-#   if defined(__STDC__) && !defined(__sun__) || defined(__cplusplus)
-#	define STDVA	1		/* has ANSI stdarg stuff */
-#   else
-#	define STDVA	0		/* nope, still the K&R way */
-#   endif
-#endif
-
-#if STDVA
-    int Packet_printf(sockbuf_t *, const char *fmt, ...);
-    int Packet_scanf(sockbuf_t *, const char *fmt, ...);
-#else
-    int Packet_printf();
-    int Packet_scanf();
-#endif
+int Packet_printf(sockbuf_t *, const char *fmt, ...);
+int Packet_scanf(sockbuf_t *, const char *fmt, ...);
 
 #endif
 

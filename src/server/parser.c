@@ -1,5 +1,4 @@
-/* $Id: parser.c,v 5.17 2001/11/30 11:47:19 bertg Exp $
- *
+/*
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -23,28 +22,7 @@
  */
 /* Original options parsing code contributed by Ted Lemon <mellon@ncd.com> */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <errno.h>
-#include <time.h>
-
-#ifdef _WINDOWS
-# include "NT/winServer.h"
-#endif
-
-#define SERVER
-#include "version.h"
-#include "config.h"
-#include "serverconst.h"
-#include "global.h"
-#include "proto.h"
-#include "defaults.h"
-#include "error.h"
-#include "portability.h"
-#include "checknames.h"
-#include "commonproto.h"
-
+#include "xpserver.h"
 
 char parser_version[] = VERSION;
 
@@ -93,7 +71,6 @@ static void Parse_help(char *progname)
 	       options[j].type == valString ? "<string>" :
 	       options[j].type == valIPos ? "<position>" :
 	       options[j].type == valSec ? "<seconds>" :
-	       options[j].type == valPerSec ? "<per-second>" :
 	       options[j].type == valList ? "<list>" :
 	       "");
 	for (str = options[j].helpLine; *str; str++) {
@@ -148,6 +125,7 @@ static void Parser_dump_options(char *progname)
     option_desc		*options;
     int			option_count;
 
+    (void)progname;
     options = Get_option_descs(&option_count);
 
     for (j = 0; j < option_count; j++) {
@@ -174,32 +152,27 @@ static void Parser_dump_flags(char *progname)
     int			option_count;
     char		msg[MSG_LEN];
 
+    (void)progname;
     options = Get_option_descs(&option_count);
 
     for (j = 0; j < option_count; j++) {
 	int len = strlen(options[j].name);
 	strlcpy(msg, "{", sizeof(msg));
-	if ((options[j].flags & OPT_COMMAND) != 0) {
+	if ((options[j].flags & OPT_COMMAND) != 0)
 	    strlcat(msg, "command, ", sizeof(msg));
-	}
-	if ((options[j].flags & OPT_PASSWORD) != 0) {
+	if ((options[j].flags & OPT_PASSWORD) != 0)
 	    strlcat(msg, "passwordfile, ", sizeof(msg));
-	}
-	if ((options[j].flags & OPT_DEFAULTS) != 0) {
+	if ((options[j].flags & OPT_DEFAULTS) != 0)
 	    strlcat(msg, "defaults, ", sizeof(msg));
-	}
-	if ((options[j].flags & OPT_MAP) != 0) {
+	if ((options[j].flags & OPT_MAP) != 0)
 	    strlcat(msg, "map, ", sizeof(msg));
-	}
-	if ((options[j].flags & OPT_VISIBLE) != 0) {
+	if ((options[j].flags & OPT_VISIBLE) != 0)
 	    strlcat(msg, "visible, ", sizeof(msg));
-	}
-	if ((strlen(msg) >= 2)) {
+	if ((strlen(msg) >= 2))
 	    msg[strlen(msg) - 2] = '\0';
-	}
 	strlcat(msg, "}", sizeof(msg));
 	xpprintf("%s:%*s%s\n", options[j].name,
-	       (len < 40) ? (40 - len) : 1, "", msg);
+		 (len < 40) ? (40 - len) : 1, "", msg);
     }
     xpprintf("\n");
 }
@@ -248,40 +221,31 @@ static void Parser_dump_all(char *progname)
  * This is called when a client requests
  * to see the current server parameter list.
  */
-int Parser_list_option(int *index, char *buf)
+int Parser_list_option(int *ind, char *buf)
 {
-    int			i = *index;
+    int			i = *ind;
     option_desc		*options;
     int			option_count;
 
     options = Get_option_descs(&option_count);
 
 
-    if (i < 0 || i >= option_count) {
+    if (i < 0 || i >= option_count)
 	return -1;
-    }
-    if (options[i].defaultValue == NULL) {
+    if (options[i].defaultValue == NULL)
 	return 0;
-    }
-    if ((options[i].flags & OPT_VISIBLE) == 0) {
+    if ((options[i].flags & OPT_VISIBLE) == 0)
 	return 0;
-    }
     switch (options[i].type) {
     case valInt:
-	sprintf(buf, "%s:%d", options[i].name,
-		*(int *)options[i].variable);
+	sprintf(buf, "%s:%d", options[i].name, *(int *)options[i].variable);
 	break;
     case valSec:
 	sprintf(buf, "%s:%d", options[i].name,
 		*(int *)options[i].variable / FPS);
 	break;
     case valReal:
-	sprintf(buf, "%s:%g", options[i].name,
-		*(DFLOAT *)options[i].variable);
-	break;
-    case valPerSec:
-	sprintf(buf, "%s:%g", options[i].name,
-		*(DFLOAT *)options[i].variable * FPS);
+	sprintf(buf, "%s:%g", options[i].name, *(double *)options[i].variable);
 	break;
     case valBool:
 	sprintf(buf, "%s:%s", options[i].name,
@@ -293,8 +257,7 @@ int Parser_list_option(int *index, char *buf)
 		((ipos *)options[i].variable)->y);
 	break;
     case valString:
-	sprintf(buf, "%s:%s", options[i].name,
-		*(char **)options[i].variable);
+	sprintf(buf, "%s:%s", options[i].name, *(char **)options[i].variable);
 	break;
     case valList:
 	{
@@ -306,12 +269,10 @@ int Parser_list_option(int *index, char *buf)
 		     iter != List_end(list);
 		     LI_FORWARD(iter)) {
 		    char *str = LI_DATA(iter);
-		    if (iter != List_begin(list)) {
+		    if (iter != List_begin(list))
 			strlcat(buf, ",", MSG_LEN);
-		    }
-		    if (strlcat(buf, str, MSG_LEN) >= MSG_LEN) {
+		    if (strlcat(buf, str, MSG_LEN) >= MSG_LEN)
 			break;
-		    }
 		}
 	    }
 	}
@@ -338,30 +299,30 @@ static bool Parse_check_info_request(char **argv, int i)
     if (strcmp(arg, "-help") == 0
 	|| strcmp(arg, "-h") == 0) {
 	Parse_help(*argv);
-	return TRUE;
+	return true;
     }
     if (strcmp(arg, "-dump") == 0) {
 	Parser_dump_all(*argv);
-	return TRUE;
+	return true;
     }
     if (strcmp(arg, "-dumpMan") == 0) {
 	Parser_dump_options(*argv);
-	return TRUE;
+	return true;
     }
     if (strcmp(arg, "-dumpWindows") == 0) {
 	Parser_dump_options(*argv);
-	return TRUE;
+	return true;
     }
     if (strcmp(arg, "-dumpFlags") == 0) {
 	Parser_dump_flags(*argv);
-	return TRUE;
+	return true;
     }
     if (strcmp(arg, "-version") == 0 || strcmp(arg, "-v") == 0) {
 	puts(TITLE);
-	return TRUE;
+	return true;
     }
 
-    return FALSE;
+    return false;
 }
 
 
@@ -382,70 +343,57 @@ bool Parser(int argc, char **argv)
     mapWidth = 0;
     mapHeight = 0;
 
-    if (Init_options() == FALSE) {
-	return FALSE;
-    }
+    if (Init_options() == false)
+	return false;
 
     for (i = 1; i < argc; i++) {
-	if (Parse_check_info_request(argv, i) == TRUE) {
-	    return FALSE;
-	}
+	if (Parse_check_info_request(argv, i) == true)
+	    return false;
 
 	if (argv[i][0] == '-' || argv[i][0] == '+') {
 	    desc = Find_option_by_name(argv[i] + 1);
 	    if (desc != NULL) {
 		if (desc->type == valBool) {
 		    const char *bool_value;
-		    if (argv[i][0] == '-') {
+		    if (argv[i][0] == '-')
 			bool_value = "true";
-		    }
-		    else {
+		    else
 			bool_value = "false";
-		    }
 		    Option_set_value(desc->name, bool_value, 1, OPT_COMMAND);
 		}
-		else if (desc->type == valVoid) {
-		}
+		else if (desc->type == valVoid)
+		    ;
 		else {
-		    if (i + 1 == argc) {
+		    if (i + 1 == argc)
 			warn("Option '%s' needs an argument", argv[i]);
-		    }
 		    else {
 			i++;
 			Option_set_value(desc->name, argv[i], 1, OPT_COMMAND);
 		    }
 		}
 	    }
-	    else {
+	    else
 		warn("Unknown option '%s'", argv[i]);
-	    }
 	}
-	else {
+	else
 	    warn("Unknown option '%s'", argv[i]);
-	}
     }
 
-#if 1 /* kps - ng wants this to be "if 0" */
     /*
      * Read local defaults file
      */
-    if ((fname = Option_get_value("defaultsFileName", NULL)) != NULL) {
+    if ((fname = Option_get_value("defaultsFileName", NULL)) != NULL)
 	parseDefaultsFile(fname);
-    }
-    else {
+    else
 	parseDefaultsFile(Conf_defaults_file_name());
-    }
-#endif
 
     /*
      * Read local password file
      */
-    if ((fname = Option_get_value("passwordFileName", NULL)) != NULL) {
+    if ((fname = Option_get_value("passwordFileName", NULL)) != NULL)
 	parsePasswordFile(fname);
-    }
-    else {
+    else
 	parsePasswordFile(Conf_password_file_name());
-    }
 
     /*
      * Read map file if map data not found yet.
@@ -457,17 +405,15 @@ bool Parser(int argc, char **argv)
 	if ((fname = Option_get_value("mapFileName", NULL)) != NULL) {
 	    if (strcasecmp(fname, "wild") && !parseMapFile(fname)) {
 		xpprintf("Unable to read %s, trying to open %s\n",
-			fname, Conf_default_map());
-		if (!parseMapFile(Conf_default_map())) {
+			 fname, Conf_default_map());
+		if (!parseMapFile(Conf_default_map()))
 		    xpprintf("Unable to read %s\n", Conf_default_map());
-		}
 	    }
 	} else {
 	    xpprintf("Map not specified, trying to open %s\n",
 		     Conf_default_map());
-	    if (!parseMapFile(Conf_default_map())) {
+	    if (!parseMapFile(Conf_default_map()))
 		xpprintf("Unable to read %s\n", Conf_default_map());
-	    }
 	}
     }
     /*
@@ -481,15 +427,6 @@ bool Parser(int argc, char **argv)
      * Construct the World structure from the options.
      */
     status = Grok_map();
-
-    if (!is_polygon_map) {
-	xpprintf("Converting blocks to polygons...\n");
-	Xpmap_blocks_to_polygons();
-	xpprintf("Done creating polygons.\n");
-	/* force treatBallAsPoint on */
-	treatBallAsPoint = true;
-	Ball_line_init();
-    }
 
     return status;
 }
@@ -507,67 +444,50 @@ bool Parser(int argc, char **argv)
 int Tune_option(char *name, char *val)
 {
     int			ival;
-    DFLOAT		fval;
+    double		fval;
     option_desc		*opt;
 
-    if (!(opt = Find_option_by_name(name))) {
+    if (!(opt = Find_option_by_name(name)))
 	return -2;	/* Variable not found */
-    }
 
-    if (opt->tuner == tuner_none) {
+    if (opt->tuner == tuner_none)
 	return -1;	/* Operation undefined */
-    }
 
     switch (opt->type) {
     case valInt:
-	if (Convert_string_to_int(val, &ival) != TRUE) {
+	if (Convert_string_to_int(val, &ival) != true)
 	    return 0;
-	}
 	*(int *)opt->variable = ival;
 	(*opt->tuner)();
 	return 1;
     case valBool:
-	if (ON(val)) {
+	if (ON(val))
 	    *(bool *)opt->variable = true;
-	}
-	else if (OFF(val)) {
+	else if (OFF(val))
 	    *(bool *)opt->variable = false;
-	}
-	else {
+	else
 	    return 0;
-	}
 	(*opt->tuner)();
 	return 1;
     case valReal:
-	if (Convert_string_to_float(val, &fval) != TRUE) {
+	if (Convert_string_to_float(val, &fval) != true)
 	    return 0;
-	}
-	*(DFLOAT *)opt->variable = fval;
+	*(double *)opt->variable = fval;
 	(*opt->tuner)();
 	return 1;
     case valSec:
-	if (Convert_string_to_int(val, &ival) != TRUE) {
+	if (Convert_string_to_int(val, &ival) != true)
 	    return 0;
-	}
 	*(int *)opt->variable = ival * FPS;
-	(*opt->tuner)();
-	return 1;
-    case valPerSec:
-	if (Convert_string_to_float(val, &fval) != TRUE) {
-	    return 0;
-	}
-	*(DFLOAT *)opt->variable = fval / FPS;
 	(*opt->tuner)();
 	return 1;
     case valString:
 	{
 	    char *s = xp_strdup(val);
-	    if (!s) {
+	    if (!s)
 		return 0;
-	    }
-	    if (*(char **)(opt->variable) != opt->defaultValue) {
+	    if (*(char **)(opt->variable) != opt->defaultValue)
 		free(*(char **)opt->variable);
-	    }
 	    *(char **)opt->variable = s;
 	    (*opt->tuner)();
 	    return 1;
@@ -582,32 +502,32 @@ int Get_option_value(const char *name, char *value, unsigned size)
 {
     option_desc		*opt;
 
-    if (size < 12) {
+    if (size < 12)
 	return -1;	/* Generic error. */
-    }
 
-    if (!(opt = Find_option_by_name(name))) {
+    if (!(opt = Find_option_by_name(name)))
 	return -2;	/* Variable not found */
-    }
+
+    if ((opt->flags & OPT_VISIBLE) == 0)
+	return -3;
 
     switch (opt->type) {
     case valInt:
 	sprintf(value, "%d", *((int *)opt->variable));
 	break;
     case valReal:
-	sprintf(value, "%g", *((DFLOAT *)opt->variable));
+	sprintf(value, "%g", *((double *)opt->variable));
 	break;
     case valBool:
 	sprintf(value, "%s", *((bool *)opt->variable) ? "true" : "false");
 	break;
     case valString:
+	if (*((char **)opt->variable) == NULL)
+	    return -4;
 	strlcpy(value, *((char **)opt->variable), size);
 	break;
     case valSec:
 	sprintf(value, "%d", *((int *)opt->variable) / FPS);
-	break;
-    case valPerSec:
-	sprintf(value, "%g", *((DFLOAT *)opt->variable) * FPS);
 	break;
     case valIPos:
 	sprintf(value, "%d, %d",
@@ -619,5 +539,3 @@ int Get_option_value(const char *name, char *value, unsigned size)
 
     return 1;	/* Success. */
 }
-
-

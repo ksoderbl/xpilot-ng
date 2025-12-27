@@ -1,5 +1,4 @@
-/* $Id: record.h,v 5.0 2001/04/07 20:00:58 dik Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -39,8 +38,8 @@ struct recordable_drawing {
     int (*drawLines)(Display *display, Drawable drawable, GC gc,
 		     XPoint *points, int npoints, int mode);
     int (*drawLine)(Display *display, Drawable drawable, GC gc,
-		    int x1, int y1,
-		    int x2, int y2);
+		    int x_1, int y_1,
+		    int x_2, int y_2);
     int (*drawRectangle)(Display *display, Drawable drawable, GC gc,
 			 int x, int y,
 			 unsigned int width, unsigned int height);
@@ -54,7 +53,7 @@ struct recordable_drawing {
     int (*fillPolygon)(Display *display, Drawable drawable, GC gc,
 			XPoint *points, int npoints,
 			int shape, int mode);
-    void (*paintItemSymbol)(unsigned char type, Drawable drawable, GC mygc,
+    void (*paintItemSymbol)(int type, Drawable drawable, GC mygc,
 			    int x, int y, int color);
     int (*fillRectangle)(Display *display, Drawable drawable, GC gc,
 			  int x, int y,
@@ -69,10 +68,10 @@ struct recordable_drawing {
 		     int dash_offset, const char *dash_list, int n);
 };
 
-extern struct recordable_drawing	rd;	/* external Drawing interface */
+extern struct recordable_drawing rd;	/* external Drawing interface */
 
-extern int		recording;	/* Are we recording or not. */
-
+extern bool recording;	/* Are we recording or not. */
+extern int recordFPS;	/* FPS to record. */
 
 long Record_size(void);
 void Record_toggle(void);

@@ -1,5 +1,4 @@
-/* $Id: debugaudio.c,v 5.1 2001/05/12 18:07:19 bertg Exp $
- *
+/* 
  * XPilot, a multiplayer gravity war game.  Copyright (C) 1991-2001 by
  *
  *      Bjørn Stabell        <bjoern@xpilot.org>
@@ -28,18 +27,11 @@
  * Hence this file to monitor what's going on.
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-
-#ifndef _WINDOWS
-# include <unistd.h>
-#endif
-
-#include "version.h"
-#include "audio.h"
+#include "xpclient.h"
 
 char audio_version[] = VERSION;
+
+#ifdef SOUND
 
 int audioDeviceInit(char *display)
 {
@@ -51,7 +43,7 @@ int audioDeviceInit(char *display)
 void audioDevicePlay(char *filename, int type, int volume, void **private)
 {
     printf("debug audio: play file %s, type %d, vol %d, priv %p\n",
-	    filename, type, volume, private);
+	    filename, type, volume, (void *)private);
 }
 
 void audioDeviceEvents(void)
@@ -59,3 +51,4 @@ void audioDeviceEvents(void)
     /* printf("debug audio: events\n"); */
 }
 
+#endif /* SOUND */
