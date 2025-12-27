@@ -76,6 +76,7 @@ extern struct options {
     bool	playerStartsShielded;
     bool	shotsWallBounce;
     bool	ballsWallBounce;
+    bool        ballCollisionDetaches;
     bool	ballCollisions;
     bool	ballSparkCollisions;
     bool	minesWallBounce;
@@ -94,6 +95,7 @@ extern struct options {
     double	maxUnshieldedWallBounceSpeed;
     int		playerWallBounceType;
     double	playerWallBounceBrakeFactor;
+    double	playerBallBounceBrakeFactor;
     double	playerWallFriction;
     double	objectWallBounceBrakeFactor;
     double	objectWallBounceLifeFactor;

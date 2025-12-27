@@ -42,7 +42,7 @@
     slouken@libsdl.org
 */
 
-/* $Id: text.c,v 1.32 2005/05/03 17:36:15 maximan Exp $ */
+/* $Id: text.c,v 1.36 2005/09/08 11:09:05 maximan Exp $ */
 /* modified for xpilot by Erik Andersson deity_at_home.se */
 
 #ifdef _WINDOWS
@@ -415,6 +415,7 @@ bool render_text(font_data *ft_font, const char *text, string_tex_t *string_tex)
 	    
 	    Arraylist_add(string_tex->tex_list,&tex);
 	}
+	SDL_FreeSurface(string_glyph);
     } else {
     	printf("TTF_RenderText_Blended failed for [%s]\n",text);
 	return false;
@@ -518,11 +519,10 @@ void free_string_texture(string_tex_t *string_tex)
 	    	tex = *((tex_t *)Arraylist_get(string_tex->tex_list,i));
 		glDeleteTextures(1,&(tex.texture));
 	    }
-	    free(string_tex->tex_list);
+	    Arraylist_free(string_tex->tex_list);
 	    string_tex->tex_list = NULL;
 	}
-	if (string_tex->text) free(string_tex->text);
-	string_tex->text = NULL;
+	XFREE(string_tex->text);
     }
 }
 

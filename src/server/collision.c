@@ -641,7 +641,7 @@ static void Player_collides_with_ball(player_t *pl, ballobject_t *ball)
      * shields up, or die with shields down.  The treasure may
      * be destroyed.
      */
-    Delta_mv(OBJ_PTR(pl), OBJ_PTR(ball));
+    
     if (!Player_uses_emergency_shield(pl))
 	Player_add_fuel(pl, ED_BALL_HIT);
 
@@ -649,26 +649,60 @@ static void Player_collides_with_ball(player_t *pl, ballobject_t *ball)
 	if (BIT(world->rules->mode, TEAM_PLAY)
 	    && pl->team == ball->ball_treasure->team)
 	    Rank_saved_ball(pl);
+	Delta_mv(OBJ_PTR(pl), OBJ_PTR(ball));
 	ball->life = 0;
+    }
+    
+    if (options.treasureCollisionMayKill && !BIT(pl->used, HAS_SHIELD) ){
+	if(Player_has_armor(pl))
+	    Player_hit_armor(pl);
+	else{
+	    Delta_mv(OBJ_PTR(pl), OBJ_PTR(ball));
+	    pl->fuel.sum=0;
+		}
     }
 
     if (pl->fuel.sum > 0) {
-	if (!options.treasureCollisionMayKill
-	    || BIT(pl->used, HAS_SHIELD)){
-	    if(!options.treasureCollisionDestroys)
-		Obj_repel(OBJ_PTR(ball), OBJ_PTR(pl), 
-			  ( ball->pl_radius + SHIP_SZ) * 1.3 *CLICK);
+	if(ball->fuse > 0){
+	    ball->fuse+=timeStep;
 	    return;
 	}
-	if (!BIT(pl->used, HAS_SHIELD)
-	    && Player_has_armor(pl)) {
-	    if(!options.treasureCollisionDestroys)
-		Obj_repel(OBJ_PTR(ball), OBJ_PTR(pl), 
-			  ( ball->pl_radius + SHIP_SZ) * 1.3 * CLICK);
-	    Player_hit_armor(pl);
-	    return;
+	Delta_mv_partly_elastic(OBJ_PTR(ball),
+				OBJ_PTR(pl),
+				options.playerBallBounceBrakeFactor);
+	/* KHS <evil hack on> */
+	/* this stops the ball from penetrating the player in most cases */
+	if(pl->collmode < 3 && ball->collmode < 3){ 
+	    /* cannot do this hack after a wallbounce */
+	    pl->pos=pl->prevpos;
+	    ball->pos=ball->prevpos;
+	    Move_player(pl);
+	    Move_object(OBJ_PTR(ball));
 	}
+	/* KHS </evil hack> */
+	ball->fuse = timeStep;
+	/* ball was "touched", so set owner, and mark it as loose */
+
+		    /* this is only the team of the owner of the ball,
+		     * not the team the ball belongs to. the latter is
+		     * found through the ball's treasure */
+		    ball->team = pl->team;
+		    if (ball->ball_treasure->have){
+			ball->ball_loose_ticks = 0;
+			ball->ball_treasure->have = false;
+			SET_BIT(ball->obj_status, GRAVITY);
+		    }
+		    if (ball->id == NO_ID)
+			ball->ball_owner = pl->id;
+		    else if (options.ballCollisionDetaches) {
+			Detach_ball(Player_by_id(ball->id), ball);
+			ball->ball_owner = pl->id;
+		    }
+		    sound_play_sensors(pl->pos, ASTEROID_HIT_SOUND);
+	return;
     }
+
+    /* Player has died */
     if (ball->ball_owner == NO_ID) {
 	Set_message_f("%s was killed by a ball.", pl->name);
 	Handle_Scoring(SCORE_BALL_KILL,NULL,pl,NULL,NULL);
@@ -1324,9 +1358,10 @@ static void BallCollision(void)
      * some are handled by other code,
      * some don't interact.
      */
-    ignored_object_types = OBJ_PLAYER | OBJ_ASTEROID | OBJ_MINE | OBJ_ITEM;
+    ignored_object_types = OBJ_PLAYER_BIT 
+	| OBJ_ASTEROID_BIT | OBJ_MINE_BIT | OBJ_ITEM_BIT;
     if (!options.ballSparkCollisions)
-	ignored_object_types |= OBJ_SPARK;
+	ignored_object_types |= OBJ_SPARK_BIT;
 
     for (i = 0; i < NumObjs; i++) {
 	ball = BALL_IND(i);
@@ -1407,7 +1442,9 @@ static void BallCollision(void)
 		    obj->life  = 0.0;
 		} else
 		    /* they bounce */
-		    Obj_repel(OBJ_PTR(ball), obj, radius);
+		    Delta_mv_partly_elastic(OBJ_PTR(ball),
+					    obj,
+					    options.playerBallBounceBrakeFactor);
 		break;
 
 	    /* balls absorb and destroy all other objects: */

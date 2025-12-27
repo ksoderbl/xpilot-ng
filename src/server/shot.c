@@ -67,7 +67,12 @@ void Place_mine(player_t *pl)
 	return;
     }
 
-    Place_general_mine(pl->id, pl->team, GRAVITY, pl->pos, zero_vel, pl->mods);
+    /*
+     * Dropped mines are immune to gravity. The latest theory is that mines
+     * contain some sort of anti-gravity device. An even later theory
+     * claims that they are anchored to space the same way as the walls are.
+     */
+    Place_general_mine(pl->id, pl->team, 0, pl->pos, zero_vel, pl->mods);
 }
 
 

@@ -34,8 +34,10 @@ class RecordingsPanel(html.HtmlWindow):
 class MenuPanel(wx.Panel):
 	def __init__(self, parent, items):
 		wx.Panel.__init__(self, parent)
+		self.SetBackgroundColour(wx.BLACK)
 		self.frame = parent
 		p = wx.Panel(self)
+		p.SetBackgroundColour(wx.BLACK)
 		s = wx.BoxSizer(wx.VERTICAL)
 		p.SetSizer(s)
 		items.insert(0, ())
@@ -59,14 +61,17 @@ class MenuPanel(wx.Panel):
 		s.Add(self.makeBottomPanel(), 0, wx.EXPAND, 0)	
 	def makeBottomPanel(self):
 		p = wx.Panel(self)
+		p.SetBackgroundColour(wx.BLACK)
 		s = wx.FlexGridSizer(1, 3)
 		s.Add(wx.StaticBitmap(
-				p, -1, wx.Bitmap("swgrid.png", wx.BITMAP_TYPE_ANY)),
-			  0, 0, 0)
+			p, -1,
+			wx.Bitmap(os.path.join(config.png_path, "swgrid.png"),
+			wx.BITMAP_TYPE_ANY)), 0, 0, 0)
 		s.Add((0,0), 0, 0, 0)
 		s.Add(wx.StaticBitmap(
-				p, -1, wx.Bitmap("segrid.png", wx.BITMAP_TYPE_ANY)), 
-			  0, 0, 0)
+			p, -1,
+			wx.Bitmap(os.path.join(config.png_path, "segrid.png"),
+			wx.BITMAP_TYPE_ANY)), 0, 0, 0)
 		s.AddGrowableCol(1);
 		p.SetSizer(s)
 		return p
@@ -75,10 +80,17 @@ class MenuPanel(wx.Panel):
 
 class  MapEditorMenu(MenuPanel):
 	def __init__(self, parent):
-		MenuPanel.__init__(self, parent,
-						   [ ("  Polygon map editor  ", self.onPoly),
-							 ("Block map editor", self.onBlock),
-							 ])
+		b = []
+		if config.javaws:
+			b.append(("  Polygon map editor  ", self.onPoly))
+		if config.mapedit:
+			b.append(("Block map editor", self.onBlock))
+		if b:
+			MenuPanel.__init__(self, parent, b)
+		else:
+			# FIXME: raise some error; we shouldn't even create this menu if
+			# we have nothing to put in it
+			pass
 	def onPoly(self, evt):
 		xputil.Process(self, (config.javaws, config.jxpmap_url)).run()
 	def onBlock(self, evt):
@@ -86,12 +98,19 @@ class  MapEditorMenu(MenuPanel):
 
 class ToolsMenu(MenuPanel):
 	def __init__(self, parent):
-		MenuPanel.__init__(self, parent,
-						   [ ("  Client configuration  ", self.onClientConfig),
-							 ("XP-Replay", self.onXPReplay),
-							 ("Recordings", self.onRecordings),
-							 ("Map editor", self.onMapEditor),
-							 ])
+		b = []
+                if config.client:
+		        b.append(("  Client configuration  ", self.onClientConfig))
+		if config.xpreplay:
+			b.append(("XP-Replay", self.onXPReplay))
+			b.append(("Recordings", self.onRecordings))
+		if config.mapedit and config.javaws:
+			b.append(("Map editor", self.onMapEditor))
+		elif config.mapedit:
+			b.append(("Block map editor", self.onBlock))
+		elif config.javaws:
+			b.append(("Polygon map editor", self.onPoly))
+		MenuPanel.__init__(self, parent, b)
 	def onMapEditor(self, evt):
 		self.show(MapEditorMenu(self.frame))
 	def onRecordings(self, evt):
@@ -105,17 +124,24 @@ class ToolsMenu(MenuPanel):
 	def onClientConfig(self, evt):
 		self.show(options.ClientOptionsPanel(
 				self.frame, config.client, config.xpilotrc))
+	def onPoly(self, evt):
+		xputil.Process(self, (config.javaws, config.jxpmap_url)).run()
+	def onBlock(self, evt):
+		xputil.Process(self, (config.mapedit,)).run()
 
 class MainMenu(MenuPanel):
 	def __init__(self, parent):
-		MenuPanel.__init__(self, parent,
-						   [ ("    Internet servers    ", self.onInternet), 
-							 ("Start server", self.onStart),
-							 (),
-							 ("Tools", self.onTools),
-							 ("Support and Chat", self.onChat),
-							 ("Quit", self.onQuit),
-							 ])
+		b = []
+		b.append(("    Internet servers    ", self.onInternet))
+		if config.server:
+			b.append(("Start server", self.onStart))
+                if config.client or config.xpreplay or config.mapedit or config.javaws:
+		        b.append(("Tools", self.onTools))
+		b.append(("Support and Chat", self.onChat))
+# FIXME: This should be a fullscreen widget in the corner instead.
+#		b.append(("Windowed", self.onWindowed))
+		b.append(("Quit", self.onQuit))
+		MenuPanel.__init__(self, parent, b)
 	def onInternet(self, evt):
 		meta = metaui.Panel(self.frame,
 							config.meta,
@@ -135,13 +161,23 @@ class MainMenu(MenuPanel):
 	def onChat(self, evt):
 		self.show(ircui.IrcPanel(self.frame, config.irc_server, get_nick(), 
 								 config.irc_channel))
+	def onWindowed(self, evt):
+		# FIXME: assert self.frame.fullscreen=True
+		# FIXME: remove "Windowed" button & replace with "Fullscreen"
+		self.frame.ShowFullScreen(False)
+		self.frame.fullscreen=False
+	def onFullscreen(self, evt):
+		# FIXME: assert self.frame.fullscreen=False
+		# FIXME: remove "Fullscreen" button & replace with "Windowed"
+		self.frame.ShowFullScreen(True)
+		self.frame.fullscreen=True
 
 class MainFrame(wx.Frame):
 	def __init__(self, *args, **kwds):
 		kwds["style"] = wx.DEFAULT_FRAME_STYLE
 		wx.Frame.__init__(self, *args, **kwds)
 		self.SetSize((800, 650))
-		self.SetBackgroundColour(wx.Colour(0, 0, 0))
+		self.SetBackgroundColour(wx.BLACK)
 		s = wx.BoxSizer(wx.VERTICAL)
 		s.Add(self.makeTopPanel(), 0, wx.EXPAND, 0)
 		self.SetAutoLayout(True)
@@ -149,6 +185,7 @@ class MainFrame(wx.Frame):
 		self.history = []
 		self.contentPanel = None
 		self.setContentPanel(MainMenu(self))
+		self.fullscreen = None
 	def setContentPanel(self, p):
 		if self.contentPanel:
 			self.GetSizer().Detach(self.contentPanel)
@@ -162,18 +199,22 @@ class MainFrame(wx.Frame):
 		self.Layout()
 	def makeTopPanel(self):
 		p = wx.Panel(self)
+		p.SetBackgroundColour(wx.BLACK)
 		s = wx.FlexGridSizer(1, 5)
 		s.Add(wx.StaticBitmap(
-				p, -1, wx.Bitmap("nwgrid.png", wx.BITMAP_TYPE_ANY)),
-			  0, 0, 0)
+			p, -1,
+			wx.Bitmap(os.path.join(config.png_path, "nwgrid.png"),wx.BITMAP_TYPE_ANY)),
+			0, 0, 0)
 		s.Add((0,0), 0, 0, 0)
 		s.Add(wx.StaticBitmap(
-				p, -1, wx.Bitmap("logo.png", wx.BITMAP_TYPE_ANY)),
-			  0, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 1)
+			p, -1,
+			wx.Bitmap(os.path.join(config.png_path, "logo.png"),wx.BITMAP_TYPE_ANY)),
+			0, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 1)
 		s.Add((0,0), 0, 0, 0)
 		s.Add(wx.StaticBitmap(
-				p, -1, wx.Bitmap("negrid.png", wx.BITMAP_TYPE_ANY)), 
-			  0, 0, 0)
+			p, -1,
+			wx.Bitmap(os.path.join(config.png_path, "negrid.png"), wx.BITMAP_TYPE_ANY)), 
+			0, 0, 0)
 		s.AddGrowableCol(1);
 		s.AddGrowableCol(3);
 		p.SetSizer(s)
@@ -203,6 +244,10 @@ class App(wx.App):
 		frame = MainFrame(None, -1, "XPilot NG Control Center")
 		self.SetTopWindow(frame)
 		frame.Show(True)
+# FIXME: We can only default to fullscreen when we support switching back
+#        and forth between fullscreen & windowed.
+#		frame.fullscreen=True
+#		frame.ShowFullScreen(True)
 		return True
 
 def main():

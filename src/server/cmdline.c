@@ -685,6 +685,16 @@ static option_desc opts[] = {
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
+	"ballCollisionDetaches",
+	"ballHitDetaches",
+	"false",
+	&options.ballCollisionDetaches,
+	valBool,
+	tuner_dummy,
+	"Does a ball get freed by a collision with a player?\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
 	"ballCollisions",
 	"ballCollisions",
 	"false",
@@ -860,6 +870,17 @@ static option_desc opts[] = {
 	Move_init,
 	"Factor to slow down ship in direction perpendicular to the wall\n"
 	"when a wall is hit (0 to 1).\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
+	"playerBallBounceBrakeFactor",
+	"playerBallBrake",
+	"0.7",
+	&options.playerBallBounceBrakeFactor,
+	valReal,
+	Move_init,
+	"Elastic or inelastic properties of the player-ball collision\n"
+	"1 means fully elastic, 0 fully inelastic.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {

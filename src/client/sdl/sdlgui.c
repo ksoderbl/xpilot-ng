@@ -502,10 +502,10 @@ void Gui_paint_base(int x, int y, int id, int team, int type)
 
     switch (type) {
     case SETUP_BASE_UP:
-	mapnprint(&mapfont,color,CENTER,DOWN ,(x)    	    	,(y - BLOCK_SZ / 2),maxCharsInNames,"%s",other->nick_name);
+	mapnprint(&mapfont,color,CENTER,DOWN ,(x) ,(y - BLOCK_SZ / 2),maxCharsInNames,"%s",other->nick_name);
         break;
     case SETUP_BASE_DOWN:
-	mapnprint(&mapfont,color,CENTER,UP   ,(x)    	    	,(int)(y + BLOCK_SZ / 1.5),maxCharsInNames,"%s",other->nick_name);
+	mapnprint(&mapfont,color,CENTER,UP   ,(x) ,(int)(y + BLOCK_SZ / 1.5),maxCharsInNames,"%s",other->nick_name);
         break;
     case SETUP_BASE_LEFT:
 	mapnprint(&mapfont,color,RIGHT,UP    ,(x + BLOCK_SZ / 2) ,(y),maxCharsInNames,"%s",other->nick_name);
@@ -714,17 +714,17 @@ void Gui_paint_setup_left_grav(int x, int y)
 
 void Gui_paint_setup_worm(int x, int y)
 {
-    Image_paint(IMG_WORMHOLE, x, y, loopsSlow % 8, whiteRGBA);
+    Image_paint_rotated(IMG_WORMHOLE, x, y, (loopsSlow << 3) % TABLE_SIZE, whiteRGBA);
 }
 
 void Gui_paint_setup_item_concentrator(int x, int y)
 {
-    Image_paint(IMG_CONCENTRATOR, x, y, loopsSlow % 32, whiteRGBA);
+    Image_paint_rotated(IMG_CONCENTRATOR, x, y, (loopsSlow << 3) % TABLE_SIZE, whiteRGBA);
 }
 
 void Gui_paint_setup_asteroid_concentrator(int x, int y)
 {
-    Image_paint(IMG_ASTEROIDCONC, x, y, loopsSlow % 32, whiteRGBA);
+    Image_paint_rotated(IMG_ASTEROIDCONC, x, y, (loopsSlow << 4) % TABLE_SIZE, whiteRGBA);
 }
 
 void Gui_paint_decor_dot(int x, int y, int size)
@@ -1027,7 +1027,7 @@ void Gui_paint_asteroid(int x, int y, int type, int rot, int size)
     glPushMatrix();
     glTranslatef((GLfloat)x, (GLfloat)y, 0.0);
     glScalef(real_size, real_size, 1.0);
-    glRotatef(360.0 * rot / 128,
+    glRotatef(360.0 * rot / TABLE_SIZE,
 	   (type & 1) - 0.5,
 	   (type & 2) - 1,
 	   (type & 4) - 2);
@@ -1071,7 +1071,7 @@ void Gui_paint_missiles_end(void)
 
 void Gui_paint_missile(int x, int y, int len, int dir)
 {
-    Image_paint(IMG_MISSILE, x - 16, y - 16, dir/4, whiteRGBA);
+    Image_paint_rotated(IMG_MISSILE, x - 16, y - 16, dir, whiteRGBA);
 }
 
 void Gui_paint_lasers_begin(void)
@@ -1393,10 +1393,8 @@ void Gui_paint_ship(int x, int y, int dir, int id, int cloak, int phased,
     	    } else {
 			img = IMG_SHIP_SELF;
     	    }
-    	    if (cloak || phased ) {
-	    	color = (color & 0xffffff00) + ((color & 0x000000ff)/2);
-	    }
-	    Image_paint(img, x - 16, y - 16, dir>>1, color);
+    	    if (cloak || phased) Image_paint_rotated(img, x, y, dir, (color & 0xffffff00) + ((color & 0x000000ff)/2));
+	    else Image_paint_rotated(img, x, y, dir, color);
 	} else {
     	    glEnable(GL_BLEND);
     	    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -1468,8 +1466,8 @@ void Paint_select(void)
     if(!select_bounds) return;
     set_alphacolor(selectionColorRGBA);
     glBegin(GL_LINE_LOOP);
-    	glVertex2i(select_bounds->x 	    	    	,select_bounds->y);
-    	glVertex2i(select_bounds->x + select_bounds->w	,select_bounds->y);
+    	glVertex2i(select_bounds->x 	    	    	,select_bounds->y   	    	    );
+    	glVertex2i(select_bounds->x + select_bounds->w	,select_bounds->y   	    	    );
     	glVertex2i(select_bounds->x + select_bounds->w	,select_bounds->y + select_bounds->h);
     	glVertex2i(select_bounds->x 	    	    	,select_bounds->y + select_bounds->h);
     glEnd();
@@ -1546,7 +1544,6 @@ static void Paint_meter(int xoff, int y, string_tex_t *tex, int val, int max,
     if (!meterBorderColorRGBA)
 	color = meter_color;
 
-    /*HUDprint(&gamefont,color,x_alignment,UP,xstr,draw_height - y - meterHeight,"%s",title);*/
     disp_text(tex,color,x_alignment,CENTER,xstr,draw_height - y - meterHeight/2,true);
 }
 

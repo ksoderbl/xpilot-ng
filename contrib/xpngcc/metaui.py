@@ -7,6 +7,7 @@ import wx.lib.mixins.listctrl as listmix
 import socket
 import StringIO
 from string import atoi
+import config
 
 def fetch(meta):
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -76,17 +77,36 @@ class Panel(wx.Panel):
 		self.detailList.Layout()
 		self.playerList = AutoSizeListCtrl(self, -1)
 		self.playerList.InsertColumn(0, "Players")
+		box0 = wx.BoxSizer(wx.HORIZONTAL)
+		# FIXME: add a "mute" checkbox to box0
+		if (config.client_sdl and config.client_x11):
+			self.joinclient = wx.RadioBox(self, label="Client", 
+				choices=["Modern", "Classic"])
+                        if config.client == config.client_x11:
+                                self.joinclient.SetSelection(1)
+                        self.client.prog = config.client
+			self.Bind(wx.EVT_RADIOBOX, self.OnJoinClient, self.joinclient)
+			box0.Add(self.joinclient, 0, wx.ALL)
+		elif config.client_sdl:
+			self.client.prog = config.client = config.client_sdl
+		else:
+			self.client.prog = config.client = config.client_x11
 		refresh = wx.Button(self, -1, "Refresh")
 		self.Bind(wx.EVT_BUTTON, self.OnRefresh, refresh)
-		join = wx.Button(self, -1, "Join")
-		self.Bind(wx.EVT_BUTTON, self.OnJoin, join)
 		box1 = wx.BoxSizer(wx.HORIZONTAL)
-		box1.Add(join, 0, wx.ALL, 5)
-		box1.Add((5,0))
+		if config.client:
+			join = wx.Button(self, -1, "Join")
+			self.Bind(wx.EVT_BUTTON, self.OnJoin, join)
+			box1.Add(join, 0, wx.ALL, 5)
+			box1.Add((5,0))
+		else:
+			box1.Add((100,0))
 		box1.Add(refresh, 0, wx.ALL, 5)
 		box2 = wx.BoxSizer(wx.VERTICAL)
 		box2.Add(self.detailList, 2, wx.EXPAND)
 		box2.Add(self.playerList, 1, wx.EXPAND)
+		box2.Add((1, 5))
+		box2.Add(box0)
 		box2.Add((1, 5))
 		box2.Add(box1)
 		box3 = wx.BoxSizer(wx.HORIZONTAL)
@@ -112,6 +132,13 @@ class Panel(wx.Panel):
 		self.serverList.SetItemState(0, wx.LIST_STATE_SELECTED, 
 									 wx.LIST_STATE_SELECTED )
 		self.Layout()
+
+	def OnJoinClient(self, evt):
+		preferredClientString = self.joinclient.GetStringSelection()
+		if preferredClientString == 'Modern':
+			self.client.prog = config.client = config.client_sdl
+		else:
+			self.client.prog = config.client = config.client_x11
 
 	def OnSelect(self, evt):
 		s = self.servers[evt.GetIndex()]
