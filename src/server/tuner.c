@@ -159,8 +159,8 @@ void tuner_teamcannons(void)
 
     if (teamCannons) {
 	for (i = 0; i < World.NumCannons; i++) {
-	    team = Find_closest_team(World.cannon[i].blk_pos.x,
-				     World.cannon[i].blk_pos.y);
+	    team = Find_closest_team(World.cannon[i].clk_pos.x,
+				     World.cannon[i].clk_pos.y);
 	    if (team == TEAM_NOT_SET) {
 		error("Couldn't find a matching team for the cannon.");
 	    }
@@ -238,9 +238,8 @@ void tuner_minelife(void)
 	    continue;
 
 	if (!BIT(Obj[i]->status, FROMCANNON)) {
-	    life =
-		(mineLife ? mineLife : MINE_LIFETIME) / (Obj[i]->mods.mini +
-							 1);
+	    life = (mineLife ? mineLife * TIME_FACT : MINE_LIFETIME)
+		/ (Obj[i]->mods.mini + 1);
 
 	    Obj[i]->life = (int)(rfrac() * life);
 	    /* We wouldn't want all the mines
@@ -264,9 +263,8 @@ void tuner_missilelife(void)
 	    continue;
 
 	if (!BIT(Obj[i]->status, FROMCANNON)) {
-	    life =
-		(mineLife ? mineLife : MISSILE_LIFETIME) / (Obj[i]->mods.mini +
-							    1);
+	    life = (missileLife ? missileLife * TIME_FACT : MISSILE_LIFETIME)
+		/ (Obj[i]->mods.mini + 1);
 
 	    Obj[i]->life = (int)(rfrac() * life);
 	    /* Maybe all the missiles are full

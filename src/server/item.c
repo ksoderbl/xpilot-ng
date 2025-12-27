@@ -249,16 +249,16 @@ void Place_item(int item, int ind)
 	    cy -= World.cheight;
 	bx = cx / BLOCK_CLICKS;
 	by = cy / BLOCK_CLICKS;
-	/* kps - change this */
-#if 1
-	if (!BIT(1U << World.block[bx][by], SPACE_BLOCKS)) {
-	    return;
+
+	if (!is_polygon_map) {
+	    if (!BIT(1U << World.block[bx][by], SPACE_BLOCKS)) {
+		return;
+	    }
+	} else {
+	    if (is_inside(cx, cy, NOTEAM_BIT | NONBALL_BIT) != -1)
+		return;
 	}
-#else
-	/* ng */
-	if (is_inside(cx, cy, NOTEAM_BIT | NONBALL_BIT) != -1)
- 	    return;
-#endif
+
     } else {
 	if (rfrac() < movingItemProb) {
 	    grav = GRAVITY;
@@ -308,16 +308,15 @@ void Place_item(int item, int ind)
 		bx = cx / BLOCK_CLICKS;
 		by = cy / BLOCK_CLICKS;
 	    }
-#if 1
-	    /* kps - old */
-	    if (BIT(1U << World.block[bx][by], SPACE_BLOCKS|CANNON_BIT)) {
-		break;
+
+	    if (!is_polygon_map) {
+		if (BIT(1U << World.block[bx][by], SPACE_BLOCKS|CANNON_BIT)) {
+		    break;
+		}
+	    } else {
+		if (is_inside(cx, cy, NOTEAM_BIT | NONBALL_BIT) == -1)
+		    break;
 	    }
-#else
-	    /* kps - ng */
-	    if (is_inside(cx, cy, NOTEAM_BIT | NONBALL_BIT) == -1)
-		break;
-#endif
 	}
     }
     vx = vy = 0;
@@ -384,9 +383,7 @@ void Make_item(int cx, int cy,
     obj->acc.x =
     obj->acc.y = 0.0;
     obj->mass = 10.0;
-    /* kps - use TIME_FACT */
-    obj->life = 1500 + (int)(rfrac() * 512);
-    /*obj->life = 1500 * TIME_FACT + (int)(rfrac() * 512 * TIME_FACT);*/
+    obj->life = 1500 * TIME_FACT + (int)(rfrac() * 512 * TIME_FACT);
     obj->count = num_per_pack;
     obj->pl_range = ITEM_SIZE/2;
     obj->pl_radius = ITEM_SIZE/2;
@@ -574,12 +571,16 @@ void General_tractor_beam(int ind, int cx, int cy,
 void Do_deflector(int ind)
 {
     player	*pl = Players[ind];
-    DFLOAT	range = (pl->item[ITEM_DEFLECTOR] * 0.5 + 1) * BLOCK_SZ;
+    DFLOAT	range = (pl->item[ITEM_DEFLECTOR] * 0.5 + 1) * BLOCK_CLICKS;
     DFLOAT	maxforce = pl->item[ITEM_DEFLECTOR] * 0.2;
     object	*obj, **obj_list;
     int		i, obj_count;
-    long	dist, dx, dy;
+    int		dx, dy;
+    DFLOAT	dist;
 
+#if 0
+    /* kps - this is removed here because uau wants to do this in another place
+     */
     if (pl->fuel.sum < -ED_DEFLECTOR) {
 	if (BIT(pl->used, HAS_DEFLECTOR)) {
 	    Deflector(ind, false);
@@ -587,9 +588,10 @@ void Do_deflector(int ind)
 	return;
     }
     Add_fuel(&(pl->fuel), (long)ED_DEFLECTOR);
+#endif
 
     Cell_get_objects(OBJ_X_IN_BLOCKS(pl), OBJ_Y_IN_BLOCKS(pl),
-		     (int)(range / BLOCK_SZ + 1), 200,
+		     (int)(range / BLOCK_CLICKS + 1), 200,
 		     &obj_list, &obj_count);
     
     for (i = 0; i < obj_count; i++) {
@@ -600,7 +602,8 @@ void Do_deflector(int ind)
 
 	if (obj->id == pl->id) {
 	    if (BIT(obj->status, OWNERIMMUNE)
-		|| obj->fuselife < obj->life
+		/*|| obj->fuselife < obj->life*/
+		|| frame_loops < obj->fuseframe
 		|| selfImmunity)
 		continue;
 	} else {
@@ -613,12 +616,11 @@ void Do_deflector(int ind)
 	    && !BIT(obj->status, GRAVITY))
 	    continue;
 
-	dx = (obj->pos.px - pl->pos.px);
-	dy = (obj->pos.py - pl->pos.py);
-	dx = WRAP_DX(dx);
-	dy = WRAP_DY(dy);
-	
-	dist = (long)(LENGTH(dx, dy) - SHIP_SZ);
+	dx = CENTER_XCLICK(obj->pos.cx - pl->pos.cx);
+	dy = CENTER_YCLICK(obj->pos.cy - pl->pos.cy);
+
+	/* kps - 4.3.1X had some nice code here, consider using it ? */
+	dist = (DFLOAT)(LENGTH(dx, dy) - PIXEL_TO_CLICK(SHIP_SZ));
 	if (dist < range
 	    && dist > 0) {
 	    int dir = (int)findDir(dx, dy);
@@ -1093,7 +1095,7 @@ void Fire_general_ecm(int ind, unsigned short team, int cx, int cy)
 		mine->life = 0;
 		break;
 	    }
-	    mine->count = ((int)(8*(1-range)) + 2) * FPS;
+	    mine->count = ((int)(8*(1-range)) + 2) * 12;
 	    if (   !BIT(mine->status, CONFUSED)
 		&& (closest_mine == NULL || range < closest_mine_range)) {
 		closest_mine = mine;

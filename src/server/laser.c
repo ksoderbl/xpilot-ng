@@ -59,7 +59,7 @@ char laser_version[] = VERSION;
  */
 typedef struct victim {
     int			ind;		/* player index */
-    position		pos;		/* current player position */
+    cpos		pos;		/* current player position */
     DFLOAT		prev_dist;	/* distance at previous sample */
 } victim_t;
 
@@ -120,12 +120,12 @@ static void Laser_pulse_destroy_all(void)
 static void Laser_pulse_find_victims(
 	vicbuf_t *vicbuf, 
 	pulse_t *pulse,
-	DFLOAT midx,
-	DFLOAT midy)
+	int midcx,
+	int midcy)
 {
     int		i;
     player	*vic;
-    DFLOAT	dist;
+    int		dist;
 
     vicbuf->num_vic = 0;
     for (i = 0; i < NumPlayers; i++) {
@@ -159,9 +159,9 @@ static void Laser_pulse_find_victims(
 	if (vic->id == pulse->id && !pulse->refl) {
 	    continue;
 	}
-	dist = Wrap_length(vic->pos.cx - PIXEL_TO_CLICK(midx),
-			   vic->pos.cy - PIXEL_TO_CLICK(midy)) / CLICK;
-	if (dist > pulse->len / 2 + SHIP_SZ) {
+	dist = Wrap_length(vic->pos.cx - midcx,
+			   vic->pos.cy - midcy);
+	if (dist > pulse->len / 2 + PIXEL_TO_CLICK(SHIP_SZ)) {
 	    continue;
 	}
 	if (vicbuf->max_vic == 0) {
@@ -173,8 +173,8 @@ static void Laser_pulse_find_victims(
 	    vicbuf->max_vic = NumPlayers;
 	}
 	vicbuf->vic_ptr[vicbuf->num_vic].ind = i;
-	vicbuf->vic_ptr[vicbuf->num_vic].pos.x = vic->pos.px;
-	vicbuf->vic_ptr[vicbuf->num_vic].pos.y = vic->pos.py;
+	vicbuf->vic_ptr[vicbuf->num_vic].pos.cx = vic->pos.cx;
+	vicbuf->vic_ptr[vicbuf->num_vic].pos.cy = vic->pos.cy;
 	vicbuf->vic_ptr[vicbuf->num_vic].prev_dist = 1e10;
 	vicbuf->num_vic++;
     }
@@ -190,8 +190,8 @@ static void Laser_pulse_find_victims(
 static void Laser_pulse_hits_player(
 	pulse_t *pulse,
 	object *obj,
-	DFLOAT x,
-	DFLOAT y,
+	int cx,
+	int cy,
 	victim_t *victim,
 	bool *refl)
 {
@@ -213,12 +213,10 @@ static void Laser_pulse_hits_player(
     vicpl->forceVisible++;
     if (BIT(vicpl->have, HAS_MIRROR)
 	&& (rfrac() * (2 * vicpl->item[ITEM_MIRROR])) >= 1) {
-	pulse->pos.x = x - tcos(pulse->dir) * 0.5
-			    * PULSE_SAMPLE_DISTANCE;
-	pulse->pos.y = y - tsin(pulse->dir) * 0.5
-			    * PULSE_SAMPLE_DISTANCE;
-	pulse->dir = (int)Wrap_findDir(vicpl->pos.px - pulse->pos.x,
-				       vicpl->pos.py - pulse->pos.y)
+	pulse->pos.cx = cx - tcos(pulse->dir) * 0.5 * PULSE_SAMPLE_DISTANCE;
+	pulse->pos.cy = cy - tsin(pulse->dir) * 0.5 * PULSE_SAMPLE_DISTANCE;
+	pulse->dir = (int)Wrap_cfindDir(vicpl->pos.cx - pulse->pos.cx,
+					vicpl->pos.cy - pulse->pos.cy)
 		     * 2 - RES / 2 - pulse->dir;
 	pulse->dir = MOD2(pulse->dir, RES);
 	pulse->life += vicpl->item[ITEM_MIRROR];
@@ -275,8 +273,8 @@ static void Laser_pulse_hits_player(
 		    sc = Rate(0, pl->score)
 			   * laserKillScoreMult
 			   * selfKillScoreMult;
-		    SCORE(victim->ind, -sc,
-			  vicpl->pos.cx, vicpl->pos.cy, vicpl->name);
+		    SCORE(victim->ind, -sc, vicpl->pos.cx, vicpl->pos.cy,
+			  vicpl->name);
 		    strcat(msg, " How strange!");
 		} else {
 		    sc = Rate(pl->score,
@@ -322,8 +320,8 @@ static void Laser_pulse_hits_player(
 static int Laser_pulse_check_player_hits(
 		    pulse_t *pulse,
 		    object *obj,
-		    DFLOAT x,
-		    DFLOAT y,
+		    int cx,
+		    int cy,
 		    vicbuf_t *vicbuf,
 		    bool *refl)
 {
@@ -344,14 +342,13 @@ static int Laser_pulse_check_player_hits(
 
     for (j = vicbuf->num_vic - 1; j >= 0; --j) {
 	victim = &(vicbuf->vic_ptr[j]);
-	dist = Wrap_length(PIXEL_TO_CLICK(x) - PIXEL_TO_CLICK(victim->pos.x),
-			   PIXEL_TO_CLICK(y) - PIXEL_TO_CLICK(victim->pos.y))
-	    / CLICK;
-	if (dist <= SHIP_SZ) {
+	dist = Wrap_length(cx - victim->pos.cx,
+			   cy - victim->pos.cy);
+	if (dist <= PIXEL_TO_CLICK(SHIP_SZ)) {
 	    Laser_pulse_hits_player(
 			pulse,
 			obj,
-			x, y,
+			cx, cy,
 			victim,
 			refl);
 	    hits++;
@@ -405,8 +402,8 @@ static list_t Laser_pulse_get_object_list(
 		dx = midx - ast->pos.px;
 		dy = midy - ast->pos.py;
 		dx = WRAP_DX(dx);
-		dy = WRAP_DX(dy);
-		range = ast->pl_radius + pulse->len / 2;
+		dy = WRAP_DY(dy);
+		range = ast->pl_radius + CLICK_TO_PIXEL(pulse->len / 2);
 		if (sqr(dx) + sqr(dy) < sqr(range)) {
 		    List_push_back(output_obj_list, ast);
 		}
@@ -457,7 +454,7 @@ void Laser_pulse_collision(void)
 	pulse = Pulses[p];
 
 	/* check for end of pulse life */
-	if (--pulse->life < 0 || pulse->len < PULSE_LENGTH) {
+	if ((pulse->life -= framespeed) < 0 || pulse->len < PULSE_LENGTH) {
 	    Laser_pulse_destroy_one(p);
 	    continue;
 	}
@@ -470,54 +467,54 @@ void Laser_pulse_collision(void)
 	    pl = NULL;
 	}
 
-	pulse->pos.x += tcos(pulse->dir) * PULSE_SPEED;
-	pulse->pos.y += tsin(pulse->dir) * PULSE_SPEED;
+	pulse->pos.cx += tcos(pulse->dir) * PULSE_SPEED * framespeed2;
+	pulse->pos.cy += tsin(pulse->dir) * PULSE_SPEED * framespeed2;
 	if (BIT(World.rules->mode, WRAP_PLAY)) {
-	    if (pulse->pos.x < 0) {
-		pulse->pos.x += World.width;
+	    if (pulse->pos.cx < 0) {
+		pulse->pos.cx += World.cwidth;
 	    }
-	    else if (pulse->pos.x >= World.width) {
-		pulse->pos.x -= World.width;
+	    else if (pulse->pos.cx >= World.cwidth) {
+		pulse->pos.cx -= World.cwidth;
 	    }
-	    if (pulse->pos.y < 0) {
-		pulse->pos.y += World.height;
+	    if (pulse->pos.cy < 0) {
+		pulse->pos.cy += World.cheight;
 	    }
-	    else if (pulse->pos.y >= World.height) {
-		pulse->pos.y -= World.height;
+	    else if (pulse->pos.cy >= World.cheight) {
+		pulse->pos.cy -= World.cheight;
 	    }
-	    x1 = pulse->pos.x;
-	    y1 = pulse->pos.y;
-	    x2 = x1 + tcos(pulse->dir) * pulse->len;
-	    y2 = y1 + tsin(pulse->dir) * pulse->len;
+	    x1 = CLICK_TO_PIXEL(pulse->pos.cx);
+	    y1 = CLICK_TO_PIXEL(pulse->pos.cy);
+	    x2 = x1 + tcos(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
+	    y2 = y1 + tsin(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
 	} else {
-	    x1 = pulse->pos.x;
-	    y1 = pulse->pos.y;
+	    x1 = CLICK_TO_PIXEL(pulse->pos.cx);
+	    y1 = CLICK_TO_PIXEL(pulse->pos.cy);
 	    if (x1 < 0 || x1 >= World.width
 		|| y1 < 0 || y1 >= World.height) {
 		pulse->len = 0;
 		continue;
 	    }
-	    x2 = x1 + tcos(pulse->dir) * pulse->len;
+	    x2 = x1 + tcos(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
 	    if (x2 < 0) {
-		pulse->len = (int)(pulse->len * (0 - x1) / (x2 - x1));
-		x2 = x1 + tcos(pulse->dir) * pulse->len;
+		pulse->len = (int)(CLICK_TO_PIXEL(pulse->len) * (0 - x1) / (x2 - x1));
+		x2 = x1 + tcos(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
 	    }
 	    if (x2 >= World.width) {
-		pulse->len = (int)(pulse->len * (World.width - 1 - x1)
+		pulse->len = (int)(CLICK_TO_PIXEL(pulse->len) * (World.width - 1 - x1)
 		    / (x2 - x1));
-		x2 = x1 + tcos(pulse->dir) * pulse->len;
+		x2 = x1 + tcos(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
 	    }
-	    y2 = y1 + tsin(pulse->dir) * pulse->len;
+	    y2 = y1 + tsin(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
 	    if (y2 < 0) {
-		pulse->len = (int)(pulse->len * (0 - y1) / (y2 - y1));
-		x2 = x1 + tcos(pulse->dir) * pulse->len;
-		y2 = y1 + tsin(pulse->dir) * pulse->len;
+		pulse->len = (int)(CLICK_TO_PIXEL(pulse->len) * (0 - y1) / (y2 - y1));
+		x2 = x1 + tcos(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
+		y2 = y1 + tsin(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
 	    }
 	    if (y2 > World.height) {
-		pulse->len = (int)(pulse->len * (World.height - 1 - y1)
+		pulse->len = (int)(CLICK_TO_PIXEL(pulse->len) * (World.height - 1 - y1)
 		    / (y2 - y1));
-		x2 = x1 + tcos(pulse->dir) * pulse->len;
-		y2 = y1 + tsin(pulse->dir) * pulse->len;
+		x2 = x1 + tcos(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
+		y2 = y1 + tsin(pulse->dir) * CLICK_TO_PIXEL(pulse->len);
 	    }
 	    if (pulse->len <= 0) {
 		pulse->len = 0;
@@ -545,7 +542,9 @@ void Laser_pulse_collision(void)
 
 	if (round_delay == 0) {
 	    /* assemble a shortlist of players which might get hit. */
-	    Laser_pulse_find_victims(&vicbuf, pulse, midx, midy);
+	    Laser_pulse_find_victims(&vicbuf, pulse,
+				     FLOAT_TO_CLICK(midx),
+				     FLOAT_TO_CLICK(midy));
 	}
 
 	obj_list = Laser_pulse_get_object_list(
@@ -562,12 +561,11 @@ void Laser_pulse_collision(void)
 	if (pulse->id == NO_ID) {
 	    obj->status = FROMCANNON;
 	}
-	Object_position_init_clicks(obj,
-				    PIXEL_TO_CLICK(x1), PIXEL_TO_CLICK(y1));
+	Object_position_init_clicks(obj, FLOAT_TO_CLICK(x1), FLOAT_TO_CLICK(y1));
 
 	refl = false;
 
-	for (i = hits = 0; i <= max; i += PULSE_SAMPLE_DISTANCE) {
+	for (i = hits = 0; i <= max; i += CLICK_TO_PIXEL(PULSE_SAMPLE_DISTANCE)) {
 	    x = x1 + (i * dx) / max;
 	    y = y1 + (i * dy) / max;
 	    obj->vel.x = (x - CLICK_TO_FLOAT(obj->pos.cx));
@@ -609,7 +607,7 @@ void Laser_pulse_collision(void)
 		    adx = x - ast->pos.px;
 		    ady = y - ast->pos.py;
 		    adx = WRAP_DX(adx);
-		    ady = WRAP_DX(ady);
+		    ady = WRAP_DY(ady);
 		    if (sqr(adx) + sqr(ady) <= sqr(ast->pl_radius)) {
 			obj->life = 0;
 			ast->life += ASTEROID_FUEL_HIT(ED_LASER_HIT,
@@ -640,7 +638,7 @@ void Laser_pulse_collision(void)
 
 	    hits = Laser_pulse_check_player_hits(
 			    pulse, obj,
-			    x, y,
+			    FLOAT_TO_CLICK(x), FLOAT_TO_CLICK(y),
 			    &vicbuf,
 			    &refl);
 
@@ -666,3 +664,207 @@ void Laser_pulse_collision(void)
     }
 }
 
+#if 0
+/* kps - take stuff from poly version and move into the above */
+static void LaserCollision(void)
+{
+    int				ind, j, p, sc,
+				objnum = -1;
+    int 			dx, dy;
+    player			*pl, *vic;
+    pulse_t			*pulse;
+    object			*obj = NULL;
+    char			msg[MSG_LEN];
+
+    for (p = 0; p < NumPulses; p++) {
+	pulse = Pulses[p];
+	if (pulse->id != -1) {
+	    ind = GetInd[pulse->id];
+	    pl = Players[ind];
+	} else {
+	    ind = -1;
+	    pl = NULL;
+	}
+	if (--pulse->life < 0) {
+	    free(Pulses[p]);
+	    if (--NumPulses > p) {
+		Pulses[p] = Pulses[NumPulses];
+		p--;
+	    }
+	    if (pl)
+		pl->num_pulses--;
+	    continue;
+	}
+	if (pulse->len < PULSE_LENGTH) {
+	    pulse->len = 0;
+	    continue;
+	}
+	if (obj == NULL) {
+	    if (NumObjs >= MAX_TOTAL_SHOTS) {
+		pulse->len = 0;
+		continue;
+	    }
+	    objnum = NumObjs++;
+	    obj = Obj[objnum];
+	}
+
+	dx = (int)(tcos(pulse->dir) * PULSE_SPEED);
+	dy = (int)(tsin(pulse->dir) * PULSE_SPEED);
+	pulse->pos.x += dx;
+	pulse->pos.y += dy;
+	pulse->pos.x = WRAP_XCLICK(pulse->pos.x);
+	pulse->pos.y = WRAP_YCLICK(pulse->pos.y);
+
+	obj->type = OBJ_PULSE;
+	obj->life = 1;
+	obj->owner = pulse->id;
+	obj->id = pulse->id;
+	obj->team = pulse->team;
+	obj->count = 0;
+	if (pulse->id == -1)
+	    obj->status = FROMCANNON;
+	Object_position_init_clicks(obj, pulse->pos.x, pulse->pos.y);
+
+	obj->vel.x = CLICK_TO_FLOAT(dx);
+	obj->vel.y = CLICK_TO_FLOAT(dy);
+	Move_object(objnum);
+	if (obj->life == 0) {
+	    pulse->len = PULSE_SPEED * obj->wall_time;
+	    if (pulse->len > CLICK_TO_PIXEL(PULSE_LENGTH))
+		/* -1 is a hack to make the pulse die in the next frame. */
+		pulse->len = CLICK_TO_PIXEL(PULSE_LENGTH) - 1;
+	}
+	if (rdelay <= 0) {
+	    for (j = 0; j < NumPlayers; j++) {
+		vic = Players[j];
+		if (BIT(vic->status, PLAYING|GAME_OVER|KILLED|PAUSE)
+		    != PLAYING) {
+		    continue;
+		}
+		if (BIT(vic->used, OBJ_PHASING_DEVICE)) {
+		    continue;
+		}
+		if (BIT(World.rules->mode, TEAM_PLAY)
+		    && teamImmunity
+		    && vic->team == pulse->team
+		    && vic->id != pulse->id) {
+		    continue;
+		}
+		if (vic->id == pulse->id && !pulse->refl) {
+		    continue;
+		}
+		if (Wrap_length(vic->pos.cx - pulse->pos.x, vic->pos.cy - pulse->pos.y)
+		    > pulse->len + PIXEL_TO_CLICK(SHIP_SZ)) {
+		    continue;
+		}
+		if (obj->life) {
+		    if (!in_range_acd(vic->prevpos.x - obj->prevpos.x,
+				      vic->prevpos.y - obj->prevpos.y,
+				      vic->extmove.x - obj->extmove.x,
+				      vic->extmove.y - obj->extmove.y,
+				      SHIP_SZ * CLICK))
+			continue;
+		}
+		else
+		    if (!in_range_partial(vic->prevpos.x - obj->prevpos.x,
+					  vic->prevpos.y - obj->prevpos.y,
+					  vic->extmove.x - obj->extmove.x,
+					  vic->extmove.y - obj->extmove.y,
+					  SHIP_SZ * CLICK, obj->wall_time))
+			continue;
+		vic->forceVisible++;
+		pulse->len = PULSE_LENGTH - 1;
+#if 0
+		/* Mirrors don't work at the moment. */
+		if (BIT(vic->have, OBJ_MIRROR)
+		    && (rfrac() * (2 * vic->item[ITEM_MIRROR])) >= 1) {
+		    /* STUFF REMOVED */
+		    pulse->life += vic->item[ITEM_MIRROR];
+		    pulse->len = PULSE_LENGTH;
+		    pulse->refl = true;
+		    continue;
+		}
+#endif
+		sound_play_sensors(vic->pos.cx, vic->pos.cy,
+				   PLAYER_EAT_LASER_SOUND);
+		if (BIT(vic->used, (OBJ_SHIELD|OBJ_EMERGENCY_SHIELD))
+		    == (OBJ_SHIELD|OBJ_EMERGENCY_SHIELD))
+		    continue;
+		if (!BIT(obj->type, KILLING_SHOTS))
+		    continue;
+		if (BIT(pulse->mods.laser, STUN)
+		    || (laserIsStunGun == true
+			&& allowLaserModifiers == false)) {
+		    if (BIT(vic->used, OBJ_SHIELD|OBJ_LASER|OBJ_SHOT)
+			|| BIT(vic->status, THRUSTING)) {
+			if (pl) {
+			    sprintf(msg,
+				    "%s got paralysed by %s's stun laser.",
+				    vic->name, pl->name);
+			    if (vic->id == pl->id)
+				strcat(msg, " How strange!");
+			} else {
+			    sprintf(msg,
+				    "%s got paralysed by a stun laser.",
+				    vic->name);
+			}
+			Set_message(msg);
+			CLR_BIT(vic->used,
+				OBJ_SHIELD|OBJ_LASER|OBJ_SHOT);
+			CLR_BIT(vic->status, THRUSTING);
+			vic->stunned += 5;
+		    }
+		} else if (BIT(pulse->mods.laser, BLIND)) {
+		    vic->damaged += (12 + 6);
+		    vic->forceVisible += (12 + 6);
+		    if (pl)
+			Record_shove(vic, pl, frame_loops + 12 + 6);
+		} else {
+		    Add_fuel(&(vic->fuel), (long)ED_LASER_HIT);
+		    if (!BIT(vic->used, OBJ_SHIELD)
+			&& !BIT(vic->have, OBJ_ARMOR)) {
+			SET_BIT(vic->status, KILLED);
+			if (pl) {
+			    sprintf(msg,
+				    "%s got roasted alive by %s's laser.",
+				    vic->name, pl->name);
+			    if (vic->id == pl->id) {
+				SCORE(j, PTS_PR_PL_SHOT, vic->pos.cx,
+				      vic->pos.cy, vic->name);
+				strcat(msg, " How strange!");
+			    } else {
+				sc = (int)floor(Rate(pl->score,
+						     vic->score)
+						* laserKillScoreMult);
+				Score_players(ind, sc, vic->name,
+					      j, -sc,
+					      pl->name);
+			    }
+			} else {
+			    sc = Rate(CANNON_SCORE, vic->score) / 4;
+			    SCORE(j, -sc, vic->pos.cx, vic->pos.cy, "Cannon");
+			    sprintf(msg,
+				    "%s got roasted alive by cannonfire.",
+				    vic->name);
+			}
+			sound_play_sensors(vic->pos.cx, vic->pos.cy,
+					   PLAYER_ROASTED_SOUND);
+			Set_message(msg);
+			if (pl && pl->id != vic->id) {
+			    Rank_kill(pl);
+			}
+		    }
+		    if (!BIT(vic->used, OBJ_SHIELD)
+			&& BIT(vic->have, OBJ_ARMOR)) {
+			Player_hit_armor(j);
+		    }
+		}
+	    }
+	}
+    }
+    if (objnum >= 0 && obj != NULL) {
+	obj->type = OBJ_DEBRIS;
+	obj->life = 0;
+    }
+}
+#endif

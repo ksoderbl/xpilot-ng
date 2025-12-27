@@ -66,9 +66,9 @@ extern long CANNON_USE_ITEM;
 #define CANNON_MINE_MASS	(MINE_MASS * 0.6)
 #define CANNON_SHOT_MASS	0.4
 /* lifetime in ticks (frames) of shots, missiles and mines */
-#define CANNON_SHOT_LIFE	(8 + (randomMT() % 24))
+#define CANNON_SHOT_LIFE	((8 + (randomMT() % 24)) * TIME_FACT)
 /* maximum lifetime (only used in aiming) */
-#define CANNON_SHOT_LIFE_MAX	(8 + 24)
+#define CANNON_SHOT_LIFE_MAX	((8 + 24) * TIME_FACT)
 /* number of laser pulses used in calculation of pulse lifetime */
 #define CANNON_PULSES		1
 

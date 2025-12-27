@@ -137,7 +137,7 @@ void Cannon_throw_items(int ind)
 		obj->acc.x = 0;
 		obj->acc.y = 0;
 		obj->mass = 10;
-		obj->life = 1500 + (int)(rfrac() * 512);
+		obj->life = 1500*TIME_FACT + (int)(rfrac() * 512 * TIME_FACT);
 		obj->count = amount;
 		obj->pl_range = ITEM_SIZE / 2;
 		obj->pl_radius = ITEM_SIZE / 2;
@@ -358,7 +358,7 @@ static void Cannon_aim(int ind, int weapon, int *target, int *dir)
 	range = (int)(range * 0.5 + 0.1 * cannonSmartness);
 	break;
     case CW_LASER:
-	speed = PULSE_SPEED; /* kps -change to CLICK_TO_PIXEL(PULSE_SPEED) ? */
+	speed = CLICK_TO_PIXEL(PULSE_SPEED);
 	range = (int)(PULSE_LIFE(CANNON_PULSES) * speed);
 	break;
     case CW_ECM:
@@ -627,8 +627,8 @@ static void Cannon_fire(int ind, int weapon, int target, int dir)
 		/* number */	300 + 400 * rfrac(),
 		/* dir */	dir - 4 * (4 - cannonSmartness),
 				dir + 4 * (4 - cannonSmartness),
-		/* speed */	0.1, speed * 4, /* kps */
-		/* life */	3 /* * TIME_FACT */, 20 /* * TIME_FACT */);
+		/* speed */	0.1, speed * 4,
+		/* life */	3 * TIME_FACT, 20 * TIME_FACT);
 	    c->item[ITEM_EMERGENCY_THRUST]--;
 	} else {
 	    Make_debris(
@@ -644,8 +644,8 @@ static void Cannon_fire(int ind, int weapon, int target, int dir)
 		/* number */	150 + 200 * rfrac(),
 		/* dir */	dir - 3 * (4 - cannonSmartness),
 				dir + 3 * (4 - cannonSmartness),
-		/* speed */	0.1, speed * 2, /* kps */
-		/* life */	3 /* * TIME_FACT */, 20 /* * TIME_FACT */);
+		/* speed */	0.1, speed * 2,
+		/* life */	3 * TIME_FACT, 20 * TIME_FACT);
 	}
 	c->item[ITEM_FUEL]--;
 	IFSOUND(sound = THRUST_SOUND);

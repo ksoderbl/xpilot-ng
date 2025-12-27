@@ -288,7 +288,7 @@ static int Check_names(char *nick_name, char *real_name, char *host_name)
  */
 static unsigned Version_to_magic(unsigned version)
 {
-    if (version >= 0x4203 /*0x3100*/ && version <= MY_VERSION) {
+    if (version >= 0x4203  && version <= MY_VERSION) {
 	return VERSION2MAGIC(version);
     }
     return MAGIC;
@@ -344,7 +344,7 @@ void Contact(int fd, void *arg)
      */
     if (Packet_scanf(&ibuf, "%u", &magic) <= 0
 	|| (magic & 0xFFFF) != (MAGIC & 0xFFFF)) {
-	D(printf("Incompatible packet from %s (0x%08x)", host_addr, magic);)
+	D(printf("Incompatible packet from %s (0x%08x)", host_addr, magic));
 	return;
     }
     version = MAGIC2VERSION(magic);
@@ -353,7 +353,7 @@ void Contact(int fd, void *arg)
      * Read core of packet.
      */
     if (Packet_scanf(&ibuf, "%s%hu%c", real_name, &port, &ch) <= 0) {
-	D(printf("Incomplete packet from %s", host_addr);)
+	D(printf("Incomplete packet from %s", host_addr));
 	return;
     }
     Fix_real_name(real_name);

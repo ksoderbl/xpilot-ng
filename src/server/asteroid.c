@@ -139,7 +139,7 @@ void Break_asteroid(int ind)
 		      10,
 		      0, RES-1,
 		      5, 10,
-		      3, 10);
+		      3 * TIME_FACT, 10 * TIME_FACT);
 	Make_debris(asteroid->pos.cx, asteroid->pos.cy,
 		    asteroid->vel.x, asteroid->vel.y,
 		    -1,
@@ -152,7 +152,7 @@ void Break_asteroid(int ind)
 		    20 + 30 * rfrac(),
 		    0, RES-1,
 		    5, 10,
-		    3, 10);
+		    3 * TIME_FACT, 10 * TIME_FACT);
     } else {
 	/* foo[12] refer to the mini-asteroids
 	   foo3 refers to the wreckage and debris */
@@ -195,7 +195,7 @@ void Break_asteroid(int ind)
 		      10,
 		      0, RES-1,
 		      5, 10,
-		      3, 10);
+		      3 * TIME_FACT, 10 * TIME_FACT);
 	Make_debris(asteroid->pos.cx, asteroid->pos.cy,
 		    velx3, vely3,
 		    -1,
@@ -208,7 +208,7 @@ void Break_asteroid(int ind)
 		    20 + 30 * rfrac(),
 		    0, RES-1,
 		    5, 10,
-		    3, 10);
+		    3 * TIME_FACT, 10 * TIME_FACT);
     }
 
     if ((asteroidMaxItems > 0) && (rfrac() < asteroidItemProb)) {
@@ -327,7 +327,8 @@ static void Make_asteroid(int cx, int cy,
     radius = ASTEROID_RADIUS(size) / CLICK;
     asteroid->pl_range = radius;
     asteroid->pl_radius = radius;
-    asteroid->fuselife = asteroid->life - 1;
+    /*asteroid->fuselife = asteroid->life - 1;*/
+    asteroid->fuseframe = frame_loops + 1;
     asteroid->status = GRAVITY;
     CLEAR_MODS(asteroid->mods);
 

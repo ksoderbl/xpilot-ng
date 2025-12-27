@@ -50,6 +50,7 @@
 #include "netserver.h"
 #include "saudio.h"
 #include "error.h"
+#include "click.h"
 #include "commonproto.h"
 #include "srecord.h"
 
@@ -64,22 +65,23 @@ char frame_version[] = VERSION;
 typedef unsigned short shuffle_t;
 
 /*
- * Structure for calculating if a pixel is visible by a player.
+ * Structure for calculating if a click position is visible by a player.
  * The following always holds:
- *	(world.x >= realWorld.x && world.y >= realWorld.y)
+ *	(world.cx >= realWorld.cx && world.cy >= realWorld.cy)
  */
 typedef struct {
-    position	world;			/* Lower left hand corner is this */
+    cpos	world;			/* Lower left hand corner is this */
 					/* world coordinate */
-    position	realWorld;		/* If the player is on the edge of
+    cpos	realWorld;		/* If the player is on the edge of
 					   the screen, these are the world
 					   coordinates before adjustment... */
-} pixel_visibility_t;
+} click_visibility_t;
 
 /*
  * Structure with player position info measured in blocks instead of pixels.
  * Used for map state info updating.
  */
+/* kps - ng does not want this */
 typedef struct {
     ipos		world;
     ipos		realWorld;
@@ -96,6 +98,7 @@ typedef struct {
 
 extern time_t		gameOverTime;
 long			frame_loops = 1;
+unsigned long		frame_time = TIME_FACT;
 static long		last_frame_shuffle;
 static shuffle_t	*object_shuffle_ptr;
 static int		num_object_shuffle;
@@ -106,9 +109,11 @@ static int		max_player_shuffle;
 static radar_t		*radar_ptr;
 static int		num_radar, max_radar;
 
-static pixel_visibility_t pv;
+static click_visibility_t cv;
 static int		view_width,
 			view_height,
+			view_cwidth,
+			view_cheight,
 			horizontal_blocks,
 			vertical_blocks,
 			debris_x_areas,
@@ -150,12 +155,31 @@ static unsigned		fastshot_num[DEBRIS_TYPES * 2],
 	}								\
     }
 
-#define inview(x_, y_) 								\
-    (   (   ((x_) > pv.world.x && (x_) < pv.world.x + view_width)		\
-	 || ((x_) > pv.realWorld.x && (x_) < pv.realWorld.x + view_width))	\
-     && (   ((y_) > pv.world.y && (y_) < pv.world.y + view_height)		\
-	 || ((y_) > pv.realWorld.y && (y_) < pv.realWorld.y + view_height)))
 
+#if 1
+static int click_inview(click_visibility_t *v, int cx, int cy)
+{
+    return ((cx > v->world.cx && cx < v->world.cx + view_cwidth)
+	    || (cx > v->realWorld.cx && cx < v->realWorld.cx + view_cwidth))
+	&& ((cy > v->world.cy && cy < v->world.cy + view_cheight)
+	    || (cy > v->realWorld.cy && cy < v->realWorld.cy + view_cheight));
+}
+#else
+static int click_inview(click_visibility_t *v, int cx, int cy)
+{
+#define FOOBAR (200*CLICK)
+    return ((cx > v->world.cx + FOOBAR
+	     && cx < v->world.cx + view_cwidth - FOOBAR)
+	    || (cx > v->realWorld.cx + FOOBAR
+		&& cx < v->realWorld.cx + view_cwidth - FOOBAR))
+	&& ((cy > v->world.cy + FOOBAR
+	     && cy < v->world.cy + view_cheight - FOOBAR)
+	    || (cy > v->realWorld.cy + FOOBAR
+		&& cy < v->realWorld.cy + view_cheight - FOOBAR));
+}
+#endif
+
+/* kps - ng does not want this */
 static int block_inview(block_visibility_t *bv, int x, int y)
 {
     return ((x > bv->world.x && x < bv->world.x + horizontal_blocks)
@@ -276,13 +300,15 @@ static void Frame_radar_buffer_send(int conn)
     int			tmp;
     radar_t		*p;
     const int		radar_width = 256;
-    int			radar_height = (radar_width * World.y) / World.x;
+    int			radar_height;
     int			radar_x;
     int			radar_y;
     int			send_x;
     int			send_y;
     shuffle_t		*radar_shuffle;
     size_t		shuffle_bufsize;
+
+    radar_height = (radar_width * World.height) / World.width;
 
     if (num_radar > MIN(256, MAX_SHUFFLE_INDEX)) {
 	num_radar = MIN(256, MAX_SHUFFLE_INDEX);
@@ -295,12 +321,19 @@ static void Frame_radar_buffer_send(int conn)
     for (i = 0; i < num_radar; i++) {
 	radar_shuffle[i] = i;
     }
-    /* permute. */
-    for (i = 0; i < num_radar; i++) {
-	dest = (int)(rfrac() * num_radar);
-	tmp = radar_shuffle[i];
-	radar_shuffle[i] = radar_shuffle[dest];
-	radar_shuffle[dest] = tmp;
+
+    if (conn < World.NumBases) {
+	/* permute. */
+	for (i = 0; i < num_radar; i++) {
+#if 1
+	    dest = (int)(rfrac() * num_radar);
+#else /* ng wants this */
+	    dest = (int)(rfrac() * (num_radar - i)) + i;
+#endif
+	    tmp = radar_shuffle[i];
+	    radar_shuffle[i] = radar_shuffle[dest];
+	    radar_shuffle[dest] = tmp;
+	}
     }
 
     if (Get_conn_version(conn) <= 0x4400) {
@@ -414,7 +447,9 @@ static int Frame_status(int conn, int ind)
 #endif
 	    && BIT(Players[lock_ind]->status, PLAYING|GAME_OVER) == PLAYING
 	    && (playersOnRadar
-		|| inview(Players[lock_ind]->pos.px, Players[lock_ind]->pos.py))
+		|| click_inview(&cv,
+				Players[lock_ind]->pos.cx,
+				Players[lock_ind]->pos.cy))
 	    && pl->lock.distance != 0) {
 	    SET_BIT(pl->lock.tagged, LOCK_VISIBLE);
 	    lock_dir = (int)Wrap_findDir((int)(Players[lock_ind]->pos.px - pl->pos.px),
@@ -487,9 +522,9 @@ static int Frame_status(int conn, int ind)
     if (BIT(pl->used, HAS_EMERGENCY_SHIELD))
 	Send_shieldtime(conn,
 			pl->emergency_shield_left,
-			pl->emergency_shield_max);
+			EMERGENCY_SHIELD_TIME);
     if (BIT(pl->status, SELF_DESTRUCT) && pl->count > 0) {
-	Send_destruct(conn, pl->count);
+	Send_destruct(conn, pl->count >> TIME_BITS);
     }
     if (BIT(pl->used, HAS_PHASING_DEVICE))
 	Send_phasingtime(conn,
@@ -506,6 +541,7 @@ static int Frame_status(int conn, int ind)
     return 1;
 }
 
+/* kps - fix this asap, remove the block_inview stuff */
 static void Frame_map(int conn, int ind)
 {
     player		*pl = Players[ind];
@@ -543,6 +579,7 @@ static void Frame_map(int conn, int ind)
 	}
     }
 
+    /* kps - fix these for ng (remove block_inview stuff) */
     packet_count = 0;
     max_packet = MAX(5, bytes_left / target_packet_size);
     i = MAX(0, pl->last_target_update);
@@ -554,7 +591,9 @@ static void Frame_map(int conn, int ind)
 	targ = &World.targets[i];
 	if (BIT(targ->update_mask, conn_bit)
 	    || (BIT(targ->conn_mask, conn_bit) == 0
-		&& block_inview(&bv, targ->pos.x, targ->pos.y))) {
+		&& block_inview(&bv,
+				targ->pos.x / BLOCK_CLICKS,
+				targ->pos.y / BLOCK_CLICKS))) {
 	    Send_target(conn, i, targ->dead_time, targ->damage);
 	    pl->last_target_update = i;
 	    bytes_left -= target_packet_size;
@@ -593,6 +632,7 @@ static void Frame_map(int conn, int ind)
 	    i = 0;
 	}
 	if (BIT(World.fuel[i].conn_mask, conn_bit) == 0) {
+#if 0 /* old block based stuff */
 	    if (World.block[World.fuel[i].blk_pos.x]
 			   [World.fuel[i].blk_pos.y] == FUEL) {
 		if (block_inview(&bv,
@@ -606,6 +646,19 @@ static void Frame_map(int conn, int ind)
 		    }
 		}
 	    }
+#else
+	    if ((CENTER_XCLICK(World.fuel[i].clk_pos.x - pl->pos.cx) <
+		 (view_width << CLICK_SHIFT) + BLOCK_CLICKS) &&
+		(CENTER_YCLICK(World.fuel[i].clk_pos.y - pl->pos.cy) <
+		 (view_height << CLICK_SHIFT) + BLOCK_CLICKS)) {
+		Send_fuel(conn, i, (int) World.fuel[i].fuel);
+		pl->last_fuel_update = i;
+		bytes_left -= max_packet * fuel_packet_size;
+		if (++packet_count >= max_packet) {
+		    break;
+		}
+	    }
+#endif    
 	}
     }
 
@@ -678,6 +731,10 @@ static void Frame_shuffle_objects(void)
     }
 }
 
+/* kps - ng wants changes in shuffling like this:
+-	    dest = (int)(rfrac() * NumObjs);
++	    dest = (int)(rfrac() * (NumObjs - i)) + i;
+*/
 
 static void Frame_shuffle_players(void)
 {
@@ -728,6 +785,7 @@ static void Frame_shots(int conn, int ind)
 {
     player			*pl = Players[ind];
     register int		x, y;
+    int				cx, cy;
     int				i, k, color;
     int				fuzz = 0, teamshot, len;
     int				obj_count;
@@ -747,11 +805,13 @@ static void Frame_shots(int conn, int ind)
 	    continue;
 	}
 	shot = obj_list[i];
-	x = shot->pos.px;
-	y = shot->pos.py;
-	if (!inview(x, y)) {
+	cx = shot->pos.cx;
+	cy = shot->pos.cy;
+	if (!click_inview(&cv, cx, cy)) {
 	    continue;
 	}
+	x = CLICK_TO_PIXEL(cx);
+	y = CLICK_TO_PIXEL(cy);
 	if ((color = shot->color) == BLACK) {
 	    xpprintf("black %d,%d\n", shot->type, shot->id);
 	    color = WHITE;
@@ -760,7 +820,14 @@ static void Frame_shots(int conn, int ind)
 	case OBJ_SPARK:
 	case OBJ_DEBRIS:
 	    if ((fuzz >>= 7) < 0x40) {
-		fuzz = randomMT();
+#if 0
+		fuzz = randomMT(); /* old,  but ng wants: */
+#else
+		if (conn < World.NumBases)  /* if not pl-> */
+		    fuzz = randomMT();
+		else
+		    fuzz = 0;
+#endif
 	    }
 	    if ((fuzz & 0x7F) >= spark_rand) {
 		/*
@@ -779,15 +846,15 @@ static void Frame_shots(int conn, int ind)
 	    if (debris_colors >= 3) {
 		if (debris_colors > 4) {
 		    if (color == BLUE) {
-			color = (shot->life >> 1);
+			color = (shot->life >> (TIME_BITS + 1));
 		    } else {
-			color = (shot->life >> 2);
+			color = (shot->life >> (TIME_BITS + 2));
 		    }
 		} else {
 		    if (color == BLUE) {
-			color = (shot->life >> 2);
+			color = (shot->life >> (TIME_BITS + 2));
 		    } else {
-			color = (shot->life >> 3);
+			color = (shot->life >> (TIME_BITS + 3));
 		    }
 		}
 		if (color >= debris_colors) {
@@ -795,8 +862,8 @@ static void Frame_shots(int conn, int ind)
 		}
 	    }
 
-	    debris_store((int)(shot->pos.px - pv.world.x),
-			 (int)(shot->pos.py - pv.world.y),
+	    debris_store((int)(shot->pos.px - CLICK_TO_PIXEL(cv.world.cx)),
+			 (int)(shot->pos.py - CLICK_TO_PIXEL(cv.world.cy)),
 			 color);
 	    break;
 
@@ -836,8 +903,8 @@ static void Frame_shots(int conn, int ind)
 		teamshot = 0;
 	    }
 
-	    fastshot_store((int)(shot->pos.px - pv.world.x),
-			   (int)(shot->pos.py - pv.world.y),
+	    fastshot_store((int)(shot->pos.px - CLICK_TO_PIXEL(cv.world.cx)),
+			   (int)(shot->pos.py - CLICK_TO_PIXEL(cv.world.cy)),
 			   color, teamshot);
 	    break;
 
@@ -904,7 +971,7 @@ static void Frame_shots(int conn, int ind)
 	    break;
 
 	default:
-	    error("Frame_shots: Shot type %d not defined.", shot->type);
+	    warn("Frame_shots: Shot type %d not defined.", shot->type);
 	    break;
 	}
     }
@@ -915,50 +982,22 @@ static void Frame_ships(int conn, int ind)
     player			*pl = Players[ind],
 				*pl_i;
     pulse_t			*pulse;
-    int				i, j, k, color, dir;
-    DFLOAT			x, y;
+    int				i, j, k, color, dir, cx, cy;
 
     for (j = 0; j < NumPulses; j++) {
 	pulse = Pulses[j];
 	if (pulse->len <= 0) {
 	    continue;
 	}
-	x = pulse->pos.x;
-	y = pulse->pos.y;
-	if (BIT (World.rules->mode, WRAP_PLAY)) {
-	    if (x < 0) {
-		x += World.width;
-	    }
-	    else if (x >= World.width) {
-		x -= World.width;
-	    }
-	    if (y < 0) {
-		y += World.height;
-	    }
-	    else if (y >= World.height) {
-		y -= World.height;
-	    }
-	}
-	if (inview(x, y)) {
+	cx = WRAP_XCLICK(pulse->pos.cx);
+	cy = WRAP_YCLICK(pulse->pos.cy);
+
+	if (click_inview(&cv, cx, cy)) {
 	    dir = pulse->dir;
 	} else {
-	    x += tcos(pulse->dir) * pulse->len;
-	    y += tsin(pulse->dir) * pulse->len;
-	    if (BIT (World.rules->mode, WRAP_PLAY)) {
-		if (x < 0) {
-		    x += World.width;
-		}
-		else if (x >= World.width) {
-		    x -= World.width;
-		}
-		if (y < 0) {
-		    y += World.height;
-		}
-		else if (y >= World.height) {
-		    y -= World.height;
-		}
-	    }
-	    if (inview(x, y)) {
+	    cx += WRAP_XCLICK(tcos(pulse->dir) * pulse->len);
+	    cy += WRAP_YCLICK(tsin(pulse->dir) * pulse->len);
+	    if (click_inview(&cv, cx, cy)) {
 		dir = MOD2(pulse->dir + RES/2, RES);
 	    }
 	    else {
@@ -973,7 +1012,8 @@ static void Frame_ships(int conn, int ind)
 	} else {
 	    color = RED;
 	}
-	Send_laser(conn, color, (int)x, (int)y, pulse->len, dir);
+	Send_laser(conn, color, CLICK_TO_PIXEL(cx), CLICK_TO_PIXEL(cy),
+		   CLICK_TO_PIXEL(pulse->len), dir);
     }
     for (i = 0; i < NumEcms; i++) {
 	ecm_t *ecm = Ecms[i];
@@ -991,7 +1031,7 @@ static void Frame_ships(int conn, int ind)
 	cannon_t *cannon = World.cannon + i;
 	if (cannon->tractor_count > 0) {
 	    player *t = Players[GetInd[cannon->tractor_target]];
-	    if (inview(t->pos.px, t->pos.py)) {
+	    if (click_inview(&cv, t->pos.cx, t->pos.cy)) {
 		int j;
 		for (j = 0; j < 3; j++) {
 		    Send_connector(conn,
@@ -1013,14 +1053,14 @@ static void Frame_ships(int conn, int ind)
 	if (BIT(pl_i->status, GAME_OVER)) {
 	    continue;
 	}
-	if (!inview(pl_i->pos.px, pl_i->pos.py)) {
+	if (!click_inview(&cv, pl_i->pos.cx, pl_i->pos.cy)) {
 	    continue;
 	}
 	if (BIT(pl_i->status, PAUSE)) {
 	    Send_paused(conn,
 			pl_i->pos.px,
 			pl_i->pos.py,
-			pl_i->count /* kps - enable >> TIME_BITS */);
+			pl_i->count >> TIME_BITS);
 	    continue;
 	}
 
@@ -1038,15 +1078,21 @@ static void Frame_ships(int conn, int ind)
 		      pl_i->id,
 		      pl_i->dir,
 		      BIT(pl_i->used, HAS_SHIELD) != 0,
+#if 1
 		      BIT(pl_i->used, HAS_CLOAKING_DEVICE) != 0,
+#else /* kps - ng wants this, why? */
+		      (BIT(pl_i->used, OBJ_CLOAKING_DEVICE) != 0
+		       || BIT(pl_i->used, OBJ_PHASING_DEVICE) != 0),
+#endif
 		      BIT(pl_i->used, HAS_EMERGENCY_SHIELD) != 0,
 		      BIT(pl_i->used, HAS_PHASING_DEVICE) != 0,
 		      BIT(pl_i->used, HAS_DEFLECTOR) != 0
 	    );
 	}
 	if (BIT(pl_i->used, HAS_REFUEL)) {
-	    if (inview(CLICK_TO_PIXEL(World.fuel[pl_i->fs].clk_pos.x),
-		       CLICK_TO_PIXEL(World.fuel[pl_i->fs].clk_pos.y))) {
+	    if (click_inview(&cv,
+			     World.fuel[pl_i->fs].clk_pos.x,
+			     World.fuel[pl_i->fs].clk_pos.y)) {
 		Send_refuel(conn,
 			    CLICK_TO_PIXEL(World.fuel[pl_i->fs].clk_pos.x),
 			    CLICK_TO_PIXEL(World.fuel[pl_i->fs].clk_pos.y),
@@ -1055,16 +1101,17 @@ static void Frame_ships(int conn, int ind)
 	    }
 	}
 	if (BIT(pl_i->used, HAS_REPAIR)) {
-	    DFLOAT x = (DFLOAT)(World.targets[pl_i->repair_target].pos.x + 0.5) * BLOCK_SZ;
-	    DFLOAT y = (DFLOAT)(World.targets[pl_i->repair_target].pos.y + 0.5) * BLOCK_SZ;
-	    if (inview(x, y)) {
+	    int cx = World.targets[pl_i->repair_target].pos.x;
+	    int cy = World.targets[pl_i->repair_target].pos.y;
+	    if (click_inview(&cv, cx, cy)) {
 		/* same packet as refuel */
-		Send_refuel(conn, pl_i->pos.px, pl_i->pos.py, (int) x, (int) y);
+		Send_refuel(conn, pl_i->pos.px, pl_i->pos.py,
+			    CLICK_TO_PIXEL(cx), CLICK_TO_PIXEL(cy));
 	    }
 	}
 	if (BIT(pl_i->used, HAS_TRACTOR_BEAM)) {
 	    player *t = Players[GetInd[pl_i->lock.pl_id]];
-	    if (inview(t->pos.px, t->pos.py)) {
+	    if (click_inview(&cv, t->pos.cx, t->pos.cy)) {
 		int j;
 
 		for (j = 0; j < 3; j++) {
@@ -1078,7 +1125,7 @@ static void Frame_ships(int conn, int ind)
 	}
 
 	if (pl_i->ball != NULL
-	    && inview(pl_i->ball->pos.px, pl_i->ball->pos.py)) {
+	    && click_inview(&cv, pl_i->ball->pos.cx, pl_i->ball->pos.cy)) {
 	    Send_connector(conn,
 			   pl_i->ball->pos.px,
 			   pl_i->ball->pos.py,
@@ -1219,24 +1266,29 @@ static void Frame_parameters(int conn, int ind)
     debris_x_areas = (view_width + 255) >> 8;
     debris_y_areas = (view_height + 255) >> 8;
     debris_areas = debris_x_areas * debris_y_areas;
+    /* kps - remove these 2 for ng */
     horizontal_blocks = (view_width + (BLOCK_SZ - 1)) / BLOCK_SZ;
     vertical_blocks = (view_height + (BLOCK_SZ - 1)) / BLOCK_SZ;
 
-    pv.world.x = pl->pos.px - view_width / 2;	/* Scroll */
-    pv.world.y = pl->pos.py - view_height / 2;
-    pv.realWorld = pv.world;
+    view_cwidth = view_width * CLICK;
+    view_cheight = view_height * CLICK;
+    cv.world.cx = pl->pos.cx - view_cwidth / 2;	/* Scroll */
+    cv.world.cy = pl->pos.cy - view_cheight / 2;
+    cv.realWorld = cv.world;
     if (BIT (World.rules->mode, WRAP_PLAY)) {
-	if (pv.world.x < 0 && pv.world.x + view_width < World.width) {
-	    pv.world.x += World.width;
+	if (cv.world.cx < 0 && cv.world.cx + view_cwidth < World.cwidth) {
+	    cv.world.cx += World.cwidth;
 	}
-	else if (pv.world.x > 0 && pv.world.x + view_width >= World.width) {
-	    pv.realWorld.x -= World.width;
+	else if (cv.world.cx > 0
+		 && cv.world.cx + view_cwidth >= World.cwidth) {
+	    cv.realWorld.cx -= World.cwidth;
 	}
-	if (pv.world.y < 0 && pv.world.y + view_height < World.height) {
-	    pv.world.y += World.height;
+	if (cv.world.cy < 0 && cv.world.cy + view_cheight < World.cheight) {
+	    cv.world.cy += World.cheight;
 	}
-	else if (pv.world.y > 0 && pv.world.y + view_height >= World.height) {
-	    pv.realWorld.y -= World.height;
+	else if (cv.world.cy > 0
+		 && cv.world.cy + view_cheight >= World.cheight) {
+	    cv.realWorld.cy -= World.cheight;
 	}
     }
 }
@@ -1251,8 +1303,12 @@ void Frame_update(void)
     static time_t	oldTimeLeft;
     static bool		game_over_called = false;
 
-    if (++frame_loops >= LONG_MAX)	/* Used for misc. timing purposes */
-	frame_loops = 1;
+    frame_loops++;
+    frame_time += framespeed;
+    if (frame_time > ULONG_MAX - TIME_FACT) {
+	frame_loops = 0; /* This is likely to cause visible problems, but */
+	frame_time = 0;  /* maybe nothing fatal. Might happen after a ~month.*/
+    }
 
     Frame_shuffle();
 
@@ -1268,15 +1324,21 @@ void Frame_update(void)
 	    game_over_called = true;
 	}
     }
-
-    for (i = 0; i < num_player_shuffle; i++) {
+    
+    /* kps - is this ok ? */
+    /*for (i = 0; i < num_player_shuffle; i++) {*/
+    for (i = 0; i < observerStart + MAX_OBSERVERS - 1; i++) {
+	if (i >= observerStart + NumObservers ||
+	    (i >= num_player_shuffle && i < observerStart))
+	    continue;
 	pl = Players[i];
 	conn = pl->conn;
 	if (conn == NOT_CONNECTED) {
 	    continue;
 	}
+	playback = (pl->rectype == 1);
 	if (BIT(pl->status, PAUSE|GAME_OVER)
-	    && !allowViewing
+	    && !allowViewing && pl->rectype != 2
 	    && !pl->isowner) {
 	    /*
 	     * Lower the frame rate for non-playing players
@@ -1298,6 +1360,7 @@ void Frame_update(void)
 	/*
 	* Reduce frame rate to player's own rate.
 	*/
+#if 0
 	if (pl->player_count > 0) {
 	    pl->player_round++;
 	    if (pl->player_round >= pl->player_count) {
@@ -1305,6 +1368,15 @@ void Frame_update(void)
 		continue;
 	    }
 	}
+#else
+	if (pl->player_fps < FPS) {
+	    int divisor = (FPS - 1) / pl->player_fps + 1;
+	    /* Even combined with above pause check gives at least every
+	     * (4 * divisor)th frame. */
+	    if (frame_loops % divisor)
+ 		continue;
+	}
+#endif
 
 	if (Send_start_of_frame(conn) == -1) {
 	    continue;
@@ -1371,8 +1443,7 @@ void Set_message(const char *message)
 
     if ((i = strlen(message)) >= MSG_LEN) {
 #ifndef SILENT
-	errno = 0;
-	error("Max message len exceed (%d,%s)", i, message);
+	warn("Max message len exceed (%d,%s)", i, message);
 #endif
 	strlcpy(tmp, message, MSG_LEN);
 	msg = tmp;
@@ -1403,11 +1474,9 @@ void Set_player_message(player *pl, const char *message)
 
     if ((i = strlen(message)) >= MSG_LEN) {
 #ifndef SILENT
-	errno = 0;
-	error("Max message len exceed (%d,%s)", i, message);
+	warn("Max message len exceed (%d,%s)", i, message);
 #endif
-	memcpy(tmp, message, MSG_LEN - 1);
-	tmp[MSG_LEN - 1] = '\0';
+	strlcpy(tmp, message, MSG_LEN);
 	msg = tmp;
     } else {
 	msg = message;

@@ -214,6 +214,13 @@ void Cell_add_object(object *obj)
     bx = OBJ_X_IN_BLOCKS(obj);
     by = OBJ_Y_IN_BLOCKS(obj);
 
+#if 0
+    /* kps */
+    if (obj->type == OBJ_BALL)
+	printf(__FUNCTION__ ": ball added, bx = %d, by = %d\n", bx, by);
+    /* kps */
+#endif
+
     obj_node_ptr = &(obj->cell);
     next = obj_node_ptr->next;
     prev = obj_node_ptr->prev;

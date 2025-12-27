@@ -136,11 +136,11 @@ void Place_general_mine(int ind, unsigned short team, long status,
     cy = WRAP_YCLICK(cy);
 
     if (pl && BIT(pl->status, KILLED)) {
-	life = (int)(rfrac() * 12 /* * TIME_FACT */);
+	life = (int)(rfrac() * 12 * TIME_FACT);
     } else if (BIT(status, FROMCANNON)) {
 	life = CANNON_SHOT_LIFE;
     } else {
-	life = (mineLife ? mineLife /* * TIME_FACT*/: MINE_LIFETIME);
+	life = (mineLife ? mineLife * TIME_FACT : MINE_LIFETIME);
     }
 
     if (!BIT(mods.warhead, CLUSTER))
@@ -191,10 +191,8 @@ void Place_general_mine(int ind, unsigned short team, long status,
 		if (i != ind
 		    && !Team_immune(Players[i]->id, pl->id)
 		    && !IS_TANK_IND(i)) {
-		    int dx = cx - World.base[Players[i]->home_base].pos.x
-			* BLOCK_CLICKS;
-		    int dy = cy - World.base[Players[i]->home_base].pos.y
-			* BLOCK_CLICKS;
+		    int dx = cx - World.base[Players[i]->home_base].pos.x;
+		    int dy = cy - World.base[Players[i]->home_base].pos.y;
 		    if (Wrap_length(dx, dy) <= baseMineRange * BLOCK_CLICKS) {
 			Set_player_message(pl, "No base mining!");
 			return;
@@ -325,11 +323,11 @@ void Make_treasure_ball(int treasure)
 {
     ballobject *ball;
     treasure_t *t = &(World.treasures[treasure]);
-    DFLOAT	x = (t->pos.x + 0.5) * BLOCK_SZ,
-		y = (t->pos.y * BLOCK_SZ) + 10;
-    int cx = PIXEL_TO_CLICK(x);
-    int cy = PIXEL_TO_CLICK(y);
-    /*int cx = t->pos.x, cy = t->pos.y; kps - ng wants this */
+    int cx = t->pos.x;
+    int cy = t->pos.y;
+
+    if (!is_polygon_map)
+	cy += (10 * PIXEL_CLICKS - BLOCK_CLICKS / 2);
 
     if (t->empty)
 	return;
@@ -646,9 +644,9 @@ void Fire_general_shot(int ind, unsigned short team, bool cannon,
 	}
 
 	if (pl && BIT(pl->status, KILLED)) {
-	    life = (int)(rfrac() * 12 /* * TIME_FACT*/);
+	    life = (int)(rfrac() * 12 * TIME_FACT);
 	} else if (!cannon) {
-	    life = (missileLife ? missileLife /* * TIME_FACT */: MISSILE_LIFETIME);
+	    life = (missileLife ? missileLife * TIME_FACT : MISSILE_LIFETIME);
 	}
 
 	switch (type) {
@@ -952,7 +950,7 @@ void Fire_general_shot(int ind, unsigned short team, bool cannon,
 	}
 
 	shot->life 	= life / minis;
-	shot->fuselife	= shot->life - fuse; /* kps - ng does not want this */
+	/*shot->fuselife	= shot->life - fuse;*/
 	shot->fuseframe	= frame_loops + fuse;
 	shot->mass	= mass / minis;
 	shot->count 	= 0;
@@ -1068,18 +1066,12 @@ void Fire_normal_shots(int ind)
 {
     player		*pl = Players[ind];
     int			i, shot_angle;
-#if 1
-    if (frame_loops < pl->shot_time + fireRepeatRate) {
-	return;
-    }
-    pl->shot_time = frame_loops;
-#else
-    /* kps - ng wants this */
+
     if (frame_time < pl->shot_time + fireRepeatRate) {
  	return;
     }
     pl->shot_time = frame_time;
-#endif
+
     shot_angle = MODS_SPREAD_MAX - pl->mods.spread;
 
     Fire_main_shot(ind, OBJ_SHOT, pl->dir);
@@ -1190,13 +1182,15 @@ void Delete_shot(int ind)
 	    if (BIT(ball->status, NOEXPLOSION))
 		break;
 	    sound_play_sensors(ball->pos.cx, ball->pos.cy, EXPLODE_BALL_SOUND);
-#if 0 /* kps - ng wants this */
-	    /* The ball could be inside a BallArea, check whether the sparks
-	     * can exist here. Should we set a team? */
-	    if (is_inside(ball->prevpos.x, ball->prevpos.y,
-			  NONBALL_BIT | NOTEAM_BIT) != -1)
-		break;
-#endif
+
+	    if (is_polygon_map) {
+		/* The ball could be inside a BallArea, check whether
+		 * the sparks can exist here. Should we set a team? */
+		if (is_inside(ball->prevpos.x, ball->prevpos.y,
+			      NONBALL_BIT | NOTEAM_BIT) != -1)
+		    break;
+	    }
+
 	    Make_debris(
 		/* pos.x, pos.y   */ ball->prevpos.x, ball->prevpos.y,
 		/* vel.x, vel.y   */ ball->vel.x, ball->vel.y,
@@ -1210,7 +1204,7 @@ void Delete_shot(int ind)
 		/* num debris     */ 10 + 10 * rfrac(),
 		/* min,max dir    */ 0, RES-1,
 		/* min,max speed  */ 10, 50,
-		/* min,max life   */ 10/* * TIME_FACT */, 54/* * TIME_FACT */
+		/* min,max life   */ 10 * TIME_FACT, 54 * TIME_FACT
 		);
 
 	}
@@ -1321,8 +1315,8 @@ void Delete_shot(int ind)
 	    /* min,max dir    */ 0, RES-1,
 	    /* min,max speed  */ 20 * speed_modv,
 				 (intensity >> 2) * speed_modv,
-	    /* min,max life   */ (int)(8 /* * TIME_FACT */ * life_modv),
-	                         (int)((intensity >> 1) /* * TIME_FACT */ * life_modv)
+	    /* min,max life   */ (int)(8 * TIME_FACT * life_modv),
+	                         (int)((intensity >> 1) * TIME_FACT * life_modv)
 	    );
 	break;
 
@@ -1344,23 +1338,23 @@ void Delete_shot(int ind)
 	switch (shot->info) {
 
 	case ITEM_MISSILE:
-	    if (shot->life == 0 && shot->color != WHITE) {
+	    if (shot->life <= 0 && shot->color != WHITE) {
 		shot->color = WHITE;
-		shot->life  = FPS * WARN_TIME;
+		shot->life  = 12 * WARN_TIME * TIME_FACT;
 		return;
 	    }
-	    if (shot->life == 0 && rfrac() < rogueHeatProb) {
+	    if (shot->life <= 0 && rfrac() < rogueHeatProb) {
 		addHeat = 1;
 	    }
 	    break;
 
 	case ITEM_MINE:
-	    if (!shot->life && shot->color != WHITE) {
+	    if (shot->life <= 0 && shot->color != WHITE) {
 		shot->color = WHITE;
-		shot->life  = FPS * WARN_TIME;
+		shot->life  = 12 * WARN_TIME * TIME_FACT;
 		return;
 	    }
-	    if (shot->life == 0 && rfrac() < rogueMineProb) {
+	    if (shot->life <= 0 && rfrac() < rogueMineProb) {
 		addMine = 1;
 	    }
 	    break;
@@ -1424,14 +1418,15 @@ void Fire_laser(int ind)
     int		cx, cy;
 
     if (pl->item[ITEM_LASER] > pl->num_pulses
-	&& pl->velocity < PULSE_SPEED - PULSE_SAMPLE_DISTANCE) {
+	&& pl->velocity < CLICK_TO_PIXEL(PULSE_LENGTH)) {
 	if (pl->fuel.sum <= -ED_LASER) {
 	    CLR_BIT(pl->used, HAS_LASER);
 	} else {
+	    /* kps - ng does not want to add the velocity here */
 	    cx = pl->pos.cx + pl->ship->m_gun[pl->dir].cx
-		+ PIXEL_TO_CLICK(pl->vel.x);
+		+ PIXEL_TO_CLICK(pl->vel.x) * framespeed2;
 	    cy = pl->pos.cy + pl->ship->m_gun[pl->dir].cy
-		+ PIXEL_TO_CLICK(pl->vel.y);
+		+ PIXEL_TO_CLICK(pl->vel.y) * framespeed2;
 	    cx = WRAP_XCLICK(cx);
 	    cy = WRAP_YCLICK(cy);
 	    Fire_general_laser(ind, pl->team, cx, cy, pl->dir, pl->mods);
@@ -1449,9 +1444,9 @@ void Fire_general_laser(int ind, unsigned short team, int cx, int cy,
     if (pl) {
 	Add_fuel(&(pl->fuel), (long)ED_LASER);
 	sound_play_sensors(cx, cy, FIRE_LASER_SOUND);
-	life = (int)PULSE_LIFE(pl->item[ITEM_LASER]);
+	life = (int)PULSE_LIFE(pl->item[ITEM_LASER]) * TIME_FACT;
     } else {
-	life = (int)PULSE_LIFE(CANNON_PULSES);
+	life = (int)PULSE_LIFE(CANNON_PULSES) * TIME_FACT;
     }
 
     if (NumPulses >= MAX_TOTAL_PULSES) {
@@ -1470,57 +1465,17 @@ void Fire_general_laser(int ind, unsigned short team, int cx, int cy,
     pulse->life = life;
     pulse->mods = mods;
     pulse->refl = false;
-    pulse->pos.x = CLICK_TO_PIXEL(cx) - PULSE_SPEED * tcos(dir);
-    pulse->pos.y = CLICK_TO_PIXEL(cy) - PULSE_SPEED * tsin(dir);
+    pulse->pos.cx = cx - (int)(PULSE_SPEED * tcos(dir) * framespeed2);
+    pulse->pos.cy = cy - (int)(PULSE_SPEED * tsin(dir) * framespeed2);
     NumPulses++;
     if (pl)
 	pl->num_pulses++;
 }
 
 
+/* kps - this function is named Connector_force in ng */
 void Move_ball(int ind)
 {
-#ifdef ORIGINAL_BALL
-
-    /*
-     * This is the original ball code from XPilot versions 2.0 till 3.3.1.
-     * The `feature' which some people got dissatisfied with
-     * is that trying to connect to a fast moving ball may result
-     * in being launched with high speed into a wall.
-     * Some like that feature reasoning that making everything
-     * easy is boring.  Hence keeping the old code around.
-     * It can be enabled by adding -DORIGINAL_BALL to the compilation flags.
-     */
-
-    ballobject		*ball = BALL_IND(ind);
-    player		*pl = Players[ GetInd[ball->id] ];
-    vector		F;
-    const DFLOAT		k = 10.0,
-			a = 0.01,
-			l = Wrap_length(pl->pos.cx - ball->pos.cx,
-					pl->pos.cy - ball->pos.cy) / CLICK,
-			c = k * (1.0 - ballConnectorLength / l)
-			    - a * ABS(ball->length - l) * (ball->length - l);
-
-    if (l > ballConnectorLength * (1.00 + maxBallConnectorRatio)
-	|| l < ballConnectorLength * (1.00 - maxBallConnectorRatio)) {
-	Detach_ball(GetInd[ball->id], ind);
-	return;
-    }
-
-    F.x = WRAP_DX(pl->pos.x - ball->pos.x) * c;
-    F.y = WRAP_DY(pl->pos.y - ball->pos.y) * c;
-
-    pl->vel.x -= F.x/pl->mass;
-    pl->vel.y -= F.y/pl->mass;
-
-    ball->vel.x += F.x/ball->mass;
-    ball->vel.y += F.y/ball->mass;
-
-    ball->length = l;
-
-#else	/* ORIGINAL_BALL */
-
     /*
      * The new ball movement code since XPilot version 3.4.0 as made
      * by Bretton Wade.  The code was submitted in context diff format
@@ -1570,13 +1525,13 @@ void Move_ball(int ind)
     player		*pl = Players[ GetInd[ball->id] ];
     vector		D;
     DFLOAT		length, force, ratio, accell, cosine;
-    DFLOAT		pl_damping, ball_damping;
+    DFLOAT		pl_damping, ball_damping, damping;
     /* const DFLOAT		k = 1500.0, b = 2.0; */
     /* const DFLOAT		max_spring_ratio = 0.30; */
 
     /* compute the normalized vector between the ball and the player */
-    D.x = WRAP_DX(pl->pos.px - ball->pos.px);
-    D.y = WRAP_DY(pl->pos.py - ball->pos.py);
+    D.x = CENTER_XCLICK(pl->pos.cx - ball->pos.cx);
+    D.y = CENTER_YCLICK(pl->pos.cy - ball->pos.cy);
     length = VECTOR_LENGTH(D);
     if (length > 0.0) {
 	D.x /= length;
@@ -1586,7 +1541,8 @@ void Move_ball(int ind)
 	D.x = D.y = 0.0;
 
     /* compute the ratio for the spring action */
-    ratio = (ballConnectorLength - length) / ballConnectorLength;
+    ratio = (ballConnectorLength * CLICK - length)
+	/ (ballConnectorLength * CLICK);
 
     /* compute force by spring for this length */
     force = ballConnectorSpringConstant * ratio;
@@ -1601,7 +1557,7 @@ void Move_ball(int ind)
 	Detach_ball(GetInd[ball->id], ind);
 	return;
     }
-    ball->length = length;
+    ball->length = length / CLICK;
 
     /* compute damping for player */
     cosine = (pl->vel.x * D.x) + (pl->vel.y * D.y);
@@ -1611,17 +1567,23 @@ void Move_ball(int ind)
     cosine = (ball->vel.x * -D.x) + (ball->vel.y * -D.y);
     ball_damping = -ballConnectorDamping * cosine;
 
+    damping = pl_damping + ball_damping;
+
+    /*
+      damping can be calculated like this too:
+      damping = -ballConnectorDamping * ((pl->vel.x - ball->vel.x) * D.x +
+      (pl->vel.y - ball->vel.y) * D.y);
+    */
+
     /* compute accelleration for player, assume t = 1 */
-    accell = (force + pl_damping + ball_damping) / pl->mass;
-    pl->vel.x += D.x * accell;
-    pl->vel.y += D.y * accell;
+    accell = (force + damping) / pl->mass;
+    pl->vel.x += D.x * accell * framespeed2;
+    pl->vel.y += D.y * accell * framespeed2;
 
     /* compute accelleration for ball, assume t = 1 */
-    accell = (force + ball_damping + pl_damping) / ball->mass;
-    ball->vel.x += -D.x * accell;
-    ball->vel.y += -D.y * accell;
-
-#endif	/* ORIGINAL_BALL */
+    accell = (force + damping) / ball->mass;
+    ball->vel.x += -D.x * accell * framespeed2;
+    ball->vel.y += -D.y * accell * framespeed2;
 }
 
 
@@ -1777,8 +1739,9 @@ void Move_smart_shot(int ind)
 			pl->pos.cy - shot->pos.cy) / CLICK;
     x_dif += pl->vel.x * (range / shot_speed);
     y_dif += pl->vel.y * (range / shot_speed);
-    theta = (int)Wrap_findDir(pl->pos.px + x_dif - shot->pos.px,
-			      pl->pos.py + y_dif - shot->pos.py);
+    theta = (int)
+	Wrap_cfindDir(pl->pos.cx + PIXEL_TO_CLICK(x_dif) - shot->pos.cx,
+		      pl->pos.cy + PIXEL_TO_CLICK(y_dif) - shot->pos.cy);
 
     {
 	DFLOAT x, y, vx, vy;
@@ -1794,7 +1757,7 @@ void Move_smart_shot(int ind)
 	vy = shot->vel.y;
 	x = shot_speed / (BLOCK_SZ*BLOCK_PARTS);
 	vx /= x; vy /= x;
-	x = shot->pos.px; y = shot->pos.py;
+	x = CLICK_TO_PIXEL(shot->pos.cx); y = CLICK_TO_PIXEL(shot->pos.cy);
 	foundw = 0;
 
 	for (i = SMART_SHOT_LOOK_AH; i > 0 && foundw == 0; i--) {
@@ -1809,21 +1772,23 @@ void Move_smart_shot(int ind)
 	    if (xi < 0 || xi >= World.x || yi < 0 || yi >= World.y)
 		break;
 
-	    switch(World.block[xi][yi]) {
-	    case TARGET:
-	    case TREASURE:
-	    case FUEL:
-	    case FILLED:
-	    case REC_LU:
-	    case REC_RU:
-	    case REC_LD:
-	    case REC_RD:
-	    case CANNON:
-		if (range > (SMART_SHOT_LOOK_AH-i)*(BLOCK_SZ/BLOCK_PARTS)) {
-		    if (shot_speed > SMART_SHOT_MIN_SPEED)
-			shot_speed -= acc * (SMART_SHOT_DECFACT+1);
+	    if (!is_polygon_map) {
+		switch(World.block[xi][yi]) {
+		case TARGET:
+		case TREASURE:
+		case FUEL:
+		case FILLED:
+		case REC_LU:
+		case REC_RU:
+		case REC_LD:
+		case REC_RD:
+		case CANNON:
+		    if (range > (SMART_SHOT_LOOK_AH-i)*(BLOCK_SZ/BLOCK_PARTS)) {
+			if (shot_speed > SMART_SHOT_MIN_SPEED)
+			    shot_speed -= acc * (SMART_SHOT_DECFACT+1);
+		    }
+		    foundw = 1;
 		}
-		foundw = 1;
 	    }
 	}
 
@@ -1839,22 +1804,24 @@ void Move_smart_shot(int ind)
 		yt = yi + sur[(i+j+si)&7].dy;
 
 		if (xt >= 0 && xt < World.x && yt >= 0 && yt < World.y)
-		    switch (World.block[xt][yt]) {
-		    case TARGET:
-		    case TREASURE:
-		    case FUEL:
-		    case FILLED:
-		    case REC_LU:
-		    case REC_RU:
-		    case REC_LD:
-		    case REC_RD:
-		    case CANNON:
-			if (!si)
-			    k = -32;
-			break;
-		    default:
-			++k;
-			break;
+		    if (!is_polygon_map) {
+			switch (World.block[xt][yt]) {
+			case TARGET:
+			case TREASURE:
+			case FUEL:
+			case FILLED:
+			case REC_LU:
+			case REC_RU:
+			case REC_LD:
+			case REC_RD:
+			case CANNON:
+			    if (!si)
+				k = -32;
+			    break;
+			default:
+			    ++k;
+			    break;
+			}
 		    }
 	    }
 	    if (k > freemax
@@ -1873,9 +1840,9 @@ void Move_smart_shot(int ind)
 	if (angle >= 0) {
 	    i = angle&7;
 	    theta = (int)Wrap_findDir((yi + sur[i].dy) * BLOCK_SZ
-			    - (shot->pos.py + 2 * shot->vel.y),
+			    - (CLICK_TO_PIXEL(shot->pos.cy) + 2 * shot->vel.y),
 			    (xi + sur[i].dx) * BLOCK_SZ
-			    - (shot->pos.px - 2 * shot->vel.x));
+			    - (CLICK_TO_PIXEL(shot->pos.cx) - 2 * shot->vel.x));
 #ifdef SHOT_EXTRA_SLOWDOWN
 	    if (!foundw && range > (SHOT_LOOK_AH-i) * BLOCK_SZ) {
 		if (shot_speed

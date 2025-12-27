@@ -377,6 +377,8 @@ bool Parser(int argc, char **argv)
     char		*fname;
     option_desc		*desc;
 
+    memset(&World, 0, sizeof(World));
+
     if (Init_options() == FALSE) {
 	return FALSE;
     }
@@ -448,7 +450,6 @@ bool Parser(int argc, char **argv)
      * If "mapFileName" is defined and it is not equal to "wild"
      * then read it's contents from file.  Else read a default map.
      */
-#if 1
     if (!(fname = Option_get_value("mapData", NULL))) {
 	if ((fname = Option_get_value("mapFileName", NULL)) != NULL) {
 	    if (strcasecmp(fname, "wild") && !parseMapFile(fname)) {
@@ -466,26 +467,6 @@ bool Parser(int argc, char **argv)
 	    }
 	}
     }
-#else
-    /* kps - ng wants this */
-    if ((fname = Option_get_value("mapFileName", NULL)) != NULL) {
-	if (!parseMapFile(fname)) {
-	    xpprintf("Unable to read %s, trying to open %s\n", fname, Conf_default_map());
-	    if (!parseMapFile(Conf_default_map())) {
-		xpprintf("Unable to read %s\n", Conf_default_map());
-		warn("Unable to read any map. Exiting.");
-		exit(1);
-	    }
-	}
-    } else {
-	xpprintf("Map not specified, trying to open %s\n", Conf_default_map());
-	if (!parseMapFile(Conf_default_map())) {
-	    xpprintf("Unable to read %s\n", Conf_default_map());
-	    warn("Unable to read any map. Exiting.");
-	    exit(1);
-	}
-    }
-#endif
     /*
      * Parse the options database and `internalise' it.
      */
@@ -493,17 +474,12 @@ bool Parser(int argc, char **argv)
 
     Options_free();
 
-#if 1
     /*
      * Construct the World structure from the options.
      */
     status = Grok_map();
-
+	
     return status;
-#else
-    /* kps - ng */
-    return TRUE;
-#endif
 }
 
 #if 0

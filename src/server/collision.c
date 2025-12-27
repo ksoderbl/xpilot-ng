@@ -66,82 +66,9 @@ char collision_version[] = VERSION;
  * Kudos to Svenske and Mad Gurka for beta testing, and Murx for
  * invaluable insights.
  */
-#if 0
-static int in_range_acd(
-	int p1x, int p1y, int p2x, int p2y,
-	int q1x, int q1y, int q2x, int q2y,
-	int r)
-{
-    long		fac1, fac2;
-    double		tmin, fminx, fminy;
-    long		top, bot;
-    long		dpx, dpy, dqx, dqy;
-    long		dx, dy, dox, doy;
 
-    /*
-     * Get the wrapped coordinates straight 
-     */
-    if (BIT(World.rules->mode, WRAP_PLAY)) {
-	if (ABS(p2x - p1x) > World.width / 2) {
-	    if (p1x < p2x)
-		p1x += World.width;
-	    else
-		p2x += World.width;
-	}
-	if (ABS(p2y - p1y) > World.height / 2) {
-	    if (p1y < p2y)
-		p1y += World.height;
-	    else
-		p2y += World.height;
-	}
-	if (ABS(q2x - q1x) > World.width / 2) {
-	    if (q1x < q2x)
-		q1x += World.width;
-	    else
-		q2x += World.width;
-	}
-	if (ABS(q2y - q1y) > World.height / 2) {
-	    if (q1y < q2y)
-		q1y += World.height;
-	    else
-		q2y += World.height;
-	}
-    }
-
-    dx = WRAP_DX(q2x - p2x);
-    dy = WRAP_DY(q2y - p2y);
-    if (sqr(dx) + sqr(dy) < sqr(r))
-	return 1;
-
-    dox = WRAP_DX(p1x - q1x);
-    doy = WRAP_DY(p1y - q1y);
-    if (sqr(dox) + sqr(doy) < sqr(r))
-	return 1;
-
-    dpx = WRAP_DX(p2x - p1x);
-    dpy = WRAP_DY(p2y - p1y);
-    dqx = WRAP_DX(q2x - q1x);
-    dqy = WRAP_DY(q2y - q1y);
-
-    /*
-     * Do the detection 
-     */
-    fac1 = dpx - dqx;
-    fac2 = dpy - dqy;
-    top = -(fac1 * dx + fac2 * dy);
-    bot = (fac1 * fac1 + fac2 * fac2);
-    if (top < 0 || bot < 1 || top > bot)
-	return 0;
-    tmin = ((double)top) / ((double)bot);	/* BG: could make top&bot doubles. */
-    fminx = dx + fac1 * tmin;
-    fminy = dy + fac2 * tmin;
-    if (fminx * fminx + fminy * fminy < r * r)
-	return 1;
-    else
-	return 0;
-}
-#else
-static int in_range_acd(
+/* kps - note: thise are all given in clicks here */
+static int in_range_acd_old(
 	int p1x, int p1y, int p2x, int p2y,
 	int q1x, int q1y, int q2x, int q2y,
 	int r)
@@ -213,7 +140,6 @@ static int in_range_acd(
     r   = CLICK_TO_PIXEL(r);
     /* kps hack end */
 
-
     /*
      * Do the detection 
      */
@@ -233,7 +159,7 @@ static int in_range_acd(
     else
 	return 0;
 }
-#endif
+
 
 /*
  * Globals
@@ -303,12 +229,12 @@ static void PlayerCollision(void)
 		}
 		if (BIT(Players[j]->used, HAS_PHASING_DEVICE))
 		    continue;
-		if (!in_range_acd(pl->prevpos.x, pl->prevpos.y,
-				  pl->pos.cx, pl->pos.cy, 
-				  Players[j]->prevpos.x,
-				  Players[j]->prevpos.y, 
-				  Players[j]->pos.cx, Players[j]->pos.cy, 
-				  PIXEL_TO_CLICK(2*SHIP_SZ-6))) {
+		if (!in_range_acd_old(pl->prevpos.x, pl->prevpos.y,
+				      pl->pos.cx, pl->pos.cy, 
+				      Players[j]->prevpos.x,
+				      Players[j]->prevpos.y, 
+				      Players[j]->pos.cx, Players[j]->pos.cy, 
+				      PIXEL_TO_CLICK(2*SHIP_SZ-6))) {
 		    continue;
 		}
 
@@ -415,7 +341,7 @@ static void PlayerCollision(void)
 			sound_play_sensors(Players[j]->pos.cx,
 					   Players[j]->pos.cy,
 					   PLAYER_RAN_OVER_PLAYER_SOUND);
-			Rank_AddKill(pl);
+			pl->kills++;
 			if (IS_TANK_IND(i)) {
 			    sc = Rate(Players[i_tank_owner]->score,
 						 Players[j]->score)
@@ -442,7 +368,7 @@ static void PlayerCollision(void)
 			Set_message(msg);
 			sound_play_sensors(pl->pos.cx, pl->pos.cy,
 					   PLAYER_RAN_OVER_PLAYER_SOUND);
-			Rank_AddKill(Players[j]);
+			Players[j]->kills++;
 			if (IS_TANK_IND(j)) {
 			    sc = Rate(Players[j_tank_owner]->score, pl->score)
 				   * tankKillScoreMult;
@@ -484,9 +410,8 @@ static void PlayerCollision(void)
 		pl->ball = NULL;
 	    else {
 		DFLOAT distance = Wrap_length(pl->pos.cx - ball->pos.cx,
-					      pl->pos.cy - ball->pos.cy);
-		/* kps hack */
-		distance /= CLICK;
+					      pl->pos.cy - ball->pos.cy)
+		    / CLICK;
 		if (distance >= ballConnectorLength) {
 		    ball->id = pl->id;
 		    /* this is only the team of the owner of the ball,
@@ -510,11 +435,11 @@ static void PlayerCollision(void)
 	     * We want a separate list of balls to avoid searching
 	     * the object list for balls.
 	     */
-	    int dist, mindist = ballConnectorLength * CLICK;
+	    int dist, mindist = ballConnectorLength;
 	    for (j = 0; j < NumObjs; j++) {
 		if (BIT(Obj[j]->type, OBJ_BALL) && Obj[j]->id == NO_ID) {
 		    dist = Wrap_length(pl->pos.cx - Obj[j]->pos.cx,
-				       pl->pos.cy - Obj[j]->pos.cy);
+				       pl->pos.cy - Obj[j]->pos.cy) / CLICK;
 		    if (dist < mindist) {
 			ballobject *ball = BALL_PTR(Obj[j]);
 			int bteam = World.treasures[ball->treasure].team;
@@ -546,10 +471,8 @@ static void PlayerCollision(void)
 		pl->time++;
 	    }
 	    if (BIT(pl->status, PLAYING|KILLED) == PLAYING
-		&& Wrap_length(pl->pos.cx
-			       - World.check[pl->check].x * BLOCK_CLICKS,
-			       pl->pos.cy
-			       - World.check[pl->check].y * BLOCK_CLICKS)
+		&& Wrap_length(pl->pos.cx - World.check[pl->check].x,
+			       pl->pos.cy - World.check[pl->check].y)
 		    < checkpointRadius * BLOCK_CLICKS
 		&& !IS_TANK_PTR(pl)
 		&& !ballrace) {
@@ -639,11 +562,11 @@ static void PlayerObjectCollision(int ind)
 	}
 
 	range = SHIP_SZ + obj->pl_range;
-	if (!in_range_acd(pl->prevpos.x, pl->prevpos.y,
-			  pl->pos.cx, pl->pos.cy,
-			  obj->prevpos.x, obj->prevpos.y,
-			  obj->pos.cx, obj->pos.cy,
-			  PIXEL_TO_CLICK(range))) {
+	if (!in_range_acd_old(pl->prevpos.x, pl->prevpos.y,
+			      pl->pos.cx, pl->pos.cy,
+			      obj->prevpos.x, obj->prevpos.y,
+			      obj->pos.cx, obj->pos.cy,
+			      range * CLICK)) {
 	    continue;
 	}
 
@@ -682,7 +605,8 @@ static void PlayerObjectCollision(int ind)
 	}
 	else if (BIT(obj->type, OBJ_HEAT_SHOT | OBJ_SMART_SHOT | OBJ_TORPEDO
 				| OBJ_SHOT | OBJ_CANNON_SHOT)) {
-	    if (pl->id == obj->id && obj->life > obj->fuselife) {
+	    /*if (pl->id == obj->id && obj->life > obj->fuselife) {*/
+	    if (pl->id == obj->id && frame_loops < obj->fuseframe) {
 		continue;
 	    }
 	}
@@ -704,11 +628,11 @@ static void PlayerObjectCollision(int ind)
 	if (radius >= range) {
 	    hit = 1;
 	} else {
-	    hit = in_range_acd(pl->prevpos.x, pl->prevpos.y,
-			       pl->pos.cx, pl->pos.cy,
-			       obj->prevpos.x, obj->prevpos.y,
-			       obj->pos.cx, obj->pos.cy,
-			       PIXEL_TO_CLICK(range));
+	    hit = in_range_acd_old(pl->prevpos.x, pl->prevpos.y,
+				   pl->pos.cx, pl->pos.cy,
+				   obj->prevpos.x, obj->prevpos.y,
+				   obj->pos.cx, obj->pos.cy,
+				   range * CLICK);
 	}
 
 	/*
@@ -827,7 +751,7 @@ static void Player_collides_with_ball(int ind, object *obj, int radius)
 		   * selfKillScoreMult;
 	    SCORE(ind, -sc, pl->pos.cx, pl->pos.cy, Players[killer]->name);
 	} else {
-	    Rank_AddKill(Players[killer]);
+	    Players[killer]->kills++;
 	    sc = Rate(Players[killer]->score, pl->score)
 		       * ballKillScoreMult;
 	    Score_players(killer, sc, pl->name,
@@ -1127,7 +1051,7 @@ static void Player_collides_with_debris(int ind, object *obj)
 	    SCORE(ind, -sc, pl->pos.cx, pl->pos.cy,
 		  (killer == -1) ? "[Explosion]" : pl->name);
 	} else {
-	    Rank_AddKill(Players[killer]);
+	    Players[killer]->kills++;
 	    sc = Rate(Players[killer]->score, pl->score)
 		       * explosionKillScoreMult;
 	    Score_players(killer, sc, pl->name,
@@ -1315,7 +1239,7 @@ static void Player_collides_with_killing_shot(int ind, object *obj)
 		    strcat(msg, "  How strange!");
 		    sc = Rate(0, pl->score) * selfKillScoreMult;
 		} else {
-		    Rank_AddKill(Players[killer]);
+		    Players[killer]->kills++;
 		    sc = Rate(Players[killer]->score, pl->score);
 		}
 	    }
@@ -1468,7 +1392,8 @@ static void AsteroidCollision(void)
 		&& !BIT(obj->status, FROMCANNON))
 		continue;
 	    /* don't collide while still overlapping  after breaking */
-	    if (obj->type == OBJ_ASTEROID && ast->life > ast->fuselife)
+	    /*if (obj->type == OBJ_ASTEROID && ast->life > ast->fuselife)*/
+	    if (obj->type == OBJ_ASTEROID && frame_loops < ast->fuseframe)
 		continue;
 	    /* don't collide with self */
 	    if (obj == ast)
@@ -1480,11 +1405,11 @@ static void AsteroidCollision(void)
 		continue;
 
 	    radius = ast->pl_radius + obj->pl_radius;
-	    if (!in_range_acd(ast->prevpos.x, ast->prevpos.y,
-			      ast->pos.cx, ast->pos.cy,
-			      obj->prevpos.x, obj->prevpos.y,
-			      obj->pos.cx, obj->pos.cy,
-			      PIXEL_TO_CLICK(radius))) {
+	    if (!in_range_acd_old(ast->prevpos.x, ast->prevpos.y,
+				  ast->pos.cx, ast->pos.cy,
+				  obj->prevpos.x, obj->prevpos.y,
+				  obj->pos.cx, obj->pos.cy,
+				  radius * CLICK)) {
 		continue;
 	    }
 
@@ -1503,7 +1428,8 @@ static void AsteroidCollision(void)
 		damage = -ABS(2 * obj->mass * VECTOR_LENGTH(obj->vel));
 		Delta_mv_elastic(ast, obj);
 		/* avoid doing collision twice */
-		obj->fuselife = obj->life - 1;
+		/*obj->fuselife = obj->life - 1;*/
+		obj->fuseframe = frame_loops + 1;
 		sound = true;
 		break;
 	    case OBJ_SPARK:
@@ -1544,9 +1470,10 @@ static void AsteroidCollision(void)
 	    }
 
 	    if (ast->life > 0) {
-		if (ast->life <= ast->fuselife) {
-		    ast->life += ASTEROID_FUEL_HIT(damage, WIRE_PTR(ast)->size);
-		}
+		/* kps - this is some strange sort of hack - fix it*/
+		/*if (ast->life <= ast->fuselife) {*/
+		ast->life += ASTEROID_FUEL_HIT(damage, WIRE_PTR(ast)->size);
+		/*}*/
 		if (sound) {
 		    sound_play_sensors(ast->pos.cx, ast->pos.cy,
 				       ASTEROID_HIT_SOUND);    
@@ -1618,10 +1545,8 @@ static void BallCollision(void)
 	    player *owner = Players[owner_ind];
 
 	    if (!ballrace_connect || ball->id == owner->id) { 
-		if (Wrap_length(ball->pos.cx
-				 - World.check[owner->check].x * BLOCK_CLICKS,
-				ball->pos.cy
-				 - World.check[owner->check].y * BLOCK_CLICKS)
+		if (Wrap_length(ball->pos.cx - World.check[owner->check].x,
+				ball->pos.cy - World.check[owner->check].y)
 		    < checkpointRadius * BLOCK_CLICKS) {
 		    Player_pass_checkpoint(owner_ind);
 		}
@@ -1650,11 +1575,11 @@ static void BallCollision(void)
 		continue;
 	    }
 
-	    if (!in_range_acd(ball->prevpos.x, ball->prevpos.y,
-			      ball->pos.cx, ball->pos.cy,
-			      obj->prevpos.x, obj->prevpos.y,
-			      obj->pos.cx, obj->pos.cy,
-			      PIXEL_TO_CLICK(ball->pl_radius + obj->pl_radius))) {
+	    if (!in_range_acd_old(ball->prevpos.x, ball->prevpos.y,
+				  ball->pos.cx, ball->pos.cy,
+				  obj->prevpos.x, obj->prevpos.y,
+				  obj->pos.cx, obj->pos.cy,
+				  (ball->pl_radius + obj->pl_radius)*CLICK)) {
 		continue;
 	    }
 
@@ -1751,11 +1676,11 @@ static void MineCollision(void)
 	    if (obj->life <= 0)
 		continue;
 
-	    if (!in_range_acd(mine->prevpos.x, mine->prevpos.y,
-			      mine->pos.cx, mine->pos.cy,
-			      obj->prevpos.x, obj->prevpos.y,
-			      obj->pos.cx, obj->pos.cy,
-			      PIXEL_TO_CLICK(mineShotDetonateDistance + obj->pl_radius))) {
+	    if (!in_range_acd_old(mine->prevpos.x, mine->prevpos.y,
+				  mine->pos.cx, mine->pos.cy,
+				  obj->prevpos.x, obj->prevpos.y,
+				  obj->pos.cx, obj->pos.cy,
+				  mineShotDetonateDistance + obj->pl_radius)) {
 		continue;
 	    }
 
@@ -1767,7 +1692,7 @@ static void MineCollision(void)
     }
 }
 
-/* kps - ng does not want this */
+
 int wormXY(int x, int y)
 {
     return World.itemID[x][y];

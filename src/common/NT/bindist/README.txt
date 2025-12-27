@@ -1,6 +1,6 @@
-This is the README for XPilot.exe and XPilotServer.exe  4.5.4X-rc4-NT13.
+This is the README for XPilot.exe and XPilotServer.exe  4.5.4X-rc5-NT13.
 
-Copyright © 1991-2002 by Bjørn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska & Uoti Urpala.
+Copyright © 1991-2003 by Bjørn Stabell, Ken Ronny Schouten, Bert Gijsbers, Dick Balaska & Uoti Urpala.
 
 Following are notes for building the
 Windows version of XPilot.  See INSTALL in the XPilot root

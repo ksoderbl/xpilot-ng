@@ -136,10 +136,6 @@
 #    endif
 #endif
 
-#ifndef SOUNDDIR
-#    define SOUNDDIR	LIBDIR "sound/"
-#endif
-
 #ifndef ZCAT_EXT
 #    define ZCAT_EXT	".gz"
 #endif

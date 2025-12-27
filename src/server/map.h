@@ -205,6 +205,7 @@ typedef struct {
     int		NumEmptyTreasures;	/* Number of empty treasures owned */
     int		TreasuresDestroyed;	/* Number of destroyed treasures */
     int		TreasuresLeft;		/* Number of treasures left */
+    int		SwapperId;		/* Player swapping to this full team */
     DFLOAT	score;
     DFLOAT	prev_score;
 } team_t;
@@ -212,6 +213,8 @@ typedef struct {
 typedef struct {
     ipos	pos;
 } item_concentrator_t, asteroid_concentrator_t;
+
+extern bool is_polygon_map;
 
 typedef struct {
     int			x, y;		/* Size of world in blocks */
@@ -250,8 +253,7 @@ typedef struct {
     int			NumCannons;
     cannon_t		*cannon;
     int			NumChecks;
-    /* kps - ng wants this to be *check; */
-    ipos		check[OLD_MAX_CHECKS];
+    ipos		*check;
     int			NumWormholes;
     wormhole_t		*wormHoles;
     int			NumTreasures;

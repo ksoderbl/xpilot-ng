@@ -139,20 +139,23 @@ int main(int argc, char **argv)
     init_error(argv[0]);
     Check_server_versions();
 
-    seedMT((unsigned)time((time_t *)0) * Get_process_id());
+    /*seedMT((unsigned)time((time_t *)0) * Get_process_id());*/
+    /* Removed seeding random number generator because of server recordings. */
 
     if (Parser(argc, argv) == FALSE) {
 	exit(1);
     }
 
+    Init_recording();
     plock_server(pLockServer);           /* Lock the server into memory */
     Make_table();			/* Make trigonometric tables */
     Compute_gravity();
-    Find_base_direction();
+    Find_base_direction(); /* kps - ng does not want this */
     Walls_init();
 
     /* Allocate memory for players, shots and messages */
-    Alloc_players(World.NumBases + MAX_PSEUDO_PLAYERS);
+    Alloc_players(World.NumBases + MAX_PSEUDO_PLAYERS + MAX_OBSERVERS);
+    observerStart = World.NumBases + MAX_PSEUDO_PLAYERS;
     Alloc_shots(MAX_TOTAL_SHOTS);
     Alloc_cells();
 
@@ -172,7 +175,11 @@ int main(int argc, char **argv)
 	if (addr == NULL) {
 	    errno = 0;
 	    error("Failed name lookup on: %s", serverHost);
-	    return 1;
+#ifndef _WINDOWS
+	    exit(1);
+#else
+	    return(1);
+#endif
 	}
 	serverAddr = xp_strdup(addr);
 	strlcpy(Server.host, serverHost, sizeof(Server.host));
@@ -218,7 +225,8 @@ int main(int argc, char **argv)
     serverTime = time(NULL);
 
 #ifndef SILENT
-    xpprintf("%s Server runs at %d frames per second\n", showtime(), framesPerSecond);
+    xpprintf("%s Server runs at %d frames per second (FPSMultiplier = %d)\n",
+	     showtime(), framesPerSecond, FPSMultiplier);
 #endif
 
     if (timerResolution > 0) {
@@ -245,6 +253,7 @@ void Main_loop(void)
 {
     main_loops++;
 
+    /* kps - xxx */
     if ((main_loops & 0x3F) == 0) {
 	Meta_update(0);
     }
@@ -299,7 +308,29 @@ void Main_loop(void)
 	}
     }
 
+    playback = record = 0;
     Queue_loop();
+    playback = rplayback;
+    record = rrecord;
+
+    if (playback && (*playback_ei == main_loops)) {
+	char *a, *b, *c, *d, *e;
+	int i, j;
+	a = playback_es;
+	while (*playback_es++);
+	b = playback_es;
+	while (*playback_es++);
+	c = playback_es;
+	while (*playback_es++);
+	d = playback_es;
+	while (*playback_es++);
+	e = playback_es;
+	while (*playback_es++);
+	playback_ei++;
+	i = *playback_ei++;
+	j = *playback_ei++;
+	Setup_connection(a, b, c, i, d, e, j);
+    }
 }
 
 
@@ -311,6 +342,8 @@ int End_game(void)
     player		*pl;
     char		msg[MSG_LEN];
 
+    record = rrecord;
+    playback = rplayback; /* Could be called from signal handler */
     if (ShutdownServer == 0) {
 	errno = 0;
 	error("Shutting down...");
@@ -326,6 +359,19 @@ int End_game(void)
 	} else {
 	    Destroy_connection(pl->conn, msg);
 	}
+    }
+
+    record = playback = 0;
+    while (NumObservers > 0) {
+	pl = Players[observerStart + NumObservers - 1];
+	Destroy_connection(pl->conn, msg);
+    }
+    record = rrecord;
+    playback = rplayback;
+    
+    if (recordMode != 0) {
+	recordMode = 0;
+	Init_recording();
     }
 
     /* Tell meta server that we are gone. */
@@ -500,7 +546,12 @@ void Server_info(char *str, unsigned max_size)
 	    "MAX SPEED........: %d fps\n"
 	    "WORLD (%3dx%3d)..: %s\n"
 	    "      AUTHOR.....: %s\n"
-	    "PLAYERS (%2d/%2d)..:\n",
+	    "PLAYERS (%2d/%2d)..:\n"
+	    "\n"
+	    "EXPERIMENTAL SERVER, see\n"
+	    "http://xpilot.sourceforge.net/\n"
+	    "http://www.hut.fi/~ksoderbl/xpilot/xpilot-4.5.4X-rc5.txt\n"
+	    "\n",
 	    server_version,
 	    (game_lock && ShutdownServer == -1) ? "locked" :
 	    (!game_lock && ShutdownServer != -1) ? "shutting down" :
@@ -519,8 +570,8 @@ void Server_info(char *str, unsigned max_size)
 	return;
     }
 
-    sprintf(msg,
-	   "\nNO:  TM: NAME:             LIFE:   SC:    PLAYER:\n"
+    sprintf(msg, "\n"
+	   "NO:  TM: NAME:             LIFE:   SC:    PLAYER:\n"
 	   "-------------------------------------------------\n");
     if (strlen(msg) + strlen(str) >= max_size) {
 	return;
@@ -652,7 +703,7 @@ void Log_game(const char *heading)
 void Game_Over(void)
 {
     long		maxsc, minsc;
-    int			i, win, loose;
+    int			i, win, lose;
     char		msg[128];
 
     Set_message("Game over...");
@@ -666,7 +717,7 @@ void Game_Over(void)
 	int teamscore[MAX_TEAMS];
 	maxsc = -32767;
 	minsc = 32767;
-	win = loose = -1;
+	win = lose = -1;
 
 	for (i=0; i < MAX_TEAMS; i++) {
 	    teamscore[i] = 1234567; /* These teams are not used... */
@@ -690,7 +741,7 @@ void Game_Over(void)
 		}
 		if (teamscore[i] < minsc) {
 		    minsc = teamscore[i];
-		    loose = i;
+		    lose = i;
 		}
 	    }
 	}
@@ -701,8 +752,8 @@ void Game_Over(void)
 	    xpprintf("%s\n", msg);
 	}
 
-	if (loose != -1 && loose != win) {
-	    sprintf(msg,"Worst team (%ld Pts): Team %d", minsc, loose);
+	if (lose != -1 && lose != win) {
+	    sprintf(msg,"Worst team (%ld Pts): Team %d", minsc, lose);
 	    Set_message(msg);
 	    xpprintf("%s\n", msg);
 	}
@@ -710,7 +761,7 @@ void Game_Over(void)
 
     maxsc = -32767;
     minsc = 32767;
-    win = loose = -1;
+    win = lose = -1;
 
     for (i = 0; i < NumPlayers; i++) {
 	SET_BIT(Players[i]->status, GAME_OVER);
@@ -721,7 +772,7 @@ void Game_Over(void)
 	    }
 	    if (Players[i]->score < minsc) {
 		minsc = Players[i]->score;
-		loose = i;
+		lose = i;
 	    }
 	}
     }
@@ -730,8 +781,8 @@ void Game_Over(void)
 	Set_message(msg);
 	xpprintf("%s\n", msg);
     }
-    if (loose != -1 && loose != win) {
-	sprintf(msg,"Worst human player: %s", Players[loose]->name);
+    if (lose != -1 && lose != win) {
+	sprintf(msg,"Worst human player: %s", Players[lose]->name);
 	Set_message(msg);
 	xpprintf("%s\n", msg);
     }

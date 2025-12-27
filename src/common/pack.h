@@ -101,10 +101,10 @@
  * 4.5.0.1: temporary wormholes
  *
  * 4.F.1.0: Send_player(): Additional %c (is 1 when we tell a player about himself).
- * 4.F.1.1: XXX - kps
+ * 4.F.1.1: same as 4.5.0.1, but adds the 4.F.1.0 Send_player() change
  */
 #ifdef SERVER
-#define	MAGIC		0x4501F4ED
+#define	MAGIC		(is_polygon_map ? 0x4F11F4ED : 0x4501F4ED)
 #else
 #define	MAGIC		0x4F11F4ED
 #endif
@@ -116,14 +116,8 @@
 /*
  * Which client versions can join this server.
  */
-#define MIN_CLIENT_VERSION	0x3103
-#define MAX_CLIENT_VERSION	MY_VERSION
-
-#if 0 /* when the server supports poly stuff, use this */
-/*
- * Which client versions can join this server.
- */
-#define MIN_CLIENT_VERSION	0x4F09
+#ifdef SERVER
+#define MIN_CLIENT_VERSION	(is_polygon_map ? 0x4F09 : 0x4203)
 #define MAX_CLIENT_VERSION	MY_VERSION
 #endif
 

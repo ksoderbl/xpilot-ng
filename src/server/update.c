@@ -44,6 +44,7 @@
 #include "objpos.h"
 #include "cannon.h"
 #include "asteroid.h"
+#include "click.h"
 #include "commonproto.h"
 #include "netserver.h"
 
@@ -56,13 +57,13 @@ char update_version[] = VERSION;
 
 #define update_object_speed(o_)						\
     if (BIT((o_)->status, GRAVITY)) {					\
-	(o_)->vel.x += (o_)->acc.x					\
-		    + World.gravity[(o_)->pos.bx][(o_)->pos.by].x;	\
-	(o_)->vel.y += (o_)->acc.y					\
-		    + World.gravity[(o_)->pos.bx][(o_)->pos.by].y;	\
+	(o_)->vel.x += ((o_)->acc.x					\
+	  + World.gravity[(o_)->pos.bx][(o_)->pos.by].x) * framespeed2;	\
+	(o_)->vel.y += ((o_)->acc.y					\
+	  + World.gravity[(o_)->pos.bx][(o_)->pos.by].y) * framespeed2;	\
     } else {								\
-	(o_)->vel.x += (o_)->acc.x;					\
-	(o_)->vel.y += (o_)->acc.y;					\
+	(o_)->vel.x += (o_)->acc.x * framespeed2;			\
+	(o_)->vel.y += (o_)->acc.y * framespeed2;			\
     }
 
 int	round_delay = 0;	/* delay until start of next round */
@@ -83,7 +84,8 @@ static void Transport_to_home(int ind)
      * This results in a visually pleasing take off and landing.
      */
     player		*pl = Players[ind];
-    DFLOAT		bx, by, dx, dy,	t, m;
+    int			cx, cy;
+    DFLOAT		dx, dy, t, m;
     const int		T = RECOVERY_DELAY;
 
     if (BIT(World.rules->mode, TIMING) && pl->round) {
@@ -93,14 +95,14 @@ static void Transport_to_home(int ind)
 		check = pl->check - 1;
 	else
 		check = World.NumChecks - 1;
-	bx = (World.check[check].x + 0.5) * BLOCK_SZ;
-	by = (World.check[check].y + 0.5) * BLOCK_SZ;
+	cx = World.check[check].x;
+	cy = World.check[check].y;
     } else {
-	bx = (World.base[pl->home_base].pos.x + 0.5) * BLOCK_SZ;
-	by = (World.base[pl->home_base].pos.y + 0.5) * BLOCK_SZ;
+	cx = World.base[pl->home_base].pos.x;
+	cy = World.base[pl->home_base].pos.y;
     }
-    dx = WRAP_DX(bx - pl->pos.px);
-    dy = WRAP_DY(by - pl->pos.py);
+    dx = CENTER_XCLICK(cx - pl->pos.cx);
+    dy = CENTER_YCLICK(cy - pl->pos.cy);
     t = pl->count + 0.5f;
     if (2 * t <= T) {
 	m = 2 / t;
@@ -108,8 +110,13 @@ static void Transport_to_home(int ind)
 	t = T - t;
 	m = (4 * t) / (T * T - 2 * t * t);
     }
-    pl->vel.x = dx * m;
-    pl->vel.y = dy * m;
+    /* kps - this can be optimized by multiplying by framespeed here
+     * and not multiplying by framespeed2 in some places of Move_player
+     * functions, but it can be confusing.
+     */
+    m *= TIME_FACT;
+    pl->vel.x = dx * m / CLICK;
+    pl->vel.y = dy * m / CLICK;
 }
 
 /*
@@ -118,7 +125,7 @@ static void Transport_to_home(int ind)
 void Phasing (int ind, int on)
 {
     player	*pl = Players[ind];
-    const int	phasing_time = 4 * FPS;
+    const int	phasing_time = 4 * 12;
 
     if (on) {
 	if (pl->phasing_left <= 0) {
@@ -223,7 +230,7 @@ void Deflector(int ind, int on)
 void Emergency_thrust (int ind, int on)
 {
     player	*pl = Players[ind];
-    const int	emergency_thrust_time = 4 * FPS;
+    const int	emergency_thrust_time = 4 * 12;
 
     if (on) {
 	if (pl->emergency_thrust_left <= 0) {
@@ -253,13 +260,11 @@ void Emergency_thrust (int ind, int on)
 void Emergency_shield (int ind, int on)
 {
     player	*pl = Players[ind];
-    const int	emergency_shield_time = 4 * FPS;	/* 8 -> 4 */
 
     if (on) {
 	if (BIT(pl->have, HAS_EMERGENCY_SHIELD)) {
 	    if (pl->emergency_shield_left <= 0) {
-		pl->emergency_shield_left = emergency_shield_time;
-		pl->emergency_shield_max = emergency_shield_time;
+		pl->emergency_shield_left = EMERGENCY_SHIELD_TIME;
 		pl->item[ITEM_EMERGENCY_SHIELD]--;
 	    }
 	    if (cloakedShield || !BIT(pl->used, HAS_CLOAKING_DEVICE)) {
@@ -377,6 +382,7 @@ static void do_Autopilot (player *pl)
      */
     if ((vel = VECTOR_LENGTH(pl->vel)) < auto_pilot_dead_velocity) {
 	pl->vel.x = pl->vel.y = vel = 0.0;
+	/* kps - ng wants the Player_position_restore call to be removed */
 	Player_position_restore(pl);
     }
 
@@ -526,7 +532,7 @@ void Update_objects(void)
      * Let the fuel stations regenerate some fuel.
      */
     if (NumPlayers > 0) {
-	int fuel = (int)(NumPlayers * STATION_REGENERATION);
+	DFLOAT fuel = (NumPlayers * framespeed * STATION_REGENERATION);
 	int frames_per_update = MAX_STATION_FUEL / (fuel * BLOCK_SZ);
 	for (i=0; i<World.NumFuels; i++) {
 	    if (World.fuel[i].fuel == MAX_STATION_FUEL) {
@@ -608,6 +614,10 @@ void Update_objects(void)
 	}
     }
 
+    /* kps - ng wants an if 0 here */
+    /* !@# turn back on after implemented */
+    /*#if 0*/
+
     /*
      * Updating cannons, maybe a little bit of fireworks too?
      */
@@ -643,7 +653,7 @@ void Update_objects(void)
 		/* this gives the cannon an item about once every minute */
 		if (World.items[item].cannonprob > 0
 		    && cannonItemProbMult > 0
-		    && (int)(rfrac() * (60 * FPS))
+		    && (int)(rfrac() * (60 * 12))
 			< (cannonItemProbMult * World.items[item].cannonprob)) {
 		    Cannon_add_item(i, item, (item == ITEM_FUEL ?
 					ENERGY_PACK_FUEL >> FUEL_SCALE_BITS
@@ -691,8 +701,8 @@ void Update_objects(void)
     for (i = 0; i < World.NumTargets; i++) {
 	if (World.targets[i].dead_time > 0) {
 	    if (!--World.targets[i].dead_time) {
-		World.block[World.targets[i].pos.x][World.targets[i].pos.y]
-		    = TARGET;
+		World.block[World.targets[i].pos.x / BLOCK_CLICKS]
+		    [World.targets[i].pos.y / BLOCK_CLICKS] = TARGET;
 		World.targets[i].conn_mask = 0;
 		World.targets[i].update_mask = (unsigned)-1;
 		World.targets[i].last_change = frame_loops;
@@ -702,8 +712,9 @@ void Update_objects(void)
 
 		    for (j = 0; j < World.NumTargets; j++) {
 			if (World.targets[j].team == team) {
-			    World.block[World.targets[j].pos.x]
-				       [World.targets[j].pos.y] = TARGET;
+			    World.block[World.targets[j].pos.x / BLOCK_CLICKS]
+				       [World.targets[j].pos.y / BLOCK_CLICKS]
+				= TARGET;
 			    World.targets[j].conn_mask = 0;
 			    World.targets[j].update_mask = (unsigned)-1;
 			    World.targets[j].last_change = frame_loops;
@@ -718,10 +729,14 @@ void Update_objects(void)
 	else if (World.targets[i].damage == TARGET_DAMAGE) {
 	    continue;
 	}
-	World.targets[i].damage += TARGET_REPAIR_PER_FRAME;
+	World.targets[i].damage += TARGET_REPAIR_PER_FRAME * framespeed;
 	if (World.targets[i].damage >= TARGET_DAMAGE) {
 	    World.targets[i].damage = TARGET_DAMAGE;
 	}
+	/* kps - bug
+	 * TARGET_REPAIR_PER_FRAME==0
+	 * TARGET_UPDATE_DELAY==infinite (C/0)
+	 */
 	else if (World.targets[i].last_change + TARGET_UPDATE_DELAY < frame_loops) {
 	    /*
 	     * We don't send target info to the clients every frame
@@ -732,6 +747,8 @@ void Update_objects(void)
 	World.targets[i].conn_mask = 0;
 	World.targets[i].last_change = frame_loops;
     }
+    /* kps - ng wants an endif here */
+    /*#endif*/ /* not-yet-supported cannons and targets */
 
     /* * * * * *
      *
@@ -752,41 +769,39 @@ void Update_objects(void)
 	if (pl->damaged > 0)
 	    pl->damaged--;
 
-	if (pl->count > 0) {
-	    pl->count--;
-	    if (!BIT(pl->status, PLAYING)) {
-		Transport_to_home(i);
-		Move_player(i);
-		continue;
+	if (pl->count >= 0) {
+	    pl->count -= framespeed;
+	    if (pl->count > 0) {
+		if (!BIT(pl->status, PLAYING)) {
+		    Transport_to_home(i);
+		    Move_player(i);
+		    continue;
+		}
+	    } else {
+		pl->count = -1;
+		if (!BIT(pl->status, PLAYING)) {
+		    SET_BIT(pl->status, PLAYING);
+		    Go_home(i);
+		}
+		if (BIT(pl->status, SELF_DESTRUCT)) {
+		    if (selfDestructScoreMult != 0) {
+			DFLOAT sc = Rate(0, pl->score) * selfDestructScoreMult;
+			SCORE(GetInd[pl->id], -sc, pl->pos.cx, pl->pos.cy,
+			      "Self-Destruct");
+		    }
+		    SET_BIT(pl->status, KILLED);
+		    sprintf(msg, "%s has committed suicide.", pl->name);
+		    Set_message(msg);
+		    Throw_items(i);
+		    Kill_player(i);
+		    updateScores = true;
+		}
 	    }
 	}
 
 	/* kps - add flooding check here */
 
 	/* kps - add idle check here */
-
-	if (pl->count == 0) {
-	    pl->count = -1;
-
-	    if (!BIT(pl->status, PLAYING)) {
-		SET_BIT(pl->status, PLAYING);
-		Go_home(i);
-	    }
-	    if (BIT(pl->status, SELF_DESTRUCT)) {
-		if (selfDestructScoreMult != 0) {
-		    DFLOAT sc = Rate(0, pl->score) * selfDestructScoreMult;
-		    SCORE(GetInd[pl->id], -sc, pl->pos.cx, pl->pos.cy,
-			  "Self-Destruct");
-		}
-		SET_BIT(pl->status, KILLED);
-		sprintf(msg, "%s has committed suicide.", pl->name);
-		Set_message(msg);
-		Throw_items(i);
-		Kill_player(i);
-		updateScores = true;
-	    }
-	}
-
 
 	if (BIT(pl->status, PLAYING|GAME_OVER|PAUSE) != PLAYING)
 	    continue;
@@ -801,7 +816,8 @@ void Update_objects(void)
 	}
 
 	if (pl->shield_time > 0) {
-	    if (--pl->shield_time == 0) {
+	    if ((pl->shield_time -= framespeed) <= 0) {
+		pl->shield_time = 0;
 		if (!BIT(pl->used, HAS_EMERGENCY_SHIELD)) {
 		    CLR_BIT(pl->used, HAS_SHIELD);
 		}
@@ -884,6 +900,7 @@ void Update_objects(void)
 	    pl->turnvel *= pl->turnresistance;
 	}
 
+	/* kps - ng does not want this */
 	if (turnThrust) {
 	    tf = pl->oldturnvel - pl->turnvel;
 	    tf = TURN_FUEL(tf);
@@ -918,15 +935,25 @@ void Update_objects(void)
 
 	/*
 	 * Compute energy drainage
+	 *
+	 * Since the amount per frame could get too small to be represented
+	 * accurately as an integer, FPSMultiplier makes this happen less
+	 * often (in terms of frames) rather than smaller amount each time.
 	 */
-	if (BIT(pl->used, HAS_SHIELD))
-	    Add_fuel(&(pl->fuel), (long)ED_SHIELD);
+	if (frame_loops % FPSMultiplier == 0) {
+	    if (BIT(pl->used, HAS_SHIELD))
+		Add_fuel(&(pl->fuel), (long)ED_SHIELD);
 
-	if (BIT(pl->used, HAS_PHASING_DEVICE))
-	    Add_fuel(&(pl->fuel), (long)ED_PHASING_DEVICE);
+	    if (BIT(pl->used, HAS_PHASING_DEVICE))
+		Add_fuel(&(pl->fuel), (long)ED_PHASING_DEVICE);
 
-	if (BIT(pl->used, HAS_CLOAKING_DEVICE))
-	    Add_fuel(&(pl->fuel), (long)ED_CLOAKING_DEVICE);
+	    if (BIT(pl->used, HAS_CLOAKING_DEVICE))
+		Add_fuel(&(pl->fuel), (long)ED_CLOAKING_DEVICE);
+
+	    /* added by kps - remove ED_DEFLECTOR stuff from Do_deflector() */
+	    if (BIT(pl->used, HAS_DEFLECTOR))
+		Add_fuel(&(pl->fuel), (long)ED_DEFLECTOR);
+	}
 
 #define UPDATE_RATE 100
 
@@ -953,8 +980,14 @@ void Update_objects(void)
 			     pl->pos.cy - World.fuel[pl->fs].clk_pos.y)
 		 > 90.0 * CLICK)
 		|| (pl->fuel.sum >= pl->fuel.max)
+#if 0
+		/* kps - ng wants this World.block part removed, currently
+		 * it crashes a poly server if enabled since the World.block
+		 * array is not initialized.
+		 */
 		|| (World.block[World.fuel[pl->fs].blk_pos.x]
 			       [World.fuel[pl->fs].blk_pos.y] != FUEL)
+#endif
 		|| BIT(pl->used, HAS_PHASING_DEVICE)
 		|| (BIT(World.rules->mode, TEAM_PLAY)
 		    && teamFuel
@@ -965,11 +998,11 @@ void Update_objects(void)
 		int ct = pl->fuel.current;
 
 		do {
-		    if (World.fuel[pl->fs].fuel > REFUEL_RATE) {
-			World.fuel[pl->fs].fuel -= REFUEL_RATE;
+		    if (World.fuel[pl->fs].fuel > REFUEL_RATE * framespeed) {
+			World.fuel[pl->fs].fuel -= REFUEL_RATE * framespeed;
 			World.fuel[pl->fs].conn_mask = 0;
 			World.fuel[pl->fs].last_change = frame_loops;
-			Add_fuel(&(pl->fuel), REFUEL_RATE);
+			Add_fuel(&(pl->fuel), REFUEL_RATE * framespeed);
 		    } else {
 			Add_fuel(&(pl->fuel), World.fuel[pl->fs].fuel);
 			World.fuel[pl->fs].fuel = 0;
@@ -990,8 +1023,8 @@ void Update_objects(void)
 	/* target repair */
 	if (BIT(pl->used, HAS_REPAIR)) {
 	    target_t *targ = &World.targets[pl->repair_target];
-	    int cx = (targ->pos.x + 0.5) * BLOCK_CLICKS;
-	    int cy = (targ->pos.y + 0.5) * BLOCK_CLICKS;
+	    int cx = targ->pos.x;
+	    int cy = targ->pos.y;
 	    if (Wrap_length(pl->pos.cx - cx, pl->pos.cy - cy) > 90.0 * CLICK
 		|| targ->damage >= TARGET_DAMAGE
 		|| targ->dead_time > 0
@@ -1002,11 +1035,12 @@ void Update_objects(void)
 		int ct = pl->fuel.current;
 
 		do {
-		    if (pl->fuel.tank[pl->fuel.current] > REFUEL_RATE) {
+		    if (pl->fuel.tank[pl->fuel.current] >
+			REFUEL_RATE * framespeed) {
 			targ->damage += TARGET_FUEL_REPAIR_PER_FRAME;
 			targ->conn_mask = 0;
 			targ->last_change = frame_loops;
-			Add_fuel(&(pl->fuel), -REFUEL_RATE);
+			Add_fuel(&(pl->fuel), -REFUEL_RATE * framespeed);
 			if (targ->damage > TARGET_DAMAGE) {
 			    targ->damage = TARGET_DAMAGE;
 			    break;
@@ -1027,7 +1061,7 @@ void Update_objects(void)
 	    CLR_BIT(pl->used, HAS_SHIELD|HAS_CLOAKING_DEVICE|HAS_DEFLECTOR);
 	    CLR_BIT(pl->status, THRUSTING);
 	}
-	if (pl->fuel.sum > (pl->fuel.max-REFUEL_RATE))
+	if (pl->fuel.sum > (pl->fuel.max - REFUEL_RATE * framespeed))
 	    CLR_BIT(pl->used, HAS_REFUEL);
 
 	/*
@@ -1047,7 +1081,9 @@ void Update_objects(void)
 	    }
 	    pl->acc.x = power * tcos(pl->dir) / inert;
 	    pl->acc.y = power * tsin(pl->dir) / inert;
-	    Add_fuel(&(pl->fuel), (long)(-f * FUEL_SCALE_FACT)); /* Decrement fuel */
+	    /* Decrement fuel */
+	    if (frame_loops % FPSMultiplier == 0)
+		Add_fuel(&(pl->fuel), (long)(-f * FUEL_SCALE_FACT));
 	} else {
 	    pl->acc.x = pl->acc.y = 0.0;
 	}
@@ -1055,6 +1091,10 @@ void Update_objects(void)
 	pl->mass = pl->emptymass
 		   + FUEL_MASS(pl->fuel.sum)
 		   + pl->item[ITEM_ARMOR] * ARMOR_MASS;
+
+	/* kps - ng wants if 0 here */
+	/* Turn back on after implemented */
+	/*#if 0*/
 
 	if (BIT(pl->status, WARPING)) {
 	    position w;
@@ -1179,22 +1219,17 @@ void Update_objects(void)
 		    object *b = Obj[k];
 		    if (BIT(b->type, OBJ_BALL) && b->id == pl->id) {
 			position ballpos;
-			ballpos.x = b->pos.px + (w.x - pl->pos.px);
-			ballpos.y = b->pos.py + (w.y - pl->pos.py);
-			ballpos.x = WRAP_XPIXEL(ballpos.x);
-			ballpos.y = WRAP_YPIXEL(ballpos.y);
-			if (ballpos.x < 0 || ballpos.x >= World.width
-			    || ballpos.y < 0 || ballpos.y >= World.height) {
-			    b->life = 0;
-			} else {
-			    Object_position_set_clicks(b,
-						       PIXEL_TO_CLICK(ballpos.x), 
-						       PIXEL_TO_CLICK(ballpos.y));
-			    Object_position_remember(b);
-			    b->vel.x *= WORM_BRAKE_FACTOR;
-			    b->vel.y *= WORM_BRAKE_FACTOR;
-			    Cell_add_object(b);
-			}
+			ballpos.x = b->pos.cx
+			    + (PIXEL_TO_CLICK(w.x) - pl->pos.cx);
+			ballpos.y = b->pos.cy
+			    + (PIXEL_TO_CLICK(w.y) - pl->pos.cy);
+			ballpos.x = WRAP_XCLICK(ballpos.x);
+			ballpos.y = WRAP_YCLICK(ballpos.y);
+			Object_position_set_clicks(b, ballpos.x, ballpos.y);
+			Object_position_remember(b);
+			b->vel.x *= WORM_BRAKE_FACTOR;
+			b->vel.y *= WORM_BRAKE_FACTOR;
+			Cell_add_object(b);
 		    }
 		}
 	    }
@@ -1220,6 +1255,8 @@ void Update_objects(void)
 
 	    sound_play_sensors(pl->pos.cx, pl->pos.cy, WORM_HOLE_SOUND);
 	}
+	/* kps - ng wants an endif here */
+	/*#endif*/ /* not-yet-supported warping stuff */
 
 	if (!BIT(pl->status, PAUSE)) {
 	    update_object_speed(pl);	    /* New position */
@@ -1239,6 +1276,7 @@ void Update_objects(void)
 	pl->used &= pl->have;
     }
 
+    /* kps - ng does not want this for loop */
     for (i = World.NumWormholes - 1; i >= 0; i--) {
 	if (World.wormHoles[i].countdown > 0) {
 	    World.wormHoles[i].countdown--;
@@ -1322,7 +1360,7 @@ void Update_objects(void)
      * Kill shots that ought to be dead.
      */
     for (i = NumObjs - 1; i >= 0; i--)
-	if (--(Obj[i]->life) <= 0)
+	if ((Obj[i]->life -= framespeed) <= 0)
 	    Delete_shot(i);
 
     /*

@@ -105,6 +105,8 @@ DFLOAT Rate(DFLOAT winner, DFLOAT loser)
 {
     DFLOAT t;
 
+    if (constantScoring)
+	return RATE_SIZE / 2;
     t = ((RATE_SIZE / 2) * RATE_RANGE) / (ABS(loser - winner) + RATE_RANGE);
     if (loser > winner)
 	t = RATE_SIZE - t;
@@ -139,13 +141,9 @@ void Score_players(int winner, DFLOAT winner_score, char *winner_msg,
 	if (loser_score > 0)
 	    loser_score = -loser_score;
     }
-    SCORE(winner, winner_score,
-	  Players[loser]->pos.cx,
-	  Players[loser]->pos.cy,
+    SCORE(winner, winner_score, Players[loser]->pos.cx, Players[loser]->pos.cy,
 	  winner_msg);
-    SCORE(loser, loser_score,
-	  Players[loser]->pos.cx,
-	  Players[loser]->pos.cy,
+    SCORE(loser, loser_score, Players[loser]->pos.cx, Players[loser]->pos.cy,
 	  loser_msg);
 }
 

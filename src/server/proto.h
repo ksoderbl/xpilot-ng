@@ -54,6 +54,10 @@ int IsOffensiveItem(enum Item i);
 int IsDefensiveItem(enum Item i);
 int CountOffensiveItems(player *pl);
 int CountDefensiveItems(player *pl);
+int in_range_acd(double dx, double dy, double dvx, double dvy, double r);
+int in_range_simple(int px, int py, int qx, int qy, int r);
+int in_range_partial(double dx, double dy, double dvx, double dvy,
+		     double r, DFLOAT wall_time);
 
 /*
  * Prototypes for id.c
@@ -72,6 +76,7 @@ void Move_object(object *obj);
 void Move_player(int ind);
 void Turn_player(int ind);
 int is_inside(int x, int y, int hit_mask);
+int Polys_to_client(unsigned char *);
 
 /*
  * Prototypes for event.c
@@ -88,13 +93,15 @@ void filter_mods(modifiers *mods);
 void Init_map(void);
 void Alloc_map(void);
 void Free_map(void);
-bool Grok_map(void); /* kps - ng wants this to return void */
+bool Grok_map(void);
+bool Grok_polygon_map(void);
+
 void Find_base_direction(void);
 void Compute_gravity(void);
 DFLOAT Wrap_findDir(DFLOAT dx, DFLOAT dy);
 DFLOAT Wrap_cfindDir(int dx, int dy);
 DFLOAT Wrap_length(int dx, int dy);
-unsigned short Find_closest_team(int posx, int posy);
+unsigned short Find_closest_team(int cx, int cy);
 
 int Wildmap(
 	int width,
@@ -168,7 +175,7 @@ void Fire_left_rshot(int ind, int type, int dir, int gun);
 void Fire_right_rshot(int ind, int type, int dir, int gun);
 void Make_treasure_ball(int treasure);
 int Punish_team(int ind, int t_destroyed, int t_target);
-void Ball_hits_goal(object *ball, int group);
+void Ball_hits_goal(ballobject *ball, int group);
 void Delete_shot(int ind);
 void Fire_laser(int ind);
 void Fire_general_laser(int ind, unsigned short team, int cx, int cy, int dir,
@@ -245,6 +252,7 @@ void Cannon_check_fire(int ind);
  * Prototypes for command.c
  */
 void Handle_player_command(player *pl, char *cmd);
+int Get_player_index_by_name(char *name);
 
 /*
  * Prototypes for player.c

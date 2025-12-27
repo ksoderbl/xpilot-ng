@@ -43,9 +43,11 @@
 #define CLICK_TO_FLOAT(C)	((DFLOAT)(C) * (1.0f / CLICK))
 #define PIXEL_TO_CLICK(I)	((click_t)(I) << CLICK_SHIFT)
 #define FLOAT_TO_CLICK(F)	((int)((F) * CLICK))
+/* calculate the click coordinate of the center of a block */
+#define BLOCK_CENTER(B)		((int)((B) * BLOCK_CLICKS) + BLOCK_CLICKS / 2)
 
 /*
- * Two acros for edge wrap of x and y coordinates measured in clicks.
+ * Two macros for edge wrap of x and y coordinates measured in clicks.
  * Note that the correction needed should never be bigger than the size of the map.
  */
 #define WRAP_XCLICK(x_)	\

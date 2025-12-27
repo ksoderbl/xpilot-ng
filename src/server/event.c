@@ -43,6 +43,7 @@
 #include "saudio.h"
 #include "bit.h"
 #include "netserver.h"
+#include "click.h"
 
 char event_version[] = VERSION;
 
@@ -67,16 +68,13 @@ static void Refuel(int ind)
 
     CLR_BIT(pl->used, HAS_REFUEL);
     for (i=0; i<World.NumFuels; i++) {
-	if (World.block[World.fuel[i].blk_pos.x]
-		       [World.fuel[i].blk_pos.y] == FUEL) {
-	    l = Wrap_length(pl->pos.cx - World.fuel[i].clk_pos.x,
-			    pl->pos.cy - World.fuel[i].clk_pos.y) / CLICK;
-	    if (BIT(pl->used, HAS_REFUEL) == 0
-		|| l < dist) {
-		SET_BIT(pl->used, HAS_REFUEL);
-		pl->fs = i;
-		dist = l;
-	    }
+	l = Wrap_length(pl->pos.cx - World.fuel[i].clk_pos.x,
+			pl->pos.cy - World.fuel[i].clk_pos.y) / CLICK;
+	if (BIT(pl->used, HAS_REFUEL) == 0
+	    || l < dist) {
+	    SET_BIT(pl->used, HAS_REFUEL);
+	    pl->fs = i;
+	    dist = l;
 	}
     }
 }
@@ -86,8 +84,8 @@ static void Repair(int ind)
 {
     player *pl = Players[ind];
     int i;
-    DFLOAT l, dist = 1e9;
-    DFLOAT x, y;
+    DFLOAT l, dist = 1e19;
+    int cx, cy;
     target_t *targ = World.targets;
 
     if (!BIT(pl->have, HAS_REPAIR))
@@ -97,9 +95,9 @@ static void Repair(int ind)
     for (i = 0; i < World.NumTargets; i++, targ++) {
 	if (targ->team == pl->team
 	    && targ->dead_time <= 0) {
-	    x = targ->pos.x * BLOCK_CLICKS + BLOCK_CLICKS/2;
-	    y = targ->pos.y * BLOCK_CLICKS + BLOCK_CLICKS/2;
-	    l = Wrap_length(pl->pos.cx - x, pl->pos.cy - y) / CLICK;
+	    cx = targ->pos.x;
+	    cy = targ->pos.y;
+	    l = Wrap_length(pl->pos.cx - cx, pl->pos.cy - cy);
 	    if (BIT(pl->used, HAS_REPAIR) == 0 || l < dist) {
 		SET_BIT(pl->used, HAS_REPAIR);
 		pl->repair_target = i;
@@ -210,6 +208,14 @@ int Player_lock_closest(int ind, int next)
 	    || ALLIANCE(ind, i)) {
 	    continue;
 	}
+	/* kps - ng had this hack here, do we want it ? */
+#if 0
+	if (TEAM(ind,i))
+	    l = FLT_MAX / 2;
+	else
+	    l = Wrap_length(Players[i]->pos.cx - pl->pos.cx,
+			    Players[i]->pos.cy - pl->pos.cy);
+#endif
 	l = Wrap_length(Players[i]->pos.cx - pl->pos.cx,
 			Players[i]->pos.cy - pl->pos.cy);
 	if (l >= dist && l < best) {
@@ -234,14 +240,18 @@ void Pause_player(int ind, int onoff)
     int			i;
 
     if (onoff != 0 && !BIT(pl->status, PAUSE)) { /* Turn pause mode on */
-	pl->count = 10*FPS;
+	if (pl->team != TEAM_NOT_SET)
+	    World.teams[pl->team].SwapperId = -1;
+	pl->count = 10 * TIME_FACT * FPS / FPSMultiplier;
 	pl->updateVisibility = 1;
 	CLR_BIT(pl->status, SELF_DESTRUCT|PLAYING);
 	SET_BIT(pl->status, PAUSE);
 	pl->mychar = 'P';
 	updateScores = true;
+	/*strcpy(pl->scorenode->logout, "paused"); - kps add */
 	if (BIT(pl->have, HAS_BALL))
 	    Detach_ball(ind, -1);
+	Player_lock_closest(ind, 0); /* kps - ng addition */
     }
     else if (onoff == 0 && BIT(pl->status, PAUSE)) { /* Turn pause mode off */
 	if (pl->count <= 0) {
@@ -256,7 +266,9 @@ void Pause_player(int ind, int onoff)
 		    if (i == ind) {
 			continue;
 		    }
-		    if (Players[i]->life < World.rules->lives && !TEAM(ind, i)) {
+		    if (Players[i]->life < World.rules->lives
+			&& !TEAM(ind, i)
+			&& !BIT(Players[i]->status, PAUSE)) {
 			toolate = true;
 			break;
 		    }
@@ -290,7 +302,7 @@ void Pause_player(int ind, int onoff)
 int Handle_keyboard(int ind)
 {
     player  	*pl = Players[ind];
-    int	    	i, j, k, key, pressed, xi, yi;
+    int	    	i, j, k, key, pressed, cx, cy, dx, dy, xi, yi;
     DFLOAT  	minv;
 
 
@@ -539,46 +551,49 @@ int Handle_keyboard(int ind)
 		break;
 
 	    case KEY_CHANGE_HOME:
-		xi = OBJ_X_IN_BLOCKS(pl);
-		yi = OBJ_Y_IN_BLOCKS(pl);
-		if (World.block[xi][yi] == BASE) {
-		    msg[0] = '\0';
-		    for (i=0; i<World.NumBases; i++) {
-			if (World.base[i].pos.x == xi
-			    && World.base[i].pos.y == yi) {
+		cx = pl->pos.cx;
+		cy = pl->pos.cy;
+		msg[0] = '\0';
+		for (i=0; i<World.NumBases; i++) {
+		    dx = ABS(CENTER_XCLICK(World.base[i].pos.x - cx));
+		    dy = ABS(CENTER_YCLICK(World.base[i].pos.y - cy));
+		    if (dx < BLOCK_CLICKS / 2 && dy < BLOCK_CLICKS / 2) {
 
-			    if (i == pl->home_base) {
-				break;
-			    }
-			    if (World.base[i].team != TEAM_NOT_SET
-				&& World.base[i].team != pl->team)
-				break;
-			    pl->home_base = i;
-			    sprintf(msg, "%s has changed home base.",
-				    pl->name);
+			if (i == pl->home_base) {
 			    break;
 			}
-		    }
-		    for (i=0; i<NumPlayers; i++)
-			if (i != ind
-			    && !IS_TANK_IND(i)
-			    && pl->home_base == Players[i]->home_base) {
-			    Pick_startpos(i);
-			    sprintf(msg, "%s has taken over %s's home base.",
-				    pl->name, Players[i]->name);
-			}
-		    if (msg[0]) {
-			sound_play_all(CHANGE_HOME_SOUND);
-			Set_message(msg);
-		    }
-		    for (i = 0; i < NumPlayers; i++) {
-			if (Players[i]->conn != NOT_CONNECTED) {
-			    Send_base(Players[i]->conn,
-				      pl->id,
-				      pl->home_base);
-			}
+			if (World.base[i].team != TEAM_NOT_SET
+			    && World.base[i].team != pl->team)
+			    break;
+			pl->home_base = i;
+			sprintf(msg, "%s has changed home base.",
+				pl->name);
+			break;
 		    }
 		}
+		for (i=0; i<NumPlayers; i++)
+		    if (i != ind
+			&& !IS_TANK_IND(i)
+			&& pl->home_base == Players[i]->home_base) {
+			Pick_startpos(i);
+			sprintf(msg, "%s has taken over %s's home base.",
+				pl->name, Players[i]->name);
+		    }
+		if (msg[0]) {
+		    sound_play_all(CHANGE_HOME_SOUND);
+		    Set_message(msg);
+		}
+		for (i = 0; i < NumPlayers; i++) {
+		    if (Players[i]->conn != NOT_CONNECTED) {
+			Send_base(Players[i]->conn,
+				  pl->id,
+				  pl->home_base);
+		    }
+		}
+		for (i = 0; i < NumObservers; i++) {
+		    Send_base(Players[i + observerStart]->conn,
+			      pl->id, pl->home_base);
+ 		}
 		break;
 
 	    case KEY_SHIELD:
@@ -775,6 +790,11 @@ int Handle_keyboard(int ind)
 		if (BIT(pl->used, HAS_AUTOPILOT))
 		    Autopilot(ind, 0);
 		pl->turnacc = 0;
+#if 0
+		if (frame_loops % 50 == 0)
+		    Set_player_message(pl, "You should use the mouse to turn."
+				       " [*Server notice*]");
+#endif
 		if (BITV_ISSET(pl->last_keyv, KEY_TURN_LEFT)) {
 		    pl->turnacc += pl->turnspeed;
 		}
@@ -786,10 +806,13 @@ int Handle_keyboard(int ind)
 	    case KEY_SELF_DESTRUCT:
 		TOGGLE_BIT(pl->status, SELF_DESTRUCT);
 		if (BIT(pl->status, SELF_DESTRUCT))
-		    pl->count = 150;
+		    pl->count = 150 * TIME_FACT;
 		break;
 
 	    case KEY_PAUSE:
+		xi = OBJ_X_IN_BLOCKS(pl);
+		yi = OBJ_Y_IN_BLOCKS(pl);
+
 		if (BIT(pl->status, PAUSE)) {
 		    i = PAUSE;
 		}
@@ -797,11 +820,11 @@ int Handle_keyboard(int ind)
 		    i = HOVERPAUSE;
 		}
 		else {
-		    xi = OBJ_X_IN_BLOCKS(pl);
-		    yi = OBJ_Y_IN_BLOCKS(pl);
-		    j = World.base[pl->home_base].pos.x;
-		    k = World.base[pl->home_base].pos.y;
-		    if (j == xi && k == yi) {
+		    cx = World.base[pl->home_base].pos.x;
+		    cy = World.base[pl->home_base].pos.y;
+		    dx = ABS(CENTER_XCLICK(pl->pos.cx - cx));
+		    dy = ABS(CENTER_YCLICK(pl->pos.cy - cy));
+		    if (dx < BLOCK_CLICKS / 2 && dy < BLOCK_CLICKS / 2) {
 			minv = 3.0f;
 			i = PAUSE;
 		    } else {
@@ -809,12 +832,14 @@ int Handle_keyboard(int ind)
 			 * Hover pause doesn't work within two squares of the
 			 * players home base, they would want the better pause.
 			 */
-			if (ABS(j - xi) <= 2 && ABS(k - yi) <= 2)
+			if (dx < 2 * BLOCK_CLICKS && dy < 2 * BLOCK_CLICKS)
 			    break;
 			minv = 5.0f;
 			i = HOVERPAUSE;
 		    }
-		    minv += VECTOR_LENGTH(World.gravity[xi][yi]);
+		    /* kps - implement gravity for poly maps ??? */
+		    if (!is_polygon_map)
+			minv += VECTOR_LENGTH(World.gravity[xi][yi]);
 		    if (pl->velocity > minv)
 			break;
 		}
@@ -844,7 +869,7 @@ int Handle_keyboard(int ind)
 			/*
 			 * Turn hover pause on, together with shields.
 			 */
-			pl->count = 5*FPS;
+			pl->count = 5 * FPS * TIME_FACT;
 			CLR_BIT(pl->status, SELF_DESTRUCT);
 			SET_BIT(pl->status, HOVERPAUSE);
 
@@ -1056,7 +1081,7 @@ int Handle_keyboard(int ind)
 		     * shields and firing in order to prevent macros
 		     * and hacked clients.
 		     */
-		    pl->shot_time = frame_loops;
+		    pl->shot_time = frame_time;
 		}
 		break;
 

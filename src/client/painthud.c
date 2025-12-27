@@ -1185,6 +1185,12 @@ static void Msg_parse(char *message, size_t len)
 	killer = mn.name[0];
 	victim = mn.name[1];
 
+    } else if (Msg_match_fmt
+	       (message, "%n got roasted alive by %n's laser.", &mn)) {
+	DP(printf("roasted alive:\n"));
+	killer = mn.name[0];
+	victim = mn.name[1];
+
     } else {
 	/* none of the above, nothing to do */
 	return;

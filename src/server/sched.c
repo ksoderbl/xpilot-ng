@@ -489,7 +489,7 @@ struct io_handler {
 static struct io_handler	input_handlers[NUM_SELECT_FD];
 static struct io_handler	record_handlers[NUM_SELECT_FD];
 static fd_set			input_mask;
-static int			max_fd, min_fd;
+int				max_fd, min_fd;
 static int			input_inited = false;
 
 static void io_dummy(int fd, void *arg)

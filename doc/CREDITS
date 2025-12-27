@@ -42,6 +42,13 @@ Release 4.4 credits:
     Bob Glickstein          Flak.
     Juha Lindström          radar on HUD.
 
+Release 4.3X credits:
+
+    Ben Jackson             Several fixes.
+    Thorsten Kroeger        Server security fix, player passwords,
+                            numerous other patches.
+    Paul Alexander Drees    user/host client options.
+
 Release 4.3 credits:
 
     Claus Leth Gregersen    Several patches, graphics look.

@@ -116,6 +116,7 @@ extern DFLOAT		tbl_cos[];
 /* Do NOT change these! */
 #define OLD_MAX_CHECKS		26
 #define MAX_TEAMS		10
+
 #define MAX_OBSERVERS		8
 
 #define EXPIRED_MINE_ID		4096   /* assume no player has this id */
@@ -137,19 +138,24 @@ extern DFLOAT		tbl_cos[];
 #define FUEL_SCALE_FACT         (1<<FUEL_SCALE_BITS)
 #define FUEL_MASS(f)            ((f)*0.005/FUEL_SCALE_FACT)
 #define MAX_STATION_FUEL	(500<<FUEL_SCALE_BITS)
-#define START_STATION_FUEL	(20<<FUEL_SCALE_BITS)
-#define STATION_REGENERATION	(0.06*FUEL_SCALE_FACT)
+/* changed the default to max to avoid sending lots of fuel ACKs */
+/*#define START_STATION_FUEL	(20<<FUEL_SCALE_BITS)*/
+#define START_STATION_FUEL	MAX_STATION_FUEL
+#define STATION_REGENERATION	(0.06*FUEL_SCALE_FACT/TIME_FACT)
 #define MAX_PLAYER_FUEL		(2600<<FUEL_SCALE_BITS)
 #define MIN_PLAYER_FUEL		(350<<FUEL_SCALE_BITS)
-#define REFUEL_RATE		(5<<FUEL_SCALE_BITS)
+#define REFUEL_RATE		((5<<FUEL_SCALE_BITS)/TIME_FACT)
 #define ENERGY_PACK_FUEL        ((500+(randomMT()&511))<<FUEL_SCALE_BITS)
 #define FUEL_NOTIFY		(3*12)
 
 #define TARGET_DAMAGE		(250<<FUEL_SCALE_BITS)
-#define TARGET_FUEL_REPAIR_PER_FRAME (TARGET_DAMAGE / (FPS * 10))
-#define TARGET_REPAIR_PER_FRAME	(TARGET_DAMAGE / (FPS * 600))
+#define TARGET_FUEL_REPAIR_PER_FRAME (TARGET_DAMAGE / (12 * 10 * TIME_FACT))
+#define TARGET_REPAIR_PER_FRAME	(TARGET_DAMAGE / (12 * 600 * TIME_FACT))
 #define TARGET_UPDATE_DELAY	(TARGET_DAMAGE / (TARGET_REPAIR_PER_FRAME \
-				    * BLOCK_SZ))
+				    * BLOCK_SZ * TIME_FACT))
+/*#define TARGET_DEAD_TIME	(12 * 60)*/
+/*#define BALL_STRING_LENGTH      (120 * CLICK)*/
+
 
 /*
  * Size (pixels) of radius for legal HIT!

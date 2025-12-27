@@ -106,6 +106,7 @@ void Pick_startpos(int ind)
 
     if (BIT(World.rules->mode, TIMING)) {	/* pick first free base */
 	for (i=0; i < World.NumBases; i++) {
+	    /* kps - ng wants no base orders => change to if (free_bases[i]) */
 	    if (free_bases[World.baseorder[i].base_idx]) {
 		break;
 	    }
@@ -129,10 +130,18 @@ void Pick_startpos(int ind)
 	      ind, World.NumBases, num_free, pick, seen);
 	End_game();
     } else {
+	/* kps - change to pl->home_base = i */
 	pl->home_base = BIT(World.rules->mode, TIMING) ?
 			World.baseorder[i].base_idx : i;
 	if (ind < NumPlayers) {
-	    for (i = 0; i < NumPlayers; i++) {
+	    for (i = 0; i < observerStart + NumObservers; i++) {
+		/* dirty hack */
+		if (i == NumPlayers) {
+		    if (NumObservers)
+			i = observerStart;
+		    else
+			break;
+		}
 		if (Players[i]->conn != NOT_CONNECTED) {
 		    Send_base(Players[i]->conn,
 			      pl->id,
@@ -153,13 +162,13 @@ void Pick_startpos(int ind)
 void Go_home(int ind)
 {
     player		*pl = Players[ind];
-    int			i, x, y, dir, check;
+    int			i, cx, cy, dir, check;
     DFLOAT		vx, vy, velo;
 
     if (IS_TANK_PTR(pl)) {
 	/*NOTREACHED*/
 	/* Tanks have no homebase. */
-	error("BUG: gohome tank");
+	warn("BUG: gohome tank");
 	return;
     }
 
@@ -170,25 +179,23 @@ void Go_home(int ind)
 	    check = pl->check - 1;
 	else
 	    check = World.NumChecks - 1;
-	x = World.check[check].x;
-	y = World.check[check].y;
+	cx = World.check[check].x;
+	cy = World.check[check].y;
 	vx = (rfrac() - 0.5) * 0.1;
 	vy = (rfrac() - 0.5) * 0.1;
 	velo = LENGTH(vx, vy);
 	dir = pl->last_check_dir;
 	dir = MOD2(dir + (int)((rfrac() - 0.5) * (RES / 8)), RES);
     } else {
-	x = World.base[pl->home_base].pos.x;
-	y = World.base[pl->home_base].pos.y;
+	cx = World.base[pl->home_base].pos.x;
+	cy = World.base[pl->home_base].pos.y;
 	dir = World.base[pl->home_base].dir;
 	vx = vy = velo = 0;
     }
 
     pl->dir = dir;
     pl->float_dir = dir;
-    Player_position_init_clicks(pl,
-				PIXEL_TO_CLICK((x + 0.5) * BLOCK_SZ + vx),
-				PIXEL_TO_CLICK((y + 0.5) * BLOCK_SZ + vy));
+    Player_position_init_clicks(pl, cx + CLICK * vx, cy + CLICK * vy);
     pl->vel.x = vx;
     pl->vel.y = vy;
     pl->velocity = velo;
@@ -196,12 +203,13 @@ void Go_home(int ind)
     pl->turnacc = pl->turnvel = 0.0;
     memset(pl->last_keyv, 0, sizeof(pl->last_keyv));
     memset(pl->prev_keyv, 0, sizeof(pl->prev_keyv));
+    Emergency_shield(ind, 0); /* kps - ng addition */
     Player_used_kill(ind);
 
     if (playerStartsShielded != 0) {
 	SET_BIT(pl->used, HAS_SHIELD);
 	if (playerShielding == 0) {
-	    pl->shield_time = 2 * FPS;
+	    pl->shield_time = 2 * 12 * TIME_FACT;
 	    SET_BIT(pl->have, HAS_SHIELD);
 	}
 	if (BIT(pl->have, HAS_DEFLECTOR)) {
@@ -378,13 +386,15 @@ int Init_player(int ind, shipobj *ship)
     pl->fuel.sum        = World.items[ITEM_FUEL].initial << FUEL_SCALE_BITS;
     Player_init_fuel(ind, pl->fuel.sum);
 
+    /*
+     * If you don't want to allow shipshapes because the shape
+     * requirements have not been rewritten yet, change to "if 0".
+     */
+#if 1
     if (allowShipShapes == true && ship) {
 	pl->ship = ship;
     }
     else {
-/*
-	pl->ship = Default_ship();
-*/
 	shipobj *tryship = Parse_shape_str(defaultShipShape);
 
 	if (tryship)
@@ -392,6 +402,9 @@ int Init_player(int ind, shipobj *ship)
 	else
 	    pl->ship = Default_ship();
     }
+#else
+    pl->ship = Default_ship();
+#endif
 
     pl->power			= 45.0;
     pl->turnspeed		= 30.0;
@@ -416,7 +429,6 @@ int Init_player(int ind, shipobj *ship)
     pl->missile_rack	= 0;
     pl->forceVisible	= 0;
     Compute_sensor_range(pl);
-    pl->shot_max	= ShotsMax;
     pl->shot_time	= 0;
     pl->color		= WHITE;
     pl->score		= 0;
@@ -426,11 +438,11 @@ int Init_player(int ind, shipobj *ship)
     pl->fs		= 0;
     pl->repair_target	= 0;
     pl->name[0]		= '\0';
+    pl->auth_nick[0]	= 0;
     pl->num_pulses	= 0;
     pl->emergency_thrust_left = 0;
     pl->emergency_thrust_max = 0;
     pl->emergency_shield_left = 0;
-    pl->emergency_shield_max = 0;
     pl->phasing_left	= 0;
     pl->phasing_max	= 0;
     pl->ecmcount	= 0;
@@ -461,9 +473,9 @@ int Init_player(int ind, shipobj *ship)
     pl->prev_life	= pl->life;
     pl->ball 		= NULL;
 
-    pl->player_fps	= FPS;
-    pl->player_round	= 0;
-    pl->player_count	= 0;
+    pl->player_fps	= 50; /* Client should send a value after startup */
+    pl->player_round	= 0;  /* kps - remove this later */
+    pl->player_count	= 0;  /* kps - remove this later */
 
     Rank_ClearKills(pl);
     Rank_ClearDeaths(pl);
@@ -472,20 +484,24 @@ int Init_player(int ind, shipobj *ship)
      * If limited lives and if nobody has lost a life yet, you may enter
      * now, otherwise you will have to wait 'til everyone gets GAME OVER.
      */
-    if (BIT(World.rules->mode, LIMITED_LIVES)) {
-	for (i = 0; i < NumPlayers; i++) {
-	    /* If a non-team member has lost a life,
-	     * then it's too late to join. */
-	    if (Players[i]->life < World.rules->lives && !TEAM(ind, i)) {
-		too_late = true;
-		break;
-	    }
+    for (i = 0; i < NumPlayers; i++) {
+	/* If a non-team member has lost a life,
+	 * then it's too late to join.
+	 * But we don't know team here!
+	 * The TEAM macro referenced random values. Removed. -uau
+	 */
+	if ((BIT(World.rules->mode, LIMITED_LIVES)
+	     && Players[i]->life < World.rules->lives)
+	    || BIT(Players[i]->status, GAME_OVER)) {
+	    too_late = true;
+	    break;
 	}
-	if (too_late) {
-	    pl->mychar	= 'W';
-	    pl->prev_life = pl->life = 0;
-	    SET_BIT(pl->status, GAME_OVER);
-	}
+    }
+
+    if (too_late) {
+	pl->mychar	= 'W';
+	pl->prev_life = pl->life = 0;
+	SET_BIT(pl->status, GAME_OVER);
     }
 
     pl->team		= TEAM_NOT_SET;
@@ -519,6 +535,8 @@ int Init_player(int ind, shipobj *ship)
     pl->isowner = 0;
     pl->isoperator = 0;
 
+    pl->rectype = 0;
+
     return pl->id;
 }
 
@@ -550,6 +568,7 @@ void Alloc_players(int number)
     }
 
     /* Players[-1] should evaluate to NULL. */
+    /* kps - remove this ugly hack if possible */
     Players++;
 
     for (i = 0; i < number; i++) {
@@ -564,6 +583,7 @@ void Alloc_players(int number)
 
 void Free_players(void)
 {
+#if 1
     if (Players) {
 	--Players;
 	free(Players);
@@ -572,6 +592,11 @@ void Free_players(void)
 	free(playerArray);
 	free(visibilityArray);
     }
+#else /* ng wants this, fix later */
+    free(Players);
+    free(playerArray);
+    free(visibilityArray);
+#endif
 }
 
 
@@ -597,6 +622,10 @@ void Update_score_table(void)
 			       pl->score, pl->life,
 			       pl->mychar, pl->alliance);
 		}
+	    }
+	    for (i = 0; i < NumObservers; i++) {
+		Send_score(Players[i + observerStart]->conn, pl->id,
+			   pl->score, pl->life, pl->mychar, pl->alliance);
 	    }
 	}
 	if (BIT(World.rules->mode, TIMING)) {
@@ -719,8 +748,10 @@ void Reset_all_players(void)
 	    for (i = 0; i < World.NumTargets; i++) {
 		if (World.targets[i].damage != TARGET_DAMAGE
 		    || World.targets[i].dead_time != 0) {
-		    World.block[World.targets[i].pos.x][World.targets[i].pos.y]
-			= TARGET;
+#if 1 /* kps - remove this */
+		    World.block[World.targets[i].pos.x / BLOCK_CLICKS]
+			[World.targets[i].pos.y / BLOCK_CLICKS]	= TARGET;
+#endif
 		    World.targets[i].dead_time = 0;
 		    World.targets[i].damage = TARGET_DAMAGE;
 		    World.targets[i].conn_mask = 0;
@@ -804,7 +835,7 @@ static void Compute_end_of_round_values(DFLOAT *average_score,
 					DFLOAT *best_ratio,
 					int best_players[])
 {
-    int			i;
+    int			i, n = 0;
     DFLOAT		ratio;
 
     /* Initialize everything */
@@ -820,6 +851,7 @@ static void Compute_end_of_round_values(DFLOAT *average_score,
 	       && Players[i]->count <= 0)) {
 	    continue;
 	}
+	n++;
 	*average_score += Players[i]->score;
 	ratio = (DFLOAT) Players[i]->kills / (Players[i]->deaths + 1);
 	if (ratio > *best_ratio) {
@@ -831,7 +863,8 @@ static void Compute_end_of_round_values(DFLOAT *average_score,
 	    best_players[(*num_best_players)++] = i;
 	}
     }
-    *average_score /= NumPlayers;
+    if (n != 0)  /* Can this be 0? */
+	*average_score /= n;
 }
 
 
@@ -900,8 +933,7 @@ static void Give_individual_bonus(int ind, DFLOAT average_score)
 
     ratio = (DFLOAT) Players[ind]->kills / (Players[ind]->deaths + 1);
     points = ratio * Rate(Players[ind]->score, average_score);
-    SCORE(ind, points, Players[ind]->pos.cx, Players[ind]->pos.cy,
-	  "[Winner]");
+    SCORE(ind, points, Players[ind]->pos.cx, Players[ind]->pos.cy, "[Winner]");
 }
 
 
@@ -911,14 +943,14 @@ static void Count_rounds(void)
 {
     char		msg[MSG_LEN];
 
-    if (!numberOfRounds) {
+    if (!roundsToPlay) {
 	return;
     }
 
     sprintf(msg, " < Round %d out of %d completed. >",
-	    roundCounter, numberOfRounds);
+	    roundCounter, roundsToPlay);
     Set_message(msg);
-    if (roundCounter == numberOfRounds) {
+    if (roundCounter == roundsToPlay) {
 	Game_Over();
     }
     roundCounter++;
@@ -935,7 +967,7 @@ void Team_game_over(int winning_team, const char *reason)
     char		msg[MSG_LEN];
 
     if (!(best_players = (int *)malloc(NumPlayers * sizeof(int)))) {
-	error("no mem");
+	warn("no mem");
 	End_game();
     }
 
@@ -1010,7 +1042,7 @@ void Individual_game_over(int winner)
     char		msg[MSG_LEN];
 
     if (!(best_players = (int *)malloc(NumPlayers * sizeof(int)))) {
-	error("no mem");
+	warn("no mem");
 	End_game();
     }
 
@@ -1123,7 +1155,13 @@ void Race_game_over(void)
 	    pl = Players[order[i]];
 	    if (pl->home_base != World.baseorder[i].base_idx) {
 		pl->home_base = World.baseorder[i].base_idx;
-		for (j = 0; j < NumPlayers; j++) {
+		for (j = 0; j < observerStart + NumObservers; j++) {
+		    if (j == NumPlayers) {
+			if (NumObservers)
+			    j = observerStart;
+			else
+			    break;
+		    }
 		    if (Players[j]->conn != NOT_CONNECTED) {
 			Send_base(Players[j]->conn,
 				  pl->id,
@@ -1196,9 +1234,10 @@ void Race_game_over(void)
 		    "ashamed of yourselves.");
     }
 
-    Reset_all_players();
-
+    /* kps - ng swapped these two for some reason*/
     Count_rounds();
+
+    Reset_all_players();
 }
 
 
@@ -1260,6 +1299,96 @@ void Compute_game_status(void)
 			total_pts;
 	DFLOAT		pts;
 
+	/*
+	 * kps - ng wants to handle laps here, requires change in collision.c
+	 * too, maybe I'll fix it later.
+	 */
+#if 0
+	/* Handle finishing of laps */
+	for (i = 0; i < NumPlayers; i++) {
+	    pl = Players[i];
+	    if (!BIT(pl->status, FINISH))
+		continue;
+	    pl->last_lap_time = pl->time - pl->last_lap;
+	    if ((pl->best_lap > pl->last_lap_time || pl->best_lap == 0)
+		&& pl->time != 0 && pl->round != 1) {
+		pl->best_lap = pl->last_lap_time;
+	    }
+	    pl->last_lap = pl->time;
+	    if (pl->round > raceLaps) {
+		Player_death_reset(i);
+		pl->mychar = 'D';
+		SET_BIT(pl->status, GAME_OVER);
+		sprintf(msg, "%s finished the race. Last lap time: %.2fs. "
+			"Personal race best lap time: %.2fs.",
+			pl->name,
+			(DFLOAT) pl->last_lap_time / FPS,
+			(DFLOAT) pl->best_lap / FPS);
+	    }
+	    else if (pl->round > 1) {
+		sprintf(msg, "%s completes lap %d in %.2fs. "
+			"Personal race best lap time: %.2fs.",
+			pl->name,
+			pl->round-1,
+			(DFLOAT) pl->last_lap_time / FPS,
+			(DFLOAT) pl->best_lap / FPS);
+	    }
+	    else {
+		sprintf(msg, "%s starts lap 1 of %d", pl->name,
+			raceLaps);
+		CLR_BIT(pl->status, FINISH); /* no elimination from starting */
+	    }
+	    Set_message(msg);
+	}
+	if (eliminationRace) {
+	    for (;;) {
+		int pli, count = 0, lap = INT_MAX;;
+		for (i = 0; i < NumPlayers; i++) {
+		    pl = Players[i];
+		    if (BIT(pl->status, FINISH) && pl->round < lap) {
+			lap = pl->round;
+			pli = i;
+		    }
+		}
+		if (lap == INT_MAX)
+		    break;
+		CLR_BIT(Players[pli]->status, FINISH);
+		lap = 0;
+		for (i = 0; i < NumPlayers; i++) {
+		    pl = Players[i];
+		    if (BIT(pl->status, PAUSE|GAME_OVER|PLAYING) != PLAYING)
+			continue;
+		    if (pl->round < Players[pli]->round) {
+			count++;
+			if (pl->round > lap)
+			    lap = pl->round;
+		    }
+		}
+		if (Players[pli]->round < lap + count) {
+		    continue;
+		}
+		for (i = 0; i < NumPlayers; i++) {
+		    pl = Players[i];
+		    if (BIT(pl->status, PAUSE|GAME_OVER|PLAYING) != PLAYING)
+			continue;
+		    if (pl->round < Players[pli]->round) {
+			Player_death_reset(i);
+			pl->mychar = 'D';
+			SET_BIT(pl->status, GAME_OVER);
+			if (count == 1) {
+			    sprintf(msg, "%s was the last to complete lap %d and is out of the race.", pl->name, Players[pli]->round - 1);
+			    Set_message(msg);
+			}
+			else {
+			    sprintf(msg, "%s was the last to complete some lap between %d and %d.", pl->name, pl->round, Players[pli]->round - 1);
+			    Set_message(msg);
+			}
+		    }
+		}
+	    }
+	}
+#endif
+
 	/* First count the players */
 	for (i = 0; i < NumPlayers; i++)  {
 	    pl = Players[i];
@@ -1280,7 +1409,10 @@ void Compute_game_status(void)
 		position++;
 	    }
 	    else if (BIT(pl->status, FINISH)) {
-		num_finished_players++;
+		if (pl->round > raceLaps)
+		    num_finished_players++;
+		else
+		    CLR_BIT(pl->status, FINISH);
 	    }
 	    else if (!BIT(pl->status, GAME_OVER)) {
 		alive = pl;
@@ -1368,16 +1500,14 @@ void Compute_game_status(void)
 	    if (num_alive_players > 1) {
 		return;
 	    }
-	    if (num_alive_players == 1) {
-		if (num_finished_players + num_race_over_players == 0) {
-		    return;
-		}
-		if (!alive || alive->round == 0) {
-		    return;
-		}
+	    if (num_alive_players == 1 && num_active_players == 1) {
+		return;
 	    }
 	}
-	else if (num_finished_players == 0) {
+	/* !@# fix
+	 * No meaningful messages / scores if someone wins by staying alive
+	 */
+	else if (num_finished_players == 0 || num_alive_players > 1) {
 	    return;
 	}
 
@@ -1646,6 +1776,8 @@ void Compute_game_status(void)
     }
 }
 
+extern int game_lock;
+
 void Delete_player(int ind)
 {
     player		*pl = Players[ind];
@@ -1658,6 +1790,21 @@ void Delete_player(int ind)
 
     if (IS_ROBOT_PTR(pl)) {
 	Robot_destroy(ind);
+    }
+    if (pl->isoperator) {
+	if (!--NumOperators && game_lock) {
+	    game_lock = false;
+	    Set_message(" < The game has been unlocked as the last operator left! >");
+	}
+    }
+
+    /* Won't be swapping anywhere */
+    for (i = MAX_TEAMS - 1; i >= 0; i--)
+	if (World.teams[i].SwapperId == id)
+	    World.teams[i].SwapperId = -1;
+    if (pl->team != TEAM_NOT_SET) {
+	/* Swapping a queued player might be better */
+	World.teams[pl->team].SwapperId = -1;
     }
 
     /* Delete remaining shots */
@@ -1814,6 +1961,9 @@ void Delete_player(int ind)
 	}
     }
 
+    for (i = NumObservers - 1; i >= 0; i--)
+	Send_leave(Players[i + observerStart]->conn, id);
+
     release_ID(id);
 }
 
@@ -1848,7 +1998,16 @@ void Detach_ball(int ind, int obj)
 
 void Kill_player(int ind)
 {
+#if 1 /* kps - don't want to change this */
     Explode_fighter(ind);
+#else
+    /* Don't create an explosion if the player is being transported back
+     * to home base after being killed. */
+    if (BIT(Players[ind]->status, PLAYING)) {
+	Explode_fighter(ind);
+	/* Rank_death(Players[ind]); kps - ??? */
+    }
+#endif
     Player_death_reset(ind);
 }
 
@@ -1883,13 +2042,11 @@ void Player_death_reset(int ind)
     }
 
     pl->forceVisible	= 0;
-    pl->shot_max	= ShotsMax;
     pl->count		= MAX(RECOVERY_DELAY, pl->count);
     pl->ecmcount	= 0;
     pl->emergency_thrust_left = 0;
     pl->emergency_thrust_max = 0;
     pl->emergency_shield_left = 0;
-    pl->emergency_shield_max = 0;
     pl->phasing_left	= 0;
     pl->phasing_max	= 0;
     pl->damaged 	= 0;

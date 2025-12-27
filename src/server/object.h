@@ -201,8 +201,8 @@ struct _cell_node {
     short		id;		/* For shots => id of player */	\
     unsigned short	team;		/* Team of player or cannon */	\
     objposition		pos;		/* World coordinates */		\
-    ipos		prevpos;	/* previous position */		\
-    ipos		extmove;	/* For collision detection */	\
+    clpos		prevpos;	/* previous position */		\
+    clpos		extmove;	/* For collision detection */	\
     DFLOAT		wall_time;	/* bounce/crash time within frame */		\
     int			collmode;	/* collision checking mode */	\
     vector		vel;		/* speed in x,y */		\
@@ -220,7 +220,6 @@ struct _cell_node {
 #define OBJECT_EXTEND	\
     cell_node		cell;		/* node in cell linked list */	\
     long		info;		/* Miscellaneous info */	\
-/* kps - ng does not want this */    long		fuselife;	/* fuse duration ticks */	\
     long		fuseframe;	/* Frame when considered fused */	\
     int			pl_range;	/* distance for collision */	\
     int			pl_radius;	/* distance for hit */		\
@@ -434,7 +433,7 @@ typedef struct {
  * Structure holding the info for one pulse of a laser.
  */
 typedef struct {
-    position		pos; /* kps - this should be ipos */
+    cpos		pos;
     int			dir;
     int			len;
     int			life;
@@ -538,7 +537,7 @@ struct player {
     int		emergency_thrust_left;	/* how much emergency thrust left */
     int		emergency_thrust_max;	/* maximum time left */
     int		emergency_shield_left;	/* how much emergency shield left */
-/* kps - ng does not want this */    int		emergency_shield_max;	/* maximum time left */
+
     int		phasing_left;		/* how much time left */
     int		phasing_max;		/* maximum time left */
 

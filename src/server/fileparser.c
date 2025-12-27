@@ -351,6 +351,8 @@ static void parseLine(char **map_ptr, optOrigin opt_origin)
 }
 #undef EXPAND
 
+static bool isXp2MapFile(int fd);
+static bool parseXp2MapFile(int fd, optOrigin opt_origin);
 
 /*
  * Parse a file containing defaults (and possibly a map).
@@ -363,6 +365,12 @@ static bool parseOpenFile(FILE *ifile, optOrigin opt_origin)
     LineNumber = 1;
 
     fd = fileno(ifile);
+
+    /* kps - first try the new map format */
+    if (isXp2MapFile(fd)) {
+	is_polygon_map = TRUE;
+	return parseXp2MapFile(fd, opt_origin);
+    }
 
     /* Using a 200 map sample, the average map size is 37k.
        This chunk size could be increased to avoid lots of
@@ -461,10 +469,13 @@ static void fileClose(FILE *fp)
 static int hasMapExtension(const char *filename)
 {
     int fnlen = strlen(filename);
+    if (fnlen > 4 && !strcmp(&filename[fnlen - 4], ".xp2")){ 
+	return 1;
+    }
     if (fnlen > 3 && !strcmp(&filename[fnlen - 3], ".xp")){ 
 	return 1;
     }
-    if (fnlen > 4 && !strcmp(&filename[fnlen - 3], ".map")){ 
+    if (fnlen > 4 && !strcmp(&filename[fnlen - 4], ".map")){ 
 	return 1;
     }
     return 0;
@@ -605,12 +616,16 @@ static FILE *openCompressedFile(const char *filename)
  * The search order should be:
  *      filename
  *      filename.gz              if COMPRESSED_MAPS is true
+ *      filename.xp2
+ *      filename.xp2.gz          if COMPRESSED_MAPS is true
  *      filename.xp
  *      filename.xp.gz           if COMPRESSED_MAPS is true
  *      filename.map
  *      filename.map.gz          if COMPRESSED_MAPS is true
  *      MAPDIR filename
  *      MAPDIR filename.gz       if COMPRESSED_MAPS is true
+ *      MAPDIR filename.xp2
+ *      MAPDIR filename.xp2.gz   if COMPRESSED_MAPS is true
  *      MAPDIR filename.xp
  *      MAPDIR filename.xp.gz    if COMPRESSED_MAPS is true
  *      MAPDIR filename.map
@@ -628,6 +643,12 @@ static FILE *openMapFile(const char *filename)
     }
     if (!isCompressed(filename)) {
 	if (!hasMapExtension(filename)) {
+	    newname = fileAddExtension(filename, ".xp2");
+	    fp = openCompressedFile(newname);
+	    free(newname);
+	    if (fp) {
+		return fp;
+	    }
 	    newname = fileAddExtension(filename, ".xp");
 	    fp = openCompressedFile(newname);
 	    free(newname);
@@ -749,3 +770,489 @@ void expandKeyword(const char *keyword)
     }
 }
 
+
+ 
+
+
+
+/* polygon map format related stuff */
+static char	*FileName;
+
+#include <expat.h>
+
+static int edg[5000 * 2]; /* !@# change pointers in poly_t when realloc poss.*/
+extern int polyc;
+extern int num_groups;
+
+int *edges = edg;
+int *estyleptr;
+int ptscount, ecount;
+char *mapd;
+
+struct polystyle pstyles[256];
+struct edgestyle estyles[256] =
+{{"internal", 0, 0, 0}};	/* Style 0 is always this special style */
+struct bmpstyle  bstyles[256];
+poly_t *pdata;
+
+int num_pstyles, num_bstyles, num_estyles = 1; /* "Internal" edgestyle */
+int max_bases, max_balls, max_fuels, max_checks, max_polys,max_echanges; /* !@# make static after testing done */
+static int current_estyle, current_group, is_decor;
+
+static int get_bmp_id(const char *s)
+{
+    int i;
+
+    for (i = 0; i < num_bstyles; i++)
+	if (!strcmp(bstyles[i].id, s))
+	    return i;
+    warn("Undeclared bmpstyle %s", s);
+    return 0;
+}
+
+
+static int get_edge_id(const char *s)
+{
+    int i;
+
+    for (i = 0; i < num_estyles; i++)
+	if (!strcmp(estyles[i].id, s))
+	    return i;
+    warn("Undeclared edgestyle %s", s);
+    return -1;
+}
+
+
+static int get_poly_id(const char *s)
+{
+    int i;
+
+    for (i = 0; i < num_pstyles; i++)
+	if (!strcmp(pstyles[i].id, s))
+	    return i;
+    warn("Undeclared polystyle %s", s);
+    return 0;
+}
+
+
+#define STORE(T,P,N,M,V)						\
+    if (N >= M && ((M <= 0)						\
+	? (P = (T *) malloc((M = 1) * sizeof(*P)))			\
+	: (P = (T *) realloc(P, (M += M) * sizeof(*P)))) == NULL) {	\
+	warn("No memory");						\
+	exit(1);							\
+    } else								\
+	(P[N++] = V)
+/* !@# add a final realloc later to free wasted memory */
+
+
+static void tagstart(void *data, const char *el, const char **attr)
+{
+    static double scale = 1;
+    static int xptag = 0;
+
+    if (!strcasecmp(el, "XPilotMap")) {
+	double version = 0;
+	while (*attr) {
+	    if (!strcasecmp(*attr, "version"))
+		version = atof(*(attr + 1));
+	    attr += 2;
+	}
+	if (version == 0) {
+	    warn("Old(?) map file with no version number");
+	    warn("Not guaranteed to work");
+	}
+	else if (version < 1)
+	    warn("Impossible version in map file");
+	else if (version > 1) {
+	    warn("Map file has newer version than this server recognizes.");
+	    warn("The map file might use unsupported features.");
+	}
+	xptag = 1;
+	return;
+    }
+
+    if (!xptag) {
+	fatal("This doesn't look like a map file "
+	      " (XPilotMap must be first tag).");
+	return; /* not reached */
+    }
+
+    if (!strcasecmp(el, "Polystyle")) {
+	pstyles[num_pstyles].id[sizeof(pstyles[0].id) - 1] = 0;
+	pstyles[num_pstyles].color = 0;
+	pstyles[num_pstyles].texture_id = 0;
+	pstyles[num_pstyles].defedge_id = 0;
+	pstyles[num_pstyles].flags = 0;
+
+	while (*attr) {
+	    if (!strcasecmp(*attr, "id"))
+		strncpy(pstyles[num_pstyles].id, *(attr + 1),
+			sizeof(pstyles[0].id) - 1);
+	    if (!strcasecmp(*attr, "color"))
+		pstyles[num_pstyles].color = strtol(*(attr + 1), NULL, 16);
+	    if (!strcasecmp(*attr, "texture"))
+		pstyles[num_pstyles].texture_id = get_bmp_id(*(attr + 1));
+	    if (!strcasecmp(*attr, "defedge"))
+		pstyles[num_pstyles].defedge_id = get_edge_id(*(attr + 1));
+	    if (!strcasecmp(*attr, "flags"))
+		pstyles[num_pstyles].flags = atoi(*(attr + 1)); /* names @!# */
+	    attr += 2;
+	}
+	if (pstyles[num_pstyles].defedge_id == 0) {
+	    warn("Polygon default edgestyle cannot be omitted or set "
+		  "to 'internal'!");
+	    exit(1);
+	}
+	num_pstyles++;
+	return;
+    }
+
+    if (!strcasecmp(el, "Edgestyle")) {
+	estyles[num_estyles].id[sizeof(estyles[0].id) - 1] = 0;
+	estyles[num_estyles].width = 0;
+	estyles[num_estyles].color = 0;
+	estyles[num_estyles].style = 0;
+	while (*attr) {
+	    if (!strcasecmp(*attr, "id"))
+		strncpy(estyles[num_estyles].id, *(attr + 1),
+			sizeof(estyles[0].id) - 1);
+	    if (!strcasecmp(*attr, "width"))
+		estyles[num_estyles].width = atoi(*(attr + 1));
+	    if (!strcasecmp(*attr, "color"))
+		estyles[num_estyles].color = strtol(*(attr + 1), NULL, 16);
+	    if (!strcasecmp(*attr, "style")) /* !@# names later */
+		estyles[num_estyles].style = atoi(*(attr + 1));
+	    attr += 2;
+	}
+	num_estyles++;
+	return;
+    }
+
+    if (!strcasecmp(el, "Bmpstyle")) {
+	bstyles[num_bstyles].flags = 0;
+	bstyles[num_bstyles].filename[sizeof(bstyles[0].filename) - 1] = 0;
+	bstyles[num_bstyles].id[sizeof(bstyles[0].id) - 1] = 0;
+/* add checks that these are filled !@# */
+
+	while (*attr) {
+	    if (!strcasecmp(*attr, "id"))
+		strncpy(bstyles[num_bstyles].id, *(attr + 1),
+			sizeof(bstyles[0].id) - 1);
+	    if (!strcasecmp(*attr, "filename"))
+		strncpy(bstyles[num_bstyles].filename, *(attr + 1),
+			sizeof(bstyles[0].filename) - 1);
+	    if (!strcasecmp(*attr, "scalable"))
+		if (!strcasecmp(*(attr + 1), "yes"))
+		    bstyles[num_bstyles].flags |= 1;
+	    attr += 2;
+	}
+	num_bstyles++;
+	return;
+    }
+
+    if (!strcasecmp(el, "Scale")) { /* "Undocumented feature" */
+	if (!*attr || strcasecmp(*attr, "value"))
+	    warn("Invalid Scale");
+	else
+	    scale = atof(*(attr + 1));
+	return;
+    }
+
+    if (!strcasecmp(el, "BallArea")) {
+	current_group = ++num_groups;
+	groups[current_group].type = TREASURE;
+	groups[current_group].team = TEAM_NOT_SET;
+	groups[current_group].hit_mask = BALL_BIT;
+	return;
+    }
+
+    if (!strcasecmp(el, "BallTarget")) {
+	int team;
+	while (*attr) {
+	    if (!strcasecmp(*attr, "team"))
+		team = atoi(*(attr + 1));
+	    attr += 2;
+	}
+	current_group = ++num_groups;
+	groups[current_group].type = TREASURE;
+	groups[current_group].team = team;
+	groups[current_group].hit_mask = NONBALL_BIT | (((NOTEAM_BIT << 1) - 1) & ~(1 << team));
+	return;
+    }
+
+    if (!strcasecmp(el, "Decor")) {
+	is_decor = 1;
+	return;
+    }
+
+    if (!strcasecmp(el, "Polygon")) {
+	int x, y, style = -1;
+	poly_t t;
+
+	while (*attr) {
+	    if (!strcasecmp(*attr, "x"))
+		x = atoi(*(attr + 1)) * scale;
+	    if (!strcasecmp(*attr, "y"))
+		y = atoi(*(attr + 1)) * scale;
+	    if (!strcasecmp(*attr, "style"))
+		style = get_poly_id(*(attr + 1));
+	    attr += 2;
+	}
+	if (x < 0 || x >= World.cwidth || y < 0 || y > World.cheight) {
+	    warn("Polygon start point (%d, %d) is not inside the map"
+		  "(0 <= x < %d, 0 <= y < %d)",
+		  x, y, World.cwidth, World.cheight);
+	    exit(1);
+	}
+	if (style == -1) {
+	    warn("Currently you must give polygon style, no default");
+	    exit(1);
+	}
+	ptscount = 0;
+	t.x = x;
+	t.y = y;
+	t.group = current_group;
+	t.edges = edges;
+	t.style = style;
+	t.estyles_start = ecount;
+	t.is_decor = is_decor;
+	current_estyle = pstyles[style].defedge_id;
+	STORE(poly_t, pdata, polyc, max_polys, t);
+	return;
+    }
+
+    if (!strcasecmp(el, "Check")) {
+	ipos t;
+	int x, y;
+
+	while (*attr) {
+	    if (!strcasecmp(*attr, "x"))
+		x = atoi(*(attr + 1)) * scale;
+	    if (!strcasecmp(*attr, "y"))
+		y = atoi(*(attr + 1)) * scale;
+	    attr += 2;
+	}
+	t.x = x;
+	t.y = y;
+	STORE(ipos, World.check, World.NumChecks, max_checks, t);
+	return;
+    }
+
+    if (!strcasecmp(el, "Fuel")) {
+	fuel_t t;
+	int team, x, y;
+
+	team = TEAM_NOT_SET;
+	while (*attr) {
+	    if (!strcasecmp(*attr, "team"))
+		team = atoi(*(attr + 1));
+	    if (!strcasecmp(*attr, "x"))
+		x = atoi(*(attr + 1)) * scale;
+	    if (!strcasecmp(*attr, "y"))
+		y = atoi(*(attr + 1)) * scale;
+	    attr += 2;
+	}
+	t.clk_pos.x = x;
+	t.clk_pos.y = y;
+	t.fuel = START_STATION_FUEL;
+	t.conn_mask = (unsigned)-1;
+	t.last_change = frame_loops;
+	t.team = team;
+	STORE(fuel_t, World.fuel, World.NumFuels, max_fuels, t);
+	return;
+    }
+
+    if (!strcasecmp(el, "Base")) {
+	base_t	t;
+	int	team, x, y, dir;
+
+	while (*attr) {
+	    if (!strcasecmp(*attr, "team"))
+		team = atoi(*(attr + 1));
+	    if (!strcasecmp(*attr, "x"))
+		x = atoi(*(attr + 1)) * scale;
+	    if (!strcasecmp(*attr, "y"))
+		y = atoi(*(attr + 1)) * scale;
+	    if (!strcasecmp(*attr, "dir"))
+		dir = atoi(*(attr + 1));
+	    attr += 2;
+	}
+	if (team < 0 || team >= MAX_TEAMS) {
+	    warn("Illegal team number in base tag.\n");
+	    exit(1);
+	}
+
+	t.pos.x = x;
+	t.pos.y = y;
+	t.dir = dir;
+	if (BIT(World.rules->mode, TEAM_PLAY)) {
+	    t.team = team;
+	    World.teams[team].NumBases++;
+	    if (World.teams[team].NumBases == 1)
+		World.NumTeamBases++;
+	} else {
+	    t.team = TEAM_NOT_SET;
+	}
+	STORE(base_t, World.base, World.NumBases, max_bases, t);
+	return;
+    }
+
+    if (!strcasecmp(el, "Ball")) {
+    	treasure_t t;
+	int team, x, y;
+
+	while (*attr) {
+	    if (!strcasecmp(*attr, "team"))
+		team = atoi(*(attr + 1));
+	    if (!strcasecmp(*attr, "x"))
+		x = atoi(*(attr + 1)) * scale;
+	    if (!strcasecmp(*attr, "y"))
+		y = atoi(*(attr + 1)) * scale;
+	    attr += 2;
+	}
+	t.pos.x = x;
+	t.pos.y = y;
+	t.have = false;
+	t.destroyed = 0;
+	t.team = team;
+	t.empty = false; /* kps addition */
+	World.teams[team].NumTreasures++;
+	World.teams[team].TreasuresLeft++;
+	STORE(treasure_t, World.treasures, World.NumTreasures, max_balls, t);
+	return;
+    }
+
+    if (!strcasecmp(el, "Option")) {
+	const char *name, *value;
+	while (*attr) {
+	    if (!strcasecmp(*attr, "name"))
+		name = *(attr + 1);
+	    if (!strcasecmp(*attr, "value"))
+		value = *(attr + 1);
+	    attr += 2;
+	}
+
+	/*addOption(name, value, 0, NULL, OPT_MAP);*/
+	Option_set_value(name, value, 0, OPT_MAP);
+
+	return;
+    }
+
+    if (!strcasecmp(el, "Offset")) {
+	int x, y, edgestyle = -1;
+	while (*attr) {
+	    if (!strcasecmp(*attr, "x"))
+		x = atoi(*(attr + 1)) * scale;
+	    if (!strcasecmp(*attr, "y"))
+		y = atoi(*(attr + 1)) * scale;
+	    if (!strcasecmp(*attr, "style"))
+		edgestyle = get_edge_id(*(attr + 1));
+	    attr += 2;
+	}
+	if (ABS(x) > 30000 || ABS(y) > 30000) {
+	    warn("Offset component absolute value exceeds 30000 (x=%d, y=%d)",
+		  x, y);
+	    exit(1);
+	}
+	*edges++ = x;
+	*edges++ = y;
+	if (edgestyle != -1 && edgestyle != current_estyle) {
+	    STORE(int, estyleptr, ecount, max_echanges, ptscount);
+	    STORE(int, estyleptr, ecount, max_echanges, edgestyle);
+	    current_estyle = edgestyle;
+	}
+	ptscount++;
+	return;
+    }
+
+    if (!strcasecmp(el, "GeneralOptions"))
+	return;
+
+    warn("Unknown map tag: \"%s\"", el);
+    return;
+}
+
+
+static void tagend(void *data, const char *el)
+{
+    void cmdhack(void);
+    if (!strcasecmp(el, "Decor"))
+	is_decor = 0;
+    if (!strcasecmp(el, "BallArea") || !strcasecmp(el, "BallTarget"))
+	current_group = 0;
+    if (!strcasecmp(el, "Polygon")) {
+	pdata[polyc - 1].num_points = ptscount;
+	pdata[polyc - 1].num_echanges = ecount -pdata[polyc - 1].estyles_start;
+	STORE(int, estyleptr, ecount, max_echanges, INT_MAX);
+    }
+    if (!strcasecmp(el, "GeneralOptions")) {
+	/*cmdhack(); - kps ng wants this */ /* !@# */
+	Options_parse();
+	Grok_polygon_map();
+    }
+    return;
+}
+
+#if 0
+/* kps - ng */
+void cmdhack(void)
+{
+    int j;
+    for (j = 0; j < NELEM(options); j++)
+	addOption(options[j].name, options[j].defaultValue, 0, &options[j],
+		  OPT_DEFAULT);
+}
+#endif
+
+
+/* kps - ugly hack */
+static bool isXp2MapFile(int fd)
+{
+    char start[] = "<XPilotMap";
+    char buf[16];
+    int n;
+
+    n = read(fd, buf, sizeof(buf));
+    if (n < 0) {
+	error("Error reading map!");
+	return false;
+    }
+    if (n == 0)
+	return false;
+
+    /* assume this works */
+    (void)lseek(fd, 0, SEEK_SET);
+    if (!strncmp(start, buf, strlen(start)))
+	return true;
+    return false;
+}
+
+static bool parseXp2MapFile(int fd, optOrigin opt_origin)
+{
+    char buff[8192];
+    int len;
+    XML_Parser p = XML_ParserCreate(NULL);
+
+    if (!p) {
+	warn("Creating Expat instance for map parsing failed.\n");
+	/*exit(1);*/
+	return false;
+    }
+    XML_SetElementHandler(p, tagstart, tagend);
+    do {
+	len = read(fd, buff, 8192);
+	if (len < 0) {
+	    error("Error reading map!");
+	    return false;
+	}
+	if (!XML_Parse(p, buff, len, !len)) {
+	    warn("Parse error reading map at line %d:\n%s\n",
+		  XML_GetCurrentLineNumber(p),
+		  XML_ErrorString(XML_GetErrorCode(p)));
+	    /*exit(1);*/
+	    return false;
+	}
+    } while (len);
+    return true;
+}

@@ -318,7 +318,7 @@ int		maxPauseTime;		/* Max. time you can stay paused for */
 
 extern char	conf_logfile_string[];	/* Default name of log file */
 
-int		numberOfRounds;		/* how many rounds to play */
+int		roundsToPlay;		/* how many rounds to play */
 int		playerLimit;		/* allow less players than bases */
 
 int		constantScoring;	/* Fixed points for kills etc? */
@@ -3286,8 +3286,6 @@ static option_desc options[] = {
 	"The maximum duration of each round, in seconds.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
-#if 0
-/* kps - i don't know if it is too clever to rename this to numberofrounds */
     {
 	"roundsToPlay",
 	"roundsToPlay",
@@ -3298,7 +3296,6 @@ static option_desc options[] = {
 	"The number of rounds to play.  Unlimited if 0.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
-#endif
     {
 	"maxVisibleObject",
 	"maxVisibleObjects",
@@ -3411,6 +3408,7 @@ static option_desc options[] = {
 	"May players protect their nicks with a password?\n",
 	OPT_ORIGIN_ANY | OPT_DEFAULTS /* kps - was OPT_ANY */
     },
+#if 0
     {
 	"numberOfRounds",
 	"numRounds",
@@ -3421,6 +3419,7 @@ static option_desc options[] = {
 	"The number of rounds to play. If 0, unlimited.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
+#endif
     {
 	"playerLimit",
 	"playerLimit",
@@ -3627,23 +3626,32 @@ void Timing_setup(void)
     if (FPSMultiplier > 64)
 	FPSMultiplier = 64;
 
-
-    /* kps - tmp hacks */
-    ShotsLife = ShotsLifeSetting;
-    fireRepeatRate = fireRepeatRateSetting;
-    friction = frictionSetting;
-    /* kps - tmp hacks end */
-
-#if 0 /* kps - enable these in ng */
     framespeed = TIME_FACT / FPSMultiplier;
     framespeed2 = 1. / FPSMultiplier;
     ShotsLife = ShotsLifeSetting * TIME_FACT;
     fireRepeatRate = fireRepeatRateSetting * TIME_FACT;
+
+    friction = frictionSetting;
+
+#if 0 
+    /* kps - changed ng code so the above works */
+    /* ng wants this - requires other changes elsewhere */
     friction = 1 - frictionSetting;
+
+
     /* If friction < 0, the result is silly - allow such settings but
      * don't bother making it "FPSMultiplier independent" */
     if (friction > 0)
 	friction = pow(friction, 1. / FPSMultiplier);
+#endif
+
+#if 0
+    xpprintf(__FILE__ ": FPSMultiplier     = %d\n", FPSMultiplier);
+    xpprintf(__FILE__ ": framespeed        = %d\n", framespeed);
+    xpprintf(__FILE__ ": framespeed2       = %f\n", framespeed2);
+    xpprintf(__FILE__ ": ShotsLife         = %d\n", ShotsLife);
+    xpprintf(__FILE__ ": fireRepeatRate    = %d\n", fireRepeatRate);
+    xpprintf(__FILE__ ": friction          = %f\n", friction);
 #endif
 }
 

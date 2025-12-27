@@ -136,12 +136,18 @@
 	&& (GetInd[Players[j]->lock.pl_id] == (i)))
 
 
-#define RECOVERY_DELAY		(FPS*3)
-#define ROBOT_CREATE_DELAY	(FPS*2)
+#define TIME_BITS		6
+#define TIME_FACT 		(1 << TIME_BITS)
+
+#define RECOVERY_DELAY		(12*3*TIME_FACT)
+#define ROBOT_CREATE_DELAY	(12*2*TIME_FACT)
 
 #define NO_ID			(-1)
 #define NUM_IDS			256
 #define MAX_PSEUDO_PLAYERS      16
+
+#define MIN_PASS_LEN		5
+#define MAX_PASS_LEN		16      /* 8 => 16 by kps */
 
 #define MAX_TOTAL_SHOTS		16384	/* must be <= 65536 */
 #define MAX_TOTAL_PULSES	(5 * 64)
@@ -153,7 +159,7 @@
 #define ALT_SPARK_MASS_FACT     4.2
 #define ALT_FUEL_FACT           3
 #define MAX_AFTERBURNER        ((1<<LG2_MAX_AFTERBURNER)-1)
-#define AFTER_BURN_SPARKS(s,n)  (((s)*(n))>>LG2_MAX_AFTERBURNER)
+/*#define AFTER_BURN_SPARKS(s,n)  (((s)*(n))>>LG2_MAX_AFTERBURNER)*/
 #define AFTER_BURN_POWER_FACTOR(n) \
  (1.0+(n)*((ALT_SPARK_MASS_FACT-1.0)/(MAX_AFTERBURNER+1.0)))
 #define AFTER_BURN_POWER(p,n)   \
@@ -194,10 +200,11 @@
 #define MINE_SENSE_BASE_RANGE   (MINE_RANGE*1.3)
 #define MINE_SENSE_RANGE_FACTOR (MINE_RANGE*0.3)
 #define MINE_MASS               30.0
-#define MINE_LIFETIME           (5000+(randomMT()&255))
+#define MINE_LIFETIME           (5000*TIME_FACT+(randomMT()&(255*TIME_FACT)))
 #define MINE_SPEED_FACT         1.3
 
-#define MISSILE_LIFETIME        (randomMT()%(64*FPS-1)+(128*FPS))
+#define MISSILE_LIFETIME        ((randomMT()%((64*12*TIME_FACT-1))\
+                                +(128*12*TIME_FACT)))
 #define MISSILE_MASS            5.0
 #define MISSILE_RANGE           4
 #define SMART_SHOT_ACC		0.6
@@ -206,11 +213,11 @@
 #define SMART_TURNSPEED         2.6
 #define SMART_SHOT_MAX_SPEED	22.0
 #define SMART_SHOT_LOOK_AH      4
-#define TORPEDO_SPEED_TIME      (2*FPS)
-#define TORPEDO_ACC 	(18.0*SMART_SHOT_MAX_SPEED/(FPS*TORPEDO_SPEED_TIME))
+#define TORPEDO_SPEED_TIME      (2*12)
+#define TORPEDO_ACC 	(18.0*SMART_SHOT_MAX_SPEED/(12*TORPEDO_SPEED_TIME))
 #define TORPEDO_RANGE           (MINE_RANGE*0.45)
 
-#define NUKE_SPEED_TIME		(2*FPS)
+#define NUKE_SPEED_TIME		(2*12)
 #define NUKE_ACC 		(5*TORPEDO_ACC)
 #define NUKE_RANGE		(MINE_RANGE*1.5)
 #define NUKE_MASS_MULT		1
@@ -219,13 +226,13 @@
 
 #define HEAT_RANGE              (VISIBILITY_DISTANCE/2)
 #define HEAT_SPEED_FACT         1.7
-#define HEAT_CLOSE_TIMEOUT      (2*FPS)
+#define HEAT_CLOSE_TIMEOUT      (2*12)
 #define HEAT_CLOSE_RANGE        HEAT_RANGE
 #define HEAT_CLOSE_ERROR        0
-#define HEAT_MID_TIMEOUT        (4*FPS)
+#define HEAT_MID_TIMEOUT        (4*12)
 #define HEAT_MID_RANGE          (2*HEAT_RANGE)
 #define HEAT_MID_ERROR          8
-#define HEAT_WIDE_TIMEOUT       (8*FPS)
+#define HEAT_WIDE_TIMEOUT       (8*12)
 #define HEAT_WIDE_ERROR         16
 
 #define CLUSTER_MASS_SHOTS(mass) ((mass) * 0.9 / ShotsMass)
@@ -235,8 +242,8 @@
 #define HEAT_SHOT_LEN		15
 #define TORPEDO_LEN		18
 
-#define PULSE_SPEED		90
-#define PULSE_SAMPLE_DISTANCE	5
+#define PULSE_SPEED		(90 * CLICK)
+#define PULSE_SAMPLE_DISTANCE	(5 * CLICK)
 #define PULSE_LENGTH		(PULSE_SPEED - PULSE_SAMPLE_DISTANCE)
 #define PULSE_MIN_LIFE		4.5
 #define PULSE_LIFE(lasers)	(PULSE_MIN_LIFE + ((lasers) / 4))
@@ -250,6 +257,7 @@
 	((percent) * (maxforce) * ((tr_pr) ? -1 : 1))
 
 #define WARN_TIME               2
+#define EMERGENCY_SHIELD_TIME	(4*12)
 
 #define ALLIANCE_NOT_SET	(-1)
 

@@ -45,6 +45,9 @@
 #include "netserver.h"
 #include "commonproto.h"
 #include "score.h"
+#include "srecord.h"
+#include "auth.h"
+#include "checknames.h"
 
 
 char command_version[] = VERSION;
@@ -52,7 +55,7 @@ char command_version[] = VERSION;
 
 
 
-static int Get_player_index_by_name(char *name)
+int Get_player_index_by_name(char *name)
 {
     int			i, j, len;
 
@@ -98,7 +101,15 @@ static void Send_info_about_player(player * pl)
 {
     int			i;
 
-    for (i = 0; i < NumPlayers; i++) {
+    for (i = 0; i < observerStart + NumObservers; i++) {
+	/* hack */
+	if (i == NumPlayers) {
+	    if (!NumObservers) { 
+		break;
+	    } else {
+		i = observerStart;
+	    }
+	}
 	if (Players[i]->conn != NOT_CONNECTED) {
 	    Send_player(Players[i]->conn, pl->id);
 	    Send_score(Players[i]->conn, pl->id, pl->score, pl->life,
@@ -106,6 +117,126 @@ static void Send_info_about_player(player * pl)
 	    Send_base(Players[i]->conn, pl->id, pl->home_base);
 	}
     }
+}
+
+
+static void Set_swapper_state(int ind)
+{
+    player *pl = Players[ind];
+    int i;
+
+    if (BIT(pl->have, OBJ_BALL))
+	Detach_ball(ind, -1);
+
+    if(BIT(pl->status, PAUSE)) {
+	Go_home(ind);
+    }
+    else if (BIT(World.rules->mode, LIMITED_LIVES))
+	for (i = 0; i < NumPlayers; i++)
+	    if (!TEAM(ind, i) && !BIT(Players[i]->status,PAUSE)) {
+		if (pl->mychar == ' ')
+		    pl->mychar	= 'W';
+		pl->prev_life = pl->life = 0;
+		SET_BIT(pl->status, GAME_OVER);
+		CLR_BIT(pl->status, SELF_DESTRUCT);
+		pl->count=-1;
+		Go_home(ind);
+		break;
+	    }
+    Player_lock_closest(ind, 0);
+}
+
+
+static void Swap_team(int ind, char *args)
+{
+    int      i, team;
+    player   *pl=Players[ind];
+    char      msg[MSG_LEN*2];
+
+    for (i = 0 ; i < MAX_TEAMS ; i++)   /* can't queue to two teams at once */
+	if (World.teams[i].SwapperId == pl->id)
+	    World.teams[i].SwapperId = -1;
+
+    if (!args)
+	sprintf(msg,"Not swapping to any team.");
+    else {
+	team = atoi(args);
+	if (pl->team >= MAX_TEAMS)
+	    sprintf(msg,"You do not currently have a team. Swapping doesn't work.");
+	else if (team<0 || team >= MAX_TEAMS || World.teams[team].NumBases == 0)
+	    sprintf(msg,"There are no bases for team %d on this map.", team);
+	else if (team == pl->team)
+	    sprintf(msg,"You already are on team %d.", team);
+	else if (World.teams[team].NumBases - World.teams[team].NumMembers > 0) {
+	    sprintf(msg,"%s has swapped to team %d.",pl->name,team);
+	    Set_message(msg);
+	    World.teams[pl->team].NumMembers--;
+	    pl->team = team;
+	    World.teams[pl->team].NumMembers++;
+	    Set_swapper_state(ind);
+	    Pick_startpos(ind);
+	    Send_info_about_player(pl);
+	    return;
+	} else {  /* Team full. Can we permute the teams of several players? */
+	    i = World.teams[pl->team].SwapperId;
+	    while (i != -1)
+		if ( (i = Players[GetInd[i]]->team) != team)
+		    i = World.teams[i].SwapperId;
+		else {   /* found a cycle, now change the teams */
+		    int xbase= pl->home_base, xteam = pl->team, xbase2, xteam2;
+		    player *pl2 = pl;
+
+		    do {
+			pl2=Players[GetInd[World.teams[xteam].SwapperId]];
+			World.teams[xteam].SwapperId = -1;
+			xbase2 = pl2->home_base;
+			xteam2 = pl2->team;
+			pl2->team = xteam;
+			pl2->home_base = xbase;
+			Set_swapper_state(GetInd[pl2->id]);
+			Send_info_about_player(pl2);
+			/* This can send a huge amount of data if several players swap.
+			   Unfortunately all player data, even shipshape, has to be
+			   resent to change the team of a player. This should probably
+			   be changed somehow to prevent disturbing other players. */
+			xbase = xbase2;
+			xteam = xteam2;
+		    } while (xteam != team);
+		    pl->team = team;
+		    pl->home_base = xbase;
+		    Set_swapper_state(ind);
+		    Send_info_about_player(pl);
+		    sprintf(msg,"Some players swapped teams.");
+		    Set_message(msg);
+		    return;
+		}
+
+	    /* Swap a paused player away from the full team */
+	    for (i = NumPlayers - 1; i >= 0; i--)
+		if (Players[i]->conn != NOT_CONNECTED
+		    && BIT(Players[i]->status, PAUSE)
+		    && (Players[i]->team == team)) {
+		    sprintf(msg,"%s has swapped with paused %s.", pl->name,
+			    Players[i]->name);
+		    Set_message(msg);
+		    Players[i]->team = pl->team;
+		    pl->team = team;
+		    team = Players[i]->home_base;
+		    Players[i]->home_base = pl->home_base;
+		    pl->home_base = team;
+		    Set_swapper_state(i);
+		    Set_swapper_state(ind);
+		    Send_info_about_player(Players[i]);
+		    Send_info_about_player(pl);
+		    return;
+		}
+	    sprintf(msg,"You are queued for swap to team %d.", team);
+	    World.teams[team].SwapperId = pl->id;
+	}
+    }
+    sprintf(msg+strlen(msg)," [*Server reply*]");
+    Set_player_message(pl, msg);
+    return;
 }
 
 
@@ -313,6 +444,12 @@ void Handle_player_command(player *pl, char *cmd)
 	Set_player_message(pl, msg);
 	return;
     }
+#if 0 /* kps - recording related stuff too obscure */
+    else if (!pl->isoperator && (commands[i].operOnly || rplayback && !playback && commands[i].number != PASSWORD_CMD)) {
+	i = NO_CMD;
+	sprintf(msg, "You need operator status to use this command.");
+    }
+#endif
 
     msg[0] = '\0';
     result = (*commands[i].cmd)(args, pl, pl->isoperator, msg);
@@ -322,7 +459,7 @@ void Handle_player_command(player *pl, char *cmd)
 
     case CMD_RESULT_ERROR:
 	if (msg[0] == '\0') {
-	    strcpy(msg, "ErrOr.");
+	    strcpy(msg, "Error.");
 	}
 	break;
 
@@ -353,13 +490,26 @@ void Handle_player_command(player *pl, char *cmd)
     }
 }
 
-
+/*
+ * The queue system from the original server is not replicated
+ * during playback. Therefore interactions with it in the
+ * recording can cause problems (at least different message
+ * lengths in acks from client). It would be possible to work
+ * around this, but not implemented now. Currently queue and advance
+ * commands are disabled during recording.
+ */
 static int Cmd_advance(char *arg, player *pl, int oper, char *msg)
 {
     int			result;
 
     if (!oper) {
 	return CMD_RESULT_NOT_OPERATOR;
+    }
+
+    if (record || playback) {
+	strcpy(msg, "Command currently disabled during recording for "
+	       "technical reasons.");
+	return CMD_RESULT_ERROR;
     }
 
     if (!arg || !*arg) {
@@ -378,6 +528,12 @@ static int Cmd_advance(char *arg, player *pl, int oper, char *msg)
 static int Cmd_queue(char *arg, player *pl, int oper, char *msg)
 {
     int			result;
+
+    if (record || playback) {
+	strcpy(msg, "Command currently disabled during recording for "
+	       "technical reasons.");
+	return CMD_RESULT_ERROR;
+    }
 
     result = Queue_show_list(msg);
 
@@ -689,8 +845,8 @@ static int Cmd_reset(char *arg, player *pl, int oper, char *msg)
 	if (gameDuration == -1) {
 	    gameDuration = 0;
 	}
-	if (roundCounter == numberOfRounds + 1)
-	    numberOfRounds = 0;
+	if (roundCounter == roundsToPlay + 1)
+	    roundsToPlay = 0;
 	sprintf(msg, " < Round reset by %s! >", pl->name);
 	Set_message(msg);
 	strcpy(msg, "");
@@ -704,13 +860,15 @@ static int Cmd_password(char *arg, player *pl, int oper, char *msg)
 {
     if (!password || !arg || strcmp(arg, password)) {
 	strcpy(msg, "Wrong.");
-	if (pl->isoperator) {
+	if (pl->isoperator && pl->rectype != 2) {
+	    NumOperators--;
 	    pl->isoperator = 0;
 	    strcat(msg, "  You lost operator status.");
 	}
     }
     else {
-	if (!pl->isoperator) {
+	if (!pl->isoperator && pl->rectype != 2) {
+	    NumOperators++;
 	    pl->isoperator = 1;
 	}
 	strcpy(msg, "You got operator status.");
@@ -843,6 +1001,7 @@ static int Cmd_pause(char *arg, player *pl, int oper, char *msg)
     return CMD_RESULT_ERROR;
 }
 
+
 static int Cmd_get(char *arg, player *pl, int oper, char *msg)
 {
     char value[MAX_CHARS];
@@ -876,17 +1035,168 @@ static int Cmd_get(char *arg, player *pl, int oper, char *msg)
     return CMD_RESULT_ERROR;
 }
 
+
 static int Cmd_auth(char *arg, player *pl, int oper, char *msg)
 {
-    printf("AUTH!\n");
-    return CMD_RESULT_ERROR;
+    int r, i = -1;
+
+    if (!allowPlayerPasswords) {
+	strcpy(msg, "Player passwords are disabled on this server.");
+	return CMD_RESULT_ERROR;
+    }
+
+    if (!*pl->auth_nick) {
+	strcpy(msg, "You're already authenticated or your nick isn't "
+	       "password-protected.");
+	return CMD_RESULT_ERROR;
+    }
+
+    if (!arg || !*arg) {
+	strcpy(msg, "Need a password.");
+	return CMD_RESULT_ERROR;
+    }
+
+    while (*arg == ' ')
+	arg++;
+    if (!*arg) {
+	strcpy(msg, "Need a password.");
+	return CMD_RESULT_ERROR;
+    }
+    r = Check_player_password(pl->auth_nick, arg);
+    if (r & (PASSWD_WRONG | PASSWD_ERROR)) {
+	char *reason = NULL, *reason_p = NULL;
+	if (r & PASSWD_ERROR)
+	    reason_p = "Couldn't check password";
+	else
+	    reason_p = "Wrong password";
+	if (reason_p)
+	    warn("Authentication failed (%s -> %s): %s.",
+		 pl->name, pl->auth_nick, reason_p);
+	sprintf(msg, "Authentication (->%s) failed: %s.",
+		pl->auth_nick, reason ? reason : reason_p);
+	return CMD_RESULT_ERROR;
+    }
+
+    sprintf(msg, "\"%s\" successfully authenticated (%s).",
+	    pl->name, pl->auth_nick);
+    warn(msg);
+    Set_message(msg);
+
+    Queue_kick(pl->auth_nick);
+
+    for (i = 0; i < NumPlayers; i++) {
+	if (pl != Players[i] &&
+	    !strcasecmp(Players[i]->auth_nick, pl->auth_nick))
+	{
+	    sprintf(msg, "%s has been kicked out (nick collision).",
+		    Players[i]->name);
+	    if (Players[i]->conn == NOT_CONNECTED)
+		Delete_player(i);
+	    else
+		Destroy_connection(Players[i]->conn,
+				   "kicked out (someone else authenticated "
+				   "for the same nick)");
+	    warn(msg);
+	    Set_message(msg);
+	}
+    }
+
+    /* kps - what to do about the ranking stuff here ? */
+    /*Rank_save_score(pl);*/
+    Conn_change_nick(pl->conn, pl->auth_nick);
+    strcpy(pl->name, pl->auth_nick);
+    /*Rank_get_saved_score(pl);*/
+    Send_info_about_player(pl);
+    pl->auth_nick[0] = 0;
+    
+    *msg = 0;
+
+    return CMD_RESULT_SUCCESS;
 }
+
 
 static int Cmd_setpass(char *arg, player *pl, int oper, char *msg)
 {
-    printf("SETPASS!\n");
-    return CMD_RESULT_ERROR;
+    char *new_pw, *new_pw2, *old_pw;
+    int r, new = 0;
+
+    if (!allowPlayerPasswords) {
+	strcpy(msg, "Player passwords are disabled on this server.");
+	return CMD_RESULT_ERROR;
+    }
+
+    if (pl->name[strlen(pl->name)-1] == PROT_EXT) {
+	strcpy(msg, "You cannot set a password for your current nick.");
+	return CMD_RESULT_ERROR;
+    }
+
+    if (!arg || !*arg) {
+	strcpy(msg, "Need at least two arguments.");
+	return CMD_RESULT_ERROR;
+    }
+
+    new_pw = strtok(arg, " ");
+    new_pw2 = strtok(NULL, " ");
+    old_pw = strtok(NULL, " ");
+
+    if (!new_pw || strlen(new_pw) < MIN_PASS_LEN) {
+	sprintf(msg, "Minimum password lenght allowed is %d.", MIN_PASS_LEN);
+	return CMD_RESULT_ERROR;
+    }
+    if (strlen(new_pw) > MAX_PASS_LEN) {
+	sprintf(msg, "Maximum password lenght allowed is %d.", MAX_PASS_LEN);
+	return CMD_RESULT_ERROR;
+    }
+    if (!new_pw2) {
+	strcpy(msg, "Please specify new password twice.");
+	return CMD_RESULT_ERROR;
+    }
+    if (strcmp(new_pw, new_pw2)) {
+	strcpy(msg, "Passwords don't match. Try again.");
+	return CMD_RESULT_ERROR;
+    }
+    if (old_pw && !strcmp(old_pw, new_pw)) {
+	strcpy(msg, "New and old password are the same. Nothing changed.");
+	return CMD_RESULT_ERROR;
+    }
+
+    r = Check_player_password(pl->name, old_pw ? old_pw : "");
+    switch (r) {
+    case PASSWD_NONE:
+	new = 1;
+
+    case PASSWD_OK:
+	r = Set_player_password(pl->name, new_pw, new);
+	if (!r) {
+	    strcpy(msg, "Okay.");
+	} else {
+	    warn("Command \"/setpass\": Error setting password for "
+		 "player \"%s\".", pl->name);
+	    strcpy(msg, r == -1 ?
+		   "Server error." :
+		   "Sorry, no more player passwords allowed. Limit reached!");
+	    return CMD_RESULT_ERROR;
+	}
+	break;
+
+    case PASSWD_WRONG:
+	if (old_pw && old_pw[0]) {
+	    strcpy(msg, "Old password is wrong. Nothing changed.");
+	} else {
+	    strcpy(msg, "Need old password as third argument.");
+	}
+	return CMD_RESULT_ERROR;
+
+    case PASSWD_ERROR:
+	warn("Command \"/setpass\": Couldn't check password of "
+	     "player \"%s\".", pl->name);
+	strcpy(msg, "Server error.");
+	return CMD_RESULT_ERROR;
+    }
+    
+    return CMD_RESULT_SUCCESS;
 }
+
 
 
 
