@@ -1,9 +1,17 @@
 #!/usr/bin/env python
 
-import os
+import wxversion
+try:
+	wxversion.select('2.6')
+except wxversion.VersionError:
+	try:
+		wxversion.select('2.4')
+	except wxversion.VersionError:
+		wxversion.select('2.5')
 import wx
-import urllib
 import wx.html as html
+import os
+import urllib
 import metaui
 import config
 import options
@@ -17,9 +25,15 @@ def get_nick():
 	if nick: return nick
 	if os.path.exists(config.xpilotrc):
 		opts = options.parse_xpilotrc(config.xpilotrc)
-		if opts.has_key('name'): nick = opts['name']
-	if not nick:
+		try:
+			nick = opts['name']
+		except KeyError:
+			pass
+	if nick: return nick
+	try:
 		nick = os.environ['USER']
+	except KeyError:
+		nick = os.environ.get('USERNAME', 'xpilot-user')
 	return nick
 
 class RecordingsPanel(html.HtmlWindow):
@@ -99,8 +113,8 @@ class  MapEditorMenu(MenuPanel):
 class ToolsMenu(MenuPanel):
 	def __init__(self, parent):
 		b = []
-                if config.client:
-		        b.append(("  Client configuration  ", self.onClientConfig))
+		if config.client:
+			b.append(("  Client configuration  ", self.onClientConfig))
 		if config.xpreplay:
 			b.append(("XP-Replay", self.onXPReplay))
 			b.append(("Recordings", self.onRecordings))
@@ -135,8 +149,8 @@ class MainMenu(MenuPanel):
 		b.append(("    Internet servers    ", self.onInternet))
 		if config.server:
 			b.append(("Start server", self.onStart))
-                if config.client or config.xpreplay or config.mapedit or config.javaws:
-		        b.append(("Tools", self.onTools))
+		if config.client or config.xpreplay or config.mapedit or config.javaws:
+			b.append(("Tools", self.onTools))
 		b.append(("Support and Chat", self.onChat))
 # FIXME: This should be a fullscreen widget in the corner instead.
 #		b.append(("Windowed", self.onWindowed))

@@ -117,7 +117,7 @@ player_t *Get_player_by_name(const char *str,
 }
 
 
-static void Send_info_about_player(player_t *pl)
+void Send_info_about_player(player_t *pl)
 {
     int i;
 
@@ -141,7 +141,7 @@ static void Send_info_about_player(player_t *pl)
 }
 
 
-static void Set_swapper_state(player_t *pl)
+void Set_swapper_state(player_t *pl)
 {
     if (BIT(pl->have, HAS_BALL))
 	Detach_ball(pl, NULL);
@@ -632,7 +632,7 @@ static int Cmd_get(char *arg, player_t *pl, bool oper, char *msg, size_t size)
 	retval = CMD_RESULT_SUCCESS;
 	break;
     case -2:
-	snprintf(msg, size, "No option named %s.", name);
+	snprintf(msg, size, "No server option named %s.", name);
 	break;
     case -3:
 	snprintf(msg, size, "Cannot show the value of this option.");
@@ -1020,6 +1020,13 @@ static int Cmd_reset(char *arg, player_t *pl, bool oper, char *msg, size_t size)
     if (!oper)
 	return CMD_RESULT_NOT_OPERATOR;
 
+        for (i = NumObjs - 1; i >= 0; i--) {
+        object_t *obj = Obj[i];
+        obj->life = 0;
+        Delete_shot(i);
+
+    }
+
     if (arg && !strcasecmp(arg, "all")) {
 	for (i = NumPlayers - 1; i >= 0; i--) {
 	    player_t *pl_i = Player_by_index(i);
@@ -1036,6 +1043,7 @@ static int Cmd_reset(char *arg, player_t *pl, bool oper, char *msg, size_t size)
 	Set_message(msg);
 	strlcpy(msg, "", size);
 
+	teamcup_game_over();
 	teamcup_game_start();
     }
     else {

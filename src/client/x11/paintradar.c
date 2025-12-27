@@ -146,7 +146,7 @@ static void Paint_objects_radar(void)
 	unsigned s = (rs <= 0 ? 1 : radar_ptr[i].size);
 
 	color = WHITE;
-	if (radar_ptr[i].type == friendly) {
+	if (radar_ptr[i].type == RadarFriend) {
 	    if (maxColors > 4)
 		color = 4;
 	    else if (!colorSwitch)
@@ -662,9 +662,6 @@ static bool Set_wallRadarColor(xp_option_t *opt, int value)
     UNUSED_PARAM(opt);
 
     wallRadarColor = value;
-    if ((wallRadarColor & 5) && colorSwitch)
-	wallRadarColor = BLUE;    
-
     return true;
 }
 
@@ -673,9 +670,6 @@ static bool Set_decorRadarColor(xp_option_t *opt, int value)
     UNUSED_PARAM(opt);
 
     decorRadarColor = value;
-    if ((decorRadarColor & 5) && colorSwitch)
-	decorRadarColor = BLUE;    
-
     return true;
 }
 
@@ -684,9 +678,6 @@ static bool Set_targetRadarColor(xp_option_t *opt, int value)
     UNUSED_PARAM(opt);
 
     targetRadarColor = value;
-    if ((targetRadarColor & 5) && colorSwitch)
-	targetRadarColor = BLUE;    
-
     return true;
 }
 

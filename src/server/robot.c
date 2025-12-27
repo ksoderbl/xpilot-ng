@@ -385,6 +385,7 @@ static robot_t	*Robots;	/* array of robot parameters. */
  * Add your own robot type setup routine here.
  */
 extern int Robot_default_setup(robot_type_t *type_ptr);
+extern int Robot_suibot_setup(robot_type_t *type_ptr);
 
 /*
  * Array to store function pointers to robot type setup routines.
@@ -395,6 +396,7 @@ static struct robot_setup {
     int		(*setup_func)(robot_type_t *type_ptr);
 } robot_type_setups[] = {
     { Robot_default_setup },
+    { Robot_suibot_setup },
 
 };
 
@@ -1020,7 +1022,8 @@ void Robot_update(bool tick)
     num_playing_ships = num_any_ships - NumPseudoPlayers;
     if ((num_playing_ships < options.maxRobots
 	 || NumRobots < options.minRobots)
-	&& num_playing_ships < Num_bases()
+	&& (options.baselessPausing 
+	    || num_playing_ships < Num_bases())
 	&& num_any_ships < NUM_IDS
 	&& NumRobots < MAX_ROBOTS
 	&& !(BIT(world->rules->mode, TEAM_PLAY)
@@ -1037,7 +1040,8 @@ void Robot_update(bool tick)
     else {
 	new_robot_delay = 0;
 	if (NumRobots > 0) {
-	    if ((num_playing_ships > Num_bases())
+	    if ((!options.baselessPausing 
+		 && num_playing_ships > Num_bases())
 		|| (num_any_ships > NUM_IDS)
 		|| (num_playing_ships > options.maxRobots
 		    && NumRobots > options.minRobots))

@@ -1374,11 +1374,17 @@ void Gui_paint_ship(int x, int y, int dir, int id, int cloak, int phased,
     position_t point;
     other_t *other;
 
-    ship = Ship_by_id(id);
     if (!(other = Other_by_id(id))) return;
 
     if (!(color = Gui_calculate_ship_color(id,other))) return;
     
+    if ((!instruments.showShipShapes) && (self != NULL) && (self->id != id))
+			ship = Default_ship();
+    else if ((!instruments.showMyShipShape) && (self != NULL) && (self->id == id))
+			ship = Default_ship();
+		else
+			ship = Ship_by_id(id);
+
     if (shield) {
     	Image_paint(IMG_SHIELD, x - 27, y - 27, 0, (color & 0xffffff00) + ((color & 0x000000ff)/2));
     }
@@ -1738,7 +1744,7 @@ static void Paint_hudradar(double hrscale, double xlimit, double ylimit, int sz)
  	    x = x + draw_width / 2;
  	    y = -y + draw_height / 2;
 
-	    if (radar_ptr[i].type == normal) {
+	    if (radar_ptr[i].type == RadarEnemy) {
 		c = hudRadarEnemyColorRGBA;
 		shape = hudRadarEnemyShape;
 	    } else {
@@ -1921,11 +1927,11 @@ void Paint_HUD(void)
 
 
     glDisable(GL_BLEND);
-    /* message scan hack by mara*/
-    if (ball_shout && msgScanBallColorRGBA)
+    /* message scan hack by mara and jpv */
+    if (Bms_test_state(BmsBall) && msgScanBallColorRGBA)
 	Circle(msgScanBallColorRGBA, draw_width / 2,
 	       draw_height / 2, (int)(8*clData.scale),0);
-    if (need_cover && msgScanCoverColorRGBA)
+    if (Bms_test_state(BmsCover) && msgScanCoverColorRGBA)
 	Circle(msgScanCoverColorRGBA, draw_width / 2,
 	       draw_height / 2, (int)(6*clData.scale),0);
 

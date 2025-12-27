@@ -58,23 +58,34 @@ void teamcup_init(void)
 
 static void teamcup_open_score_file(void)
 {
+    char msg[MSG_LEN];
+    player_t *pl;
+    int i;
+
+
     if (!options.teamcup)
 	return;
 
-    if (teamcup_score_file != NULL) {
+/*    if (teamcup_score_file != NULL) {
 	error("teamcup_score_file != NULL");
 	End_game();
-    }
+*/
 
     snprintf(teamcup_score_file_name, sizeof(teamcup_score_file_name), "%s%d",
 	     options.teamcupScoreFileNamePrefix, options.teamcupMatchNumber);
+    
 
     teamcup_score_file = fopen(teamcup_score_file_name, "w");
     if (teamcup_score_file == NULL) {
 	error("fopen() failed, could not create score file");
 	End_game();
     }
-    warn("Teamcup score file is \"%s\".\n", teamcup_score_file_name);
+
+    snprintf(msg, sizeof(msg),
+             "Score file \"%s\" opened.", teamcup_score_file_name);
+    Set_message_f("%s [*Server notice*]", msg);
+
+    warn("%s\n", msg);
 
     teamcup_log("1) Fill the names of the teams below.\n"
 		"2) Fill the team number of total winner only if "
@@ -90,14 +101,19 @@ static void teamcup_open_score_file(void)
 		options.teamcupMailAddress, options.teamcupName,
 		options.teamcupMatchNumber
 	);
+
+    teamcup_log("Player present:\n");
+    for (i = 0; i < NumPlayers; i++) {
+	pl = Player_by_index(i);
+        teamcup_log("Team %d: %s\n",pl->team,pl->name);
+    }
+
 }
 
 static void teamcup_close_score_file(void)
 {
     char msg[MSG_LEN];
 
-    if (!options.teamcup || teamcup_score_file == NULL)
-	return;
 
     fclose(teamcup_score_file);
     teamcup_score_file = NULL;
@@ -118,6 +134,10 @@ void teamcup_game_start(void)
 
 void teamcup_game_over(void)
 {
+
+    if (!options.teamcup || teamcup_score_file == NULL)
+	return;
+
     teamcup_close_score_file();
 }
 
@@ -146,9 +166,10 @@ void teamcup_round_start(void)
 
 void teamcup_round_end(int winning_team)
 {
-    int i, j, *list, best, team_players[MAX_TEAMS];
+    int i, j, *list, best, team_players[MAX_TEAMS], best_team;
     double team_score[MAX_TEAMS];
     double best_score = -FLT_MAX;
+    double best_team_score = -FLT_MAX;
     double double_max = FLT_MAX;
     player_t *pl;
 
@@ -195,9 +216,15 @@ void teamcup_round_end(int winning_team)
     }
 
     for (i = 0; i < MAX_TEAMS; i++) {
-	if (team_score[i] != double_max)
+	if (team_score[i] != double_max){
 	    teamcup_log("Team %d\t%d\n", i, (int)(team_score[i]));
+	    if(team_score[i]>best_team_score){
+	      best_team_score=team_score[i];
+	      best_team=i;
+	    }
+        }
     }
+     teamcup_log("Advantage Team %d\n",best_team);
     if (teamcup_score_file != NULL)
 	fflush(teamcup_score_file);
 

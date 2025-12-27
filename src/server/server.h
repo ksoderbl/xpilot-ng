@@ -342,6 +342,8 @@ void Asteroid_line_init(void);
 void Handle_player_command(player_t *pl, char *cmd);
 player_t *Get_player_by_name(const char *str,
 			     int *errcode, const char **errorstr_p);
+void Send_info_about_player(player_t *pl);
+void Set_swapper_state(player_t *pl);
 
 /*
  * Prototypes for race.c
@@ -368,7 +370,7 @@ void Tune_asteroid_prob(void);
 /*
  * Prototypes for server.c
  */
-int End_game(void);
+void End_game(void);
 int Pick_team(int pick_for_type);
 void Server_info(char *str, size_t max_size);
 void Log_game(const char *heading);

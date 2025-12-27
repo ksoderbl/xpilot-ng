@@ -52,6 +52,7 @@ extern struct options {
     bool	shotsGravity;
     bool	shotHitFuelDrainUsesKineticEnergy;
     double      ballCollisionFuelDrain;
+    double      playerCollisionFuelDrain;
     bool        treasureCollisionKills;
     double	fireRepeatRate;
     double	laserRepeatRate;
@@ -221,6 +222,7 @@ extern struct options {
     double	ballConnectorLength;
     bool	connectorIsString;
     double	ballRadius;
+    bool	multipleConnectors;
 
     double 	dropItemOnKillProb;
     double	detonateItemOnKillProb;
@@ -251,6 +253,7 @@ extern struct options {
     int		adminMessageFileSizeLimit;
     char	*rankFileName;
     char	*rankWebpageFileName;
+    char	*rankWebpageCSS;
     double	frictionSetting;
     double	blockFriction;
     bool	blockFrictionVisible;

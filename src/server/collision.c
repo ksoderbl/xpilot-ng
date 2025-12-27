@@ -313,7 +313,8 @@ static void PlayerCollision(void)
 
 	/* Player picking up ball/treasure */
 	if (!BIT(pl->used, HAS_CONNECTOR)
-	    || Player_is_phasing(pl))
+	    || Player_is_phasing(pl)
+	    ||(!options.multipleConnectors && BIT(pl->have, HAS_BALL)))
 	    pl->ball = NULL;
 	else if (pl->ball != NULL) {
 	    ballobject_t *ball = pl->ball;

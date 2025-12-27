@@ -46,6 +46,7 @@ bool	is_server = false;	/* used in common code */
 bool	scoresChanged = true;
 unsigned RadarHeight = 0;
 unsigned RadarWidth = 256;	/* radar width at the server */ 
+bool     UpdateRadar = false;   /* radar update because of polystyle changes? */
 
 int     oldServer;
 ipos_t	selfPos;
@@ -1933,7 +1934,7 @@ int Handle_polystyle(int polyind, int newstyle)
     poly = &polygons[polyind];
     poly->style = newstyle;
     /*warn("polygon %d style set to %d", polyind, newstyle);*/
-
+    UpdateRadar=true;
     return 0;
 }
 
@@ -1989,10 +1990,10 @@ int Handle_fastradar(int x, int y, int size)
     
     t.x = x;
     t.y = y;
-    t.type = normal;
+    t.type = RadarEnemy;
     
     if ((size & 0x80) != 0) {
-	t.type = friendly;
+	t.type = RadarFriend;
 	size &= ~0x80;
     }
     

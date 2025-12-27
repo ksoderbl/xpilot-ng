@@ -98,17 +98,7 @@ void Paint_frame(void)
 
     Paint_frame_start();
     Paint_score_table();
-
-    /*
-     * Switch between two different window titles.
-     */
-    if (titleFlip && ((loopsSlow % TITLE_DELAY) == 0)) {
-	scroll_i = !scroll_i;
-	if (scroll_i)
-	    XStoreName(dpy, topWindow, COPYRIGHT);
-	else
-	    XStoreName(dpy, topWindow, TITLE);
-    }
+    Paint_clock(false);
 
     SET_FG(colors[BLACK].pixel);
 
@@ -184,8 +174,9 @@ void Paint_frame(void)
 
     rd.endFrame();
 
-    if (radar_exposures == 1)
+    if (radar_exposures == 1 || UpdateRadar)
 	Paint_world_radar();
+    UpdateRadar=false;
 
     /*
      * Now switch planes and clear the screen.
@@ -284,8 +275,6 @@ void Paint_frame(void)
 	}
 	Talk_cursor(toggle);
     }
-
-    Paint_clock(false);
 
     XFlush(dpy);
 }
@@ -476,7 +465,7 @@ void Paint_score_entry(int entry_num, other_t* other, bool is_team)
      * Underline the teams
      */
     if (is_team) {
-	color = (windowColor != BLUE ? BLUE : BLACK);
+	color = (windowColor != WHITE ? WHITE : BLACK);
 	XSetForeground(dpy, scoreListGC, colors[color].pixel);
 	gcv.line_style = LineSolid;
 	XChangeGC(dpy, scoreListGC, GCLineStyle, &gcv);

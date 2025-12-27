@@ -63,7 +63,6 @@ typedef struct {
 } client_data_t;
 
 typedef struct {
-    bool blockProtocol;
     bool clientRanker;
     bool clockAMPM;
     bool filledDecor;
@@ -331,8 +330,8 @@ typedef struct {
 } appearing_t;
 
 typedef enum {
-    normal,
-    friendly
+    RadarEnemy,
+    RadarFriend
 } radar_type_t;
 
 typedef struct {
@@ -504,6 +503,7 @@ extern short	phasingtimemax;
 extern int	roundDelay;
 extern int	roundDelayMax;
 
+extern bool	UpdateRadar;
 extern unsigned	RadarWidth;
 extern unsigned	RadarHeight;
 extern int	backgroundPointDist;	/* spacing of navigation points */
@@ -644,13 +644,12 @@ extern int		 num_asteroids, max_asteroids;
 extern wormhole_t	*wormhole_ptr;
 extern int		 num_wormholes, max_wormholes;
 
-extern bool	        ball_shout;
-extern bool	        need_cover;
 extern long		start_loops, end_loops;
 extern long		time_left;
 
 extern bool roundend;
 extern bool played_this_round;
+extern int protocolVersion;
 
 /*
  * somewhere
@@ -690,6 +689,8 @@ void Set_toggle_shield(bool on);
 /*
  * messages.c
  */
+bool Bms_test_state(msg_bms_t bms);
+void Bms_set_state(msg_bms_t bms);
 int Alloc_msgs(void);
 void Free_msgs(void);
 int Alloc_history(void);

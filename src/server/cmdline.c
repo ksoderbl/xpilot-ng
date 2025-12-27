@@ -217,6 +217,16 @@ static option_desc opts[] = {
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
     {
+	"playerCollisionFuelDrain",
+	"playerFuelDrain",
+	"100",
+	&options.playerCollisionFuelDrain,
+	valReal,
+	tuner_dummy,
+	"How much fuel does a player collision cost?\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
+    {
 	"shotHitFuelDrainUsesKineticEnergy",
 	"kineticEnergyFuelDrain",
 	"true",
@@ -1618,6 +1628,15 @@ static option_desc opts[] = {
 	"a radius of 10 pixels.\n",
 	OPT_ORIGIN_ANY | OPT_VISIBLE
     },
+    {   "multipleConnectors",
+	"multipleBallConnectors",
+	"true",
+	&options.multipleConnectors,
+	valBool,
+	tuner_dummy,
+	"Can a player connect to multiple balls or just to one?\n",
+	OPT_ORIGIN_ANY | OPT_VISIBLE
+    },
     {
 	"treasureCollisionMayKill",
 	"treasureUnshieldedCollisionKills",
@@ -1938,6 +1957,16 @@ static option_desc opts[] = {
 	valString,
 	tuner_none,
 	"The filename for the webpage with the server ranking list.\n",
+	OPT_COMMAND | OPT_DEFAULTS
+    },
+    {
+	"rankWebpageCSS",
+	"rankCSS",
+	NULL,
+	&options.rankWebpageCSS,
+	valString,
+	tuner_none,
+	"The URL of an optional style sheet for the ranking webpage.\n",
 	OPT_COMMAND | OPT_DEFAULTS
     },
     {
@@ -3848,7 +3877,7 @@ static option_desc opts[] = {
 	valBool,
 	tuner_none,
 	"Is this a teamcup match?.\n",
-	OPT_MAP
+	OPT_ORIGIN_ANY 
     },
     {
 	"teamcupName",
@@ -3858,7 +3887,7 @@ static option_desc opts[] = {
  	valString,
 	tuner_none,
 	"The name of the teamcup (used only if teamcup is true).\n",
-	OPT_MAP
+	OPT_ORIGIN_ANY
     },
     {
 	"teamcupMailAddress",
@@ -3868,7 +3897,7 @@ static option_desc opts[] = {
 	valString,
 	tuner_none,
 	"The mail address where players should send match results.\n",
-	OPT_MAP
+	OPT_ORIGIN_ANY
     },
     {
 	"teamcupScoreFileNamePrefix",
@@ -3879,7 +3908,7 @@ static option_desc opts[] = {
 	tuner_none,
 	"First part of file name for teamcup score files.\n"
 	"The whole filename will be this followed by the match number.\n",
-	OPT_MAP
+	OPT_ORIGIN_ANY
      },
      {
  	"teamcupMatchNumber",

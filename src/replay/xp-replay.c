@@ -249,6 +249,7 @@ struct xprc {
     double		gamma;		/* gamma correction when saving */
     struct errorwin	*ewin;		/* Error display window */
     tile_list_t		*tlist;		/* list of pixmaps */
+    int     		linewidth;	/* linewidth */
 };
 
 enum LabelDataTypes {
@@ -764,6 +765,8 @@ static struct rGC *RReadGCValues(struct xprc *rc)
 	if (input_mask & RC_GC_LW) {
 	    gc.mask |= GCLineWidth;
 	    gc.line_width = RReadByte(rc->fp);
+	    if(rc->linewidth)
+	    	gc.line_width = rc->linewidth;
 	}
 	if (input_mask & RC_GC_LS) {
 	    gc.mask |= GCLineStyle;
@@ -1372,14 +1375,19 @@ static XFontStruct *loadQueryFont(const char *fontName, GC gc)
 
 static void allocViewColors(struct xprc *rc)
 {
-    XColor		*cp, *cp2, myColor;
-    int			i, j;
+    XColor		*cp, /**cp2,*/ myColor;
+    int			i /*, j*/;
 
     rc->pixels = (unsigned long *)
 	MyMalloc(2 * rc->maxColors * sizeof(*rc->pixels), MEM_MISC);
 
     for (i = 0; i < rc->maxColors; i++) {
 	cp = &rc->colors[i];
+	/*
+	 * kps - don't try to do this "optimisation", it seems to break stuff
+	 * for some recordings.
+	 */
+#if 0
 	for (j = 0; j < i; j++) {
 	    cp2 = &rc->colors[j];
 	    if (cp->red == cp2->red &&
@@ -1392,6 +1400,7 @@ static void allocViewColors(struct xprc *rc)
 	    rc->pixels[j] = rc->pixels[i];
 	    continue;
 	}
+#endif
 	if (cp->red < 0x0100 &&
 	    cp->green < 0x0100 &&
 	    cp->blue < 0x0100 &&
@@ -3086,9 +3095,25 @@ static void dox(struct xui *ui, struct xprc *rc)
 
 		switch(c) {
 
+		case ' ':
+		    switch(playState) {
+		    case STATE_PLAYING:
+			currentSpeed = 0;
+			playState = STATE_PAUSED;
+			forceRedraw = True;
+			break;
+		    case STATE_PAUSED:
+			currentSpeed = 1;
+			playState = STATE_PLAYING;
+			break;
+		    default:
+			break;
+		    }
+
+		    break;
+
 		case 'f':
 		case 'F':
-		case ' ':
 		    frameStep++;
 		    break;
 
@@ -3346,6 +3371,8 @@ static void usage(void)
 "        -scale \"factor\"\n"
 "               Set the scale reduction factor for saving operations.\n"
 "               Valid scale factors are in the range [0.01 - 1.0].\n"
+"        -linewidth \"width\"\n"
+"               use a fixed linewidth \"width\" for drawing all lines\n"
 "        -gamma \"factor\"\n"
 "               Set the gamma correction factor when saving scaled frames.\n"
 "               Valid gamma correction factors are in the range [0.1 - 10].\n"
@@ -3392,6 +3419,7 @@ int main(int argc, char **argv)
     int			fps = 0;
     double		scale = 0;
     double		gamma_val = 0;
+    int 		linewidth = 0;
 
     Argc = argc;
     Argv = argv;
@@ -3428,6 +3456,12 @@ int main(int argc, char **argv)
 		usage();
 	    if (gamma_val == 1.0)
 		gamma_val = 0;
+	}
+	else if (!strcmp(argv[argi], "-linewidth")) {
+	    if (++argi == argc || sscanf(argv[argi], "%d", &linewidth) != 1)
+		usage();
+	    if (linewidth < 1 || gamma_val > 100)
+		usage();
 	}
 	else if (!strcmp(argv[argi], "-play"))
 	    currentSpeed = 1;
@@ -3480,6 +3514,7 @@ int main(int argc, char **argv)
     rc->fps = fps;
     rc->scale = scale;
     rc->gamma = gamma_val;
+    rc->linewidth = linewidth;
     TestInput(rc);
     purge_argument = rc;
     if (RReadHeader(rc) >= 0) {
