@@ -443,7 +443,7 @@
 #define X11_CLIENT 1
 
 /* enable xp-mapedit program */
-/* #undef XP_MAPEDIT */
+#define XP_MAPEDIT 1
 
 /* Define to 1 if the X Window System is missing or not being used. */
 /* #undef X_DISPLAY_MISSING */

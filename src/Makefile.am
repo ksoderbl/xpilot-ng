@@ -4,16 +4,10 @@ else
   MAYBE_REPLAY =
 endif
 
-if COND_XP_MAPEDIT
-  MAYBE_XP_MAPEDIT = mapedit
-else
-  MAYBE_XP_MAPEDIT =
-endif
-
 if COND_CLIENT
   MAYBE_CLIENT = client
 else
   MAYBE_CLIENT =
 endif
 
-SUBDIRS = common server $(MAYBE_CLIENT) $(MAYBE_REPLAY) $(MAYBE_XP_MAPEDIT)
+SUBDIRS = common server $(MAYBE_CLIENT) $(MAYBE_REPLAY)

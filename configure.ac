@@ -349,8 +349,7 @@ AC_CONFIG_FILES([ \
   src/client/NT/res/Makefile \
   src/server/Makefile \
   src/replay/Makefile \
-  src/replay/tools/Makefile \
-  src/mapedit/Makefile \
+  src/replay/tools/Makefile
 ])
 
 AC_OUTPUT

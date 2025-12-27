@@ -152,7 +152,7 @@ am__define_uniq_tagged_files = \
   unique=`for i in $$list; do \
     if test -f "$$i"; then echo $$i; else echo $(srcdir)/$$i; fi; \
   done | $(am__uniquify_input)`
-DIST_SUBDIRS = common server client replay mapedit
+DIST_SUBDIRS = common server client replay
 am__DIST_COMMON = $(srcdir)/Makefile.in \
 	$(top_srcdir)/config/mkinstalldirs
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -304,11 +304,9 @@ top_builddir = ..
 top_srcdir = ..
 #MAYBE_REPLAY = 
 MAYBE_REPLAY = replay
-MAYBE_XP_MAPEDIT = 
-#MAYBE_XP_MAPEDIT = mapedit
 #MAYBE_CLIENT = 
 MAYBE_CLIENT = client
-SUBDIRS = common server $(MAYBE_CLIENT) $(MAYBE_REPLAY) $(MAYBE_XP_MAPEDIT)
+SUBDIRS = common server $(MAYBE_CLIENT) $(MAYBE_REPLAY)
 all: all-recursive
 
 .SUFFIXES:

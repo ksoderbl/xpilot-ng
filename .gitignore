@@ -28,6 +28,9 @@
 *.dylib
 
 # Executables
+src/client/x11/xpilot-ng-x11
+src/replay/xpilot-ng-replay
+src/server/xpilot-ng-server
 *.exe
 *.out
 *.app
