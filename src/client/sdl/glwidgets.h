@@ -135,13 +135,15 @@ GLWidget *Init_ArrowWidget( ArrowWidget_dir_t direction, int width, int height,
 /***********************/
 #define BUTTONWIDGET 1
 typedef struct {
-    Uint32    *normal_color;
-    Uint32    *pressed_color;
-    bool    pressed;
-    void    (*action)(void *data);
-    void    *actiondata;
+    Uint32  	*normal_color;
+    Uint32  	*pressed_color;
+    bool    	pressed;
+    Uint8  	depress_time;
+    int  	press_time;
+    void    	(*action)(void *data);
+    void    	*actiondata;
 } ButtonWidget;
-GLWidget *Init_ButtonWidget( Uint32 *normal_color, Uint32 *pressed_color, void (*action)(void *data), void *actiondata);
+GLWidget *Init_ButtonWidget( Uint32 *normal_color, Uint32 *pressed_color, Uint8 depress_time, void (*action)(void *data), void *actiondata);
 /*********************/
 /* End: ButtonWidget  */
 /*********************/
@@ -454,14 +456,16 @@ void MainWidget_ShowMenu( GLWidget *widget, bool show );
 #define CONFMENUWIDGET 16
 typedef struct {
     bool	showconf;
+    bool	paused;
+    int     	team;
     GLWidget	*scrollpane;
     GLWidget	*main_list;
     GLWidget	*button_list;
     GLWidget	*join_list;
-    GLWidget	*ql;
-    GLWidget	*cl;
-    GLWidget	*sl;
-    GLWidget	*jl;
+    GLWidget	*qlb;
+    GLWidget	*clb;
+    GLWidget	*slb;
+    GLWidget	*jlb;
 } ConfMenuWidget;
 
 GLWidget *Init_ConfMenuWidget( Uint16 x, Uint16 y );
@@ -493,6 +497,26 @@ GLWidget *Init_ImageButtonWidget(const char *text,
 				 void (*onClick)(GLWidget *widget));
 /**************************/
 /* End: ImageButtonWidget */
+/**************************/
+
+/*****************************/
+/* Begin: LabelButtonWidget  */
+/*****************************/
+#define LABELBUTTONWIDGET 18
+typedef struct {
+    GLWidget *button;
+    GLWidget *label;
+} LabelButtonWidget;
+
+GLWidget *Init_LabelButtonWidget(   const char *text,
+				    Uint32 *text_color,
+    	    	    	    	    Uint32 *bg_color,
+    	    	    	    	    Uint32 *active_color,
+    	    	    	    	    Uint8 depress_time,
+    	    	    	    	    void (*action)(void *data),
+				    void *actiondata);
+/**************************/
+/* End: LabelButtonWidget */
 /**************************/
 
 #endif
