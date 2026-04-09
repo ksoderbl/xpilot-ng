@@ -47,7 +47,7 @@ if(XPILOT_BUILD_SOUND AND OPENAL_FOUND AND ALUT_FOUND)
     set(XPILOT_HAVE_SOUND ON)
 endif()
 
-set(HAVE_ZLIB_H 1)
+set(HAVE_LIBZ_H 1)
 
 configure_file(
     ${CMAKE_SOURCE_DIR}/cmake/config.h.in

@@ -77,7 +77,7 @@
 #cmakedefine01 XPILOT_BUILD_SDL_CLIENT
 #cmakedefine01 XPILOT_BUILD_REPLAY
 #cmakedefine01 XPILOT_HAVE_SOUND
-#cmakedefine HAVE_ZLIB_H 1
+#cmakedefine HAVE_LIBZ_H 1
 
 #if XPILOT_BUILD_X11_CLIENT
 #define X11_CLIENT 1
