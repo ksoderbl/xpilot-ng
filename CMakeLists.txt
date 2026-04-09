@@ -6,10 +6,9 @@ project(xpilot-ng VERSION 4.7.3 LANGUAGES C CXX)
 include(GNUInstallDirs)
 
 option(XPILOT_BUILD_X11_CLIENT "Build the X11 client" ON)
-option(XPILOT_BUILD_SDL_CLIENT "Build the SDL/OpenGL client" ON)
+option(XPILOT_BUILD_SDL_CLIENT "Build the SDL/OpenGL client" OFF)
 option(XPILOT_BUILD_REPLAY "Build the replay tool" ON)
-option(XPILOT_BUILD_MAPEDIT "Build xp-mapedit" ON)
-option(XPILOT_BUILD_SOUND "Enable OpenAL sound where supported" ON)
+option(XPILOT_BUILD_SOUND "Enable OpenAL sound where supported" OFF)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -26,7 +25,13 @@ find_package(OpenGL)
 find_package(PkgConfig REQUIRED)
 
 if(XPILOT_BUILD_SDL_CLIENT)
-    pkg_check_modules(SDL REQUIRED sdl)
+    find_package(PkgConfig REQUIRED)
+
+    pkg_check_modules(SDL QUIET sdl)
+    if(NOT SDL_FOUND)
+        pkg_check_modules(SDL REQUIRED SDL)
+    endif()
+
     pkg_check_modules(SDL_TTF REQUIRED SDL_ttf)
     pkg_check_modules(SDL_IMAGE REQUIRED SDL_image)
 endif()
