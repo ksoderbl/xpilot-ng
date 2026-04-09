@@ -1,7 +1,7 @@
-/* 
+/*
  * XPilot NG, a multiplayer space war game.
  *
- * Copyright (C) 2003 Kristian Söderblom <kps@users.sourceforge.net>
+ * Copyright (C) 2003 Kristian Sï¿½derblom <kps@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,27 +23,13 @@
 
 #include "xpclient.h"
 
-#ifdef HAVE_X11_X_H
-#  include <X11/X.h>
-#endif
-#ifdef HAVE_X11_XLIB_H
-#  include <X11/Xlib.h>
-#endif
-#ifdef HAVE_X11_XOS_H
-#  include <X11/Xos.h>
-#endif
-#ifdef HAVE_X11_XUTIL_H
-#  include <X11/Xutil.h>
-#endif
-#ifdef HAVE_X11_KEYSYM_H
-#  include <X11/keysym.h>
-#endif
-#ifdef HAVE_X11_XATOM_H
-#  include <X11/Xatom.h>
-#endif
-#ifdef HAVE_X11_XMD_H
-#  include <X11/Xmd.h>
-#endif
+#include <X11/X.h>
+#include <X11/Xlib.h>
+#include <X11/Xos.h>
+#include <X11/Xutil.h>
+#include <X11/keysym.h>
+#include <X11/Xatom.h>
+#include <X11/Xmd.h>
 
 /* X client specific headers */
 #include "bitmaps.h"
@@ -57,4 +43,3 @@
 #include "xpaint.h"
 
 #endif /* XPCLIENT_X11_H */
-
