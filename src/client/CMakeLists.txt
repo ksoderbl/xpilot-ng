@@ -28,6 +28,7 @@ target_compile_definitions(xpclient
 target_link_libraries(xpclient
     PUBLIC
         xpcommon
+        ZLIB::ZLIB
 )
 
 if(XPILOT_BUILD_X11_CLIENT)

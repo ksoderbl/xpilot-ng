@@ -4,7 +4,10 @@
 
 #define PACKAGE "@PROJECT_NAME@"
 #define PACKAGE_NAME "XPilot NG"
+#define PACKAGE_TARNAME "xpilot-ng"
 #define PACKAGE_VERSION "@PROJECT_VERSION@"
+#define PACKAGE_STRING "XPilot NG @PROJECT_VERSION@"
+#define PACKAGE_BUGREPORT "xpilot@xpilot.org"
 #define VERSION "@PROJECT_VERSION@"
 
 #define STDC_HEADERS 1
@@ -73,8 +76,8 @@
 #cmakedefine01 XPILOT_BUILD_X11_CLIENT
 #cmakedefine01 XPILOT_BUILD_SDL_CLIENT
 #cmakedefine01 XPILOT_BUILD_REPLAY
-#cmakedefine01 XPILOT_BUILD_MAPEDIT
 #cmakedefine01 XPILOT_HAVE_SOUND
+#cmakedefine HAVE_ZLIB_H 1
 
 #if XPILOT_BUILD_X11_CLIENT
 #define X11_CLIENT 1
@@ -86,10 +89,6 @@
 
 #if XPILOT_BUILD_REPLAY
 #define REPLAY 1
-#endif
-
-#if XPILOT_BUILD_MAPEDIT
-#define XP_MAPEDIT 1
 #endif
 
 #if XPILOT_HAVE_SOUND

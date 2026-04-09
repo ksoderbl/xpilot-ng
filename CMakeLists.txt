@@ -20,6 +20,7 @@ endif()
 # Common dependencies
 find_package(X11)
 find_package(OpenGL)
+find_package(ZLIB REQUIRED)
 
 # SDL 1.2-era project: use pkg-config to stay close to the original build.
 find_package(PkgConfig REQUIRED)
@@ -45,6 +46,8 @@ set(XPILOT_HAVE_SOUND OFF)
 if(XPILOT_BUILD_SOUND AND OPENAL_FOUND AND ALUT_FOUND)
     set(XPILOT_HAVE_SOUND ON)
 endif()
+
+set(HAVE_ZLIB_H 1)
 
 configure_file(
     ${CMAKE_SOURCE_DIR}/cmake/config.h.in
