@@ -1,0 +1,97 @@
+#pragma once
+
+/* Conservative CMake-generated config.h for Linux/Unix first pass. */
+
+#define PACKAGE "@PROJECT_NAME@"
+#define PACKAGE_NAME "XPilot NG"
+#define PACKAGE_VERSION "@PROJECT_VERSION@"
+#define VERSION "@PROJECT_VERSION@"
+
+#define STDC_HEADERS 1
+#define TIME_WITH_SYS_TIME 1
+#define HAVE_SYS_TYPES_H 1
+#define HAVE_SYS_STAT_H 1
+#define HAVE_STDLIB_H 1
+#define HAVE_STRING_H 1
+#define HAVE_MEMORY_H 1
+#define HAVE_STRINGS_H 1
+#define HAVE_INTTYPES_H 1
+#define HAVE_STDINT_H 1
+#define HAVE_UNISTD_H 1
+#define HAVE_SYS_TIME_H 1
+#define HAVE_SYS_SOCKET_H 1
+#define HAVE_NETINET_IN_H 1
+#define HAVE_ARPA_INET_H 1
+#define HAVE_NETDB_H 1
+#define HAVE_MATH_H 1
+#define HAVE_FCNTL_H 1
+#define HAVE_ERRNO_H 1
+#define HAVE_SIGNAL_H 1
+#define HAVE_LIMITS_H 1
+#define HAVE_CTYPE_H 1
+#define HAVE_ASSERT_H 1
+#define HAVE_STDARG_H 1
+#define HAVE_PWD_H 1
+#define HAVE_SETJMP_H 1
+#define HAVE_FLOAT_H 1
+#define HAVE_SYS_IOCTL_H 1
+#define HAVE_SYS_PARAM_H 1
+
+#define HAVE_MEMCHR 1
+#define HAVE_MEMMOVE 1
+#define HAVE_MEMSET 1
+#define HAVE_SELECT 1
+#define HAVE_SOCKET 1
+#define HAVE_SQRT 1
+#define HAVE_STRCMP 1
+#define HAVE_STRCASECMP 1
+#define HAVE_STRCHR 1
+#define HAVE_STRDUP 1
+#define HAVE_STRERROR 1
+#define HAVE_STRNCASECMP 1
+#define HAVE_STRPBRK 1
+#define HAVE_STRRCHR 1
+#define HAVE_STRSPN 1
+#define HAVE_STRSTR 1
+#define HAVE_STRTOL 1
+#define HAVE_STRTOUL 1
+#define HAVE_GETHOSTBYNAME 1
+#define HAVE_GETHOSTBYADDR 1
+#define HAVE_GETHOSTNAME 1
+#define HAVE_GETTIMEOFDAY 1
+#define HAVE_INET_NTOA 1
+#define HAVE_MKDIR 1
+#define HAVE_POW 1
+#define HAVE_RINT 1
+#define HAVE_FLOOR 1
+#define HAVE_VPRINTF 1
+#define HAVE_STRFTIME 1
+#define HAVE_STRTOD 1
+
+#define HAVE_CONFIG_H 1
+
+#cmakedefine01 XPILOT_BUILD_X11_CLIENT
+#cmakedefine01 XPILOT_BUILD_SDL_CLIENT
+#cmakedefine01 XPILOT_BUILD_REPLAY
+#cmakedefine01 XPILOT_BUILD_MAPEDIT
+#cmakedefine01 XPILOT_HAVE_SOUND
+
+#if XPILOT_BUILD_X11_CLIENT
+#define X11_CLIENT 1
+#endif
+
+#if XPILOT_BUILD_SDL_CLIENT
+#define SDL_CLIENT 1
+#endif
+
+#if XPILOT_BUILD_REPLAY
+#define REPLAY 1
+#endif
+
+#if XPILOT_BUILD_MAPEDIT
+#define XP_MAPEDIT 1
+#endif
+
+#if XPILOT_HAVE_SOUND
+#define SOUND 1
+#endif
