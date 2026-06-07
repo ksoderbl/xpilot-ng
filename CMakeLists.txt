@@ -47,7 +47,11 @@ if(XPILOT_BUILD_SOUND AND OPENAL_FOUND AND ALUT_FOUND)
     set(XPILOT_HAVE_SOUND ON)
 endif()
 
-set(HAVE_LIBZ_H 1)
+find_package(PkgConfig REQUIRED)
+find_package(ZLIB REQUIRED)
+find_package(EXPAT REQUIRED)
+find_package(X11 REQUIRED)
+find_package(OpenGL REQUIRED)
 
 configure_file(
     ${CMAKE_SOURCE_DIR}/cmake/config.h.in
@@ -64,22 +68,22 @@ configure_file(
 # )
 
 add_compile_options(
-    -Wall
-    -Wextra
-    -Wformat=2
-    -Wundef
-    -Wshadow
-    -Wpointer-arith
-    -Wcast-qual
-    -Wwrite-strings
-    -Wmissing-declarations
-    -Wuninitialized
-    -Winit-self
-    -Wredundant-decls
-    -Wstrict-prototypes
-    -Wmissing-prototypes
-    -Wold-style-definition
-    -Wno-unused-parameter
+    # -Wall
+    # -Wextra
+    # -Wformat=2
+    # -Wundef
+    # -Wshadow
+    # -Wpointer-arith
+    # -Wcast-qual
+    # -Wwrite-strings
+    # -Wmissing-declarations
+    # -Wuninitialized
+    # -Winit-self
+    # -Wredundant-decls
+    # -Wstrict-prototypes
+    # -Wmissing-prototypes
+    # -Wold-style-definition
+    # -Wno-unused-parameter
 )
 
 add_subdirectory(src)

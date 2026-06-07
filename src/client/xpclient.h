@@ -30,11 +30,7 @@
 
 #include "keys.h"
 
-#ifdef HAVE_LIBZ_H
 #include <zlib.h>
-#else
-#error "Header zlib.h missing. Please install zlib."
-#endif
 
 #ifdef _WINDOWS
 #ifdef _MSC_VER
